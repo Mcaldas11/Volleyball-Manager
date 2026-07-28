@@ -12,6 +12,7 @@ import type { Club, LeagueTableRow } from '../model/club.ts';
 import { PlayerStore } from '../model/players.ts';
 import type { Staff } from '../model/staff.ts';
 import { MatchFormat } from '../match/engine.ts';
+import type { ScoutingKnowledge } from './scouting.ts';
 
 export type CompetitionKind = 'league' | 'cup' | 'continental' | 'international';
 
@@ -170,6 +171,9 @@ export interface World {
 
   /** Retired player indices, kept forever for records and the Hall of Fame. */
   retired: number[];
+
+  /** The user's scouting knowledge of players outside their own squad. */
+  scoutingKnowledge: Map<number, ScoutingKnowledge>;
 }
 
 export function dayOfSeason(world: World): number {
@@ -207,6 +211,7 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     manager,
     fixturesByDay: new Map(),
     retired: [],
+    scoutingKnowledge: new Map(),
   };
 }
 

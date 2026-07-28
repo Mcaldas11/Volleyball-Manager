@@ -5,7 +5,7 @@ import {
 } from '../../engine/match/tactics.ts';
 import { POSITION_NAMES, POSITION_SHORT, type Position } from '../../engine/model/positions.ts';
 import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engine/model/staff.ts';
-import { buildScoutReport, formatEstimate } from '../../engine/world/scouting.ts';
+import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { abilityClass, Bar, ClubLink, Empty, Flag, money, Pos } from '../components.tsx';
@@ -501,30 +501,36 @@ export function StaffScreen(): JSX.Element {
 /**
  * Scouting.
  *
- * Attributes are shown as ranges, not numbers. The range narrows as the club's
- * scouts see more of the player, and how fast it narrows depends on how well
- * the assigned scout knows that part of the world.
+ * A player is a name on a list until a scout has actually watched them play —
+ * attributes only appear once there is some matches-watched knowledge on
+ * record, whether from dedicated scouting work or (for the genuinely famous)
+ * from reputation alone. Ranges narrow as that knowledge accumulates.
  */
 export function ScoutingScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
+  const club = g.club!;
   const [target, setTarget] = useState<number | null>(null);
-  const [watched, setWatched] = useState(4);
   const [query, setQuery] = useState('');
 
   const targets = g.scoutingPool(query);
-  const report = target !== null
-    ? buildScoutReport(world, world.userClubId, target, { confidence: 0, matchesWatched: watched })
+  const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
+  const report = target !== null && matchesWatched > 0
+    ? buildScoutReport(world, world.userClubId, target, { confidence: 0, matchesWatched })
     : null;
+
+  const committed = club.players.reduce((s, p) => s + store.wage[p], 0);
+  const targetIsFreeAgent = target !== null && store.clubId[target] < 0;
+  const affordable = target !== null && store.wage[target] <= club.finances.wageBudget - committed;
 
   return (
     <>
       <h1>Scouting</h1>
       <p className="subtitle">
-        Reports show ranges, not numbers. Send a scout to more matches to narrow
-        them — and remember that potential is much harder to judge than current
-        ability.
+        Reports show ranges, not numbers, and stay blank until your scouts have
+        actually seen the player. Send a scout to watch more matches to narrow
+        the estimate — potential is always harder to judge than current ability.
       </p>
 
       <div className="panels" style={{ alignItems: 'stretch' }}>
@@ -540,27 +546,32 @@ export function ScoutingScreen(): JSX.Element {
             <table>
               <thead>
                 <tr>
-                  <th>Name</th><th>Pos</th><th className="num">Age</th><th>Nat</th><th>Club</th>
+                  <th>Name</th><th>Pos</th><th className="num">Age</th><th>Nat</th>
+                  <th>Club</th><th className="num">Scouted</th>
                 </tr>
               </thead>
               <tbody>
-                {targets.map((p) => (
-                  <tr
-                    key={p}
-                    className={`clickable${target === p ? ' selected' : ''}`}
-                    onClick={() => setTarget(p)}
-                  >
-                    <td>{store.fullName(p)}</td>
-                    <td><Pos pos={store.position[p] as Position} /></td>
-                    <td className="num">{store.ageOn(p, world.year, 181)}</td>
-                    <td><Flag nation={store.nation[p]} /></td>
-                    <td className="dim">
-                      {store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} short /> : 'Free agent'}
-                    </td>
-                  </tr>
-                ))}
+                {targets.map((p) => {
+                  const known = totalMatchesWatched(world, p);
+                  return (
+                    <tr
+                      key={p}
+                      className={`clickable${target === p ? ' selected' : ''}`}
+                      onClick={() => setTarget(p)}
+                    >
+                      <td>{store.fullName(p)}</td>
+                      <td><Pos pos={store.position[p] as Position} /></td>
+                      <td className="num">{store.ageOn(p, world.year, 181)}</td>
+                      <td><Flag nation={store.nation[p]} /></td>
+                      <td className="dim">
+                        {store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} short /> : 'Free agent'}
+                      </td>
+                      <td className={`num ${known > 0 ? 'dim' : 'faint'}`}>{known > 0 ? known : '—'}</td>
+                    </tr>
+                  );
+                })}
                 {targets.length === 0 && (
-                  <tr><td colSpan={5}><Empty>No matching players found.</Empty></td></tr>
+                  <tr><td colSpan={6}><Empty>No matching players found.</Empty></td></tr>
                 )}
               </tbody>
             </table>
@@ -569,7 +580,7 @@ export function ScoutingScreen(): JSX.Element {
 
         <div style={{ flex: 1.4, minWidth: 0 }}>
           <h2>Scout report</h2>
-          {report === null || target === null
+          {target === null
             ? <Empty>Select a player to see what your scouts make of them.</Empty>
             : (
               <div className="panel">
@@ -578,49 +589,69 @@ export function ScoutingScreen(): JSX.Element {
                   <strong>{store.fullName(target)}</strong>
                 </div>
                 <div className="kv">
-                  <span className="k">Scout</span>
-                  <span>{report.scoutName ?? 'No specialist scout employed'}</span>
-                </div>
-                <div className="kv">
-                  <span className="k">Matches watched</span>
+                  <span className="k">Club</span>
                   <span>
-                    <input
-                      type="range" min={0} max={60} value={watched}
-                      onChange={(e) => setWatched(Number(e.target.value))}
-                    />{' '}{watched}
+                    {store.clubId[target] >= 0 ? <ClubLink id={store.clubId[target]} /> : 'Free agent'}
                   </span>
                 </div>
                 <div className="kv">
-                  <span className="k">Confidence</span>
-                  <span><Bar value={report.confidence * 100} /></span>
+                  <span className="k">Matches watched</span>
+                  <span>{matchesWatched}</span>
+                </div>
+                <div className="toolbar" style={{ margin: '8px 0' }}>
+                  <button onClick={() => g.scoutPlayer(target)}>Scout this player</button>
+                  {targetIsFreeAgent && (
+                    <button
+                      className="primary"
+                      disabled={!affordable}
+                      onClick={() => g.signPlayer(target)}
+                    >
+                      Sign
+                    </button>
+                  )}
                 </div>
 
-                <h3 style={{ marginTop: 14 }}>Assessment</h3>
-                <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
-                  {report.summary.map((s, i) => <li key={i} className="dim">{s}</li>)}
-                </ul>
+                {report === null ? (
+                  <Empty>
+                    Your scouts have not seen this player yet — send a scout to
+                    watch a few matches before any assessment is possible.
+                  </Empty>
+                ) : (
+                  <>
+                    <div className="kv">
+                      <span className="k">Scout</span>
+                      <span>{report.scoutName ?? 'No specialist scout employed'}</span>
+                    </div>
+                    <div className="kv">
+                      <span className="k">Confidence</span>
+                      <span><Bar value={report.confidence * 100} /></span>
+                    </div>
 
-                <div className="kv">
-                  <span className="k">Estimated ability</span>
-                  <span>{report.abilityLow}–{report.abilityHigh}</span>
-                </div>
-                <div className="kv">
-                  <span className="k">Estimated potential</span>
-                  <span className="elite">{report.potentialLow}–{report.potentialHigh}</span>
-                </div>
+                    <h3 style={{ marginTop: 14 }}>Assessment</h3>
+                    <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
+                      {report.summary.map((s, i) => <li key={i} className="dim">{s}</li>)}
+                    </ul>
 
-                <h3 style={{ marginTop: 14 }}>Attributes</h3>
-                <div className="attrs">
-                  {report.attributes
-                    .filter((a) => !a.exact || true)
-                    .slice(0, 24)
-                    .map((a) => (
-                      <div className="attr" key={a.attribute}>
-                        <span className="name">{ATTR_LABELS[a.attribute]}</span>
-                        <span className="val">{formatEstimate(a)}</span>
-                      </div>
-                    ))}
-                </div>
+                    <div className="kv">
+                      <span className="k">Estimated ability</span>
+                      <span>{report.abilityLow}–{report.abilityHigh}</span>
+                    </div>
+                    <div className="kv">
+                      <span className="k">Estimated potential</span>
+                      <span className="elite">{report.potentialLow}–{report.potentialHigh}</span>
+                    </div>
+
+                    <h3 style={{ marginTop: 14 }}>Attributes</h3>
+                    <div className="attrs">
+                      {report.attributes.slice(0, 24).map((a) => (
+                        <div className="attr" key={a.attribute}>
+                          <span className="name">{ATTR_LABELS[a.attribute]}</span>
+                          <span className="val">{formatEstimate(a)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
         </div>

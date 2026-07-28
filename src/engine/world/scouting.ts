@@ -57,6 +57,18 @@ export interface ScoutReport {
 }
 
 /**
+ * How many "matches watched" worth of knowledge the user's club has of a
+ * player, combining any scouting work actually done with a baseline from the
+ * player's public reputation — a famous international is already partly
+ * known without any dedicated scouting, an obscure squad player is not.
+ */
+export function totalMatchesWatched(world: World, playerIdx: number): number {
+  const famous = Math.round((world.players.reputation[playerIdx] / 10000) * 20);
+  const scouted = world.scoutingKnowledge.get(playerIdx)?.matchesWatched ?? 0;
+  return famous + scouted;
+}
+
+/**
  * Combined scouting quality a club can bring to bear on a given player:
  * the best available scout's judgement, weighted by how well they know where
  * the player is from.

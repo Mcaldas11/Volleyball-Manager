@@ -431,6 +431,16 @@ class Game {
       .slice(0, limit);
   }
 
+  /** Send a scout to watch a player a few more times, improving the report. */
+  scoutPlayer(playerIdx: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const current = world.scoutingKnowledge.get(playerIdx)?.matchesWatched ?? 0;
+    world.scoutingKnowledge.set(playerIdx, { confidence: 0, matchesWatched: Math.min(80, current + 5) });
+    this.notice = `Your scouts filed a new report on ${world.players.fullName(playerIdx)}.`;
+    this.emit();
+  }
+
   signPlayer(playerIdx: number): void {
     const world = this.world;
     const club = this.club;
