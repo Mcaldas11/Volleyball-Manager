@@ -23,6 +23,7 @@ import { DAYS_PER_SEASON, currentPhase, dayOfSeason, SeasonPhase, type Fixture, 
 import { scheduleLeagueSeason } from './schedule.ts';
 import { quickSimulate } from './quickSim.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
+import { processScoutingQueue } from '../world/scouting.ts';
 
 /** Season-long statistics, keyed by player index. */
 export type SeasonStats = Map<number, SeasonStatLine>;
@@ -291,6 +292,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
 
   world.day++;
   if (world.day % DAYS_PER_SEASON === 0) world.year++;
+
+  processScoutingQueue(world);
 }
 
 /**

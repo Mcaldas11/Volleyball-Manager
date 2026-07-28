@@ -12,7 +12,7 @@ import type { Club, LeagueTableRow } from '../model/club.ts';
 import { PlayerStore } from '../model/players.ts';
 import type { Staff } from '../model/staff.ts';
 import { MatchFormat } from '../match/engine.ts';
-import type { ScoutingKnowledge } from './scouting.ts';
+import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 
 export type CompetitionKind = 'league' | 'cup' | 'continental' | 'international';
 
@@ -95,6 +95,15 @@ export interface HallOfFameEntry {
   citation: string;
 }
 
+/** A news item for the club's inbox — a scouting report, a season result, etc. */
+export interface GameMessage {
+  id: number;
+  day: number;
+  year: number;
+  subject: string;
+  body: string;
+}
+
 /** The human user's own profile — created once, at the start of a career. */
 export interface ManagerProfile {
   firstName: string;
@@ -174,6 +183,11 @@ export interface World {
 
   /** The user's scouting knowledge of players outside their own squad. */
   scoutingKnowledge: Map<number, ScoutingKnowledge>;
+  /** Scouts currently dispatched, resolving on a future day. */
+  scoutingQueue: ScoutAssignment[];
+
+  /** The club's inbox — news, reports, results, in the order they arrived. */
+  messages: GameMessage[];
 }
 
 export function dayOfSeason(world: World): number {
@@ -212,6 +226,8 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     fixturesByDay: new Map(),
     retired: [],
     scoutingKnowledge: new Map(),
+    scoutingQueue: [],
+    messages: [],
   };
 }
 

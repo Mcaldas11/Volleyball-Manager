@@ -31,7 +31,7 @@ import {
 } from './persistence.ts';
 
 export type ScreenId =
-  | 'squad' | 'tactics' | 'rotations' | 'fixtures' | 'table'
+  | 'overview' | 'squad' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame';
 
@@ -47,7 +47,7 @@ export interface WatchedMatch {
 class Game {
   world: World | null = null;
   ctx: SeasonContext = newSeasonContext();
-  screen: ScreenId = 'squad';
+  screen: ScreenId = 'overview';
   selectedPlayer: number | null = null;
   selectedClub: number | null = null;
   watched: WatchedMatch | null = null;
@@ -90,7 +90,7 @@ class Game {
     this.watched = null;
     this.lastRollover = null;
     this.notice = '';
-    this.screen = 'squad';
+    this.screen = 'overview';
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.pendingManager = null;
@@ -132,7 +132,7 @@ class Game {
       this.watched = null;
       this.lastRollover = null;
       this.notice = '';
-      this.screen = 'squad';
+      this.screen = 'overview';
       this.selectedPlayer = null;
       this.selectedClub = null;
       this.currentSaveId = id;
@@ -206,7 +206,7 @@ class Game {
   takeCharge(clubId: number): void {
     if (this.world === null) return;
     this.world.userClubId = clubId;
-    this.screen = 'squad';
+    this.screen = 'overview';
     this.emit();
   }
 
@@ -246,6 +246,7 @@ class Game {
     const world = this.world;
     if (world === null) return;
     const clubId = world.userClubId;
+    const messagesBefore = world.messages.length;
 
     for (let d = 0; d < days; d++) {
       if (dayOfSeason(world) >= 350) {
@@ -262,6 +263,9 @@ class Game {
       // Keep the most recent of the user's matches available to review.
       const played = this.fixtureOn(world.day - 1);
       if (played !== null && played.played) this.captureWatched(played);
+    }
+    if (world.messages.length > messagesBefore && this.notice === '') {
+      this.notice = 'You have new messages.';
     }
     this.emit();
   }
@@ -431,13 +435,17 @@ class Game {
       .slice(0, limit);
   }
 
-  /** Send a scout to watch a player a few more times, improving the report. */
+  /** Dispatch a scout to watch a player; the report arrives in a week. */
   scoutPlayer(playerIdx: number): void {
     const world = this.world;
     if (world === null) return;
-    const current = world.scoutingKnowledge.get(playerIdx)?.matchesWatched ?? 0;
-    world.scoutingKnowledge.set(playerIdx, { confidence: 0, matchesWatched: Math.min(80, current + 5) });
-    this.notice = `Your scouts filed a new report on ${world.players.fullName(playerIdx)}.`;
+    if (world.scoutingQueue.some((t) => t.playerIdx === playerIdx)) {
+      this.notice = 'Already scouting this player — check back in a week.';
+      this.emit();
+      return;
+    }
+    world.scoutingQueue.push({ playerIdx, completesOnDay: world.day + 7, matches: 5 });
+    this.notice = `Scouts dispatched to watch ${world.players.fullName(playerIdx)}. Report in a week.`;
     this.emit();
   }
 
@@ -528,8 +536,15 @@ class Game {
   dateLabel(): string {
     const world = this.world;
     if (world === null) return '';
+    return this.dateLabelForDay(world.day);
+  }
+
+  /** Calendar date label for any absolute world day, past or future. */
+  dateLabelForDay(day: number): string {
+    const world = this.world;
+    if (world === null) return '';
     // The save begins on 1 July, so season day 0 is calendar day 181.
-    const doy = (dayOfSeason(world) + 181) % 365;
+    const doy = ((day % DAYS_PER_SEASON) + 181) % 365;
     const date = new Date(Date.UTC(world.year, 0, 1));
     date.setUTCDate(date.getUTCDate() + doy);
     return date.toLocaleDateString('en-GB', {

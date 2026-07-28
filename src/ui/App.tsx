@@ -6,6 +6,7 @@ import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
 } from './screens/Menu.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
+import { OverviewScreen } from './screens/Overview.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
 import {
@@ -18,6 +19,7 @@ const NAV: Array<{ group: string; items: Array<[ScreenId, string]> }> = [
   {
     group: 'Club',
     items: [
+      ['overview', 'Overview'],
       ['squad', 'Squad'],
       ['tactics', 'Tactics'],
       ['rotations', 'Rotations'],
@@ -108,6 +110,7 @@ function MenuScreen(): JSX.Element {
 function Screen(): JSX.Element {
   const g = useGame();
   switch (g.screen) {
+    case 'overview': return <OverviewScreen />;
     case 'squad': return <SquadScreen />;
     case 'tactics': return <TacticsScreen />;
     case 'rotations': return <RotationsScreen />;

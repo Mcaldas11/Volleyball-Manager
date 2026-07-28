@@ -523,6 +523,9 @@ export function ScoutingScreen(): JSX.Element {
   const committed = club.players.reduce((s, p) => s + store.wage[p], 0);
   const targetIsFreeAgent = target !== null && store.clubId[target] < 0;
   const affordable = target !== null && store.wage[target] <= club.finances.wageBudget - committed;
+  const pending = target !== null
+    ? world.scoutingQueue.find((t) => t.playerIdx === target)
+    : undefined;
 
   return (
     <>
@@ -598,8 +601,16 @@ export function ScoutingScreen(): JSX.Element {
                   <span className="k">Matches watched</span>
                   <span>{matchesWatched}</span>
                 </div>
+                {pending !== undefined && (
+                  <div className="kv">
+                    <span className="k">Scouting trip</span>
+                    <span className="faint">Report due {g.dateLabelForDay(pending.completesOnDay)}</span>
+                  </div>
+                )}
                 <div className="toolbar" style={{ margin: '8px 0' }}>
-                  <button onClick={() => g.scoutPlayer(target)}>Scout this player</button>
+                  <button disabled={pending !== undefined} onClick={() => g.scoutPlayer(target)}>
+                    {pending !== undefined ? 'Scouting in progress…' : 'Scout this player'}
+                  </button>
                   {targetIsFreeAgent && (
                     <button
                       className="primary"

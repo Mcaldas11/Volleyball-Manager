@@ -230,3 +230,33 @@ function stableNoise(playerId: number, attr: string): number {
 export function formatEstimate(e: AttributeEstimate): string {
   return e.exact ? String(e.low) : `${e.low}-${e.high}`;
 }
+
+/** A scout dispatched to watch a player, resolving on a future day. */
+export interface ScoutAssignment {
+  playerIdx: number;
+  /** Absolute world.day this assignment resolves on. */
+  completesOnDay: number;
+  /** Matches-watched added to scoutingKnowledge once it resolves. */
+  matches: number;
+}
+
+/** Apply any scouting assignments whose time has come, and log a message for each. */
+export function processScoutingQueue(world: World): void {
+  if (world.scoutingQueue.length === 0) return;
+  const remaining: ScoutAssignment[] = [];
+  for (const task of world.scoutingQueue) {
+    if (world.day < task.completesOnDay) { remaining.push(task); continue; }
+    const current = world.scoutingKnowledge.get(task.playerIdx)?.matchesWatched ?? 0;
+    world.scoutingKnowledge.set(task.playerIdx, {
+      confidence: 0, matchesWatched: Math.min(80, current + task.matches),
+    });
+    world.messages.push({
+      id: world.messages.length,
+      day: world.day,
+      year: world.year,
+      subject: 'Scouting report ready',
+      body: `Your scouts have filed a new report on ${world.players.fullName(task.playerIdx)}.`,
+    });
+  }
+  world.scoutingQueue = remaining;
+}
