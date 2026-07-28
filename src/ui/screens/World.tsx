@@ -2,7 +2,7 @@ import { useState, type JSX } from 'react';
 import { attackEfficiency, receptionPositivity } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { abilityClass, Empty, Flag, Pos } from '../components.tsx';
+import { abilityClass, ClubLink, Empty, Flag, Pos } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 type StatKey = 'points' | 'kills' | 'efficiency' | 'aces' | 'blocks' | 'digs' | 'reception';
@@ -104,7 +104,9 @@ export function StatsScreen(): JSX.Element {
                   <td>{store.fullName(r.s.playerIdx)}</td>
                   <td><Pos pos={store.position[r.s.playerIdx] as Position} /></td>
                   <td className="dim">
-                    {world.clubs[store.clubId[r.s.playerIdx]]?.shortName ?? '—'}
+                    {store.clubId[r.s.playerIdx] >= 0
+                      ? <ClubLink id={store.clubId[r.s.playerIdx]} short />
+                      : '—'}
                   </td>
                   <td className="num dim">{r.s.matches}</td>
                   <td className="num"><strong>{r.points}</strong></td>

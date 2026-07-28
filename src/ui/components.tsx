@@ -9,6 +9,7 @@ import type { JSX } from 'react';
 import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../engine/model/players.ts';
 import { NATIONS } from '../engine/world/nations.ts';
+import { useGame } from './state.ts';
 
 /** Ability bands, so a squad list can be read without parsing every number. */
 export function abilityClass(ca: number): string {
@@ -65,4 +66,16 @@ export function Status({ store, i }: { store: PlayerStore; i: number }): JSX.Ele
 
 export function Empty({ children }: { children: React.ReactNode }): JSX.Element {
   return <p className="dim" style={{ padding: '20px 0' }}>{children}</p>;
+}
+
+/** A club name that opens that club's detail page when clicked. */
+export function ClubLink({ id, short = false }: { id: number; short?: boolean }): JSX.Element {
+  const g = useGame();
+  const club = g.world?.clubs[id];
+  if (club === undefined) return <>—</>;
+  return (
+    <span className="club-link" onClick={() => g.selectClub(id)}>
+      {short ? club.shortName : club.name}
+    </span>
+  );
 }

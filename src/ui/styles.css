@@ -176,6 +176,9 @@ tbody tr.selected { background: var(--accent-dim); }
 }
 .pill.pos { min-width: 34px; text-align: center; }
 
+.club-link { cursor: pointer; }
+.club-link:hover { color: var(--accent); text-decoration: underline; }
+
 .bar {
   display: inline-block;
   width: 54px;

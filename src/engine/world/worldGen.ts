@@ -311,6 +311,7 @@ function pickForeignNation(rng: Rng, exclude: number): number {
 
 function hireStaff(world: World, rng: Rng, club: Club): void {
   const roles: StaffRole[] = [
+    StaffRole.HeadCoach,
     StaffRole.AssistantCoach,
     StaffRole.StrengthCoach,
     StaffRole.Physiotherapist,

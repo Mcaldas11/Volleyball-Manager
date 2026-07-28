@@ -5,7 +5,7 @@ import {
 } from '../../engine/model/attributes.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { abilityClass, Bar, Empty, Flag, money, Pos, Status } from '../components.tsx';
+import { abilityClass, Bar, ClubLink, Empty, Flag, money, Pos, Status } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 export function SquadScreen(): JSX.Element {
@@ -133,7 +133,7 @@ export function PlayerDetail(): JSX.Element | null {
           <div className="kv"><span className="k">Nationality</span>
             <span>{NATIONS[store.nation[p]].name}</span></div>
           <div className="kv"><span className="k">Club</span>
-            <span>{club?.name ?? 'Free agent'}</span></div>
+            <span>{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</span></div>
           <div className="kv"><span className="k">Value</span><span>{money(store.value[p])}</span></div>
           <div className="kv"><span className="k">Wage</span><span>{money(store.wage[p])}</span></div>
           {store.fivbId[p] > 0 && (

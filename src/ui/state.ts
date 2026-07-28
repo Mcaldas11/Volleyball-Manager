@@ -12,13 +12,14 @@ import { useSyncExternalStore } from 'react';
 import type { MatchResult } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
+import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
   advanceDay, newSeasonContext, pickLineup, playFixture,
   type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
 import { startSeason } from '../engine/season/seasonEngine.ts';
-import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
+import { generateStaff, generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
   currentPhase, dayOfSeason, DAYS_PER_SEASON, SeasonPhase,
   type Fixture, type ManagerProfile, type World,
@@ -48,6 +49,7 @@ class Game {
   ctx: SeasonContext = newSeasonContext();
   screen: ScreenId = 'squad';
   selectedPlayer: number | null = null;
+  selectedClub: number | null = null;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   busy = false;
@@ -90,6 +92,7 @@ class Game {
     this.notice = '';
     this.screen = 'squad';
     this.selectedPlayer = null;
+    this.selectedClub = null;
     this.pendingManager = null;
     this.currentScale = scale;
     this.currentSaveId = newSaveId();
@@ -131,6 +134,7 @@ class Game {
       this.notice = '';
       this.screen = 'squad';
       this.selectedPlayer = null;
+      this.selectedClub = null;
       this.currentSaveId = id;
       const meta = this.saves.find((s) => s.id === id);
       this.currentScale = meta?.scale ?? null;
@@ -215,11 +219,20 @@ class Game {
 
   go(screen: ScreenId): void {
     this.screen = screen;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
     this.emit();
   }
 
   select(playerIdx: number | null): void {
     this.selectedPlayer = playerIdx;
+    if (playerIdx !== null) this.selectedClub = null;
+    this.emit();
+  }
+
+  selectClub(clubId: number | null): void {
+    this.selectedClub = clubId;
+    if (clubId !== null) this.selectedPlayer = null;
     this.emit();
   }
 
@@ -394,6 +407,30 @@ class Game {
       .slice(0, limit);
   }
 
+  /**
+   * Players worth researching — anyone active outside the club, free agent or
+   * not. A text query searches the whole player pool by name; with no query,
+   * this is simply the best players in the world you don't already know.
+   */
+  scoutingPool(query: string, limit = 150): number[] {
+    const world = this.world;
+    const club = this.club;
+    if (world === null) return [];
+    const store = world.players;
+    const q = query.trim().toLowerCase();
+    const out: number[] = [];
+    for (let i = 0; i < store.count; i++) {
+      if (!store.isActive(i)) continue;
+      if (club !== null && store.clubId[i] === club.id) continue;
+      if (store.hasFlag(i, PlayerFlag.Youth)) continue;
+      if (q !== '' && !store.fullName(i).toLowerCase().includes(q)) continue;
+      out.push(i);
+    }
+    return out
+      .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
+      .slice(0, limit);
+  }
+
   signPlayer(playerIdx: number): void {
     const world = this.world;
     const club = this.club;
@@ -428,6 +465,42 @@ class Game {
     club.players = club.players.filter((p) => p !== playerIdx);
     world.players.clubId[playerIdx] = -1;
     this.notice = `${world.players.fullName(playerIdx)} has been released.`;
+    this.emit();
+  }
+
+  /** Generate a fresh batch of unattached candidates for a role, to browse and hire. */
+  recruitStaffCandidates(role: StaffRole, count = 3): Staff[] {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return [];
+    const out: Staff[] = [];
+    for (let i = 0; i < count; i++) {
+      out.push(generateStaff(world, world.rng, club.nation, role, club.reputation));
+    }
+    return out;
+  }
+
+  hireStaffMember(staffId: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    const s = world.staff[staffId];
+    if (s === undefined || s.clubId >= 0) return;
+    s.clubId = club.id;
+    club.staff.push(s.id);
+    this.notice = `${s.firstName} ${s.lastName} has joined as ${STAFF_ROLE_NAMES[s.role]}.`;
+    this.emit();
+  }
+
+  fireStaffMember(staffId: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    const s = world.staff[staffId];
+    if (s === undefined) return;
+    club.staff = club.staff.filter((id) => id !== staffId);
+    s.clubId = -1;
+    this.notice = `${s.firstName} ${s.lastName} has left the club.`;
     this.emit();
   }
 

@@ -4,11 +4,11 @@ import {
   ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
 import { POSITION_NAMES, POSITION_SHORT, type Position } from '../../engine/model/positions.ts';
-import { STAFF_ROLE_NAMES, staffRating } from '../../engine/model/staff.ts';
+import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engine/model/staff.ts';
 import { buildScoutReport, formatEstimate } from '../../engine/world/scouting.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { abilityClass, Bar, Empty, Flag, money, Pos } from '../components.tsx';
+import { abilityClass, Bar, ClubLink, Empty, Flag, money, Pos } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 /** A labelled dropdown bound to a value on the club's tactics object. */
@@ -384,6 +384,16 @@ export function StaffScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const club = g.club!;
+  const [role, setRole] = useState<StaffRole>(StaffRole.AssistantCoach);
+  const [candidates, setCandidates] = useState<Staff[]>([]);
+
+  const hirableRoles = (Object.values(StaffRole) as Array<StaffRole | string>)
+    .filter((r): r is StaffRole => typeof r === 'number' && r !== StaffRole.HeadCoach);
+
+  const hire = (id: number): void => {
+    g.hireStaffMember(id);
+    setCandidates((cs) => cs.filter((c) => c.id !== id));
+  };
 
   return (
     <>
@@ -402,32 +412,88 @@ export function StaffScreen(): JSX.Element {
             <th className="num">Rating</th>
             <th className="num">Wage</th>
             <th>Best regions</th>
+            <th />
           </tr>
         </thead>
         <tbody>
-          {club.staff.map((id) => {
-            const s = world.staff[id];
-            if (s === undefined) return null;
-            const rating = staffRating(s);
-            const regions = Object.entries(s.regionKnowledge)
-              .sort((a, b) => b[1] - a[1]).slice(0, 2)
-              .map(([k, v]) => `${k} ${v}`).join(', ');
-            return (
-              <tr key={id}>
-                <td>{s.firstName} {s.lastName}</td>
-                <td className="dim">{STAFF_ROLE_NAMES[s.role]}</td>
-                <td><Flag nation={s.nation} /></td>
-                <td className="num">{world.year - s.birthYear}</td>
-                <td className={`num ${rating >= 15 ? 'good' : rating <= 8 ? 'bad' : ''}`}>
-                  {rating.toFixed(1)}
-                </td>
-                <td className="num dim">{money(s.wage)}</td>
-                <td className="faint">{regions}</td>
-              </tr>
-            );
-          })}
+          {club.staff
+            .filter((id) => world.staff[id]?.role !== StaffRole.HeadCoach)
+            .map((id) => {
+              const s = world.staff[id];
+              if (s === undefined) return null;
+              const rating = staffRating(s);
+              const regions = Object.entries(s.regionKnowledge)
+                .sort((a, b) => b[1] - a[1]).slice(0, 2)
+                .map(([k, v]) => `${k} ${v}`).join(', ');
+              return (
+                <tr key={id}>
+                  <td>{s.firstName} {s.lastName}</td>
+                  <td className="dim">{STAFF_ROLE_NAMES[s.role]}</td>
+                  <td><Flag nation={s.nation} /></td>
+                  <td className="num">{world.year - s.birthYear}</td>
+                  <td className={`num ${rating >= 15 ? 'good' : rating <= 8 ? 'bad' : ''}`}>
+                    {rating.toFixed(1)}
+                  </td>
+                  <td className="num dim">{money(s.wage)}</td>
+                  <td className="faint">{regions}</td>
+                  <td>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Let ${s.firstName} ${s.lastName} go?`)) g.fireStaffMember(id);
+                      }}
+                    >
+                      Fire
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
         </tbody>
       </table>
+
+      <h2>Recruit staff</h2>
+      <div className="toolbar">
+        <select
+          value={role}
+          onChange={(e) => { setRole(Number(e.target.value) as StaffRole); setCandidates([]); }}
+        >
+          {hirableRoles.map((r) => <option key={r} value={r}>{STAFF_ROLE_NAMES[r]}</option>)}
+        </select>
+        <button onClick={() => setCandidates(g.recruitStaffCandidates(role))}>
+          Search candidates
+        </button>
+      </div>
+      {candidates.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Nat</th>
+              <th className="num">Age</th>
+              <th className="num">Rating</th>
+              <th className="num">Wage</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.map((s) => {
+              const rating = staffRating(s);
+              return (
+                <tr key={s.id}>
+                  <td>{s.firstName} {s.lastName}</td>
+                  <td><Flag nation={s.nation} /></td>
+                  <td className="num">{world.year - s.birthYear}</td>
+                  <td className={`num ${rating >= 15 ? 'good' : rating <= 8 ? 'bad' : ''}`}>
+                    {rating.toFixed(1)}
+                  </td>
+                  <td className="num dim">{money(s.wage)}</td>
+                  <td><button onClick={() => hire(s.id)}>Hire</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </>
   );
 }
@@ -445,8 +511,9 @@ export function ScoutingScreen(): JSX.Element {
   const store = world.players;
   const [target, setTarget] = useState<number | null>(null);
   const [watched, setWatched] = useState(4);
+  const [query, setQuery] = useState('');
 
-  const targets = g.transferTargets(60);
+  const targets = g.scoutingPool(query);
   const report = target !== null
     ? buildScoutReport(world, world.userClubId, target, { confidence: 0, matchesWatched: watched })
     : null;
@@ -463,11 +530,17 @@ export function ScoutingScreen(): JSX.Element {
       <div className="panels" style={{ alignItems: 'stretch' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h2>Available players</h2>
-          <div style={{ maxHeight: 440, overflowY: 'auto' }}>
+          <input
+            placeholder="Search by name…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ width: '100%', marginBottom: 8 }}
+          />
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             <table>
               <thead>
                 <tr>
-                  <th>Name</th><th>Pos</th><th className="num">Age</th><th>Nat</th>
+                  <th>Name</th><th>Pos</th><th className="num">Age</th><th>Nat</th><th>Club</th>
                 </tr>
               </thead>
               <tbody>
@@ -481,8 +554,14 @@ export function ScoutingScreen(): JSX.Element {
                     <td><Pos pos={store.position[p] as Position} /></td>
                     <td className="num">{store.ageOn(p, world.year, 181)}</td>
                     <td><Flag nation={store.nation[p]} /></td>
+                    <td className="dim">
+                      {store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} short /> : 'Free agent'}
+                    </td>
                   </tr>
                 ))}
+                {targets.length === 0 && (
+                  <tr><td colSpan={5}><Empty>No matching players found.</Empty></td></tr>
+                )}
               </tbody>
             </table>
           </div>

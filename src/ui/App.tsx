@@ -1,10 +1,11 @@
 import type { JSX } from 'react';
 import { NATIONS } from '../engine/world/nations.ts';
-import { money } from './components.tsx';
+import { ClubLink, money } from './components.tsx';
 import { PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
 } from './screens/Menu.tsx';
+import { ClubDetail } from './screens/ClubDetail.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
 import {
@@ -82,8 +83,11 @@ export function App(): JSX.Element {
               {g.notice}
             </div>
           )}
-          <Screen />
-          {g.selectedPlayer !== null && <PlayerDetail />}
+          {g.selectedClub !== null
+            ? <ClubDetail />
+            : g.selectedPlayer !== null
+              ? <PlayerDetail />
+              : <Screen />}
         </main>
       </div>
     </div>
@@ -130,7 +134,7 @@ function TopBar(): JSX.Element {
 
   return (
     <header className="topbar">
-      <span className="club">{club.name}</span>
+      <span className="club"><ClubLink id={club.id} /></span>
       <span className="meta">
         {NATIONS[club.nation].name} · Tier {club.tier} · Rep {club.reputation}
       </span>

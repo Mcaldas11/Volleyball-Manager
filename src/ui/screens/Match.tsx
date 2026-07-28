@@ -2,7 +2,7 @@ import { useState, type JSX } from 'react';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { RallyContact, RallyLogEntry } from '../../engine/match/engine.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
-import { Empty } from '../components.tsx';
+import { ClubLink, Empty } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 export function FixturesScreen(): JSX.Element {
@@ -41,7 +41,7 @@ export function FixturesScreen(): JSX.Element {
             return (
               <tr key={f.id}>
                 <td className="num faint">{f.round >= 1000 ? 'PO' : f.round + 1}</td>
-                <td>{opponent?.name ?? '—'}</td>
+                <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
                 <td className="dim">{isHome ? 'Home' : 'Away'}</td>
                 <td className="faint">{comp?.name ?? ''}</td>
                 <td className={`num ${f.played ? (won ? 'good' : 'bad') : 'faint'}`}>
@@ -78,9 +78,9 @@ export function MatchScreen(): JSX.Element {
   return (
     <div style={{ marginBottom: 24 }}>
       <div className="scoreline">
-        <span className="team">{homeName}</span>
+        <span className="team"><ClubLink id={watched.fixture.home} /></span>
         <span className="sets">{result.homeSets} — {result.awaySets}</span>
-        <span className="team">{awayName}</span>
+        <span className="team"><ClubLink id={watched.fixture.away} /></span>
         <span className="mono faint">
           {result.setScores.map(([h, a]) => `${h}-${a}`).join('   ')}
         </span>
@@ -366,7 +366,7 @@ export function TableScreen(): JSX.Element {
           {rows.map((r, i) => (
             <tr key={r.clubId} className={r.clubId === club.id ? 'selected' : ''}>
               <td className="num faint">{i + 1}</td>
-              <td>{world.clubs[r.clubId]?.name ?? '—'}</td>
+              <td><ClubLink id={r.clubId} /></td>
               <td className="num dim">{r.played}</td>
               <td className="num">{r.won}</td>
               <td className="num">{r.lost}</td>

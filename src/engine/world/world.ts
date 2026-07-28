@@ -233,3 +233,27 @@ export function clubsOfNation(world: World, nation: number): Club[] {
 export function userClub(world: World): Club | null {
   return world.userClubId >= 0 ? world.clubs[world.userClubId] : null;
 }
+
+export interface ClubTrophy {
+  year: number;
+  competitionName: string;
+  tier: number;
+}
+
+/**
+ * Every title a club has won, most recent first. Mirrors Club.titlesWon
+ * exactly in count — both are written at the same site, awardTitles() in
+ * rollover.ts.
+ */
+export function clubTrophies(world: World, clubId: number): ClubTrophy[] {
+  const out: ClubTrophy[] = [];
+  for (const record of world.history) {
+    for (const c of record.champions) {
+      if (c.winner !== clubId) continue;
+      const comp = world.competitions[c.competitionId];
+      if (comp === undefined) continue;
+      out.push({ year: record.year, competitionName: comp.name, tier: comp.tier });
+    }
+  }
+  return out.reverse();
+}
