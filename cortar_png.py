@@ -2,8 +2,8 @@ from PIL import Image
 import os
 
 def fatiar_sprite(nome_ficheiro, numero_de_quadros):
-    # Dizemos ao script que os ficheiros estão na pasta "BVA2"
-    caminho_ficheiro = os.path.join("BVA2", nome_ficheiro)
+    # Dizemos ao script que os ficheiros estão na pasta "public/BVA2"
+    caminho_ficheiro = os.path.join("public", "BVA2", nome_ficheiro)
     
     try:
         img = Image.open(caminho_ficheiro)
@@ -12,8 +12,8 @@ def fatiar_sprite(nome_ficheiro, numero_de_quadros):
         # Calcula a largura de cada quadro
         largura_frame = largura_total // numero_de_quadros
         
-        # Cria uma pasta com o nome da animação DENTRO da pasta BVA2
-        nome_pasta = os.path.join("BVA2", nome_ficheiro.replace(".png", ""))
+        # Cria uma pasta com o nome da animação DENTRO da pasta public/BVA2
+        nome_pasta = os.path.join("public", "BVA2", nome_ficheiro.replace(".png", ""))
         if not os.path.exists(nome_pasta):
             os.makedirs(nome_pasta)
 
