@@ -25,7 +25,8 @@ import {
   type Fixture, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import {
-  completeTransfer, evaluateFeeOffer, evaluatePersonalTerms, SquadRole,
+  completeTransfer, evaluateCounterFee, evaluateFeeOffer, evaluatePersonalTerms,
+  resolveIncomingMove, SquadRole,
 } from '../engine/world/negotiation.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import {
@@ -60,6 +61,15 @@ export interface Negotiation {
   termsMessage: string | null;
 }
 
+export interface IncomingOfferReview {
+  offerId: number;
+  playerIdx: number;
+  buyingClubId: number;
+  fee: number;
+  counterFee: number;
+  message: string | null;
+}
+
 class Game {
   world: World | null = null;
   ctx: SeasonContext = newSeasonContext();
@@ -69,6 +79,7 @@ class Game {
   /** Player the Scouting screen should jump to next time it opens; consumed once. */
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
+  incomingOffer: IncomingOfferReview | null = null;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   busy = false;
@@ -113,6 +124,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.negotiation = null;
+    this.incomingOffer = null;
     this.pendingManager = null;
     this.currentScale = scale;
     this.currentSaveId = newSaveId();
@@ -156,6 +168,7 @@ class Game {
       this.selectedPlayer = null;
       this.selectedClub = null;
       this.negotiation = null;
+      this.incomingOffer = null;
       this.currentSaveId = id;
       const meta = this.saves.find((s) => s.id === id);
       this.currentScale = meta?.scale ?? null;
@@ -247,13 +260,19 @@ class Game {
 
   select(playerIdx: number | null): void {
     this.selectedPlayer = playerIdx;
-    if (playerIdx !== null) this.selectedClub = null;
+    if (playerIdx !== null) {
+      this.selectedClub = null;
+      this.incomingOffer = null;
+    }
     this.emit();
   }
 
   selectClub(clubId: number | null): void {
     this.selectedClub = clubId;
-    if (clubId !== null) this.selectedPlayer = null;
+    if (clubId !== null) {
+      this.selectedPlayer = null;
+      this.incomingOffer = null;
+    }
     this.emit();
   }
 
@@ -263,6 +282,7 @@ class Game {
     this.screen = 'scouting';
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.incomingOffer = null;
     this.emit();
   }
 
@@ -507,6 +527,9 @@ class Game {
       termsRole: SquadRole.Rotation,
       termsMessage: null,
     };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.incomingOffer = null;
     this.emit();
   }
 
@@ -578,6 +601,127 @@ class Game {
 
   cancelNegotiation(): void {
     this.negotiation = null;
+    this.emit();
+  }
+
+  /** Open a pending incoming offer for review. */
+  openOffer(offerId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const offer = world.incomingOffers.find((o) => o.id === offerId);
+    if (offer === undefined) return;
+    this.incomingOffer = {
+      offerId,
+      playerIdx: offer.playerIdx,
+      buyingClubId: offer.buyingClubId,
+      fee: offer.fee,
+      counterFee: offer.fee,
+      message: null,
+    };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.negotiation = null;
+    this.emit();
+  }
+
+  setCounterFee(amount: number): void {
+    if (this.incomingOffer === null) return;
+    this.incomingOffer.counterFee = amount;
+    this.emit();
+  }
+
+  /** Agree to the fee as offered; the player then decides for himself. */
+  acceptOffer(): void {
+    const n = this.incomingOffer;
+    if (n === null) return;
+    this.resolveIncomingOffer(n.fee);
+  }
+
+  /** Ask for more; the buying club can accept, refuse (retry), or hold firm. */
+  counterOffer(): void {
+    const n = this.incomingOffer;
+    const world = this.world;
+    if (n === null || world === null) return;
+    const buyingClub = world.clubs[n.buyingClubId];
+    if (buyingClub === undefined) return;
+
+    const result = evaluateCounterFee(world, buyingClub, n.playerIdx, n.fee, n.counterFee);
+    if (result.accepted) {
+      this.resolveIncomingOffer(n.counterFee);
+    } else {
+      n.message = result.reason;
+      this.emit();
+    }
+  }
+
+  /** Walk away from the negotiation entirely. */
+  declineOffer(): void {
+    const n = this.incomingOffer;
+    const world = this.world;
+    if (n === null || world === null) return;
+    world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
+    this.incomingOffer = null;
+    this.notice = 'You turned down the offer.';
+    this.emit();
+  }
+
+  /** Once a fee is agreed (accept or successful counter), the player decides. */
+  private resolveIncomingOffer(fee: number): void {
+    const n = this.incomingOffer;
+    const world = this.world;
+    if (n === null || world === null) return;
+    const buyingClub = world.clubs[n.buyingClubId];
+    if (buyingClub === undefined) return;
+    const store = world.players;
+
+    const result = resolveIncomingMove(world, buyingClub, n.playerIdx);
+    world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
+
+    if (result.accepted) {
+      completeTransfer(world, buyingClub, n.playerIdx, result.wage, fee);
+      world.messages.push({
+        id: world.messages.length,
+        day: world.day,
+        year: world.year,
+        subject: 'Transfer completed',
+        body: `${store.fullName(n.playerIdx)} has accepted the move to ${buyingClub.name}.`,
+      });
+      this.notice = `${store.fullName(n.playerIdx)} has completed a move to ${buyingClub.name}.`;
+    } else {
+      world.messages.push({
+        id: world.messages.length,
+        day: world.day,
+        year: world.year,
+        subject: 'Transfer rejected by player',
+        body: `${store.fullName(n.playerIdx)} turned down the move to ${buyingClub.name} — he is staying.`,
+      });
+      this.notice = `${store.fullName(n.playerIdx)} turned down the move.`;
+    }
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /**
+   * The board sets one combined envelope for wages and transfers each season;
+   * moving money into one side takes it from the other.
+   */
+  setWageBudget(amount: number): void {
+    const club = this.club;
+    if (club === null) return;
+    const total = club.finances.wageBudget + club.finances.transferBudget;
+    const wage = Math.max(0, Math.min(total, amount));
+    club.finances.wageBudget = wage;
+    club.finances.transferBudget = total - wage;
+    this.emit();
+  }
+
+  setTransferBudget(amount: number): void {
+    const club = this.club;
+    if (club === null) return;
+    const total = club.finances.wageBudget + club.finances.transferBudget;
+    const transfer = Math.max(0, Math.min(total, amount));
+    club.finances.transferBudget = transfer;
+    club.finances.wageBudget = total - transfer;
     this.emit();
   }
 

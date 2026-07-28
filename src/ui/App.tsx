@@ -6,6 +6,7 @@ import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
 } from './screens/Menu.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
+import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { OverviewScreen } from './screens/Overview.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
@@ -88,11 +89,13 @@ export function App(): JSX.Element {
           )}
           {g.negotiation !== null
             ? <NegotiationScreen />
-            : g.selectedClub !== null
-              ? <ClubDetail />
-              : g.selectedPlayer !== null
-                ? <PlayerDetail />
-                : <Screen />}
+            : g.incomingOffer !== null
+              ? <IncomingOfferScreen />
+              : g.selectedClub !== null
+                ? <ClubDetail />
+                : g.selectedPlayer !== null
+                  ? <PlayerDetail />
+                  : <Screen />}
         </main>
       </div>
     </div>

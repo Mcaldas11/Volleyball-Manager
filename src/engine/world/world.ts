@@ -13,6 +13,7 @@ import { PlayerStore } from '../model/players.ts';
 import type { Staff } from '../model/staff.ts';
 import { MatchFormat } from '../match/engine.ts';
 import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
+import type { IncomingOffer } from './negotiation.ts';
 
 export type CompetitionKind = 'league' | 'cup' | 'continental' | 'international';
 
@@ -104,6 +105,8 @@ export interface GameMessage {
   body: string;
   /** Player this message concerns, if any — lets the UI jump straight to them. */
   playerIdx?: number;
+  /** Pending incoming offer this message concerns, if any. */
+  offerId?: number;
 }
 
 /** The human user's own profile — created once, at the start of a career. */
@@ -190,6 +193,11 @@ export interface World {
 
   /** The club's inbox — news, reports, results, in the order they arrived. */
   messages: GameMessage[];
+
+  /** Unsolicited bids from other clubs for the user's own players. */
+  incomingOffers: IncomingOffer[];
+  /** Monotonic id source for incomingOffers — they get removed, unlike messages. */
+  nextOfferId: number;
 }
 
 export function dayOfSeason(world: World): number {
@@ -230,6 +238,8 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     scoutingKnowledge: new Map(),
     scoutingQueue: [],
     messages: [],
+    incomingOffers: [],
+    nextOfferId: 0,
   };
 }
 

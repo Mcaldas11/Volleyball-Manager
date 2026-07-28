@@ -8,7 +8,7 @@ import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engi
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { abilityClass, Bar, ClubLink, Empty, Flag, money, Pos } from '../components.tsx';
+import { abilityClass, Bar, ClubLink, Empty, Flag, money, MoneyInput, Pos } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 /** A labelled dropdown bound to a value on the club's tactics object. */
@@ -343,10 +343,20 @@ export function FinancesScreen(): JSX.Element {
         <div className="panel">
           <h3>Position</h3>
           {line('Balance', f.balance)}
-          {line('Wage budget', f.wageBudget)}
+          <div className="kv">
+            <span className="k">Wage budget</span>
+            <MoneyInput value={f.wageBudget} onChange={(v) => g.setWageBudget(v)} />
+          </div>
           {line('Committed wages', -wages)}
           {line('Remaining', f.wageBudget - wages)}
-          {line('Transfer budget', f.transferBudget)}
+          <div className="kv">
+            <span className="k">Transfer budget</span>
+            <MoneyInput value={f.transferBudget} onChange={(v) => g.setTransferBudget(v)} />
+          </div>
+          <p className="faint" style={{ fontSize: 12, marginTop: 4 }}>
+            The board sets {money(f.wageBudget + f.transferBudget)} to split between wages and
+            transfers each season — moving money into one side takes it from the other.
+          </p>
         </div>
         <div className="panel">
           <h3>Income (annual)</h3>

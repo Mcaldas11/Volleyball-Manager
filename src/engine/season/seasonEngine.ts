@@ -24,6 +24,7 @@ import { scheduleLeagueSeason } from './schedule.ts';
 import { quickSimulate } from './quickSim.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
+import { generateIncomingOffers } from '../world/negotiation.ts';
 
 /** Season-long statistics, keyed by player index. */
 export type SeasonStats = Map<number, SeasonStatLine>;
@@ -287,6 +288,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     if (phase !== SeasonPhase.OffSeason) {
       weeklyTraining(world);
       rollInjuries(world);
+      generateIncomingOffers(world);
     }
   }
 

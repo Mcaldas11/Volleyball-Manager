@@ -43,20 +43,28 @@ export function OverviewScreen(): JSX.Element {
             <Empty>No messages yet.</Empty>
           ) : (
             <div className="club-list" style={{ maxHeight: 320 }}>
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={m.playerIdx !== undefined ? 'clickable' : ''}
-                  onClick={() => { if (m.playerIdx !== undefined) g.focusScouting(m.playerIdx); }}
-                  style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}
-                >
-                  <div className="kv">
-                    <strong>{m.subject}</strong>
-                    <span className="faint">{g.dateLabelForDay(m.day)}</span>
+              {messages.map((m) => {
+                const openOffer = m.offerId !== undefined
+                  && world.incomingOffers.some((o) => o.id === m.offerId);
+                const clickable = openOffer || m.playerIdx !== undefined;
+                return (
+                  <div
+                    key={m.id}
+                    className={clickable ? 'clickable' : ''}
+                    onClick={() => {
+                      if (openOffer && m.offerId !== undefined) g.openOffer(m.offerId);
+                      else if (m.playerIdx !== undefined) g.focusScouting(m.playerIdx);
+                    }}
+                    style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}
+                  >
+                    <div className="kv">
+                      <strong>{m.subject}</strong>
+                      <span className="faint">{g.dateLabelForDay(m.day)}</span>
+                    </div>
+                    <div className="dim">{m.body}</div>
                   </div>
-                  <div className="dim">{m.body}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
