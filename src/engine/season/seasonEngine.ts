@@ -91,7 +91,7 @@ export function pickLineup(
   return { lineup, libero: liberos[0] ?? -1, bench };
 }
 
-function toTeamSetup(store: PlayerStore, club: Club): TeamSetup {
+export function toTeamSetup(store: PlayerStore, club: Club): TeamSetup {
   const { lineup, libero, bench } = pickLineup(store, club);
   return {
     clubId: club.id,
@@ -120,13 +120,6 @@ export function playFixture(
   const away = world.clubs[fixture.away];
   if (home === undefined || away === undefined) return;
 
-  let homeSets: number;
-  let awaySets: number;
-  let setScores: Array<[number, number]>;
-  let homeStats: Map<number, PlayerMatchStats>;
-  let awayStats: Map<number, PlayerMatchStats>;
-  let mvp: number;
-
   if (detailed) {
     const result = simulateMatch(store, {
       home: toTeamSetup(store, home),
@@ -137,40 +130,59 @@ export function playFixture(
       collectLog: true,
       seed: world.rng.next(),
     });
-    homeSets = result.homeSets;
-    awaySets = result.awaySets;
-    setScores = result.setScores;
-    homeStats = result.stats.home.players;
-    awayStats = result.stats.away.players;
-    mvp = result.mvp;
     ctx.detailedResults.set(fixture.id, result);
-  } else {
-    const h = pickLineup(store, home);
-    const a = pickLineup(store, away);
-    const result = quickSimulate(
-      store, h, a, fixture.format, world.rng, !fixture.neutralVenue,
-    );
-    homeSets = result.homeSets;
-    awaySets = result.awaySets;
-    setScores = result.setScores;
-    homeStats = result.homeStats;
-    awayStats = result.awayStats;
-    mvp = result.mvp;
+    applyMatchResult(world, ctx, fixture, result);
+    return;
   }
 
-  fixture.played = true;
-  fixture.homeSets = homeSets;
-  fixture.awaySets = awaySets;
-  fixture.setScores = setScores;
-  fixture.mvp = mvp;
+  const h = pickLineup(store, home);
+  const a = pickLineup(store, away);
+  const result = quickSimulate(store, h, a, fixture.format, world.rng, !fixture.neutralVenue);
 
-  accumulate(ctx.stats, homeStats, setScores.length);
-  accumulate(ctx.stats, awayStats, setScores.length);
-  applyMatchLoad(store, homeStats, world.rng);
-  applyMatchLoad(store, awayStats, world.rng);
+  fixture.played = true;
+  fixture.homeSets = result.homeSets;
+  fixture.awaySets = result.awaySets;
+  fixture.setScores = result.setScores;
+  fixture.mvp = result.mvp;
+
+  accumulate(ctx.stats, result.homeStats, result.setScores.length);
+  accumulate(ctx.stats, result.awayStats, result.setScores.length);
+  applyMatchLoad(store, result.homeStats, world.rng);
+  applyMatchLoad(store, result.awayStats, world.rng);
 
   updateTable(world, fixture);
   applyMatchFinances(world, home, away, fixture);
+}
+
+/**
+ * Commit a fully-resolved detailed match into the world: the fixture record,
+ * season stats, fatigue, the league table and match-day finances. Shared by
+ * `playFixture`'s detailed path and the live match viewer's finalize step,
+ * so both commit results identically.
+ */
+export function applyMatchResult(
+  world: World,
+  ctx: SeasonContext,
+  fixture: Fixture,
+  result: MatchResult,
+): void {
+  fixture.played = true;
+  fixture.homeSets = result.homeSets;
+  fixture.awaySets = result.awaySets;
+  fixture.setScores = result.setScores;
+  fixture.mvp = result.mvp;
+
+  const homeStats = result.stats.home.players;
+  const awayStats = result.stats.away.players;
+  accumulate(ctx.stats, homeStats, result.setScores.length);
+  accumulate(ctx.stats, awayStats, result.setScores.length);
+  applyMatchLoad(world.players, homeStats, world.rng);
+  applyMatchLoad(world.players, awayStats, world.rng);
+
+  updateTable(world, fixture);
+  const home = world.clubs[fixture.home];
+  const away = world.clubs[fixture.away];
+  if (home !== undefined && away !== undefined) applyMatchFinances(world, home, away, fixture);
 }
 
 function accumulate(

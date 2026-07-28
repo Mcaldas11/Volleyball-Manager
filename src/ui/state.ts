@@ -9,12 +9,14 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { MatchResult } from '../engine/match/engine.ts';
+import {
+  MatchSimulator, type MatchResult, type RallyLogEntry, type TeamSetup,
+} from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
-  advanceDay, newSeasonContext, pickLineup, playFixture,
+  advanceDay, applyMatchResult, newSeasonContext, pickLineup, toTeamSetup,
   type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
@@ -70,6 +72,36 @@ export interface IncomingOfferReview {
   message: string | null;
 }
 
+export interface MatchdaySnapshot {
+  homeCourt: number[];
+  awayCourt: number[];
+  homeScore: number;
+  awayScore: number;
+  homeSets: number;
+  awaySets: number;
+  set: number;
+  serving: 0 | 1;
+  matchOver: boolean;
+}
+
+export interface MatchdayState {
+  fixture: Fixture;
+  stage: 'lineup' | 'live';
+  userIsHome: boolean;
+  /** The user's side; edited pre-kickoff, regardless of home/away. */
+  homeLineup: number[];
+  homeLibero: number;
+  homeBench: number[];
+  speed: 1 | 1.25 | 1.75;
+  paused: boolean;
+  /** Rallies revealed so far, for the live commentary feed. */
+  log: RallyLogEntry[];
+  /** Latest read from liveSim.snapshot(), refreshed each tick. */
+  snapshot: MatchdaySnapshot | null;
+  /** The user's side only; mirrors the engine's own per-set limit. */
+  subsUsed: number;
+}
+
 class Game {
   world: World | null = null;
   ctx: SeasonContext = newSeasonContext();
@@ -80,6 +112,9 @@ class Game {
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
   incomingOffer: IncomingOfferReview | null = null;
+  matchday: MatchdayState | null = null;
+  private liveSim: MatchSimulator | null = null;
+  private tickHandle: number | null = null;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   busy = false;
@@ -125,6 +160,9 @@ class Game {
     this.selectedClub = null;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.clearTick();
+    this.matchday = null;
+    this.liveSim = null;
     this.pendingManager = null;
     this.currentScale = scale;
     this.currentSaveId = newSaveId();
@@ -169,6 +207,9 @@ class Game {
       this.selectedClub = null;
       this.negotiation = null;
       this.incomingOffer = null;
+      this.clearTick();
+      this.matchday = null;
+      this.liveSim = null;
       this.currentSaveId = id;
       const meta = this.saves.find((s) => s.id === id);
       this.currentScale = meta?.scale ?? null;
@@ -404,21 +445,187 @@ class Game {
     return this.watched;
   }
 
-  /** Simulate the user's next match immediately, with a full rally log. */
-  playNextMatch(): void {
+  // ---- Matchday -----------------------------------------------------------
+
+  /** Fast-forward to the user's next fixture and open the pre-match lineup screen. */
+  openMatchday(): void {
     const world = this.world;
-    if (world === null) return;
+    const club = this.club;
+    if (world === null || club === null) return;
     const next = this.nextFixture();
     if (next === null) return;
     while (world.day < next.day) {
-      advanceDay(world, this.ctx, {
-        detailedClubs: new Set([world.userClubId]),
-      });
+      advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
     }
-    playFixture(world, this.ctx, next, true);
-    this.captureWatched(next);
-    advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
+
+    const { lineup, libero, bench } = pickLineup(world.players, club);
+    this.matchday = {
+      fixture: next,
+      stage: 'lineup',
+      userIsHome: next.home === club.id,
+      homeLineup: lineup,
+      homeLibero: libero,
+      homeBench: bench,
+      speed: 1,
+      paused: false,
+      log: [],
+      snapshot: null,
+      subsUsed: 0,
+    };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.negotiation = null;
+    this.incomingOffer = null;
     this.emit();
+  }
+
+  /** Swap a starter on the pre-match lineup screen. */
+  setMatchdayPlayer(zoneIdx: number, playerIdx: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup') return;
+    md.homeLineup[zoneIdx] = playerIdx;
+    this.emit();
+  }
+
+  /** Confirm the lineup and start the live match. */
+  kickOff(): void {
+    const world = this.world;
+    const md = this.matchday;
+    const club = this.club;
+    if (world === null || md === null || club === null) return;
+    const homeClub = world.clubs[md.fixture.home];
+    const awayClub = world.clubs[md.fixture.away];
+    if (homeClub === undefined || awayClub === undefined) return;
+
+    const userSetup: TeamSetup = {
+      clubId: club.id,
+      name: club.name,
+      lineup: md.homeLineup,
+      libero: md.homeLibero,
+      bench: md.homeBench,
+      tactics: club.tactics,
+    };
+    const homeSetup = md.userIsHome ? userSetup : toTeamSetup(world.players, homeClub);
+    const awaySetup = md.userIsHome ? toTeamSetup(world.players, awayClub) : userSetup;
+
+    this.liveSim = new MatchSimulator(world.players, {
+      home: homeSetup,
+      away: awaySetup,
+      format: md.fixture.format,
+      importance: md.fixture.importance,
+      neutralVenue: md.fixture.neutralVenue,
+      collectLog: true,
+      seed: world.rng.next(),
+    });
+    md.stage = 'live';
+    md.log = [];
+    md.subsUsed = 0;
+    md.snapshot = this.liveSim.snapshot();
+    this.scheduleTick();
+    this.emit();
+  }
+
+  setSpeed(speed: 1 | 1.25 | 1.75): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.speed = speed;
+    if (!md.paused) this.scheduleTick();
+    this.emit();
+  }
+
+  pause(): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.paused = true;
+    this.clearTick();
+    this.emit();
+  }
+
+  resume(): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.paused = false;
+    this.scheduleTick();
+    this.emit();
+  }
+
+  /** Skip straight to the result without watching the rest of the match. */
+  finishMatchdayNow(): void {
+    const md = this.matchday;
+    if (md === null || this.liveSim === null) return;
+    this.clearTick();
+    this.liveSim.finish();
+    this.finalizeMatchday();
+  }
+
+  /** Bring on a bench player for the user's own side, mid-match. */
+  substitute(outPlayerIdx: number, inPlayerIdx: number): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.stage !== 'live') return;
+    const teamIdx = md.userIsHome ? 0 : 1;
+    const result = sim.substitute(teamIdx, outPlayerIdx, inPlayerIdx);
+    if (result.ok) {
+      md.subsUsed++;
+      md.snapshot = sim.snapshot();
+    } else {
+      this.notice = result.reason ?? 'That substitution is not allowed.';
+    }
+    this.emit();
+  }
+
+  private clearTick(): void {
+    if (this.tickHandle !== null) {
+      window.clearInterval(this.tickHandle);
+      this.tickHandle = null;
+    }
+  }
+
+  private scheduleTick(): void {
+    this.clearTick();
+    const md = this.matchday;
+    if (md === null || md.stage !== 'live' || md.paused) return;
+    const interval = 900 / md.speed;
+    this.tickHandle = window.setInterval(() => this.tick(), interval);
+  }
+
+  private tick(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) {
+      this.clearTick();
+      return;
+    }
+    const entry = sim.step();
+    if (entry !== null) md.log.push(entry);
+    md.snapshot = sim.snapshot();
+    if (md.snapshot.matchOver) {
+      this.clearTick();
+      this.finalizeMatchday();
+      return;
+    }
+    this.emit();
+  }
+
+  private finalizeMatchday(): void {
+    const world = this.world;
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (world === null || md === null || sim === null) return;
+
+    const result = sim.buildResult();
+    applyMatchResult(world, this.ctx, md.fixture, result);
+    this.ctx.detailedResults.set(md.fixture.id, result);
+    this.watched = {
+      fixture: md.fixture,
+      result,
+      homeName: world.clubs[md.fixture.home]?.name ?? '?',
+      awayName: world.clubs[md.fixture.away]?.name ?? '?',
+    };
+    this.liveSim = null;
+    this.matchday = null;
+    advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
+    this.go('fixtures');
   }
 
   // ---- Squad ------------------------------------------------------------

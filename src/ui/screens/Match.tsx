@@ -152,7 +152,7 @@ function RallyLog({ log, home, away }: { log: RallyLogEntry[]; home: string; awa
 }
 
 /** Turn a rally's contacts into a sentence a volleyball person would recognise. */
-function describeRally(r: RallyLogEntry, store: { shortName: (i: number) => string }): string {
+export function describeRally(r: RallyLogEntry, store: { shortName: (i: number) => string }): string {
   const parts: string[] = [];
   for (const c of r.contacts) {
     parts.push(describeContact(c, store));

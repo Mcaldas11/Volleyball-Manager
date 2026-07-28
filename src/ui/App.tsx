@@ -7,6 +7,7 @@ import {
 } from './screens/Menu.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
+import { MatchdayScreen } from './screens/Matchday.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { OverviewScreen } from './screens/Overview.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
@@ -87,15 +88,17 @@ export function App(): JSX.Element {
               {g.notice}
             </div>
           )}
-          {g.negotiation !== null
-            ? <NegotiationScreen />
-            : g.incomingOffer !== null
-              ? <IncomingOfferScreen />
-              : g.selectedClub !== null
-                ? <ClubDetail />
-                : g.selectedPlayer !== null
-                  ? <PlayerDetail />
-                  : <Screen />}
+          {g.matchday !== null
+            ? <MatchdayScreen />
+            : g.negotiation !== null
+              ? <NegotiationScreen />
+              : g.incomingOffer !== null
+                ? <IncomingOfferScreen />
+                : g.selectedClub !== null
+                  ? <ClubDetail />
+                  : g.selectedPlayer !== null
+                    ? <PlayerDetail />
+                    : <Screen />}
         </main>
       </div>
     </div>
@@ -157,7 +160,7 @@ function TopBar(): JSX.Element {
       <button
         className="primary"
         disabled={next === null}
-        onClick={() => { g.playNextMatch(); g.go('fixtures'); }}
+        onClick={() => g.openMatchday()}
       >
         {next === null
           ? 'No fixture'

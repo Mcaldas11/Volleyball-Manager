@@ -214,6 +214,19 @@ export class MatchSimulator {
   private readonly laneWeights = new Float64Array(6);
   private readonly laneAttacker = new Int32Array(6);
 
+  // ---- Stepped match state --------------------------------------------------
+  // The match plays one rally per step() call rather than end-to-end in one
+  // shot, so a live viewer can pace calls over time and substitute a player
+  // between any two rallies — exactly where real volleyball allows a sub.
+  private started = false;
+  private matchOver = false;
+  private serving: 0 | 1 = 0;
+  private setTarget = 25;
+  private setsToWin = 3;
+  private maxSets = 5;
+  /** Substitutions used this set, per team. Resets each set; FIVB allows 6. */
+  private readonly subsUsedThisSet: [number, number] = [0, 0];
+
   constructor(
     private readonly store: PlayerStore,
     private readonly setup: MatchSetup,
@@ -230,42 +243,111 @@ export class MatchSimulator {
     }
   }
 
+  /** Play the whole match synchronously and return the result. */
   run(): MatchResult {
-    const format = this.setup.format;
-    const setsToWin = format === MatchFormat.BestOf5 ? 3 : format === MatchFormat.BestOf3 ? 2 : 1;
-    const maxSets = format === MatchFormat.BestOf5 ? 5 : format === MatchFormat.BestOf3 ? 3 : 1;
+    this.startIfNeeded();
+    this.finish();
+    return this.buildResult();
+  }
 
-    // Coin toss for first serve.
-    let serving: 0 | 1 = this.rng.chance(0.5) ? 0 : 1;
+  /** Play every remaining rally to completion. */
+  finish(): void {
+    while (!this.matchOver) this.step();
+  }
 
-    while (
-      this.teams[0].setsWon < setsToWin &&
-      this.teams[1].setsWon < setsToWin &&
-      this.currentSet < maxSets
-    ) {
-      const isDecider =
-        (format === MatchFormat.BestOf5 && this.currentSet === 4) ||
-        (format === MatchFormat.BestOf3 && this.currentSet === 2) ||
-        format === MatchFormat.GoldenSet;
-      const target = isDecider ? 15 : 25;
+  /**
+   * Play exactly one rally and return its log entry, or null if the match is
+   * already over. This is the one place set/match transitions happen, so it
+   * is also the natural point a live caller checks for a set/match boundary.
+   */
+  step(): RallyLogEntry | null {
+    this.startIfNeeded();
+    if (this.matchOver) return null;
 
-      const winner = this.playSet(target, serving);
-      this.teams[winner].setsWon++;
-      this.setScores.push([this.teams[0].score, this.teams[1].score]);
-      this.teams[0].stats.pointsByset.push(this.teams[0].score);
-      this.teams[1].stats.pointsByset.push(this.teams[1].score);
+    const serving = this.serving;
+    const entry = this.playRally(serving);
+    const winner = entry.winner;
 
-      // Serve alternates by set.
-      serving = (this.currentSet % 2 === 0 ? 1 : 0) as 0 | 1;
-      this.currentSet++;
-
-      this.recoverBetweenSets();
+    this.teams[winner].score++;
+    this.teams[winner].currentRun++;
+    this.teams[1 - winner].currentRun = 0;
+    const run = this.teams[winner].currentRun;
+    if (run > this.teams[winner].stats.longestRun) {
+      this.teams[winner].stats.longestRun = run;
     }
 
-    this.teams[0].stats.setsWon = this.teams[0].setsWon;
-    this.teams[1].stats.setsWon = this.teams[1].setsWon;
-    this.commitCareerTotals();
+    // Momentum decays toward zero and swings with runs. Bounded so it
+    // colours performance without ever deciding a match on its own.
+    this.teams[winner].momentum = Math.min(6, this.teams[winner].momentum * 0.82 + 1);
+    this.teams[1 - winner].momentum = Math.max(-6, this.teams[1 - winner].momentum * 0.82 - 1);
 
+    if (winner !== serving) {
+      // Side-out: the receiving team wins the ball and rotates before serving.
+      rotate(this.teams[winner].court);
+      this.serving = winner;
+    }
+
+    const a = this.teams[0].score;
+    const b = this.teams[1].score;
+    const setOver =
+      ((a >= this.setTarget || b >= this.setTarget) && Math.abs(a - b) >= 2) ||
+      // Safety valve: a deuce cannot run forever in a simulation.
+      a > this.setTarget + 25 || b > this.setTarget + 25;
+
+    if (setOver) {
+      const setWinner = a > b ? 0 : 1;
+      this.teams[setWinner].setsWon++;
+      this.setScores.push([a, b]);
+      this.teams[0].stats.pointsByset.push(a);
+      this.teams[1].stats.pointsByset.push(b);
+      this.recoverBetweenSets();
+
+      // Serve alternates by set.
+      this.serving = (this.currentSet % 2 === 0 ? 1 : 0) as 0 | 1;
+      this.currentSet++;
+
+      if (
+        this.teams[0].setsWon >= this.setsToWin ||
+        this.teams[1].setsWon >= this.setsToWin ||
+        this.currentSet >= this.maxSets
+      ) {
+        this.teams[0].stats.setsWon = this.teams[0].setsWon;
+        this.teams[1].stats.setsWon = this.teams[1].setsWon;
+        this.commitCareerTotals();
+        this.matchOver = true;
+      } else {
+        this.beginSet();
+      }
+    }
+
+    return entry;
+  }
+
+  private startIfNeeded(): void {
+    if (this.started) return;
+    this.started = true;
+    const format = this.setup.format;
+    this.setsToWin = format === MatchFormat.BestOf5 ? 3 : format === MatchFormat.BestOf3 ? 2 : 1;
+    this.maxSets = format === MatchFormat.BestOf5 ? 5 : format === MatchFormat.BestOf3 ? 3 : 1;
+    // Coin toss for first serve.
+    this.serving = this.rng.chance(0.5) ? 0 : 1;
+    this.beginSet();
+  }
+
+  private beginSet(): void {
+    this.teams[0].resetForSet();
+    this.teams[1].resetForSet();
+    const format = this.setup.format;
+    const isDecider =
+      (format === MatchFormat.BestOf5 && this.currentSet === 4) ||
+      (format === MatchFormat.BestOf3 && this.currentSet === 2) ||
+      format === MatchFormat.GoldenSet;
+    this.setTarget = isDecider ? 15 : 25;
+    this.subsUsedThisSet[0] = 0;
+    this.subsUsedThisSet[1] = 0;
+  }
+
+  buildResult(): MatchResult {
     return {
       homeSets: this.teams[0].setsWon,
       awaySets: this.teams[1].setsWon,
@@ -277,53 +359,67 @@ export class MatchSimulator {
     };
   }
 
-  // ---- Set loop -----------------------------------------------------------
+  /**
+   * Bring a bench player on for one currently on court, if the rules allow
+   * it — the substitute must be part of the matchday squad, the outgoing
+   * player must actually be on court, and each side gets six substitutions
+   * per set (the real FIVB limit). No libero re-entry rules are modelled.
+   */
+  substitute(
+    team: 0 | 1,
+    outPlayerIdx: number,
+    inPlayerIdx: number,
+  ): { ok: boolean; reason?: string } {
+    const t = this.teams[team];
+    const zone = t.court.indexOf(outPlayerIdx);
+    if (zone === -1) return { ok: false, reason: 'That player is not on court.' };
+    if (!t.ratings.has(inPlayerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
+    if (t.court.includes(inPlayerIdx)) return { ok: false, reason: 'That player is already on court.' };
+    if (this.subsUsedThisSet[team] >= 6) return { ok: false, reason: 'No substitutions left this set.' };
 
-  private playSet(target: number, firstServe: 0 | 1): 0 | 1 {
-    this.teams[0].resetForSet();
-    this.teams[1].resetForSet();
-    let serving = firstServe;
+    t.court[zone] = inPlayerIdx;
+    if (t.setterIdx === outPlayerIdx) t.setterIdx = inPlayerIdx;
+    this.subsUsedThisSet[team]++;
+    return { ok: true };
+  }
 
-    for (;;) {
-      const winner = this.playRally(serving);
+  subsRemaining(team: 0 | 1): number {
+    return 6 - this.subsUsedThisSet[team];
+  }
 
-      this.teams[winner].score++;
-      this.teams[winner].currentRun++;
-      this.teams[1 - winner].currentRun = 0;
-      const run = this.teams[winner].currentRun;
-      if (run > this.teams[winner].stats.longestRun) {
-        this.teams[winner].stats.longestRun = run;
-      }
-
-      // Momentum decays toward zero and swings with runs. Bounded so it
-      // colours performance without ever deciding a match on its own.
-      this.teams[winner].momentum = Math.min(6, this.teams[winner].momentum * 0.82 + 1);
-      this.teams[1 - winner].momentum = Math.max(-6, this.teams[1 - winner].momentum * 0.82 - 1);
-
-      if (winner !== serving) {
-        // Side-out: the receiving team wins the ball and rotates before serving.
-        rotate(this.teams[winner].court);
-        serving = winner;
-      }
-
-      const a = this.teams[0].score;
-      const b = this.teams[1].score;
-      if ((a >= target || b >= target) && Math.abs(a - b) >= 2) {
-        return a > b ? 0 : 1;
-      }
-      // Safety valve: a deuce cannot run forever in a simulation.
-      if (a > target + 25 || b > target + 25) return a > b ? 0 : 1;
-    }
+  /** Read-only snapshot for a live viewer to render after each step(). */
+  snapshot(): {
+    homeCourt: number[];
+    awayCourt: number[];
+    homeScore: number;
+    awayScore: number;
+    homeSets: number;
+    awaySets: number;
+    set: number;
+    serving: 0 | 1;
+    matchOver: boolean;
+  } {
+    return {
+      homeCourt: Array.from(this.teams[0].court),
+      awayCourt: Array.from(this.teams[1].court),
+      homeScore: this.teams[0].score,
+      awayScore: this.teams[1].score,
+      homeSets: this.teams[0].setsWon,
+      awaySets: this.teams[1].setsWon,
+      set: this.currentSet,
+      serving: this.serving,
+      matchOver: this.matchOver,
+    };
   }
 
   // ---- Rally --------------------------------------------------------------
 
-  private playRally(serving: 0 | 1): 0 | 1 {
+  private playRally(serving: 0 | 1): RallyLogEntry {
     const receiving = (1 - serving) as 0 | 1;
     const srv = this.teams[serving];
     const rcv = this.teams[receiving];
 
-    if (this.log) this.contacts = [];
+    this.contacts = [];
     const scoreBefore: [number, number] = [this.teams[0].score, this.teams[1].score];
     const srvRot = srv.rotation();
     const rcvRot = rcv.rotation();
@@ -342,19 +438,18 @@ export class MatchSimulator {
     this.totalRallies++;
     this.applyFatigue(this.contacts.length || 4);
 
-    if (this.log) {
-      this.log.push({
-        set: this.currentSet,
-        scoreBefore,
-        serveTeam: serving,
-        winner,
-        homeRotation: this.teams[0].rotation(),
-        awayRotation: this.teams[1].rotation(),
-        contacts: this.contacts,
-        homeWinProb: this.estimateWinProbability(),
-      });
-    }
-    return winner;
+    const entry: RallyLogEntry = {
+      set: this.currentSet,
+      scoreBefore,
+      serveTeam: serving,
+      winner,
+      homeRotation: this.teams[0].rotation(),
+      awayRotation: this.teams[1].rotation(),
+      contacts: this.contacts,
+      homeWinProb: this.estimateWinProbability(),
+    };
+    if (this.log) this.log.push(entry);
+    return entry;
   }
 
   /** Runs one rally from the serve to the moment the ball is dead. */
