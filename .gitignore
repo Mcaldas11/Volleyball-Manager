@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+*.log
+
+# Local save games and imported datasets. Imported FIVB data is licensed to the
+# person who imported it and must never be committed or redistributed.
+saves/
+data/local/
+data/fivb-cache/
+.env
+.env.local

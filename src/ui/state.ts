@@ -1,0 +1,355 @@
+/**
+ * Game state for the UI.
+ *
+ * A deliberately thin layer: the engine owns the world and all the rules, and
+ * this only holds what the *interface* needs — which club the user manages,
+ * which screen is open, which player is selected, and the last match they
+ * watched. Nothing here may contain simulation logic; if a rule lives in the
+ * UI it cannot be tested headlessly or run in a fifty-season career.
+ */
+
+import { useSyncExternalStore } from 'react';
+import type { MatchResult } from '../engine/match/engine.ts';
+import type { Club } from '../engine/model/club.ts';
+import { PlayerFlag } from '../engine/model/players.ts';
+import {
+  advanceDay, newSeasonContext, pickLineup, playFixture,
+  type SeasonContext,
+} from '../engine/season/seasonEngine.ts';
+import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
+import { startSeason } from '../engine/season/seasonEngine.ts';
+import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
+import {
+  currentPhase, dayOfSeason, DAYS_PER_SEASON, SeasonPhase,
+  type Fixture, type World,
+} from '../engine/world/world.ts';
+
+export type ScreenId =
+  | 'squad' | 'tactics' | 'rotations' | 'fixtures' | 'table'
+  | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
+  | 'youth' | 'stats' | 'rankings' | 'halloffame';
+
+export interface WatchedMatch {
+  fixture: Fixture;
+  result: MatchResult;
+  homeName: string;
+  awayName: string;
+}
+
+class Game {
+  world: World | null = null;
+  ctx: SeasonContext = newSeasonContext();
+  screen: ScreenId = 'squad';
+  selectedPlayer: number | null = null;
+  watched: WatchedMatch | null = null;
+  lastRollover: RolloverReport | null = null;
+  busy = false;
+  notice = '';
+
+  private version = 0;
+  private listeners = new Set<() => void>();
+
+  subscribe = (fn: () => void): (() => void) => {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  };
+
+  getSnapshot = (): number => this.version;
+
+  private emit(): void {
+    this.version++;
+    for (const fn of this.listeners) fn();
+  }
+
+  // ---- Lifecycle --------------------------------------------------------
+
+  newGame(scale: WorldScale, seed: number): void {
+    const world = generateWorld({ seed, startYear: 2026, scale });
+    startSeason(world);
+    this.world = world;
+    this.ctx = newSeasonContext();
+    this.watched = null;
+    this.lastRollover = null;
+    this.notice = '';
+    this.emit();
+  }
+
+  /** Clubs the user may take over, best first. */
+  selectableClubs(limit = 60): Club[] {
+    if (this.world === null) return [];
+    return [...this.world.clubs]
+      .sort((a, b) => b.reputation - a.reputation)
+      .slice(0, limit);
+  }
+
+  takeCharge(clubId: number): void {
+    if (this.world === null) return;
+    this.world.userClubId = clubId;
+    this.screen = 'squad';
+    this.emit();
+  }
+
+  get club(): Club | null {
+    if (this.world === null || this.world.userClubId < 0) return null;
+    return this.world.clubs[this.world.userClubId];
+  }
+
+  // ---- Navigation -------------------------------------------------------
+
+  go(screen: ScreenId): void {
+    this.screen = screen;
+    this.emit();
+  }
+
+  select(playerIdx: number | null): void {
+    this.selectedPlayer = playerIdx;
+    this.emit();
+  }
+
+  // ---- Time -------------------------------------------------------------
+
+  /**
+   * Advance the world, stopping early if one of the user's own matches comes
+   * up — the user should never skip past their own fixture by accident.
+   */
+  advance(days: number, stopAtOwnMatch = true): void {
+    const world = this.world;
+    if (world === null) return;
+    const clubId = world.userClubId;
+
+    for (let d = 0; d < days; d++) {
+      if (dayOfSeason(world) >= 350) {
+        this.rollover();
+        continue;
+      }
+      if (stopAtOwnMatch && clubId >= 0 && this.fixtureOn(world.day) !== null && d > 0) break;
+
+      // The user's own matches always run through the full rally engine.
+      advanceDay(world, this.ctx, {
+        detailedClubs: clubId >= 0 ? new Set([clubId]) : undefined,
+      });
+
+      // Keep the most recent of the user's matches available to review.
+      const played = this.fixtureOn(world.day - 1);
+      if (played !== null && played.played) this.captureWatched(played);
+    }
+    this.emit();
+  }
+
+  /** Advance to the user's next fixture and play it. */
+  advanceToNextMatch(): void {
+    const world = this.world;
+    if (world === null || world.userClubId < 0) return;
+    const next = this.nextFixture();
+    if (next === null) {
+      this.advance(7);
+      return;
+    }
+    const gap = Math.max(1, next.day - world.day + 1);
+    this.advance(gap, false);
+  }
+
+  private rollover(): void {
+    const world = this.world;
+    if (world === null) return;
+    this.lastRollover = endSeason(world, this.ctx);
+    this.notice = `Season ${world.year} complete.`;
+    // Step into the new season.
+    while (dayOfSeason(world) >= 350) {
+      world.day++;
+      if (world.day % DAYS_PER_SEASON === 0) world.year++;
+    }
+  }
+
+  private captureWatched(fixture: Fixture): void {
+    const world = this.world;
+    if (world === null) return;
+    const result = this.ctx.detailedResults.get(fixture.id);
+    if (result === undefined) return;
+    this.watched = {
+      fixture,
+      result,
+      homeName: world.clubs[fixture.home]?.name ?? '?',
+      awayName: world.clubs[fixture.away]?.name ?? '?',
+    };
+  }
+
+  // ---- Fixtures ---------------------------------------------------------
+
+  private fixtureOn(day: number): Fixture | null {
+    const world = this.world;
+    if (world === null || world.userClubId < 0) return null;
+    const ids = world.fixturesByDay.get(day);
+    if (ids === undefined) return null;
+    for (const id of ids) {
+      const f = world.fixtures[id];
+      if (f.home === world.userClubId || f.away === world.userClubId) return f;
+    }
+    return null;
+  }
+
+  nextFixture(): Fixture | null {
+    const world = this.world;
+    if (world === null || world.userClubId < 0) return null;
+    let best: Fixture | null = null;
+    for (const f of world.fixtures) {
+      if (f.played) continue;
+      if (f.home !== world.userClubId && f.away !== world.userClubId) continue;
+      if (f.day < world.day) continue;
+      if (best === null || f.day < best.day) best = f;
+    }
+    return best;
+  }
+
+  /** All of the user's fixtures this season, in order. */
+  ownFixtures(): Fixture[] {
+    const world = this.world;
+    if (world === null || world.userClubId < 0) return [];
+    return world.fixtures
+      .filter((f) => f.home === world.userClubId || f.away === world.userClubId)
+      .sort((a, b) => a.day - b.day);
+  }
+
+  /** Replay the user's most recent completed match through the full engine. */
+  reviewLast(): WatchedMatch | null {
+    return this.watched;
+  }
+
+  /** Simulate the user's next match immediately, with a full rally log. */
+  playNextMatch(): void {
+    const world = this.world;
+    if (world === null) return;
+    const next = this.nextFixture();
+    if (next === null) return;
+    while (world.day < next.day) {
+      advanceDay(world, this.ctx, {
+        detailedClubs: new Set([world.userClubId]),
+      });
+    }
+    playFixture(world, this.ctx, next, true);
+    this.captureWatched(next);
+    advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
+    this.emit();
+  }
+
+  // ---- Squad ------------------------------------------------------------
+
+  lineup(): { lineup: number[]; libero: number; bench: number[] } | null {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return null;
+    return pickLineup(world.players, club);
+  }
+
+  /** Senior squad, sorted by ability. */
+  squad(): number[] {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return [];
+    return [...club.players].sort(
+      (a, b) => world.players.currentAbility[b] - world.players.currentAbility[a],
+    );
+  }
+
+  youthSquad(): number[] {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return [];
+    return [...club.youthPlayers].sort(
+      (a, b) => world.players.potentialAbility[b] - world.players.potentialAbility[a],
+    );
+  }
+
+  /** Free agents the club could realistically sign. */
+  transferTargets(limit = 120): number[] {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return [];
+    const store = world.players;
+    const out: number[] = [];
+    for (let i = 0; i < store.count && out.length < limit * 4; i++) {
+      if (!store.isActive(i) || store.clubId[i] >= 0) continue;
+      if (store.hasFlag(i, PlayerFlag.Youth)) continue;
+      out.push(i);
+    }
+    return out
+      .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
+      .slice(0, limit);
+  }
+
+  signPlayer(playerIdx: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    const store = world.players;
+    if (store.clubId[playerIdx] >= 0) return;
+
+    let committed = 0;
+    for (const p of club.players) committed += store.wage[p];
+    if (committed + store.wage[playerIdx] > club.finances.wageBudget) {
+      this.notice = 'Not enough room in the wage budget for that contract.';
+      this.emit();
+      return;
+    }
+    if (club.players.length >= 16) {
+      this.notice = 'The squad is full — release a player first.';
+      this.emit();
+      return;
+    }
+
+    club.players.push(playerIdx);
+    store.clubId[playerIdx] = club.id;
+    store.contractUntil[playerIdx] = world.day + 2 * DAYS_PER_SEASON;
+    this.notice = `${store.fullName(playerIdx)} has signed.`;
+    this.emit();
+  }
+
+  releasePlayer(playerIdx: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    club.players = club.players.filter((p) => p !== playerIdx);
+    world.players.clubId[playerIdx] = -1;
+    this.notice = `${world.players.fullName(playerIdx)} has been released.`;
+    this.emit();
+  }
+
+  /** Called by tactics screens after mutating club.tactics in place. */
+  touch(): void {
+    this.emit();
+  }
+
+  // ---- Calendar ---------------------------------------------------------
+
+  phase(): SeasonPhase {
+    return this.world === null ? SeasonPhase.OffSeason : currentPhase(this.world);
+  }
+
+  dateLabel(): string {
+    const world = this.world;
+    if (world === null) return '';
+    // The save begins on 1 July, so season day 0 is calendar day 181.
+    const doy = (dayOfSeason(world) + 181) % 365;
+    const date = new Date(Date.UTC(world.year, 0, 1));
+    date.setUTCDate(date.getUTCDate() + doy);
+    return date.toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+    });
+  }
+}
+
+export const game = new Game();
+
+/** Re-render on any game state change. */
+export function useGame(): Game {
+  useSyncExternalStore(game.subscribe, game.getSnapshot, game.getSnapshot);
+  return game;
+}
+
+export const PHASE_NAMES: Record<SeasonPhase, string> = {
+  [SeasonPhase.PreSeason]: 'Pre-season',
+  [SeasonPhase.RegularSeason]: 'Regular season',
+  [SeasonPhase.Playoffs]: 'Playoffs',
+  [SeasonPhase.NationalTeam]: 'International window',
+  [SeasonPhase.OffSeason]: 'Off-season',
+};
