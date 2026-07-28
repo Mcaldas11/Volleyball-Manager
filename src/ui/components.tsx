@@ -5,7 +5,7 @@
  * ability, money and injury status read identically everywhere they appear.
  */
 
-import type { JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../engine/model/players.ts';
 import { NATIONS } from '../engine/world/nations.ts';
@@ -26,6 +26,62 @@ export function money(v: number): string {
   if (abs >= 1_000_000) return `${sign}€${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
   if (abs >= 1_000) return `${sign}€${Math.round(abs / 1_000)}k`;
   return `${sign}€${Math.round(abs)}`;
+}
+
+/** Money without the currency sign, for an editable field: "100k", "2M". */
+export function moneyShort(v: number): string {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    const rounded = abs >= 10_000_000 ? Math.round(m) : Math.round(m * 10) / 10;
+    return `${sign}${rounded}M`;
+  }
+  if (abs >= 1_000) return `${sign}${Math.round(abs / 1_000)}k`;
+  return `${sign}${Math.round(abs)}`;
+}
+
+/** Parse shorthand like "100k" or "2.5M" (or a plain number) back into a value. */
+export function parseMoneyShort(text: string): number | null {
+  const cleaned = text.trim().toLowerCase().replace(/[€,\s]/g, '');
+  if (cleaned === '') return null;
+  const match = /^(-?\d+(?:\.\d+)?)(k|m)?$/.exec(cleaned);
+  if (match === null) return null;
+  const n = Number(match[1]);
+  if (Number.isNaN(n)) return null;
+  const mult = match[2] === 'k' ? 1_000 : match[2] === 'm' ? 1_000_000 : 1;
+  return Math.round(n * mult);
+}
+
+/** A money field that displays and accepts shorthand ("100k", "2M") rather than raw digits. */
+export function MoneyInput({
+  value, onChange, min = 0,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+}): JSX.Element {
+  const [text, setText] = useState(moneyShort(value));
+
+  useEffect(() => setText(moneyShort(value)), [value]);
+
+  const commit = (): void => {
+    const parsed = parseMoneyShort(text);
+    if (parsed !== null && parsed >= min) onChange(parsed);
+    else setText(moneyShort(value));
+  };
+
+  return (
+    <input
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur(); }
+      }}
+      style={{ width: 100, textAlign: 'right' }}
+    />
+  );
 }
 
 export function Pos({ pos }: { pos: Position }): JSX.Element {

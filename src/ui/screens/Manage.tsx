@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import {
   BlockAssignment, DefensiveShape, DefensiveSystem, OffensiveSystem,
   ServeStrategy, ServeTarget, Tempo,
@@ -510,9 +510,13 @@ export function ScoutingScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
-  const club = g.club!;
-  const [target, setTarget] = useState<number | null>(null);
+  const [target, setTarget] = useState<number | null>(g.scoutingFocus);
   const [query, setQuery] = useState('');
+
+  // Consume any pending scouting focus exactly once, right after mounting.
+  useEffect(() => {
+    if (g.scoutingFocus !== null) g.clearScoutingFocus();
+  }, []);
 
   const targets = g.scoutingPool(query);
   const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
@@ -520,9 +524,6 @@ export function ScoutingScreen(): JSX.Element {
     ? buildScoutReport(world, world.userClubId, target, { confidence: 0, matchesWatched })
     : null;
 
-  const committed = club.players.reduce((s, p) => s + store.wage[p], 0);
-  const targetIsFreeAgent = target !== null && store.clubId[target] < 0;
-  const affordable = target !== null && store.wage[target] <= club.finances.wageBudget - committed;
   const pending = target !== null
     ? world.scoutingQueue.find((t) => t.playerIdx === target)
     : undefined;
@@ -611,15 +612,9 @@ export function ScoutingScreen(): JSX.Element {
                   <button disabled={pending !== undefined} onClick={() => g.scoutPlayer(target)}>
                     {pending !== undefined ? 'Scouting in progress…' : 'Scout this player'}
                   </button>
-                  {targetIsFreeAgent && (
-                    <button
-                      className="primary"
-                      disabled={!affordable}
-                      onClick={() => g.signPlayer(target)}
-                    >
-                      Sign
-                    </button>
-                  )}
+                  <button className="primary" onClick={() => g.startNegotiation(target)}>
+                    Negotiate transfer
+                  </button>
                 </div>
 
                 {report === null ? (
@@ -715,7 +710,7 @@ export function TransfersScreen(): JSX.Element {
                     <td className="num dim">{money(store.value[p])}</td>
                     <td className={`num ${affordable ? '' : 'bad'}`}>{money(store.wage[p])}</td>
                     <td>
-                      <button disabled={!affordable} onClick={() => g.signPlayer(p)}>Sign</button>
+                      <button onClick={() => g.startNegotiation(p)}>Negotiate</button>
                     </td>
                   </tr>
                 );

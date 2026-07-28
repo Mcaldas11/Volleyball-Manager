@@ -145,7 +145,7 @@ td {
   white-space: nowrap;
 }
 tbody tr:hover { background: var(--bg-hover); }
-tbody tr.clickable { cursor: pointer; }
+.clickable { cursor: pointer; }
 tbody tr.selected { background: var(--accent-dim); }
 .num { text-align: right; }
 

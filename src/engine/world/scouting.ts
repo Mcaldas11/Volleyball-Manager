@@ -256,6 +256,7 @@ export function processScoutingQueue(world: World): void {
       year: world.year,
       subject: 'Scouting report ready',
       body: `Your scouts have filed a new report on ${world.players.fullName(task.playerIdx)}.`,
+      playerIdx: task.playerIdx,
     });
   }
   world.scoutingQueue = remaining;

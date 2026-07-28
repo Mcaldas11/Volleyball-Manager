@@ -102,6 +102,8 @@ export interface GameMessage {
   year: number;
   subject: string;
   body: string;
+  /** Player this message concerns, if any — lets the UI jump straight to them. */
+  playerIdx?: number;
 }
 
 /** The human user's own profile — created once, at the start of a career. */

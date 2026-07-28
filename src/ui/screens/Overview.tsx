@@ -44,7 +44,12 @@ export function OverviewScreen(): JSX.Element {
           ) : (
             <div className="club-list" style={{ maxHeight: 320 }}>
               {messages.map((m) => (
-                <div key={m.id} style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
+                <div
+                  key={m.id}
+                  className={m.playerIdx !== undefined ? 'clickable' : ''}
+                  onClick={() => { if (m.playerIdx !== undefined) g.focusScouting(m.playerIdx); }}
+                  style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}
+                >
                   <div className="kv">
                     <strong>{m.subject}</strong>
                     <span className="faint">{g.dateLabelForDay(m.day)}</span>

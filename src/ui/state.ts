@@ -24,6 +24,9 @@ import {
   currentPhase, dayOfSeason, DAYS_PER_SEASON, SeasonPhase,
   type Fixture, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
+import {
+  completeTransfer, evaluateFeeOffer, evaluatePersonalTerms, SquadRole,
+} from '../engine/world/negotiation.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import {
   deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
@@ -44,12 +47,28 @@ export interface WatchedMatch {
   awayName: string;
 }
 
+export interface Negotiation {
+  playerIdx: number;
+  stage: 'fee' | 'terms';
+  /** -1 for a free agent. */
+  sellingClubId: number;
+  feeOffer: number;
+  feeValuation: number | null;
+  feeMessage: string | null;
+  termsWage: number;
+  termsRole: SquadRole;
+  termsMessage: string | null;
+}
+
 class Game {
   world: World | null = null;
   ctx: SeasonContext = newSeasonContext();
   screen: ScreenId = 'overview';
   selectedPlayer: number | null = null;
   selectedClub: number | null = null;
+  /** Player the Scouting screen should jump to next time it opens; consumed once. */
+  scoutingFocus: number | null = null;
+  negotiation: Negotiation | null = null;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   busy = false;
@@ -93,6 +112,7 @@ class Game {
     this.screen = 'overview';
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.negotiation = null;
     this.pendingManager = null;
     this.currentScale = scale;
     this.currentSaveId = newSaveId();
@@ -135,6 +155,7 @@ class Game {
       this.screen = 'overview';
       this.selectedPlayer = null;
       this.selectedClub = null;
+      this.negotiation = null;
       this.currentSaveId = id;
       const meta = this.saves.find((s) => s.id === id);
       this.currentScale = meta?.scale ?? null;
@@ -234,6 +255,20 @@ class Game {
     this.selectedClub = clubId;
     if (clubId !== null) this.selectedPlayer = null;
     this.emit();
+  }
+
+  /** Jump to the Scouting screen with a specific player already selected. */
+  focusScouting(playerIdx: number): void {
+    this.scoutingFocus = playerIdx;
+    this.screen = 'scouting';
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.emit();
+  }
+
+  /** Called by the Scouting screen once it has read scoutingFocus on mount. */
+  clearScoutingFocus(): void {
+    this.scoutingFocus = null;
   }
 
   // ---- Time -------------------------------------------------------------
@@ -449,30 +484,100 @@ class Game {
     this.emit();
   }
 
-  signPlayer(playerIdx: number): void {
+  /** Open a negotiation for a player — a fee stage first if they're contracted. */
+  startNegotiation(playerIdx: number): void {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return;
-    const store = world.players;
-    if (store.clubId[playerIdx] >= 0) return;
-
-    let committed = 0;
-    for (const p of club.players) committed += store.wage[p];
-    if (committed + store.wage[playerIdx] > club.finances.wageBudget) {
-      this.notice = 'Not enough room in the wage budget for that contract.';
-      this.emit();
-      return;
-    }
     if (club.players.length >= 16) {
       this.notice = 'The squad is full — release a player first.';
       this.emit();
       return;
     }
+    const store = world.players;
+    const sellingClubId = store.clubId[playerIdx];
+    this.negotiation = {
+      playerIdx,
+      stage: sellingClubId >= 0 ? 'fee' : 'terms',
+      sellingClubId,
+      feeOffer: store.value[playerIdx],
+      feeValuation: null,
+      feeMessage: null,
+      termsWage: store.wage[playerIdx],
+      termsRole: SquadRole.Rotation,
+      termsMessage: null,
+    };
+    this.emit();
+  }
 
-    club.players.push(playerIdx);
-    store.clubId[playerIdx] = club.id;
-    store.contractUntil[playerIdx] = world.day + 2 * DAYS_PER_SEASON;
-    this.notice = `${store.fullName(playerIdx)} has signed.`;
+  setFeeOffer(amount: number): void {
+    if (this.negotiation === null) return;
+    this.negotiation.feeOffer = amount;
+    this.emit();
+  }
+
+  setTermsWage(amount: number): void {
+    if (this.negotiation === null) return;
+    this.negotiation.termsWage = amount;
+    this.emit();
+  }
+
+  setTermsRole(role: SquadRole): void {
+    if (this.negotiation === null) return;
+    this.negotiation.termsRole = role;
+    this.emit();
+  }
+
+  submitFeeOffer(): void {
+    const n = this.negotiation;
+    const world = this.world;
+    const club = this.club;
+    if (n === null || world === null || club === null || n.sellingClubId < 0) return;
+    const sellingClub = world.clubs[n.sellingClubId];
+    if (sellingClub === undefined) return;
+
+    const ceiling = Math.min(club.finances.transferBudget, club.finances.balance);
+    if (n.feeOffer > ceiling) {
+      n.feeMessage = 'That exceeds your transfer budget.';
+      this.emit();
+      return;
+    }
+
+    const result = evaluateFeeOffer(world, sellingClub, n.playerIdx, n.feeOffer);
+    n.feeValuation = result.valuation;
+    n.feeMessage = result.reason;
+    if (result.accepted) n.stage = 'terms';
+    this.emit();
+  }
+
+  submitTermsOffer(): void {
+    const n = this.negotiation;
+    const world = this.world;
+    const club = this.club;
+    if (n === null || world === null || club === null) return;
+    const store = world.players;
+
+    let committed = 0;
+    for (const p of club.players) committed += store.wage[p];
+    if (committed + n.termsWage > club.finances.wageBudget) {
+      n.termsMessage = 'Not enough room in the wage budget for that contract.';
+      this.emit();
+      return;
+    }
+
+    const result = evaluatePersonalTerms(world, club, n.playerIdx, n.termsWage, n.termsRole);
+    n.termsMessage = result.reason;
+    if (result.accepted) {
+      const fee = n.sellingClubId >= 0 ? n.feeOffer : 0;
+      completeTransfer(world, club, n.playerIdx, n.termsWage, fee);
+      this.notice = `${store.fullName(n.playerIdx)} has signed.`;
+      this.negotiation = null;
+    }
+    this.emit();
+  }
+
+  cancelNegotiation(): void {
+    this.negotiation = null;
     this.emit();
   }
 
