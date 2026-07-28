@@ -12,7 +12,7 @@ import { PlayerFlag } from '../engine/model/players.ts';
 import { newSeasonContext, simulateRestOfSeason, startSeason } from '../engine/season/seasonEngine.ts';
 import { endSeason } from '../engine/season/rollover.ts';
 import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
-import type { World } from '../engine/world/world.ts';
+import { stubManager, type World } from '../engine/world/world.ts';
 
 export interface SeasonSnapshot {
   season: number;
@@ -38,7 +38,7 @@ export function runCareer(seasons: number, scale: WorldScale, seed = 20260728): 
   world: World;
   totalSec: number;
 } {
-  const world = generateWorld({ seed, startYear: 2026, scale });
+  const world = generateWorld({ seed, startYear: 2026, scale, manager: stubManager() });
   const ctx = newSeasonContext();
   startSeason(world);
 

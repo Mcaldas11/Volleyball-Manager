@@ -21,13 +21,20 @@ import { startSeason } from '../engine/season/seasonEngine.ts';
 import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
   currentPhase, dayOfSeason, DAYS_PER_SEASON, SeasonPhase,
-  type Fixture, type World,
+  type Fixture, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
+import { NATIONS } from '../engine/world/nations.ts';
+import {
+  deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
+  newSaveId, saveGame as writeSaveWorld, type SaveMeta,
+} from './persistence.ts';
 
 export type ScreenId =
   | 'squad' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame';
+
+export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
 
 export interface WatchedMatch {
   fixture: Fixture;
@@ -45,6 +52,14 @@ class Game {
   lastRollover: RolloverReport | null = null;
   busy = false;
   notice = '';
+
+  // ---- Menu / save-game flow --------------------------------------------
+  menuStage: MenuStage = 'main';
+  pendingManager: ManagerProfile | null = null;
+  currentScale: WorldScale | null = null;
+  saves: SaveMeta[] = [];
+  currentSaveId: string | null = null;
+  saveCreatedAt: number | null = null;
 
   private version = 0;
   private listeners = new Set<() => void>();
@@ -64,14 +79,116 @@ class Game {
   // ---- Lifecycle --------------------------------------------------------
 
   newGame(scale: WorldScale, seed: number): void {
-    const world = generateWorld({ seed, startYear: 2026, scale });
+    const manager = this.pendingManager;
+    if (manager === null) return;
+    const world = generateWorld({ seed, startYear: 2026, scale, manager });
     startSeason(world);
     this.world = world;
     this.ctx = newSeasonContext();
     this.watched = null;
     this.lastRollover = null;
     this.notice = '';
+    this.screen = 'squad';
+    this.selectedPlayer = null;
+    this.pendingManager = null;
+    this.currentScale = scale;
+    this.currentSaveId = newSaveId();
+    this.saveCreatedAt = Date.now();
     this.emit();
+  }
+
+  // ---- Menu / save-game flow --------------------------------------------
+
+  goToMenu(stage: MenuStage): void {
+    this.menuStage = stage;
+    this.emit();
+  }
+
+  setPendingManager(manager: ManagerProfile): void {
+    this.pendingManager = manager;
+    this.menuStage = 'worldSetup';
+    this.emit();
+  }
+
+  async refreshSaves(): Promise<void> {
+    try {
+      this.saves = await listSaves();
+    } catch {
+      this.notice = 'Could not read saved careers.';
+    }
+    this.emit();
+  }
+
+  async loadGame(id: string): Promise<void> {
+    this.busy = true;
+    this.emit();
+    try {
+      const world = await readSaveWorld(id);
+      this.world = world;
+      this.ctx = newSeasonContext();
+      this.watched = null;
+      this.lastRollover = null;
+      this.notice = '';
+      this.screen = 'squad';
+      this.selectedPlayer = null;
+      this.currentSaveId = id;
+      const meta = this.saves.find((s) => s.id === id);
+      this.currentScale = meta?.scale ?? null;
+      this.saveCreatedAt = meta?.createdAt ?? Date.now();
+    } catch {
+      this.notice = 'Could not load that save.';
+    }
+    this.busy = false;
+    this.emit();
+  }
+
+  async saveCurrentGame(): Promise<void> {
+    const world = this.world;
+    if (world === null) return;
+    if (this.currentSaveId === null) this.currentSaveId = newSaveId();
+    this.busy = true;
+    this.emit();
+    try {
+      const meta: SaveMeta = {
+        id: this.currentSaveId,
+        managerName: `${world.manager.firstName} ${world.manager.lastName}`,
+        nationCode: NATIONS[world.manager.nation]?.code ?? '???',
+        clubName: this.club?.name ?? 'Unemployed',
+        clubNationCode: this.club ? NATIONS[this.club.nation].code : '',
+        scale: this.currentScale ?? 'standard',
+        inGameDate: this.dateLabel(),
+        season: world.season,
+        createdAt: this.saveCreatedAt ?? Date.now(),
+        updatedAt: Date.now(),
+        schemaVersion: 1,
+      };
+      await writeSaveWorld(this.currentSaveId, meta, world);
+      this.notice = 'Game saved.';
+    } catch (err) {
+      this.notice = err instanceof Error ? err.message : 'Could not save this career.';
+    }
+    this.busy = false;
+    this.emit();
+  }
+
+  async exitToMenu(): Promise<void> {
+    await this.saveCurrentGame();
+    this.world = null;
+    this.currentSaveId = null;
+    this.saveCreatedAt = null;
+    this.currentScale = null;
+    this.menuStage = 'main';
+    await this.refreshSaves();
+    this.emit();
+  }
+
+  async deleteSave(id: string): Promise<void> {
+    try {
+      await deleteSaveFromDb(id);
+    } catch {
+      this.notice = 'Could not delete that save.';
+    }
+    await this.refreshSaves();
   }
 
   /** Clubs the user may take over, best first. */

@@ -1,7 +1,10 @@
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import { NATIONS } from '../engine/world/nations.ts';
 import { money } from './components.tsx';
 import { PHASE_NAMES, useGame, type ScreenId } from './state.ts';
+import {
+  CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
+} from './screens/Menu.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
 import {
@@ -50,7 +53,7 @@ const NAV: Array<{ group: string; items: Array<[ScreenId, string]> }> = [
 export function App(): JSX.Element {
   const g = useGame();
 
-  if (g.world === null) return <NewGame />;
+  if (g.world === null) return <MenuScreen />;
   if (g.world.userClubId < 0) return <ClubSelect />;
 
   return (
@@ -87,6 +90,17 @@ export function App(): JSX.Element {
   );
 }
 
+function MenuScreen(): JSX.Element {
+  const g = useGame();
+  switch (g.menuStage) {
+    case 'main': return <MainMenu />;
+    case 'load': return <LoadGameList />;
+    case 'createManager': return <CreateManager />;
+    case 'worldSetup': return <WorldSetup />;
+    default: return <MainMenu />;
+  }
+}
+
 function Screen(): JSX.Element {
   const g = useGame();
   switch (g.screen) {
@@ -120,6 +134,7 @@ function TopBar(): JSX.Element {
       <span className="meta">
         {NATIONS[club.nation].name} · Tier {club.tier} · Rep {club.reputation}
       </span>
+      <span className="meta">{world.manager.firstName} {world.manager.lastName}</span>
       <span className="spacer" />
       <span className="meta">{money(club.finances.balance)}</span>
       <span className="meta">{g.dateLabel()}</span>
@@ -137,112 +152,13 @@ function TopBar(): JSX.Element {
               world.clubs[next.home === world.userClubId ? next.away : next.home]?.shortName ?? ''
             }`}
       </button>
+      <button onClick={() => { void g.saveCurrentGame(); }} disabled={g.busy}>
+        {g.busy ? 'Saving…' : 'Save'}
+      </button>
+      <button onClick={() => { void g.exitToMenu(); }} disabled={g.busy}>
+        Save &amp; Exit
+      </button>
     </header>
   );
 }
 
-function NewGame(): JSX.Element {
-  const g = useGame();
-  const [scale, setScale] = useState<'small' | 'standard' | 'large'>('standard');
-  const [seed, setSeed] = useState('20260728');
-  const [building, setBuilding] = useState(false);
-
-  const start = (): void => {
-    setBuilding(true);
-    // Yield a frame so the button state paints before the world is built.
-    setTimeout(() => {
-      g.newGame(scale, Number(seed) || 1);
-      setBuilding(false);
-    }, 30);
-  };
-
-  return (
-    <div className="menu-screen">
-      <h1>Volleyball Manager</h1>
-      <p className="subtitle">
-        A management simulation of professional indoor volleyball, built on a
-        rally-by-rally match engine.
-      </p>
-
-      <div className="panel" style={{ marginTop: 24 }}>
-        <h3>New career</h3>
-        <div className="kv">
-          <span className="k">World size</span>
-          <select value={scale} onChange={(e) => setScale(e.target.value as 'small')}>
-            <option value="small">Small — top divisions only, fastest</option>
-            <option value="standard">Standard — full pyramids in major nations</option>
-            <option value="large">Large — every division worldwide (~117,000 players)</option>
-          </select>
-        </div>
-        <div className="kv" style={{ marginTop: 8 }}>
-          <span className="k">Seed</span>
-          <input value={seed} onChange={(e) => setSeed(e.target.value)} style={{ width: 140 }} />
-        </div>
-        <p className="faint" style={{ marginTop: 10, fontSize: 12 }}>
-          The same seed always produces the same world. Every player here is
-          fictional and procedurally generated — see the README for importing
-          real FIVB data with your own VIS credentials.
-        </p>
-        <button
-          className="primary"
-          style={{ marginTop: 12 }}
-          onClick={start}
-          disabled={building}
-        >
-          {building ? 'Building world…' : 'Create world'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ClubSelect(): JSX.Element {
-  const g = useGame();
-  const clubs = g.selectableClubs(80);
-  const store = g.world!.players;
-
-  return (
-    <div className="menu-screen">
-      <h1>Choose a club</h1>
-      <p className="subtitle">
-        You are the head coach, general manager and sporting director. Starting
-        at a smaller club is harder and more interesting.
-      </p>
-      <div className="club-list">
-        <table>
-          <thead>
-            <tr>
-              <th>Club</th>
-              <th>Nation</th>
-              <th className="num">Tier</th>
-              <th className="num">Reputation</th>
-              <th className="num">Arena</th>
-              <th className="num">Wage budget</th>
-              <th className="num">Squad</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {clubs.map((c) => {
-              const avg = c.players.length > 0
-                ? c.players.reduce((s, p) => s + store.currentAbility[p], 0) / c.players.length
-                : 0;
-              return (
-                <tr key={c.id} className="clickable" onClick={() => g.takeCharge(c.id)}>
-                  <td>{c.name}</td>
-                  <td className="dim">{NATIONS[c.nation].name}</td>
-                  <td className="num">{c.tier}</td>
-                  <td className="num">{c.reputation}</td>
-                  <td className="num dim">{c.arenaCapacity.toLocaleString()}</td>
-                  <td className="num">{money(c.finances.wageBudget)}</td>
-                  <td className="num dim">{avg.toFixed(0)}</td>
-                  <td><button>Take charge</button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}

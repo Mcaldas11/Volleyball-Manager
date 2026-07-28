@@ -8,6 +8,7 @@
 
 import { runCalibration } from './calibrate.ts';
 import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
+import { stubManager } from '../engine/world/world.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
@@ -63,7 +64,7 @@ function cmdWorld(args: string[]): void {
   console.log(`\n${BOLD}Generating world${RESET} ${DIM}(scale: ${scale})${RESET}\n`);
 
   const t0 = process.hrtime.bigint();
-  const world = generateWorld({ seed: 20260728, startYear: 2026, scale });
+  const world = generateWorld({ seed: 20260728, startYear: 2026, scale, manager: stubManager() });
   const elapsed = Number(process.hrtime.bigint() - t0) / 1e9;
 
   const store = world.players;

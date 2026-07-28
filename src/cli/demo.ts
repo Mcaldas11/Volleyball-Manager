@@ -10,6 +10,7 @@ import { aggregateTeam, attackEfficiency, breakPointPct, sideOutPct } from '../e
 import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { newSeasonContext, playFixture, startSeason } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
+import { stubManager } from '../engine/world/world.ts';
 import type { RallyContact } from '../engine/match/engine.ts';
 
 const DIM = '\x1b[2m';
@@ -19,7 +20,7 @@ const YELLOW = '\x1b[33m';
 const RESET = '\x1b[0m';
 
 export function runDemo(): void {
-  const world = generateWorld({ seed: 20260728, startYear: 2026, scale: 'small' });
+  const world = generateWorld({ seed: 20260728, startYear: 2026, scale: 'small', manager: stubManager() });
   startSeason(world);
   const ctx = newSeasonContext();
   const store = world.players;

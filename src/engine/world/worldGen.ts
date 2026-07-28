@@ -26,7 +26,7 @@ import { bankFor } from './names.ts';
 import { NATIONS, type Confederation } from './nations.ts';
 import { estimateValue, generatePlayer } from './playerGen.ts';
 import {
-  DAYS_PER_SEASON, newWorld, type Competition, type NationalTeam, type World,
+  DAYS_PER_SEASON, newWorld, type Competition, type ManagerProfile, type NationalTeam, type World,
 } from './world.ts';
 
 export type WorldScale = 'small' | 'standard' | 'large';
@@ -35,6 +35,7 @@ export interface WorldGenOptions {
   seed: number;
   startYear: number;
   scale: WorldScale;
+  manager: ManagerProfile;
 }
 
 /**
@@ -70,7 +71,7 @@ function clubsPerDivision(tier: number, rng: Rng): number {
 }
 
 export function generateWorld(opts: WorldGenOptions): World {
-  const world = newWorld(opts.seed, opts.startYear);
+  const world = newWorld(opts.seed, opts.startYear, opts.manager);
   const rng = world.rng;
   const usedNames = new Set<string>();
 

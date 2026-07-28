@@ -94,6 +94,23 @@ export interface HallOfFameEntry {
   citation: string;
 }
 
+/** The human user's own profile — created once, at the start of a career. */
+export interface ManagerProfile {
+  firstName: string;
+  lastName: string;
+  birthYear: number;
+  /** Day of calendar year, 0-364 — same convention as PlayerStore.birthDay. */
+  birthDay: number;
+  gender: 'male' | 'female';
+  /** Index into NATIONS, same convention as Club.nation / player nation fields. */
+  nation: number;
+}
+
+/** A manager profile for headless call sites (CLI/calibration) with no real user. */
+export function stubManager(nation = 0): ManagerProfile {
+  return { firstName: 'Alex', lastName: 'Manager', birthYear: 1985, birthDay: 0, gender: 'male', nation };
+}
+
 export const DAYS_PER_SEASON = 365;
 
 /** Where in the season a given day falls. Drives what the game does that day. */
@@ -145,6 +162,8 @@ export interface World {
   userClubId: number;
   /** Nation whose national team the user manages, or -1. */
   userNationId: number;
+  /** The human user's own manager profile. */
+  manager: ManagerProfile;
 
   /** Fixture ids indexed by day, so advancing a day is O(matches that day). */
   fixturesByDay: Map<number, number[]>;
@@ -167,7 +186,7 @@ export function dayOfYear(world: World): number {
   return (dayOfSeason(world) + 181) % 365;
 }
 
-export function newWorld(seed: number, startYear: number): World {
+export function newWorld(seed: number, startYear: number, manager: ManagerProfile): World {
   return {
     seed,
     rng: new Rng(seed),
@@ -185,6 +204,7 @@ export function newWorld(seed: number, startYear: number): World {
     hallOfFame: [],
     userClubId: -1,
     userNationId: -1,
+    manager,
     fixturesByDay: new Map(),
     retired: [],
   };
