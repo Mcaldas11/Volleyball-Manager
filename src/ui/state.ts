@@ -84,6 +84,15 @@ export interface MatchdaySnapshot {
   matchOver: boolean;
 }
 
+/** A revealed rally, plus the court arrangement that was in effect while it
+ *  was played (rotation only changes between rallies), so the live view can
+ *  place each contact in its true zone for the ball animation. */
+export interface MatchdayLogEntry {
+  entry: RallyLogEntry;
+  homeCourt: number[];
+  awayCourt: number[];
+}
+
 export interface MatchdayState {
   fixture: Fixture;
   stage: 'lineup' | 'live';
@@ -94,9 +103,9 @@ export interface MatchdayState {
   homeBench: number[];
   speed: 1 | 1.25 | 1.75;
   paused: boolean;
-  /** Rallies revealed so far, for the live commentary feed. */
-  log: RallyLogEntry[];
-  /** Latest read from liveSim.snapshot(), refreshed each tick. */
+  /** Rallies revealed so far, for the live commentary feed and ball animation. */
+  log: MatchdayLogEntry[];
+  /** Latest read from liveSim.snapshot(), refreshed after every rally. */
   snapshot: MatchdaySnapshot | null;
   /** The user's side only; mirrors the engine's own per-set limit. */
   subsUsed: number;
@@ -114,7 +123,6 @@ class Game {
   incomingOffer: IncomingOfferReview | null = null;
   matchday: MatchdayState | null = null;
   private liveSim: MatchSimulator | null = null;
-  private tickHandle: number | null = null;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   busy = false;
@@ -160,7 +168,6 @@ class Game {
     this.selectedClub = null;
     this.negotiation = null;
     this.incomingOffer = null;
-    this.clearTick();
     this.matchday = null;
     this.liveSim = null;
     this.pendingManager = null;
@@ -207,7 +214,6 @@ class Game {
       this.selectedClub = null;
       this.negotiation = null;
       this.incomingOffer = null;
-      this.clearTick();
       this.matchday = null;
       this.liveSim = null;
       this.currentSaveId = id;
@@ -521,7 +527,6 @@ class Game {
     md.log = [];
     md.subsUsed = 0;
     md.snapshot = this.liveSim.snapshot();
-    this.scheduleTick();
     this.emit();
   }
 
@@ -529,7 +534,6 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.speed = speed;
-    if (!md.paused) this.scheduleTick();
     this.emit();
   }
 
@@ -537,7 +541,6 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.paused = true;
-    this.clearTick();
     this.emit();
   }
 
@@ -545,15 +548,38 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.paused = false;
-    this.scheduleTick();
     this.emit();
+  }
+
+  /**
+   * Play exactly one rally and reveal it. The live view calls this itself,
+   * pacing repeated calls to animate the ball through each rally's contacts
+   * — state.ts has no timer of its own; pacing is a presentation concern.
+   * Returns the revealed rally, or null if the match was already over.
+   */
+  playNextRally(): MatchdayLogEntry | null {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.stage !== 'live') return null;
+
+    const preSnap = sim.snapshot();
+    const entry = sim.step();
+    if (entry === null) return null;
+
+    const logEntry: MatchdayLogEntry = {
+      entry, homeCourt: preSnap.homeCourt, awayCourt: preSnap.awayCourt,
+    };
+    md.log.push(logEntry);
+    md.snapshot = sim.snapshot();
+    if (md.snapshot.matchOver) this.finalizeMatchday();
+    else this.emit();
+    return logEntry;
   }
 
   /** Skip straight to the result without watching the rest of the match. */
   finishMatchdayNow(): void {
     const md = this.matchday;
     if (md === null || this.liveSim === null) return;
-    this.clearTick();
     this.liveSim.finish();
     this.finalizeMatchday();
   }
@@ -570,39 +596,6 @@ class Game {
       md.snapshot = sim.snapshot();
     } else {
       this.notice = result.reason ?? 'That substitution is not allowed.';
-    }
-    this.emit();
-  }
-
-  private clearTick(): void {
-    if (this.tickHandle !== null) {
-      window.clearInterval(this.tickHandle);
-      this.tickHandle = null;
-    }
-  }
-
-  private scheduleTick(): void {
-    this.clearTick();
-    const md = this.matchday;
-    if (md === null || md.stage !== 'live' || md.paused) return;
-    const interval = 900 / md.speed;
-    this.tickHandle = window.setInterval(() => this.tick(), interval);
-  }
-
-  private tick(): void {
-    const md = this.matchday;
-    const sim = this.liveSim;
-    if (md === null || sim === null) {
-      this.clearTick();
-      return;
-    }
-    const entry = sim.step();
-    if (entry !== null) md.log.push(entry);
-    md.snapshot = sim.snapshot();
-    if (md.snapshot.matchOver) {
-      this.clearTick();
-      this.finalizeMatchday();
-      return;
     }
     this.emit();
   }

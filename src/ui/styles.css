@@ -272,6 +272,26 @@ tbody tr.selected { background: var(--accent-dim); }
 .court .zone.setter { border-color: var(--accent); }
 .court .zone.libero { border-color: var(--elite); }
 
+/* ---- Live match: stacked courts sharing a net line, with a moving ball ---- */
+.court-pair {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+}
+.net-line { height: 0; border-top: 2px dashed var(--accent); }
+.ball {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
+  transform: translate(-50%, -50%);
+  transition: left 0.22s linear, top 0.22s linear;
+  pointer-events: none;
+}
+
 .menu-screen {
   max-width: 780px;
   margin: 8vh auto;
