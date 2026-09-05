@@ -5,6 +5,8 @@ import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/sta
 import { ClubLink, Empty } from '../components.tsx';
 import { useGame } from '../state.ts';
 
+type NameLookup = { shortName: (i: number) => string };
+
 export function FixturesScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -74,6 +76,8 @@ export function MatchScreen(): JSX.Element {
 
   const { result, homeName, awayName } = watched;
   const store = g.world!.players;
+  const homeClub = g.world!.clubs[watched.fixture.home];
+  const awayClub = g.world!.clubs[watched.fixture.away];
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -102,14 +106,26 @@ export function MatchScreen(): JSX.Element {
         <span className="faint">{result.totalRallies} rallies simulated</span>
       </div>
 
-      {tab === 'log' && <RallyLog log={result.log ?? []} home={homeName} away={awayName} />}
+      {tab === 'log' && (
+        <RallyLog
+          log={result.log ?? []}
+          homeCode={homeClub?.shortName ?? homeName.slice(0, 3).toUpperCase()}
+          awayCode={awayClub?.shortName ?? awayName.slice(0, 3).toUpperCase()}
+        />
+      )}
       {tab === 'box' && <BoxScore />}
       {tab === 'rotations' && <RotationAnalysis />}
     </div>
   );
 }
 
-function RallyLog({ log, home, away }: { log: RallyLogEntry[]; home: string; away: string }): JSX.Element {
+function RallyLog({
+  log, homeCode, awayCode,
+}: {
+  log: RallyLogEntry[];
+  homeCode: string;
+  awayCode: string;
+}): JSX.Element {
   const g = useGame();
   const store = g.world!.players;
   // Only the last set is shown by default; a full five-setter is 200+ rallies.
@@ -129,30 +145,53 @@ function RallyLog({ log, home, away }: { log: RallyLogEntry[]; home: string; awa
           </button>
         ))}
       </div>
-      <div className="rally-log">
-        {shown.map((r, i) => (
-          <div key={i} className={`rally ${r.winner === 0 ? 'home-point' : 'away-point'}`}>
-            <span className="score mono">
-              {r.scoreBefore[0]}-{r.scoreBefore[1]}
-            </span>
-            <span className="desc">{describeRally(r, store)}</span>
-            <span className="faint" title="Home win probability">
-              {(r.homeWinProb * 100).toFixed(0)}%
-            </span>
-          </div>
-        ))}
-        {shown.length === 0 && <div className="rally dim">No rallies recorded.</div>}
-      </div>
-      <p className="faint" style={{ fontSize: 12, marginTop: 6 }}>
-        Blue = point to {home}, amber = point to {away}. The percentage is {home}'s
-        win probability after that rally.
-      </p>
+      <RallyTicker entries={shown} store={store} homeCode={homeCode} awayCode={awayCode} showProb />
     </>
   );
 }
 
+/**
+ * A live-ticker style feed: one card per rally, the scoring team's code, and
+ * a short headline built around whoever decided the point.
+ */
+export function RallyTicker({
+  entries, store, homeCode, awayCode, showProb = false,
+}: {
+  entries: RallyLogEntry[];
+  store: NameLookup;
+  homeCode: string;
+  awayCode: string;
+  showProb?: boolean;
+}): JSX.Element {
+  return (
+    <div className="ticker">
+      {entries.map((r, i) => {
+        const { before, player, after } = describeRallyHighlight(r, store);
+        const isHome = r.winner === 0;
+        return (
+          <div key={i} className={`ticker-entry ${isHome ? 'home-point' : 'away-point'}`}>
+            <span className="ticker-score mono">{r.scoreBefore[0]}-{r.scoreBefore[1]}</span>
+            <span className={`ticker-pill ${isHome ? 'home' : 'away'}`}>{isHome ? homeCode : awayCode}</span>
+            <span className="ticker-text">
+              {before}
+              {player !== '' && <strong className="ticker-player">{player}</strong>}
+              {after}
+            </span>
+            {showProb && (
+              <span className="faint ticker-prob" title="Home win probability">
+                {(r.homeWinProb * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
+        );
+      })}
+      {entries.length === 0 && <div className="ticker-entry dim">No rallies recorded.</div>}
+    </div>
+  );
+}
+
 /** Turn a rally's contacts into a sentence a volleyball person would recognise. */
-export function describeRally(r: RallyLogEntry, store: { shortName: (i: number) => string }): string {
+export function describeRally(r: RallyLogEntry, store: NameLookup): string {
   const parts: string[] = [];
   for (const c of r.contacts) {
     parts.push(describeContact(c, store));
@@ -161,10 +200,7 @@ export function describeRally(r: RallyLogEntry, store: { shortName: (i: number) 
   return text === '' ? 'Rally' : text;
 }
 
-function describeContact(
-  c: RallyContact,
-  store: { shortName: (i: number) => string },
-): string {
+function describeContact(c: RallyContact, store: NameLookup): string {
   const who = store.shortName(c.player);
   switch (c.kind) {
     case 'serve': return `${who} serves (${c.detail})`;
@@ -182,6 +218,30 @@ function describeContact(
     case 'freeball': return 'free ball over';
     default: return '';
   }
+}
+
+/** One-line headline for a rally, built around whoever decided the point — for the live ticker. */
+const HIGHLIGHT_TEMPLATES: Partial<Record<RallyContact['kind'], [string, string]>> = {
+  ace: ['Ace — ', ' serves it straight through.'],
+  kill: ['Kill — ', ' finishes it off.'],
+  blocked: ['Stuffed at the net — ', "'s attack goes nowhere."],
+  attackError: ['Attack error — ', ' puts it wide.'],
+  serveError: ['Serve error — ', ' into the net.'],
+  receptionError: ['Reception error — ', ' shanks the pass.'],
+  setError: ['Setting error — ', ' the set goes astray.'],
+  digError: ['Dig error — ', " can't keep it up."],
+};
+
+export function describeRallyHighlight(
+  r: RallyLogEntry,
+  store: NameLookup,
+): { before: string; player: string; after: string } {
+  const last = r.contacts[r.contacts.length - 1];
+  const template = last !== undefined ? HIGHLIGHT_TEMPLATES[last.kind] : undefined;
+  if (last === undefined || template === undefined) {
+    return { before: describeRally(r, store), player: '', after: '' };
+  }
+  return { before: template[0], player: store.shortName(last.player), after: template[1] };
 }
 
 function BoxScore(): JSX.Element {

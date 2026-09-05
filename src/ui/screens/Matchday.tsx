@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { POSITION_SHORT, type Position } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
-import { ClubLink, Flag } from '../components.tsx';
-import { describeRally } from './Match.tsx';
+import {
+  ClubLink, Flag, PlayerFace, POSITION_ACCENT,
+} from '../components.tsx';
+import { RallyTicker } from './Match.tsx';
 import { useGame, type MatchdayLogEntry } from '../state.ts';
 
 const ZONE_ORDER = [3, 2, 1, 4, 5, 0]; // front row first: 4,3,2 then back row 5,6,1
-const ZONE_ORDER_MIRRORED = [4, 5, 0, 3, 2, 1]; // back row first, so front row sits by the net
 const ZONE_LABELS = ['1', '2', '3', '4', '5', '6'];
 
 /** Column/row of each zone within the 3x2 grid, derived once from ZONE_ORDER. */
@@ -21,11 +22,18 @@ interface BallPos {
   y: number;
 }
 
-/** Screen position (% of the combined court-pair box) for a zone on a given side. */
+/**
+ * Screen position (% of the combined court2d box) for a zone on a given side.
+ *
+ * Columns are inset to 20/50/80 rather than spanning the full 0-100 width:
+ * .court2d's clip-path tapers the court toward each baseline, so a column at
+ * the true edge would fall outside the shape at the back row. Insetting
+ * keeps every marker inside the taper at every row.
+ */
 function zonePercent(zone: number, side: 'home' | 'away'): { x: number; y: number } {
   const grid = ZONE_GRID[zone];
   if (grid === undefined) return { x: 50, y: 50 };
-  const x = ((grid.col + 0.5) / 3) * 100;
+  const x = 20 + grid.col * 30;
   const isFront = grid.row === 0;
   // Both teams' front rows sit adjacent to the shared net line at y=50.
   const rowFrac = side === 'home' ? (isFront ? 0.75 : 0.25) : (isFront ? 0.25 : 0.75);
@@ -55,16 +63,59 @@ async function animateRally(
   }
 }
 
-function renderZone(z: number, court: number[], store: PlayerStore): JSX.Element {
-  const p = court[z];
-  if (p === undefined) return <div className="zone" key={z} />;
-  const pos = store.position[p] as Position;
-  const isSetter = POSITION_SHORT[pos] === 'S';
+/** A player's dot on the 2D court: their photo, ringed in their role's colour. */
+function PlayerMarker({
+  playerIdx, zone, side, store,
+}: {
+  playerIdx: number;
+  zone: number;
+  side: 'home' | 'away';
+  store: PlayerStore;
+}): JSX.Element {
+  const { x, y } = zonePercent(zone, side);
+  const pos = store.position[playerIdx] as Position;
   return (
-    <div className={`zone${isSetter ? ' setter' : ''}`} key={z}>
-      <div className="z">Zone {ZONE_LABELS[z]}</div>
-      <div>{store.shortName(p)}</div>
-      <div className="faint">{POSITION_SHORT[pos]}</div>
+    <div
+      className="player-marker"
+      style={{ left: `${x}%`, top: `${y}%` }}
+      title={`${store.fullName(playerIdx)} · Zone ${ZONE_LABELS[zone]}`}
+    >
+      <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={38} />
+      <span className="player-marker-ring" style={{ boxShadow: `0 0 0 2px ${POSITION_ACCENT[pos]}` }} />
+      <span className="player-marker-label">{store.shortName(playerIdx)}</span>
+    </div>
+  );
+}
+
+/** The court itself: a two-team pitch with every starter's photo in their zone. */
+function Court2D({
+  homeCourt, awayCourt, store, ball,
+}: {
+  homeCourt: number[];
+  awayCourt: number[];
+  store: PlayerStore;
+  ball: BallPos | null;
+}): JSX.Element {
+  return (
+    <div className="court2d">
+      <div className="court2d-attack-line away" />
+      <div className="court2d-net" />
+      <div className="court2d-attack-line home" />
+      {[0, 1, 2, 3, 4, 5].map((z) => {
+        const p = homeCourt[z];
+        return p === undefined ? null : (
+          <PlayerMarker key={`h${z}`} playerIdx={p} zone={z} side="home" store={store} />
+        );
+      })}
+      {[0, 1, 2, 3, 4, 5].map((z) => {
+        const p = awayCourt[z];
+        return p === undefined ? null : (
+          <PlayerMarker key={`a${z}`} playerIdx={p} zone={z} side="away" store={store} />
+        );
+      })}
+      {ball !== null && (
+        <span className="ball" style={{ left: `${ball.x}%`, top: `${ball.y}%` }} />
+      )}
     </div>
   );
 }
@@ -205,31 +256,40 @@ function LiveMatchView(): JSX.Element {
         <button onClick={() => g.finishMatchdayNow()}>Finish match</button>
       </div>
 
-      <div className="panel">
-        <h3>{homeClub?.name ?? '—'} <span className="faint">vs</span> {awayClub?.name ?? '—'}</h3>
-        <div className="court-pair">
-          <div className="court">
-            {ZONE_ORDER_MIRRORED.map((z) => renderZone(z, snap?.homeCourt ?? [], store))}
+      <div className="live-match-layout">
+        <div className="panel court-panel">
+          <div className="team-strip">
+            <span className="team-strip-name">
+              {awayClub !== undefined && <Flag nation={awayClub.nation} />} {awayClub?.name ?? '—'}
+            </span>
+            <span className="pill">Sets: {snap?.awaySets ?? 0}</span>
           </div>
-          <div className="net-line" />
-          <div className="court">
-            {ZONE_ORDER.map((z) => renderZone(z, snap?.awayCourt ?? [], store))}
+          <Court2D
+            homeCourt={snap?.homeCourt ?? []}
+            awayCourt={snap?.awayCourt ?? []}
+            store={store}
+            ball={ball}
+          />
+          <div className="team-strip">
+            <span className="pill">Sets: {snap?.homeSets ?? 0}</span>
+            <span className="team-strip-name">
+              {homeClub !== undefined && <Flag nation={homeClub.nation} />} {homeClub?.name ?? '—'}
+            </span>
           </div>
-          {ball !== null && (
-            <span className="ball" style={{ left: `${ball.x}%`, top: `${ball.y}%` }} />
-          )}
         </div>
-      </div>
 
-      <h3 style={{ marginTop: 16 }}>Commentary</h3>
-      <div className="rally-log" ref={logRef}>
-        {md.log.map((l, i) => (
-          <div key={i} className={`rally ${l.entry.winner === 0 ? 'home-point' : 'away-point'}`}>
-            <span className="score mono">{l.entry.scoreBefore[0]}-{l.entry.scoreBefore[1]}</span>
-            <span className="desc">{describeRally(l.entry, store)}</span>
+        <div className="panel ticker-panel">
+          <h3 style={{ marginTop: 0 }}>Live ticker</h3>
+          <div className="ticker-scroll" ref={logRef}>
+            <RallyTicker
+              entries={md.log.map((l) => l.entry)}
+              store={store}
+              homeCode={homeClub?.shortName ?? '—'}
+              awayCode={awayClub?.shortName ?? '—'}
+            />
+            {md.log.length === 0 && <div className="ticker-entry dim">Kicking off…</div>}
           </div>
-        ))}
-        {md.log.length === 0 && <div className="rally dim">Kicking off…</div>}
+        </div>
       </div>
 
       <Substitutions teamIdx={userTeamIdx} />

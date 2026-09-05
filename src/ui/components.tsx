@@ -6,11 +6,20 @@
  */
 
 import { useEffect, useState, type JSX } from 'react';
-import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
+import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../engine/model/players.ts';
 import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/nations.ts';
 import { playerFaceUrl } from './faces.ts';
 import { useGame } from './state.ts';
+
+/** One colour per role, used to tell players apart on the court view at a glance. */
+export const POSITION_ACCENT: Readonly<Record<Position, string>> = {
+  [Position.Setter]: 'var(--gold)',
+  [Position.Opposite]: 'var(--bad)',
+  [Position.OutsideHitter]: 'var(--accent)',
+  [Position.MiddleBlocker]: 'var(--elite)',
+  [Position.Libero]: 'var(--good)',
+};
 
 /** Ability bands, so a squad list can be read without parsing every number. */
 export function abilityClass(ca: number): string {

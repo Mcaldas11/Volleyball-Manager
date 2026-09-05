@@ -279,24 +279,116 @@ tbody tr.selected { background: var(--accent-dim); }
 .scoreline .team { font-size: 16px; font-weight: 600; }
 .scoreline .sets { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.rally-log {
-  max-height: 460px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-raised);
-}
-.rally {
+/* ---- Live ticker: one card per rally, styled like a broadcast feed ---- */
+
+.ticker-scroll { max-height: 460px; overflow-y: auto; }
+.ticker { display: flex; flex-direction: column; gap: 6px; }
+.ticker-entry {
   display: flex;
+  align-items: center;
   gap: 10px;
-  padding: 4px 10px;
-  border-bottom: 1px solid var(--border);
-  align-items: baseline;
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 6px;
 }
-.rally .score { width: 54px; color: var(--text-faint); }
-.rally .desc { flex: 1; }
-.rally.home-point { border-left: 2px solid var(--accent); }
-.rally.away-point { border-left: 2px solid var(--warn); }
+.ticker-entry.home-point { border-left-color: var(--accent); }
+.ticker-entry.away-point { border-left-color: var(--gold); }
+.ticker-score { color: var(--text-faint); width: 44px; flex: none; }
+.ticker-pill {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.ticker-pill.home { background: var(--accent-dim); color: #cfe0ff; }
+.ticker-pill.away { background: var(--gold-dim); color: #ffe6a3; }
+.ticker-text { flex: 1; color: var(--text-dim); }
+.ticker-player { color: var(--text); font-weight: 600; }
+
+/* ---- 2D match court ---- */
+
+.live-match-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+
+.court-panel { display: flex; flex-direction: column; gap: 8px; flex: 1 1 420px; max-width: 480px; }
+.team-strip { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.team-strip-name { font-weight: 600; }
+
+.ticker-panel { flex: 1 1 320px; min-width: 280px; }
+
+.court2d {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  aspect-ratio: 3 / 4;
+  margin: 4px auto;
+  border: 2px solid rgba(238, 242, 247, 0.35);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #17324a 0%, #142838 50%, #17324a 100%);
+}
+.court2d-net {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 0;
+  border-top: 3px solid #eef2f7;
+  transform: translateY(-50%);
+}
+.court2d-net::before, .court2d-net::after {
+  content: '';
+  position: absolute;
+  top: -13px;
+  width: 4px;
+  height: 26px;
+  background: repeating-linear-gradient(180deg, var(--bad) 0 5px, #fff 5px 10px);
+  border-radius: 2px;
+}
+.court2d-net::before { left: 7%; }
+.court2d-net::after { right: 7%; }
+.court2d-attack-line {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  height: 0;
+  border-top: 2px dashed rgba(238, 242, 247, 0.3);
+}
+.court2d-attack-line.away { top: 24%; }
+.court2d-attack-line.home { top: 76%; }
+
+.player-marker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translate(-50%, -50%);
+  transition: left 0.4s ease, top 0.4s ease;
+}
+.player-marker .player-face { width: 36px; height: 36px; }
+.player-marker-ring {
+  position: absolute;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.player-marker-label {
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
 
 .court {
   display: grid;
@@ -316,14 +408,7 @@ tbody tr.selected { background: var(--accent-dim); }
 .court .zone.setter { border-color: var(--accent); }
 .court .zone.libero { border-color: var(--elite); }
 
-/* ---- Live match: stacked courts sharing a net line, with a moving ball ---- */
-.court-pair {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 300px;
-}
-.net-line { height: 0; border-top: 2px dashed var(--accent); }
+/* The ball marker itself sits inside .court2d (position: relative there). */
 .ball {
   position: absolute;
   width: 10px;
