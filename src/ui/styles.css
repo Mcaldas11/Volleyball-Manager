@@ -367,8 +367,14 @@ tbody tr.selected { background: var(--accent-dim); }
   gap: 2px;
   transform: translate(-50%, -50%);
   transition: left 0.4s ease, top 0.4s ease;
+  z-index: 1;
 }
 .player-marker .player-face { width: 36px; height: 36px; }
+.player-marker.is-active {
+  z-index: 2;
+  transform: translate(-50%, -50%) scale(1.18);
+}
+.player-marker.is-active .player-face { box-shadow: 0 0 0 2px #fff, 0 0 10px rgba(255, 255, 255, 0.7); }
 .player-marker-ring {
   position: absolute;
   top: 0;

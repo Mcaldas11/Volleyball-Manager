@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import { POSITION_SHORT, type Position } from '../../engine/model/positions.ts';
+import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
+import type { RallyContact } from '../../engine/match/engine.ts';
 import {
   ClubLink, Flag, PlayerFace, POSITION_ACCENT,
 } from '../components.tsx';
@@ -45,12 +46,102 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Which broad phase of the rally a contact belongs to, for formation purposes. */
+type Phase = 'serve' | 'receive' | 'set' | 'attack' | 'react';
+
+function phaseFromKind(kind: RallyContact['kind']): Phase {
+  switch (kind) {
+    case 'serve': case 'serveError': return 'serve';
+    case 'reception': case 'receptionError': case 'freeball':
+    case 'dig': case 'digError': return 'receive';
+    case 'set': case 'setError': return 'set';
+    case 'attack': case 'kill': case 'attackError':
+    case 'blocked': case 'blockTouch': case 'ace': return 'attack';
+    default: return 'react';
+  }
+}
+
+interface ActiveContact { kind: RallyContact['kind']; team: 0 | 1; player: number; }
+
+/** Positive `amount` always means "toward the shared net," on either half. */
+function towardNet(side: 'home' | 'away', amount: number): number {
+  return side === 'home' ? amount : -amount;
+}
+
+function clampPct(v: number): number {
+  return Math.max(6, Math.min(94, v));
+}
+
+/**
+ * A player's position for the instant the rally is currently animating —
+ * not just their static rotation zone. Everyone drifts toward what they'd
+ * actually be doing: a setter releases to the net the moment their side
+ * takes the serve (whatever zone the rotation has them standing in), hitters
+ * press forward to attack, and blockers shift to match the hitter.
+ */
+function formationPosition(
+  zone: number,
+  side: 'home' | 'away',
+  playerIdx: number,
+  store: PlayerStore,
+  active: ActiveContact | null,
+  homeCourt: number[],
+  awayCourt: number[],
+): { x: number; y: number } {
+  const base = zonePercent(zone, side);
+  if (active === null) return base;
+
+  const phase = phaseFromKind(active.kind);
+  if (phase === 'serve' || phase === 'react') return base;
+
+  const actingSide: 'home' | 'away' = active.team === 0 ? 'home' : 'away';
+  const isActingTeam = actingSide === side;
+  const grid = ZONE_GRID[zone];
+  const isFrontRow = grid?.row === 0;
+  const isActor = active.player === playerIdx;
+  const role = store.position[playerIdx] as Position;
+
+  let { x, y } = base;
+
+  if (isActingTeam) {
+    if (role === Position.Setter && (phase === 'receive' || phase === 'set')) {
+      // Releases toward the net-side target area regardless of their zone —
+      // this is the cue that makes a P1 (setter back row) reception read
+      // correctly instead of leaving them stuck at the back.
+      const pull = phase === 'set' ? 0.75 : 0.4;
+      const targetY = side === 'home' ? 38 : 62;
+      x += (68 - x) * pull;
+      y += (targetY - y) * pull;
+    } else if (phase === 'receive') {
+      y += towardNet(side, isFrontRow ? 3 : -4);
+      if (isActor) x += (50 - x) * 0.15;
+    } else if (phase === 'attack') {
+      if (isActor) y += towardNet(side, 8);
+      else if (isFrontRow) y += towardNet(side, 4);
+      else y += towardNet(side, -2);
+    }
+  } else if (phase === 'set' && isFrontRow) {
+    y += towardNet(side, 3); // blockers start reading the set
+  } else if (phase === 'attack' && isFrontRow) {
+    const attackerCourt = actingSide === 'home' ? homeCourt : awayCourt;
+    const attackerZone = attackerCourt.indexOf(active.player);
+    if (attackerZone !== -1) {
+      const attackerX = zonePercent(attackerZone, actingSide).x;
+      x += (attackerX - x) * 0.5; // blockers shift to match the hitter
+    }
+    y += towardNet(side, 6);
+  }
+
+  return { x: clampPct(x), y: clampPct(y) };
+}
+
 /** Move the ball through one rally's contacts, one at a time. */
 async function animateRally(
   logEntry: MatchdayLogEntry,
   speed: number,
   cancelled: { current: boolean },
   setBall: (pos: BallPos | null) => void,
+  setActive: (c: ActiveContact | null) => void,
 ): Promise<void> {
   const perContact = 260 / speed;
   for (const c of logEntry.entry.contacts) {
@@ -59,24 +150,29 @@ async function animateRally(
     const court = c.team === 0 ? logEntry.homeCourt : logEntry.awayCourt;
     const zone = court.indexOf(c.player);
     if (zone !== -1) setBall({ side, ...zonePercent(zone, side) });
+    setActive({ kind: c.kind, team: c.team, player: c.player });
     await sleep(perContact);
   }
 }
 
 /** A player's dot on the 2D court: their photo, ringed in their role's colour. */
 function PlayerMarker({
-  playerIdx, zone, side, store,
+  playerIdx, zone, side, store, active, homeCourt, awayCourt,
 }: {
   playerIdx: number;
   zone: number;
   side: 'home' | 'away';
   store: PlayerStore;
+  active: ActiveContact | null;
+  homeCourt: number[];
+  awayCourt: number[];
 }): JSX.Element {
-  const { x, y } = zonePercent(zone, side);
+  const { x, y } = formationPosition(zone, side, playerIdx, store, active, homeCourt, awayCourt);
   const pos = store.position[playerIdx] as Position;
+  const isActor = active !== null && active.player === playerIdx;
   return (
     <div
-      className="player-marker"
+      className={`player-marker${isActor ? ' is-active' : ''}`}
       style={{ left: `${x}%`, top: `${y}%` }}
       title={`${store.fullName(playerIdx)} · Zone ${ZONE_LABELS[zone]}`}
     >
@@ -89,12 +185,13 @@ function PlayerMarker({
 
 /** The court itself: a two-team pitch with every starter's photo in their zone. */
 function Court2D({
-  homeCourt, awayCourt, store, ball,
+  homeCourt, awayCourt, store, ball, active,
 }: {
   homeCourt: number[];
   awayCourt: number[];
   store: PlayerStore;
   ball: BallPos | null;
+  active: ActiveContact | null;
 }): JSX.Element {
   return (
     <div className="court2d">
@@ -104,13 +201,19 @@ function Court2D({
       {[0, 1, 2, 3, 4, 5].map((z) => {
         const p = homeCourt[z];
         return p === undefined ? null : (
-          <PlayerMarker key={`h${z}`} playerIdx={p} zone={z} side="home" store={store} />
+          <PlayerMarker
+            key={`h${z}`} playerIdx={p} zone={z} side="home" store={store}
+            active={active} homeCourt={homeCourt} awayCourt={awayCourt}
+          />
         );
       })}
       {[0, 1, 2, 3, 4, 5].map((z) => {
         const p = awayCourt[z];
         return p === undefined ? null : (
-          <PlayerMarker key={`a${z}`} playerIdx={p} zone={z} side="away" store={store} />
+          <PlayerMarker
+            key={`a${z}`} playerIdx={p} zone={z} side="away" store={store}
+            active={active} homeCourt={homeCourt} awayCourt={awayCourt}
+          />
         );
       })}
       {ball !== null && (
@@ -196,6 +299,7 @@ function LiveMatchView(): JSX.Element {
   const snap = md.snapshot;
   const logRef = useRef<HTMLDivElement>(null);
   const [ball, setBall] = useState<BallPos | null>(null);
+  const [active, setActive] = useState<ActiveContact | null>(null);
   const cancelledRef = useRef(false);
 
   // Drives the match forward itself: play a rally, animate it, repeat.
@@ -212,8 +316,9 @@ function LiveMatchView(): JSX.Element {
         }
         const logEntry = g.playNextRally();
         if (logEntry === null) break;
-        await animateRally(logEntry, current.speed, cancelledRef, setBall);
+        await animateRally(logEntry, current.speed, cancelledRef, setBall, setActive);
         if (cancelledRef.current) break;
+        setActive(null); // reset to base rotation positions between points
         await sleep(280 / current.speed);
       }
     };
@@ -269,6 +374,7 @@ function LiveMatchView(): JSX.Element {
             awayCourt={snap?.awayCourt ?? []}
             store={store}
             ball={ball}
+            active={active}
           />
           <div className="team-strip">
             <span className="pill">Sets: {snap?.homeSets ?? 0}</span>
