@@ -10,20 +10,65 @@ const MAX_BIRTH_DATE = '2008-07-01';
 export function MainMenu(): JSX.Element {
   const g = useGame();
 
+  useEffect(() => {
+    void g.refreshSaves();
+  }, []);
+
+  const mostRecent = g.saves[0];
+
   return (
-    <div className="menu-screen">
-      <h1>Volleyball Manager</h1>
-      <p className="subtitle">
-        A management simulation of professional indoor volleyball, built on a
-        rally-by-rally match engine.
-      </p>
-      <div className="panel" style={{ marginTop: 24 }}>
-        <div className="toolbar">
-          <button className="primary" onClick={() => g.goToMenu('createManager')}>
-            New career
-          </button>
-          <button onClick={() => g.goToMenu('load')}>Load game</button>
+    <div className="main-menu">
+      <div className="main-menu-panel">
+        <div className="wordmark">
+          <span className="wordmark-badge">VM</span>
+          <div>
+            <h1>Volleyball Manager</h1>
+            <p className="subtitle">
+              Rally-by-rally management sim for professional indoor volleyball.
+            </p>
+          </div>
         </div>
+
+        {mostRecent !== undefined && (
+          <div
+            className="menu-card menu-card-continue"
+            onClick={() => { void g.loadGame(mostRecent.id); }}
+          >
+            <div className="menu-card-label">Continue career</div>
+            <div className="menu-card-club">
+              <FlagByCode code={mostRecent.clubNationCode} /> <strong>{mostRecent.clubName}</strong>
+            </div>
+            <div className="menu-card-meta">
+              {mostRecent.managerName} · {mostRecent.inGameDate}
+            </div>
+            <div className="menu-card-meta faint">
+              Last saved {new Date(mostRecent.updatedAt).toLocaleString()}
+            </div>
+          </div>
+        )}
+
+        <div className="menu-card-grid">
+          <div className="menu-card" onClick={() => g.goToMenu('createManager')}>
+            <div className="menu-card-title">Start New Career</div>
+            <div className="menu-card-meta">Create a manager and take charge of a club.</div>
+          </div>
+          <div className="menu-card" onClick={() => g.goToMenu('load')}>
+            <div className="menu-card-title">Load Game</div>
+            <div className="menu-card-meta">
+              {g.saves.length === 0
+                ? 'No saved careers yet.'
+                : `${g.saves.length} saved career${g.saves.length === 1 ? '' : 's'}.`}
+            </div>
+          </div>
+        </div>
+
+        <p className="main-menu-footer">Free and open source, MIT licensed.</p>
+      </div>
+
+      <div className="main-menu-hero">
+        {mostRecent !== undefined && mostRecent.clubNationCode !== '' && (
+          <span className="hero-flag"><FlagByCode code={mostRecent.clubNationCode} /></span>
+        )}
       </div>
     </div>
   );
