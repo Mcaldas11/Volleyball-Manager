@@ -135,6 +135,33 @@ function formationPosition(
   return { x: clampPct(x), y: clampPct(y) };
 }
 
+/** Punchy callouts for the moments worth flashing on screen, not every touch of the ball. */
+const BIG_PLAY_CALLOUTS: Partial<Record<RallyContact['kind'], readonly string[]>> = {
+  kill: ['MONSTER SPIKE!', 'KILL!', 'CRUSHED!', 'UNSTOPPABLE!'],
+  blocked: ['HUGE BLOCK!', 'STUFFED!', 'DENIED!', 'REJECTED!'],
+  ace: ['ACE!', 'UNTOUCHABLE SERVE!'],
+  attackError: ['OUT!', 'WIDE!'],
+  serveError: ['OUT!', 'INTO THE NET!'],
+};
+
+function pickBigPlay(kind: RallyContact['kind']): string | null {
+  const options = BIG_PLAY_CALLOUTS[kind];
+  if (options === undefined) return null;
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+/**
+ * Which team the callout should be coloured for. For a kill or an ace that's
+ * simply whoever made the contact — but a block or an error is logged
+ * against the player who lost the point, so the credit flips to the other side.
+ */
+function creditTeamFor(kind: RallyContact['kind'], actingTeam: 0 | 1): 0 | 1 {
+  if (kind === 'blocked' || kind === 'attackError' || kind === 'serveError') {
+    return (1 - actingTeam) as 0 | 1;
+  }
+  return actingTeam;
+}
+
 /** Move the ball through one rally's contacts, one at a time. */
 async function animateRally(
   logEntry: MatchdayLogEntry,
@@ -142,8 +169,9 @@ async function animateRally(
   cancelled: { current: boolean },
   setBall: (pos: BallPos | null) => void,
   setActive: (c: ActiveContact | null) => void,
+  onBigPlay: (text: string, team: 0 | 1) => void,
 ): Promise<void> {
-  const perContact = 260 / speed;
+  const perContact = 420 / speed;
   for (const c of logEntry.entry.contacts) {
     if (cancelled.current) return;
     const side: 'home' | 'away' = c.team === 0 ? 'home' : 'away';
@@ -151,6 +179,8 @@ async function animateRally(
     const zone = court.indexOf(c.player);
     if (zone !== -1) setBall({ side, ...zonePercent(zone, side) });
     setActive({ kind: c.kind, team: c.team, player: c.player });
+    const callout = pickBigPlay(c.kind);
+    if (callout !== null) onBigPlay(callout, creditTeamFor(c.kind, c.team));
     await sleep(perContact);
   }
 }
@@ -300,7 +330,15 @@ function LiveMatchView(): JSX.Element {
   const logRef = useRef<HTMLDivElement>(null);
   const [ball, setBall] = useState<BallPos | null>(null);
   const [active, setActive] = useState<ActiveContact | null>(null);
+  const [bigPlay, setBigPlay] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
   const cancelledRef = useRef(false);
+  const bigPlayTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const triggerBigPlay = (text: string, team: 0 | 1): void => {
+    setBigPlay({ text, team, key: Date.now() });
+    if (bigPlayTimer.current !== undefined) clearTimeout(bigPlayTimer.current);
+    bigPlayTimer.current = setTimeout(() => setBigPlay(null), 1100);
+  };
 
   // Drives the match forward itself: play a rally, animate it, repeat.
   // No timer in state.ts — pacing is entirely a presentation concern here.
@@ -316,14 +354,17 @@ function LiveMatchView(): JSX.Element {
         }
         const logEntry = g.playNextRally();
         if (logEntry === null) break;
-        await animateRally(logEntry, current.speed, cancelledRef, setBall, setActive);
+        await animateRally(logEntry, current.speed, cancelledRef, setBall, setActive, triggerBigPlay);
         if (cancelledRef.current) break;
         setActive(null); // reset to base rotation positions between points
-        await sleep(280 / current.speed);
+        await sleep(550 / current.speed);
       }
     };
     void run();
-    return () => { cancelledRef.current = true; };
+    return () => {
+      cancelledRef.current = true;
+      clearTimeout(bigPlayTimer.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -350,7 +391,7 @@ function LiveMatchView(): JSX.Element {
       </div>
 
       <div className="toolbar">
-        {([1, 1.25, 1.75] as const).map((s) => (
+        {([0.75, 1, 1.5] as const).map((s) => (
           <button key={s} className={md.speed === s ? 'primary' : ''} onClick={() => g.setSpeed(s)}>
             {s}x
           </button>
@@ -363,11 +404,14 @@ function LiveMatchView(): JSX.Element {
 
       <div className="live-match-layout">
         <div className="panel court-panel">
+          {/* Court2D always draws the fixture's home club in the top half and
+              away in the bottom half (see zonePercent) — these strips must
+              match that or a team's label ends up over the other team's players. */}
           <div className="team-strip">
             <span className="team-strip-name">
-              {awayClub !== undefined && <Flag nation={awayClub.nation} />} {awayClub?.name ?? '—'}
+              {homeClub !== undefined && <Flag nation={homeClub.nation} />} {homeClub?.name ?? '—'}
             </span>
-            <span className="pill">Sets: {snap?.awaySets ?? 0}</span>
+            <span className="pill">Sets: {snap?.homeSets ?? 0}</span>
           </div>
           <Court2D
             homeCourt={snap?.homeCourt ?? []}
@@ -377,11 +421,17 @@ function LiveMatchView(): JSX.Element {
             active={active}
           />
           <div className="team-strip">
-            <span className="pill">Sets: {snap?.homeSets ?? 0}</span>
+            <span className="pill">Sets: {snap?.awaySets ?? 0}</span>
             <span className="team-strip-name">
-              {homeClub !== undefined && <Flag nation={homeClub.nation} />} {homeClub?.name ?? '—'}
+              {awayClub !== undefined && <Flag nation={awayClub.nation} />} {awayClub?.name ?? '—'}
             </span>
           </div>
+
+          {bigPlay !== null && (
+            <div key={bigPlay.key} className={`big-play ${bigPlay.team === 0 ? 'home' : 'away'}`}>
+              {bigPlay.text}
+            </div>
+          )}
         </div>
 
         <div className="panel ticker-panel">

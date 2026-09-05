@@ -313,11 +313,42 @@ tbody tr.selected { background: var(--accent-dim); }
 
 .live-match-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
 
-.court-panel { display: flex; flex-direction: column; gap: 8px; flex: 1 1 420px; max-width: 480px; }
+.court-panel { position: relative; display: flex; flex-direction: column; gap: 8px; flex: 1 1 420px; max-width: 480px; }
 .team-strip { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
 .team-strip-name { font-weight: 600; }
 
 .ticker-panel { flex: 1 1 320px; min-width: 280px; }
+
+.big-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 22px;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  background: rgba(10, 14, 20, 0.55);
+  border: 2px solid var(--gold);
+  pointer-events: none;
+  animation: big-play-pop 1.1s ease-out forwards;
+  white-space: nowrap;
+}
+.big-play.home { border-color: var(--accent); }
+.big-play.away { border-color: var(--gold); }
+
+@keyframes big-play-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
 
 .court2d {
   position: relative;

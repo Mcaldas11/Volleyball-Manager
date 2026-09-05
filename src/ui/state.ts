@@ -101,7 +101,7 @@ export interface MatchdayState {
   homeLineup: number[];
   homeLibero: number;
   homeBench: number[];
-  speed: 1 | 1.25 | 1.75;
+  speed: 0.75 | 1 | 1.5;
   paused: boolean;
   /** Rallies revealed so far, for the live commentary feed and ball animation. */
   log: MatchdayLogEntry[];
@@ -530,7 +530,7 @@ class Game {
     this.emit();
   }
 
-  setSpeed(speed: 1 | 1.25 | 1.75): void {
+  setSpeed(speed: 0.75 | 1 | 1.5): void {
     const md = this.matchday;
     if (md === null) return;
     md.speed = speed;
