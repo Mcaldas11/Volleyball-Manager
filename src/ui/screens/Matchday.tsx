@@ -171,7 +171,8 @@ async function animateRally(
   setActive: (c: ActiveContact | null) => void,
   onBigPlay: (text: string, team: 0 | 1) => void,
 ): Promise<void> {
-  const perContact = 420 / speed;
+  // Baseline tuned so 1x plays at what used to be 0.75x — that read better.
+  const perContact = 560 / speed;
   for (const c of logEntry.entry.contacts) {
     if (cancelled.current) return;
     const side: 'home' | 'away' = c.team === 0 ? 'home' : 'away';
@@ -357,7 +358,7 @@ function LiveMatchView(): JSX.Element {
         await animateRally(logEntry, current.speed, cancelledRef, setBall, setActive, triggerBigPlay);
         if (cancelledRef.current) break;
         setActive(null); // reset to base rotation positions between points
-        await sleep(550 / current.speed);
+        await sleep(733 / current.speed);
       }
     };
     void run();
@@ -413,6 +414,14 @@ function LiveMatchView(): JSX.Element {
             </span>
             <span className="pill">Sets: {snap?.homeSets ?? 0}</span>
           </div>
+
+          <div className="court-scoreboard">
+            <span className="dim">Set {(snap?.set ?? 0) + 1}</span>
+            <span className="court-scoreboard-score">
+              {snap?.homeScore ?? 0} – {snap?.awayScore ?? 0}
+            </span>
+          </div>
+
           <Court2D
             homeCourt={snap?.homeCourt ?? []}
             awayCourt={snap?.awayCourt ?? []}

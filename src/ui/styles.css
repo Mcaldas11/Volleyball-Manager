@@ -319,6 +319,20 @@ tbody tr.selected { background: var(--accent-dim); }
 
 .ticker-panel { flex: 1 1 320px; min-width: 280px; }
 
+.court-scoreboard {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  padding: 2px 0 6px;
+}
+.court-scoreboard-score {
+  font-size: 30px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
 .big-play {
   position: absolute;
   left: 50%;
@@ -355,10 +369,15 @@ tbody tr.selected { background: var(--accent-dim); }
   width: 100%;
   max-width: 440px;
   aspect-ratio: 3 / 4;
-  margin: 4px auto;
+  margin: 4px auto 26px;
   border: 2px solid rgba(238, 242, 247, 0.35);
   border-radius: 4px;
   background: linear-gradient(180deg, #17324a 0%, #142838 50%, #17324a 100%);
+  /* Faces the user but tips back slightly, like a broadcast court camera
+     rather than a flat top-down map. */
+  transform: perspective(1000px) rotateX(18deg);
+  transform-origin: center bottom;
+  box-shadow: 0 20px 30px -14px rgba(0, 0, 0, 0.6);
 }
 .court2d-net {
   position: absolute;
