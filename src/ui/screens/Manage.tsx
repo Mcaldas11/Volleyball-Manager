@@ -130,8 +130,12 @@ export function RotationsScreen(): JSX.Element {
 
   if (selection === null) return <Empty>No lineup available.</Empty>;
 
-  // Zone layout for this rotation: rotating the lineup left by `rot` steps.
-  const zones = Array.from({ length: 6 }, (_, z) => selection.lineup[(z + rot) % 6]);
+  // selection.lineup is the P1 reference (setter at zone index 0). A real
+  // rotation moves each player from zone z+1 into zone z (court.ts's
+  // rotate()), which walks the setter *down* through the zone numbers — so
+  // reaching "setter in zone `rot`" means stepping the lineup back by `rot`,
+  // not forward.
+  const zones = Array.from({ length: 6 }, (_, z) => selection.lineup[(z - rot + 6) % 6]);
   const zoneOrder = [3, 2, 1, 4, 5, 0]; // display order: 4,3,2 front then 5,6,1 back
   const zoneLabels = ['1', '2', '3', '4', '5', '6'];
 

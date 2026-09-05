@@ -7,20 +7,14 @@ import { useGame } from '../state.ts';
 const MIN_BIRTH_DATE = '1946-01-01';
 const MAX_BIRTH_DATE = '2008-07-01';
 
+/** The match ball's own colours (Mikasa V200W blue and gold), not a flat tint. */
 function VolleyballIcon({ className }: { className?: string }): JSX.Element {
   return (
-    <svg
-      viewBox="0 0 64 64"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-    >
-      <circle cx="32" cy="32" r="27" />
-      <path d="M32 5 C 21 16 21 48 32 59" />
-      <path d="M8 22 C 24 29 40 29 56 22" />
-      <path d="M9 44 C 24 35 40 35 55 44" />
+    <svg viewBox="0 0 64 64" className={className} fill="none" strokeWidth="2.5" strokeLinecap="round">
+      <circle cx="32" cy="32" r="27" style={{ stroke: 'var(--accent)' }} />
+      <path d="M32 5 C 21 16 21 48 32 59" style={{ stroke: 'var(--gold)' }} />
+      <path d="M8 22 C 24 29 40 29 56 22" style={{ stroke: 'var(--gold)' }} />
+      <path d="M9 44 C 24 35 40 35 55 44" style={{ stroke: 'var(--gold)' }} />
     </svg>
   );
 }
