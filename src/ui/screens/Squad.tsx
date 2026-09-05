@@ -5,7 +5,9 @@ import {
 } from '../../engine/model/attributes.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { abilityClass, Bar, ClubLink, Empty, Flag, money, PlayerFace, Pos, Status } from '../components.tsx';
+import {
+  abilityClass, Bar, ClubLink, Empty, Flag, money, PlayerFace, Pos, starRating, Status,
+} from '../components.tsx';
 import { useGame } from '../state.ts';
 
 export function SquadScreen(): JSX.Element {
@@ -156,8 +158,13 @@ export function PlayerDetail(): JSX.Element | null {
           <div className="kv"><span className="k">Block reach</span>
             <span>{store.blockReachCm[p]} cm</span></div>
           <div className="kv"><span className="k">Ability</span>
-            <span className={abilityClass(store.currentAbility[p])}>
-              {store.currentAbility[p]}
+            <span>
+              <span className="stars" style={{ marginRight: 6 }}>
+                {starRating(store.currentAbility[p])}
+              </span>
+              <span className={abilityClass(store.currentAbility[p])}>
+                {store.currentAbility[p]}
+              </span>
             </span></div>
           <div className="kv"><span className="k">Potential</span>
             <span className={abilityClass(store.potentialAbility[p])}>

@@ -498,6 +498,16 @@ class Game {
     this.emit();
   }
 
+  /** Swap two starting zones' players — dragging one starter onto another on the team sheet. */
+  swapMatchdayPlayers(zoneA: number, zoneB: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup') return;
+    const a = md.homeLineup[zoneA];
+    md.homeLineup[zoneA] = md.homeLineup[zoneB];
+    md.homeLineup[zoneB] = a;
+    this.emit();
+  }
+
   /** Confirm the lineup and start the live match. */
   kickOff(): void {
     const world = this.world;

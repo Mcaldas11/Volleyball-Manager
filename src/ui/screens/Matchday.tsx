@@ -3,8 +3,9 @@ import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact } from '../../engine/match/engine.ts';
 import {
-  ClubLink, Flag, PlayerFace, POSITION_ACCENT,
+  abilityClass, ClubLink, Flag, initials, PlayerFace, POSITION_ACCENT, starRating,
 } from '../components.tsx';
+import { playerFaceUrl } from '../faces.ts';
 import { RallyTicker } from './Match.tsx';
 import { useGame, type MatchdayLogEntry } from '../state.ts';
 
@@ -261,64 +262,202 @@ export function MatchdayScreen(): JSX.Element | null {
   return md.stage === 'lineup' ? <LineupSetup /> : <LiveMatchView />;
 }
 
+/** The card's full-bleed photo, falling back to initials like PlayerFace does. */
+function CardPhoto({ playerId, name }: { playerId: number; name: string }): JSX.Element {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="lineup-card-photo">
+      {!failed
+        ? <img src={playerFaceUrl(playerId)} alt={name} loading="lazy" onError={() => setFailed(true)} />
+        : <span className="lineup-card-photo-fallback">{initials(name)}</span>}
+    </div>
+  );
+}
+
+/** The colour tint every card gets, radiating from the top in its role's colour. */
+function cardTint(pos: Position): string {
+  return `linear-gradient(165deg, color-mix(in srgb, ${POSITION_ACCENT[pos]} 38%, transparent), transparent 60%)`;
+}
+
+/** One starting-zone slot: a full player card, draggable, and a drop target for
+ *  both bench players and other starters (dropping onto another starter swaps them). */
+function LineupCard({
+  zone, playerIdx, store, bench, isDragOver, onSelectChange, onDropPlayer, onDragOverZone, onDragLeaveZone,
+}: {
+  zone: number;
+  playerIdx: number;
+  store: PlayerStore;
+  bench: number[];
+  isDragOver: boolean;
+  onSelectChange: (playerIdx: number) => void;
+  onDropPlayer: (draggedPlayerIdx: number) => void;
+  onDragOverZone: () => void;
+  onDragLeaveZone: () => void;
+}): JSX.Element {
+  const pos = store.position[playerIdx] as Position;
+  const ca = store.currentAbility[playerIdx];
+  return (
+    <div
+      className={`lineup-card${isDragOver ? ' drag-over' : ''}`}
+      style={{ borderColor: POSITION_ACCENT[pos], backgroundImage: cardTint(pos) }}
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData('text/plain', String(playerIdx))}
+      onDragOver={(e) => { e.preventDefault(); onDragOverZone(); }}
+      onDragLeave={onDragLeaveZone}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDragLeaveZone();
+        const dragged = Number(e.dataTransfer.getData('text/plain'));
+        if (!Number.isNaN(dragged)) onDropPlayer(dragged);
+      }}
+    >
+      <span className="lineup-card-shine" />
+      <span className="lineup-card-pos" style={{ background: POSITION_ACCENT[pos] }}>
+        {POSITION_SHORT[pos]}
+      </span>
+      <CardPhoto playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} />
+      <div className="lineup-card-info">
+        <div className="lineup-card-name">{store.shortName(playerIdx)}</div>
+        <div className="lineup-card-meta">
+          <span className="stars">{starRating(ca)}</span>
+          <span className="lineup-card-ability">{ca}</span>
+        </div>
+      </div>
+      <span className="lineup-card-swap-hint">⇅</span>
+      <select
+        className="lineup-card-select"
+        value={playerIdx}
+        title={`Zone ${ZONE_LABELS[zone]} — change`}
+        onChange={(e) => onSelectChange(Number(e.target.value))}
+      >
+        <option value={playerIdx}>{store.shortName(playerIdx)} (Zone {ZONE_LABELS[zone]})</option>
+        {bench.map((b) => (
+          <option key={b} value={b}>
+            {store.shortName(b)} ({POSITION_SHORT[store.position[b] as Position]})
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/** A bench/libero card. Ordinary bench players can be dragged onto a starting
+ *  slot; the libero can't (it may never serve, so it stays out of that flow). */
+function BenchCard({
+  playerIdx, store, tag,
+}: {
+  playerIdx: number;
+  store: PlayerStore;
+  tag?: string;
+}): JSX.Element {
+  const pos = store.position[playerIdx] as Position;
+  const draggable = tag === undefined;
+  return (
+    <div
+      className="lineup-card lineup-card-small"
+      style={{ borderColor: POSITION_ACCENT[pos], backgroundImage: cardTint(pos) }}
+      draggable={draggable}
+      onDragStart={draggable ? (e) => e.dataTransfer.setData('text/plain', String(playerIdx)) : undefined}
+    >
+      <span className="lineup-card-shine" />
+      {tag !== undefined && <span className="lineup-card-tag">{tag}</span>}
+      <span className="lineup-card-pos" style={{ background: POSITION_ACCENT[pos] }}>
+        {POSITION_SHORT[pos]}
+      </span>
+      <CardPhoto playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} />
+      <div className="lineup-card-info">
+        <div className="lineup-card-name">{store.shortName(playerIdx)}</div>
+        <div className="lineup-card-meta">
+          <span className="lineup-card-ability">{store.currentAbility[playerIdx]}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LineupSetup(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const club = g.club!;
   const md = g.matchday!;
   const store = world.players;
+  const [dragOverZone, setDragOverZone] = useState<number | null>(null);
 
   const opponent = world.clubs[md.userIsHome ? md.fixture.away : md.fixture.home];
   const available = club.players.filter((p) => store.isAvailable(p));
-  const bench = available.filter((p) => !md.homeLineup.includes(p));
+  // The libero gets its own card below — it can't be dropped into an arbitrary
+  // zone (it may never serve), so it's excluded from the generic swap-in list.
+  const bench = available.filter((p) => !md.homeLineup.includes(p) && p !== md.homeLibero);
+
+  const starters = md.homeLineup.filter((p): p is number => p !== undefined);
+  const teamAvg = starters.length > 0
+    ? Math.round(starters.reduce((s, p) => s + store.currentAbility[p], 0) / starters.length)
+    : 0;
+
+  const frontZones = ZONE_ORDER.slice(0, 3);
+  const backZones = ZONE_ORDER.slice(3);
+
+  // Dropping a bench player replaces whoever is there; dropping another
+  // starter swaps the two, so nobody just falls out of the lineup unannounced.
+  const dropOnZone = (targetZone: number, draggedPlayerIdx: number): void => {
+    if (draggedPlayerIdx === md.homeLineup[targetZone]) return;
+    const sourceZone = md.homeLineup.indexOf(draggedPlayerIdx);
+    if (sourceZone === -1) g.setMatchdayPlayer(targetZone, draggedPlayerIdx);
+    else if (sourceZone !== targetZone) g.swapMatchdayPlayers(sourceZone, targetZone);
+  };
+
+  const renderZone = (z: number): JSX.Element | null => {
+    const p = md.homeLineup[z];
+    return p === undefined ? null : (
+      <LineupCard
+        key={z}
+        zone={z}
+        playerIdx={p}
+        store={store}
+        bench={bench}
+        isDragOver={dragOverZone === z}
+        onSelectChange={(np) => g.setMatchdayPlayer(z, np)}
+        onDropPlayer={(dragged) => dropOnZone(z, dragged)}
+        onDragOverZone={() => setDragOverZone(z)}
+        onDragLeaveZone={() => setDragOverZone((cur) => (cur === z ? null : cur))}
+      />
+    );
+  };
 
   return (
-    <>
-      <h1>Team Sheet</h1>
-      <p className="subtitle">
-        {md.userIsHome ? 'vs' : 'at'} {opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}
-      </p>
-
-      <div className="panels">
-        <div className="panel">
-          <h3>Starting six</h3>
-          <div className="court">
-            {ZONE_ORDER.map((z) => {
-              const p = md.homeLineup[z];
-              if (p === undefined) return <div className="zone" key={z} />;
-              const pos = store.position[p] as Position;
-              const isSetter = POSITION_SHORT[pos] === 'S';
-              return (
-                <div className={`zone${isSetter ? ' setter' : ''}`} key={z}>
-                  <div className="z">Zone {ZONE_LABELS[z]}</div>
-                  <div>{store.shortName(p)}</div>
-                  <div className="faint">{POSITION_SHORT[pos]}</div>
-                  <select
-                    value={p}
-                    onChange={(e) => g.setMatchdayPlayer(z, Number(e.target.value))}
-                    style={{ marginTop: 4, width: '100%' }}
-                  >
-                    <option value={p}>{store.shortName(p)}</option>
-                    {bench.map((b) => (
-                      <option key={b} value={b}>
-                        {store.shortName(b)} ({POSITION_SHORT[store.position[b] as Position]})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })}
-          </div>
-          <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>
-            Libero: {md.homeLibero >= 0 ? store.shortName(md.homeLibero) : 'None available'}
+    <div className="lineup-screen">
+      <div className="lineup-header">
+        <div>
+          <h1>Team Sheet</h1>
+          <p className="subtitle">
+            {md.userIsHome ? 'vs' : 'at'} {opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}
           </p>
+        </div>
+        <div className="lineup-team-avg">
+          <span className="faint">Team ability</span>
+          <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
         </div>
       </div>
 
-      <div className="toolbar" style={{ marginTop: 16 }}>
+      <div className="lineup-formation">
+        <div className="lineup-row">{frontZones.map(renderZone)}</div>
+        <div className="lineup-net" />
+        <div className="lineup-row">{backZones.map(renderZone)}</div>
+      </div>
+
+      <h3 className="lineup-subheading">Bench — drag onto a slot above to bring a player on</h3>
+      <div className="lineup-bench">
+        {md.homeLibero >= 0 && <BenchCard playerIdx={md.homeLibero} store={store} tag="Libero" />}
+        {bench.map((p) => <BenchCard key={p} playerIdx={p} store={store} />)}
+        {bench.length === 0 && md.homeLibero < 0 && (
+          <p className="faint">No other players available.</p>
+        )}
+      </div>
+
+      <div className="toolbar" style={{ marginTop: 20, justifyContent: 'center' }}>
         <button className="primary" onClick={() => g.kickOff()}>Kick off</button>
       </div>
-    </>
+    </div>
   );
 }
 

@@ -31,6 +31,12 @@ export function abilityClass(ca: number): string {
   return 'a-poor';
 }
 
+/** 1-5 stars from current ability, trading-card style — same scale everywhere it appears. */
+export function starRating(ca: number): string {
+  const filled = Math.max(1, Math.min(5, Math.round((ca / 2000) * 5)));
+  return '★★★★★'.slice(0, filled) + '☆☆☆☆☆'.slice(0, 5 - filled);
+}
+
 export function money(v: number): string {
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
@@ -155,7 +161,7 @@ export function ClubCrest({ club, size = 28 }: { club: Club; size?: number }): J
   );
 }
 
-function initials(name: string): string {
+export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? '';
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '';

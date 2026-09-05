@@ -518,6 +518,192 @@ tbody tr.selected { background: var(--accent-dim); }
 .court .zone.setter { border-color: var(--accent); }
 .court .zone.libero { border-color: var(--elite); }
 
+/* ---- Team sheet: player cards ---- */
+
+.lineup-screen { max-width: 920px; margin: 0 auto; }
+.lineup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.lineup-header h1, .lineup-header .subtitle { text-align: left; }
+.lineup-team-avg { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.lineup-team-avg strong { font-size: 30px; line-height: 1; }
+
+.lineup-subheading {
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: 600;
+  margin: 26px 0 10px;
+}
+
+.lineup-formation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+}
+.lineup-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.lineup-net {
+  width: 55%;
+  max-width: 360px;
+  min-width: 200px;
+  height: 0;
+  border-top: 2px dashed var(--border-strong);
+}
+
+.lineup-bench {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.lineup-card {
+  position: relative;
+  width: 128px;
+  height: 180px;
+  flex: none;
+  border-radius: 12px;
+  border: 2px solid var(--border-strong);
+  overflow: hidden;
+  background: var(--bg-raised);
+  box-shadow: 0 8px 16px -10px rgba(0, 0, 0, 0.7);
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.lineup-card:has(.lineup-card-select):hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 20px -10px rgba(0, 0, 0, 0.75);
+}
+.lineup-card.drag-over {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 3px rgba(255, 199, 44, 0.35), 0 12px 20px -10px rgba(0, 0, 0, 0.75);
+  transform: translateY(-4px) scale(1.03);
+}
+.lineup-card:active { cursor: grabbing; }
+.lineup-card-small { width: 92px; height: 132px; cursor: grab; }
+
+.lineup-card-shine {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.12) 49%, transparent 60%);
+  pointer-events: none;
+}
+
+.lineup-card-pos {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #0b0e13;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45);
+}
+.lineup-card-small .lineup-card-pos { width: 17px; height: 17px; font-size: 8px; }
+
+.lineup-card-tag {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 2;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #241a00;
+}
+
+.lineup-card-photo {
+  position: relative;
+  width: 100%;
+  height: 68%;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+.lineup-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lineup-card-photo-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.lineup-card-info {
+  position: relative;
+  height: 32%;
+  padding: 4px 7px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+.lineup-card-name {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lineup-card-small .lineup-card-name { font-size: 10px; }
+.lineup-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.lineup-card-ability { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/** Star rating — shared between the team-sheet cards and a player's profile. */
+.stars { color: var(--gold); letter-spacing: -1px; white-space: nowrap; font-size: 12px; }
+.lineup-card-info .stars { font-size: 9px; }
+
+/* Tucked in a corner rather than covering the whole card, so dragging can
+   start from the photo or name without the native <select> intercepting it. */
+.lineup-card-swap-hint {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  z-index: 4;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.lineup-card-select {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  z-index: 5;
+  width: 18px;
+  height: 18px;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
 /* The ball marker itself sits inside .court2d (position: relative there). */
 .ball {
   position: absolute;
