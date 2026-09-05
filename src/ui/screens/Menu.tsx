@@ -7,6 +7,42 @@ import { useGame } from '../state.ts';
 const MIN_BIRTH_DATE = '1946-01-01';
 const MAX_BIRTH_DATE = '2008-07-01';
 
+function VolleyballIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+    >
+      <circle cx="32" cy="32" r="27" />
+      <path d="M32 5 C 21 16 21 48 32 59" />
+      <path d="M8 22 C 24 29 40 29 56 22" />
+      <path d="M9 44 C 24 35 40 35 55 44" />
+    </svg>
+  );
+}
+
+function LoadGameIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+    >
+      <path d="M14 20 h36" />
+      <path d="M14 32 h36" />
+      <path d="M14 44 h24" />
+      <circle cx="48" cy="44" r="6" />
+    </svg>
+  );
+}
+
 export function MainMenu(): JSX.Element {
   const g = useGame();
 
@@ -48,16 +84,22 @@ export function MainMenu(): JSX.Element {
         )}
 
         <div className="menu-card-grid">
-          <div className="menu-card" onClick={() => g.goToMenu('createManager')}>
-            <div className="menu-card-title">Start New Career</div>
-            <div className="menu-card-meta">Create a manager and take charge of a club.</div>
+          <div className="menu-card menu-card-big" onClick={() => g.goToMenu('createManager')}>
+            <div className="menu-card-art"><VolleyballIcon className="menu-card-icon" /></div>
+            <div className="menu-card-body">
+              <div className="menu-card-title">Start New Career</div>
+              <div className="menu-card-meta">Create a manager and take charge of a club.</div>
+            </div>
           </div>
-          <div className="menu-card" onClick={() => g.goToMenu('load')}>
-            <div className="menu-card-title">Load Game</div>
-            <div className="menu-card-meta">
-              {g.saves.length === 0
-                ? 'No saved careers yet.'
-                : `${g.saves.length} saved career${g.saves.length === 1 ? '' : 's'}.`}
+          <div className="menu-card menu-card-big" onClick={() => g.goToMenu('load')}>
+            <div className="menu-card-art"><LoadGameIcon className="menu-card-icon" /></div>
+            <div className="menu-card-body">
+              <div className="menu-card-title">Load Game</div>
+              <div className="menu-card-meta">
+                {g.saves.length === 0
+                  ? 'No saved careers yet.'
+                  : `${g.saves.length} saved career${g.saves.length === 1 ? '' : 's'}.`}
+              </div>
             </div>
           </div>
         </div>
@@ -66,6 +108,7 @@ export function MainMenu(): JSX.Element {
       </div>
 
       <div className="main-menu-hero">
+        <VolleyballIcon className="hero-volleyball" />
         {mostRecent !== undefined && mostRecent.clubNationCode !== '' && (
           <span className="hero-flag"><FlagByCode code={mostRecent.clubNationCode} /></span>
         )}
