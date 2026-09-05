@@ -23,7 +23,7 @@ command line.
 
 ```bash
 git clone <this repository>
-cd beachvolleyboll
+cd volleyball-manager
 npm install
 npm run dev
 ```
@@ -45,7 +45,7 @@ npm test              # unit tests
 This is an early-stage solo project without a formal contribution process yet.
 If you'd like to help, open an issue describing what you'd like to work on
 before sending a pull request — the biggest gaps are listed under Planned
-Features below, and save/load is the most valuable one.
+Features below.
 
 Before submitting a change:
 
@@ -70,6 +70,7 @@ Before submitting a change:
       for every watched match
 - [x] Per-rotation tactical instructions: preferred attacker, serve target,
       block assignment, defensive shape, tempo
+- [x] In-match substitutions, up to the real six-per-set limit
 - [x] Team-level offensive, defensive, serve-risk and tempo systems
 - [x] Choose any club to manage, from any of 58 nations' league pyramids
 - [x] Manage the team's finances: sponsorship, TV rights, gate receipts,
@@ -94,18 +95,34 @@ Before submitting a change:
       with their own FIVB credentials — see [FIVB Data](#fivb-data)
 - [x] Database of 100,000+ fictitious players, generated with realistic
       positions, anthropometrics and national distributions
+- [x] Save and load a career, locally in the browser (IndexedDB) — multiple
+      careers side by side, each resumable from the main menu
+
+### INTERFACE
+
+- [x] A 2D live match viewer: a real court (not a static grid) with every
+      starter's photo in their zone, coloured by role, actually moving through
+      each phase of the rally — a setter releases to the net the moment their
+      side takes the serve, hitters press forward to attack, blockers shift to
+      match the hitter
+- [x] A live commentary ticker alongside the match, plus flashed callouts for
+      the moments that deserve one — "MONSTER SPIKE!", "HUGE BLOCK!", "ACE!"
+- [x] Country flags throughout — clubs, players, staff, nations — resolved
+      from FIVB confederation codes to real flag images
+- [x] Player photos, deterministic per player so the same face keeps showing
+      up for them across sessions
+- [x] A proper main menu: continue your most recent career at a glance, or
+      start a new one, without hunting through a save list first
 
 ### PLANNED FEATURES
 
-- [ ] Save and load a career (the world is fully serializable by design;
-      the format just isn't written yet — this is the top priority)
 - [ ] National team management: squad selection already exists, but the VNL,
       World Championship and Olympic tournaments are not yet scheduled, and
       you cannot be offered a national job
 - [ ] Cup and continental club competitions (the structures are generated;
       their fixtures are not yet scheduled)
 - [ ] Press conferences and a media system
-- [ ] In-match tactical substitutions and timeouts
+- [ ] In-match timeouts (substitutions already exist — see Interface above)
 - [ ] Full multi-round playoffs (currently only the first round is scheduled)
 - [ ] Performance work on the season rollover at world scale (~25s/season,
       dominated by weekly training iterating every player alive)

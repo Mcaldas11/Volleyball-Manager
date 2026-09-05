@@ -5,7 +5,8 @@
  * ability, money and injury status read identically everywhere they appear.
  */
 
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useId, useState, type JSX } from 'react';
+import type { Club } from '../engine/model/club.ts';
 import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../engine/model/players.ts';
 import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/nations.ts';
@@ -113,6 +114,47 @@ export function Flag({ nation }: { nation: number }): JSX.Element {
   return <FlagByCode code={n.code} />;
 }
 
+/**
+ * No club has a real-world crest, so this generates one: a shield in a colour
+ * derived from the club's permanent id (the golden-angle step keeps
+ * consecutive ids visually distinct, never near-duplicate hues) with the
+ * short-name initials on it. Fully offline — no image request, no rate limit,
+ * works for all of them at once.
+ */
+export function ClubCrest({ club, size = 28 }: { club: Club; size?: number }): JSX.Element {
+  const gradId = useId();
+  const hue = (club.id * 137.508) % 360;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      className="club-crest"
+      role="img"
+      aria-label={`${club.name} crest`}
+    >
+      <title>{club.name}</title>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={`hsl(${hue}, 55%, 46%)`} />
+          <stop offset="100%" stopColor={`hsl(${hue}, 50%, 30%)`} />
+        </linearGradient>
+      </defs>
+      <path
+        d="M12 1.4 L21 4.8 V11.5 C21 17.5 16.8 21.3 12 22.6 C7.2 21.3 3 17.5 3 11.5 V4.8 Z"
+        fill={`url(#${gradId})`}
+        style={{ stroke: 'var(--gold)' }}
+        strokeWidth="1.1"
+      />
+      <text
+        x="12" y="14.2" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#fff"
+      >
+        {club.shortName}
+      </text>
+    </svg>
+  );
+}
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? '';
@@ -191,7 +233,7 @@ export function ClubLink({ id, short = false }: { id: number; short?: boolean })
   if (club === undefined) return <>—</>;
   return (
     <span className="club-link" onClick={() => g.selectClub(id)}>
-      <Flag nation={club.nation} /> {short ? club.shortName : club.name}
+      <ClubCrest club={club} size={16} /> {short ? club.shortName : club.name}
     </span>
   );
 }

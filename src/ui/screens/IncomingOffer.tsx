@@ -22,7 +22,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
     <>
       <h2 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         Transfer offer — {store.fullName(n.playerIdx)}
-        <button onClick={() => g.declineOffer()}>Give up</button>
+        <button onClick={() => g.declineOffer()}>Cancel</button>
       </h2>
 
       <div className="panel" style={{ maxWidth: 420 }}>
@@ -34,6 +34,10 @@ export function IncomingOfferScreen(): JSX.Element | null {
         <div className="kv">
           <span className="k">Market value</span>
           <span>{money(store.value[n.playerIdx])}</span>
+        </div>
+        <div className="kv">
+          <span className="k">Expires</span>
+          <span className="faint">{g.dateLabelForDay(n.expiresOnDay)}</span>
         </div>
 
         <div className="toolbar" style={{ margin: '8px 0' }}>

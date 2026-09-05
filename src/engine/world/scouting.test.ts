@@ -25,7 +25,7 @@ test('processScoutingQueue resolves due assignments and logs a message', () => {
 
 test('processScoutingQueue accumulates matches watched, capped at 80', () => {
   const world = generateWorld({ seed: 2, startYear: 2026, scale: 'small', manager: stubManager() });
-  world.scoutingKnowledge.set(0, { confidence: 0, matchesWatched: 70 });
+  world.scoutingKnowledge.set(0, { matchesWatched: 70 });
   world.scoutingQueue.push({ playerIdx: 0, completesOnDay: world.day, matches: 20 });
 
   processScoutingQueue(world);

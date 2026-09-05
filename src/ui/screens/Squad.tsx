@@ -69,7 +69,9 @@ export function SquadScreen(): JSX.Element {
               <td className={`num ${abilityClass(store.currentAbility[p])}`}>
                 {store.currentAbility[p]}
               </td>
-              <td className="num faint">{store.potentialAbility[p]}</td>
+              <td className={`num ${abilityClass(store.potentialAbility[p])}`}>
+                {store.potentialAbility[p]}
+              </td>
               <td><Bar value={store.condition[p]} /></td>
               <td><Bar value={store.morale[p]} /></td>
               <td><Status store={store} i={p} /></td>
@@ -158,7 +160,9 @@ export function PlayerDetail(): JSX.Element | null {
               {store.currentAbility[p]}
             </span></div>
           <div className="kv"><span className="k">Potential</span>
-            <span className="faint">{store.potentialAbility[p]}</span></div>
+            <span className={abilityClass(store.potentialAbility[p])}>
+              {store.potentialAbility[p]}
+            </span></div>
         </div>
 
         <div className="panel" style={{ minWidth: 230 }}>
@@ -243,7 +247,7 @@ export function YouthScreen(): JSX.Element {
                     <td className={`num ${abilityClass(store.currentAbility[p])}`}>
                       {store.currentAbility[p]}
                     </td>
-                    <td className="num faint">{pa}</td>
+                    <td className={`num ${abilityClass(pa)}`}>{pa}</td>
                     <td className={pa > 1550 ? 'elite' : pa > 1250 ? 'good' : 'dim'}>
                       {pa > 1550 ? 'Potentially exceptional'
                         : pa > 1250 ? 'Could play at the top level'

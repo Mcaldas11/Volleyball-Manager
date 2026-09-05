@@ -1,7 +1,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import type { ManagerProfile } from '../../engine/world/world.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { Flag, FlagByCode, money } from '../components.tsx';
+import { ClubCrest, FlagByCode, money } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 const MIN_BIRTH_DATE = '1946-01-01';
@@ -310,7 +310,7 @@ export function WorldSetup(): JSX.Element {
         <div className="toolbar" style={{ marginTop: 12 }}>
           <button onClick={() => g.goToMenu('createManager')} disabled={building}>Back</button>
           <button className="primary" onClick={start} disabled={building}>
-            {building ? 'Building world…' : 'Create world'}
+            {building ? (<><span className="spinner" /> Building world…</>) : 'Create world'}
           </button>
         </div>
       </div>
@@ -351,7 +351,7 @@ export function ClubSelect(): JSX.Element {
                 : 0;
               return (
                 <tr key={c.id} className="clickable" onClick={() => g.takeCharge(c.id)}>
-                  <td><Flag nation={c.nation} /> {c.name}</td>
+                  <td><ClubCrest club={c} size={18} /> {c.name}</td>
                   <td className="dim">{NATIONS[c.nation].name}</td>
                   <td className="num">{c.tier}</td>
                   <td className="num">{c.reputation}</td>

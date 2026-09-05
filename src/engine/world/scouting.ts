@@ -25,8 +25,6 @@ import type { World } from './world.ts';
 
 /** How thoroughly a club has scouted a given player. */
 export interface ScoutingKnowledge {
-  /** 0-1. Zero is a name on a list; one is complete certainty. */
-  confidence: number;
   matchesWatched: number;
 }
 
@@ -248,7 +246,7 @@ export function processScoutingQueue(world: World): void {
     if (world.day < task.completesOnDay) { remaining.push(task); continue; }
     const current = world.scoutingKnowledge.get(task.playerIdx)?.matchesWatched ?? 0;
     world.scoutingKnowledge.set(task.playerIdx, {
-      confidence: 0, matchesWatched: Math.min(80, current + task.matches),
+      matchesWatched: Math.min(80, current + task.matches),
     });
     world.messages.push({
       id: world.messages.length,

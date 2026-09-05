@@ -18,9 +18,22 @@ import {
 } from './screens/Manage.tsx';
 import { StatsScreen, RankingsScreen, HallOfFameScreen } from './screens/World.tsx';
 
-const NAV: Array<{ group: string; items: Array<[ScreenId, string]> }> = [
+/** Identifies the current main-content view, so it can be keyed to replay the fade-in on change. */
+function viewKey(g: ReturnType<typeof useGame>): string {
+  if (g.matchday !== null) return 'matchday';
+  if (g.negotiation !== null) return 'negotiation';
+  if (g.incomingOffer !== null) return 'offer';
+  if (g.selectedClub !== null) return `club-${g.selectedClub}`;
+  if (g.selectedPlayer !== null) return `player-${g.selectedPlayer}`;
+  return `screen-${g.screen}`;
+}
+
+type NavIconName = 'club' | 'competition' | 'management' | 'world';
+
+const NAV: Array<{ group: string; icon: NavIconName; items: Array<[ScreenId, string]> }> = [
   {
     group: 'Club',
+    icon: 'club',
     items: [
       ['overview', 'Overview'],
       ['squad', 'Squad'],
@@ -32,6 +45,7 @@ const NAV: Array<{ group: string; items: Array<[ScreenId, string]> }> = [
   },
   {
     group: 'Competition',
+    icon: 'competition',
     items: [
       ['fixtures', 'Fixtures'],
       ['table', 'League Table'],
@@ -40,6 +54,7 @@ const NAV: Array<{ group: string; items: Array<[ScreenId, string]> }> = [
   },
   {
     group: 'Management',
+    icon: 'management',
     items: [
       ['transfers', 'Transfers'],
       ['scouting', 'Scouting'],
@@ -49,12 +64,58 @@ const NAV: Array<{ group: string; items: Array<[ScreenId, string]> }> = [
   },
   {
     group: 'World',
+    icon: 'world',
     items: [
       ['rankings', 'World Rankings'],
       ['halloffame', 'Hall of Fame'],
     ],
   },
 ];
+
+/** Small monochrome line icons for the nav group headers — inherits `color` from its container. */
+function NavIcon({ name }: { name: NavIconName }): JSX.Element {
+  const common = {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className: 'nav-icon',
+  };
+  switch (name) {
+    case 'club':
+      return (
+        <svg {...common}>
+          <path d="M8 3 L4 6 L6 9 L8 7.5 V20 H16 V7.5 L18 9 L20 6 L16 3 C16 4.5 14.5 5.5 12 5.5 C9.5 5.5 8 4.5 8 3 Z" />
+        </svg>
+      );
+    case 'competition':
+      return (
+        <svg {...common}>
+          <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+          <path d="M7 5H4a1 1 0 0 0-1 1c0 2.5 1.8 4 4 4.2" />
+          <path d="M17 5h3a1 1 0 0 1 1 1c0 2.5-1.8 4-4 4.2" />
+          <path d="M9 20h6M12 15v5" />
+        </svg>
+      );
+    case 'management':
+      return (
+        <svg {...common}>
+          <rect x="3" y="7.5" width="18" height="12" rx="1.5" />
+          <path d="M8 7.5V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1.5" />
+          <path d="M3 12.5h18" />
+        </svg>
+      );
+    case 'world':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M3.5 12h17M12 3.5c2.5 2.4 3.8 5.4 3.8 8.5s-1.3 6.1-3.8 8.5c-2.5-2.4-3.8-5.4-3.8-8.5S9.5 5.9 12 3.5Z" />
+        </svg>
+      );
+  }
+}
 
 export function App(): JSX.Element {
   const g = useGame();
@@ -69,7 +130,7 @@ export function App(): JSX.Element {
         <nav className="nav">
           {NAV.map((section) => (
             <div key={section.group}>
-              <div className="group">{section.group}</div>
+              <div className="group"><NavIcon name={section.icon} /> {section.group}</div>
               {section.items.map(([id, label]) => (
                 <button
                   key={id}
@@ -84,21 +145,23 @@ export function App(): JSX.Element {
         </nav>
         <main className="main">
           {g.notice !== '' && (
-            <div className="notice" onClick={() => { g.notice = ''; g.touch(); }}>
+            <div key={g.notice} className="notice" onClick={() => { g.notice = ''; g.touch(); }}>
               {g.notice}
             </div>
           )}
-          {g.matchday !== null
-            ? <MatchdayScreen />
-            : g.negotiation !== null
-              ? <NegotiationScreen />
-              : g.incomingOffer !== null
-                ? <IncomingOfferScreen />
-                : g.selectedClub !== null
-                  ? <ClubDetail />
-                  : g.selectedPlayer !== null
-                    ? <PlayerDetail />
-                    : <Screen />}
+          <div key={viewKey(g)} className="view-fade">
+            {g.matchday !== null
+              ? <MatchdayScreen />
+              : g.negotiation !== null
+                ? <NegotiationScreen />
+                : g.incomingOffer !== null
+                  ? <IncomingOfferScreen />
+                  : g.selectedClub !== null
+                    ? <ClubDetail />
+                    : g.selectedPlayer !== null
+                      ? <PlayerDetail />
+                      : <Screen />}
+          </div>
         </main>
       </div>
     </div>
@@ -155,8 +218,8 @@ function TopBar(): JSX.Element {
       <span className="meta">{money(club.finances.balance)}</span>
       <span className="meta">{g.dateLabel()}</span>
       <span className="meta">{PHASE_NAMES[g.phase()]}</span>
-      <button onClick={() => g.advance(1)}>+1 day</button>
-      <button onClick={() => g.advance(7)}>+1 week</button>
+      <button disabled={next?.day === world.day} onClick={() => g.advance(1)}>+1 day</button>
+      <button disabled={next?.day === world.day} onClick={() => g.advance(7)}>+1 week</button>
       <button
         className="primary"
         disabled={next === null}

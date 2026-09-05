@@ -4,7 +4,9 @@ import type { Position } from '../../engine/model/positions.ts';
 import { StaffRole } from '../../engine/model/staff.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { clubTrophies } from '../../engine/world/world.ts';
-import { abilityClass, Empty, Flag, Pos } from '../components.tsx';
+import {
+  abilityClass, ClubCrest, Empty, Flag, Pos,
+} from '../components.tsx';
 import { useGame } from '../state.ts';
 
 /**
@@ -35,8 +37,9 @@ export function ClubDetail(): JSX.Element | null {
 
   return (
     <>
-      <h2 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Flag nation={club.nation} /> {club.name}
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <ClubCrest club={club} size={34} />
+        {club.name}
         <button onClick={() => g.selectClub(null)}>Close</button>
       </h2>
 

@@ -70,6 +70,7 @@ export interface IncomingOfferReview {
   fee: number;
   counterFee: number;
   message: string | null;
+  expiresOnDay: number;
 }
 
 export interface MatchdaySnapshot {
@@ -355,7 +356,11 @@ class Game {
         this.rollover();
         continue;
       }
-      if (stopAtOwnMatch && clubId >= 0 && this.fixtureOn(world.day) !== null && d > 0) break;
+      // `d > 0` used to gate this, which meant a match scheduled for *today*
+      // (the very first day of this call) got simulated headlessly instead of
+      // stopping for the interactive Matchday screen — exactly the accident
+      // this check exists to prevent. Must apply from the first day too.
+      if (stopAtOwnMatch && clubId >= 0 && this.fixtureOn(world.day) !== null) break;
 
       // The user's own matches always run through the full rally engine.
       advanceDay(world, this.ctx, {
@@ -817,6 +822,7 @@ class Game {
       fee: offer.fee,
       counterFee: offer.fee,
       message: null,
+      expiresOnDay: offer.expiresOnDay,
     };
     this.selectedPlayer = null;
     this.selectedClub = null;

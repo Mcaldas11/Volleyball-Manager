@@ -7,7 +7,6 @@ import { POSITION_NAMES, POSITION_SHORT, type Position } from '../../engine/mode
 import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engine/model/staff.ts';
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
-import { NATIONS } from '../../engine/world/nations.ts';
 import { abilityClass, Bar, ClubLink, Empty, Flag, money, MoneyInput, Pos } from '../components.tsx';
 import { useGame } from '../state.ts';
 
@@ -273,7 +272,7 @@ export function TrainingScreen(): JSX.Element {
             <th className="num">Potential</th>
             <th className="num">Headroom</th>
             <th>Condition</th>
-            <th className="num" title="Professionalism, work ethic and coachability">Application</th>
+            <th className="num" title="Professionalism and work ethic">Application</th>
             <th>Outlook</th>
           </tr>
         </thead>
@@ -283,10 +282,11 @@ export function TrainingScreen(): JSX.Element {
             const ca = store.currentAbility[p];
             const pa = store.potentialAbility[p];
             const headroom = pa - ca;
+            // Coachability deliberately excluded: it's a hidden attribute, and
+            // averaging it in here would let a coach back-solve its value from
+            // the two visible ones — breaking the "never shown as a number" rule.
             const application = Math.round(
-              (store.getAttr(p, 'professionalism') +
-                store.getAttr(p, 'workEthic') +
-                store.getAttr(p, 'coachability')) / 3,
+              (store.getAttr(p, 'professionalism') + store.getAttr(p, 'workEthic')) / 2,
             );
             return (
               <tr key={p} className="clickable" onClick={() => g.select(p)}>
@@ -323,8 +323,17 @@ export function FinancesScreen(): JSX.Element {
   const club = g.club!;
   const store = g.world!.players;
   const f = club.finances;
+  // Senior-squad wages only — matches the affordability check a transfer
+  // negotiation actually runs (see submitTermsOffer), so this is "room left
+  // to sign someone," not the club's total wage-type spend.
   const wages = club.players.reduce((s, p) => s + store.wage[p], 0);
+  const youthWages = club.youthPlayers.reduce((s, p) => s + store.wage[p], 0);
   const staffWages = club.staff.reduce((s, id) => s + (g.world!.staff[id]?.wage ?? 0), 0);
+  // Mirrors settleFinances() in rollover.ts exactly, so this is a true preview
+  // of what rollover will do if the season ended today.
+  const totalIncome = f.sponsorshipIncome + f.tvRightsIncome + f.merchandiseIncome + f.seasonIncome;
+  const totalCosts = wages + youthWages + staffWages +
+    f.arenaMaintenance + f.medicalCosts + f.youthAcademyCosts + f.seasonExpenditure;
 
   const line = (k: string, v: number, good = false): JSX.Element => (
     <div className="kv">
@@ -351,8 +360,8 @@ export function FinancesScreen(): JSX.Element {
             <span className="k">Wage budget</span>
             <MoneyInput value={f.wageBudget} onChange={(v) => g.setWageBudget(v)} />
           </div>
-          {line('Committed wages', -wages)}
-          {line('Remaining', f.wageBudget - wages)}
+          {line('Committed wages (senior squad)', -wages)}
+          {line('Remaining for signings', f.wageBudget - wages)}
           <div className="kv">
             <span className="k">Transfer budget</span>
             <MoneyInput value={f.transferBudget} onChange={(v) => g.setTransferBudget(v)} />
@@ -368,27 +377,31 @@ export function FinancesScreen(): JSX.Element {
           {line('TV rights', f.tvRightsIncome, true)}
           {line('Merchandise', f.merchandiseIncome, true)}
           {line('Gate receipts so far', f.seasonIncome, true)}
+          {f.prizeMoney > 0 && line('Of which prize money', f.prizeMoney, true)}
           {line('Per match (full house)', f.ticketIncomePerMatch, true)}
         </div>
         <div className="panel">
           <h3>Expenditure (annual)</h3>
           {line('Player wages', -wages)}
+          {line('Youth wages', -youthWages)}
           {line('Staff wages', -staffWages)}
           {line('Arena maintenance', -f.arenaMaintenance)}
           {line('Medical', -f.medicalCosts)}
           {line('Youth academy', -f.youthAcademyCosts)}
-          {line('Travel', -f.travelCosts)}
+          {line('Travel so far', -f.seasonExpenditure)}
         </div>
       </div>
 
       <h2>Projection</h2>
       <div className="panel">
-        {line(
-          'Projected annual result',
-          f.sponsorshipIncome + f.tvRightsIncome + f.merchandiseIncome -
-          wages - staffWages - f.arenaMaintenance - f.medicalCosts -
-          f.youthAcademyCosts - f.travelCosts,
-        )}
+        {line('Income so far', totalIncome, true)}
+        {line('Costs so far', -totalCosts)}
+        {line('Result if the season ended today', totalIncome - totalCosts)}
+        <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>
+          Sponsorship and TV rights are locked in for the season; gate receipts
+          and travel costs accrue match by match, so this figure moves as the
+          season goes on.
+        </p>
       </div>
     </>
   );
@@ -436,9 +449,13 @@ export function StaffScreen(): JSX.Element {
               const s = world.staff[id];
               if (s === undefined) return null;
               const rating = staffRating(s);
-              const regions = Object.entries(s.regionKnowledge)
-                .sort((a, b) => b[1] - a[1]).slice(0, 2)
-                .map(([k, v]) => `${k} ${v}`).join(', ');
+              const scoutsRegions = s.role === StaffRole.Scout || s.role === StaffRole.HeadScout ||
+                s.role === StaffRole.RecruitmentAnalyst;
+              const regions = scoutsRegions
+                ? Object.entries(s.regionKnowledge)
+                  .sort((a, b) => b[1] - a[1]).slice(0, 2)
+                  .map(([k, v]) => `${k} ${v}`).join(', ')
+                : '';
               return (
                 <tr key={id}>
                   <td>{s.firstName} {s.lastName}</td>
@@ -449,7 +466,7 @@ export function StaffScreen(): JSX.Element {
                     {rating.toFixed(1)}
                   </td>
                   <td className="num dim">{money(s.wage)}</td>
-                  <td className="faint">{regions}</td>
+                  <td className="faint">{scoutsRegions ? regions : '—'}</td>
                   <td>
                     <button
                       onClick={() => {
@@ -535,7 +552,7 @@ export function ScoutingScreen(): JSX.Element {
   const targets = g.scoutingPool(query);
   const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
   const report = target !== null && matchesWatched > 0
-    ? buildScoutReport(world, world.userClubId, target, { confidence: 0, matchesWatched })
+    ? buildScoutReport(world, world.userClubId, target, { matchesWatched })
     : null;
 
   const pending = target !== null
@@ -658,7 +675,9 @@ export function ScoutingScreen(): JSX.Element {
                     </div>
                     <div className="kv">
                       <span className="k">Estimated potential</span>
-                      <span className="elite">{report.potentialLow}–{report.potentialHigh}</span>
+                      <span className={abilityClass((report.potentialLow + report.potentialHigh) / 2)}>
+                        {report.potentialLow}–{report.potentialHigh}
+                      </span>
                     </div>
 
                     <h3 style={{ marginTop: 14 }}>Attributes</h3>
@@ -732,9 +751,6 @@ export function TransfersScreen(): JSX.Element {
             </tbody>
           </table>
         )}
-      <p className="faint" style={{ fontSize: 12, marginTop: 10 }}>
-        Nationality codes follow FIVB federation codes: {NATIONS.slice(0, 6).map((n) => n.code).join(', ')}…
-      </p>
     </>
   );
 }

@@ -44,7 +44,7 @@ export function NegotiationScreen(): JSX.Element | null {
       </div>
 
       {n.stage === 'fee' && sellingClub !== null && (
-        <div className="panel" style={{ maxWidth: 420 }}>
+        <div key="fee" className="panel view-fade" style={{ maxWidth: 420 }}>
           <h3>Transfer fee — {sellingClub.name}</h3>
           <div className="kv">
             <span className="k">Offer</span>
@@ -60,7 +60,7 @@ export function NegotiationScreen(): JSX.Element | null {
       )}
 
       {n.stage === 'terms' && (
-        <div className="panel" style={{ maxWidth: 420 }}>
+        <div key="terms" className="panel view-fade" style={{ maxWidth: 420 }}>
           <h3>Personal terms</h3>
           <div className="kv">
             <span className="k">Promised role</span>
