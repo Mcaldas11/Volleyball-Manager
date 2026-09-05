@@ -135,3 +135,40 @@ export function nationsIn(conf: Confederation): number[] {
   });
   return out;
 }
+
+/**
+ * FIVB/IOC-style codes used throughout this file aren't ISO 3166-1 (GER not
+ * DEU, NED not NLD, RSA not ZAF...), so flag images — served by flagcdn.com
+ * keyed on ISO alpha-2 — need this table to find the right one.
+ */
+const ISO2_BY_CODE: Readonly<Record<string, string>> = {
+  POL: 'PL', ITA: 'IT', FRA: 'FR', SLO: 'SI', SRB: 'RS', NED: 'NL', GER: 'DE',
+  BUL: 'BG', UKR: 'UA', TUR: 'TR', RUS: 'RU', CZE: 'CZ', GRE: 'GR', BEL: 'BE',
+  FIN: 'FI', POR: 'PT', ESP: 'ES', CRO: 'HR', ROU: 'RO', SVK: 'SK', EST: 'EE',
+  LAT: 'LV', AUT: 'AT', SUI: 'CH', DEN: 'DK', SWE: 'SE', NOR: 'NO', HUN: 'HU',
+  ISR: 'IL', MKD: 'MK', BIH: 'BA', MNE: 'ME',
+  BRA: 'BR', ARG: 'AR', CHI: 'CL', COL: 'CO', VEN: 'VE', PER: 'PE', URU: 'UY',
+  USA: 'US', CUB: 'CU', CAN: 'CA', MEX: 'MX', PUR: 'PR', DOM: 'DO',
+  JPN: 'JP', IRI: 'IR', CHN: 'CN', KOR: 'KR', QAT: 'QA', AUS: 'AU', IND: 'IN',
+  THA: 'TH', KAZ: 'KZ',
+  EGY: 'EG', TUN: 'TN', MAR: 'MA', ALG: 'DZ', CMR: 'CM', RSA: 'ZA',
+};
+
+/**
+ * Flag *image* URLs from flagcdn.com (free, no API key). Windows doesn't ship
+ * pictorial glyphs for Unicode flag emoji — Chromium falls back to plain
+ * two-letter codes there — so real UI chrome needs an actual image instead.
+ */
+const FLAG_CDN = 'https://flagcdn.com';
+
+/** SVG flag image URL for a nation's FIVB code, or null if the code is unmapped. */
+export function flagImageUrlForCode(code: string): string | null {
+  const iso2 = ISO2_BY_CODE[code];
+  return iso2 !== undefined ? `${FLAG_CDN}/${iso2.toLowerCase()}.svg` : null;
+}
+
+/** SVG flag image URL for a nation, given its index into NATIONS. */
+export function flagImageUrl(nationIndex: number): string | null {
+  const n = NATIONS[nationIndex];
+  return n !== undefined ? flagImageUrlForCode(n.code) : null;
+}

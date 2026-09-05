@@ -8,7 +8,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../engine/model/players.ts';
-import { NATIONS } from '../engine/world/nations.ts';
+import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/nations.ts';
 import { useGame } from './state.ts';
 
 /** Ability bands, so a squad list can be read without parsing every number. */
@@ -88,8 +88,19 @@ export function Pos({ pos }: { pos: Position }): JSX.Element {
   return <span className="pill pos">{POSITION_SHORT[pos]}</span>;
 }
 
+/** A flag image looked up directly by FIVB code — for places without a nation index handy. */
+export function FlagByCode({ code }: { code: string }): JSX.Element {
+  const idx = NATION_BY_CODE.get(code);
+  const name = idx !== undefined ? NATIONS[idx].name : code;
+  const url = flagImageUrlForCode(code);
+  if (url === null) return <span className="flag-img flag-fallback" title={name} />;
+  return <img className="flag-img" src={url} alt={name} title={name} loading="lazy" />;
+}
+
 export function Flag({ nation }: { nation: number }): JSX.Element {
-  return <span className="faint">{NATIONS[nation]?.code ?? '???'}</span>;
+  const n = NATIONS[nation];
+  if (n === undefined) return <span className="flag-img flag-fallback" title="Unknown nation" />;
+  return <FlagByCode code={n.code} />;
 }
 
 /** A small horizontal meter, used for condition and morale. */
@@ -131,7 +142,7 @@ export function ClubLink({ id, short = false }: { id: number; short?: boolean })
   if (club === undefined) return <>—</>;
   return (
     <span className="club-link" onClick={() => g.selectClub(id)}>
-      {short ? club.shortName : club.name}
+      <Flag nation={club.nation} /> {short ? club.shortName : club.name}
     </span>
   );
 }

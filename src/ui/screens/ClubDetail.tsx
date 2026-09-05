@@ -36,7 +36,7 @@ export function ClubDetail(): JSX.Element | null {
   return (
     <>
       <h2 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {club.name}
+        <Flag nation={club.nation} /> {club.name}
         <button onClick={() => g.selectClub(null)}>Close</button>
       </h2>
 

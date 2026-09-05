@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { POSITION_SHORT, type Position } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
-import { ClubLink } from '../components.tsx';
+import { ClubLink, Flag } from '../components.tsx';
 import { describeRally } from './Match.tsx';
 import { useGame, type MatchdayLogEntry } from '../state.ts';
 
@@ -181,9 +181,13 @@ function LiveMatchView(): JSX.Element {
   return (
     <>
       <div className="scoreline">
-        <span className="team">{homeClub?.shortName ?? '—'}</span>
+        <span className="team">
+          {homeClub !== undefined && <Flag nation={homeClub.nation} />} {homeClub?.shortName ?? '—'}
+        </span>
         <span className="sets">{snap?.homeSets ?? 0} — {snap?.awaySets ?? 0}</span>
-        <span className="team">{awayClub?.shortName ?? '—'}</span>
+        <span className="team">
+          {awayClub !== undefined && <Flag nation={awayClub.nation} />} {awayClub?.shortName ?? '—'}
+        </span>
         {snap !== null && (
           <span className="mono faint">Set {snap.set + 1} · {snap.homeScore}-{snap.awayScore}</span>
         )}

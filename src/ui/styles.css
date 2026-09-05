@@ -179,6 +179,17 @@ tbody tr.selected { background: var(--accent-dim); }
 .club-link { cursor: pointer; }
 .club-link:hover { color: var(--accent); text-decoration: underline; }
 
+.flag-img {
+  display: inline-block;
+  width: 18px;
+  height: 13px;
+  object-fit: cover;
+  border-radius: 2px;
+  vertical-align: -2px;
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
+  background: var(--bg-hover);
+}
+
 .bar {
   display: inline-block;
   width: 54px;

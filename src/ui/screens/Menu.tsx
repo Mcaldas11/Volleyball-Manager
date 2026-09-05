@@ -1,7 +1,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import type { ManagerProfile } from '../../engine/world/world.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { money } from '../components.tsx';
+import { Flag, FlagByCode, money } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 const MIN_BIRTH_DATE = '1946-01-01';
@@ -60,7 +60,7 @@ export function LoadGameList(): JSX.Element {
               {g.saves.map((s) => (
                 <tr key={s.id} className="clickable" onClick={() => { void g.loadGame(s.id); }}>
                   <td>{s.managerName}</td>
-                  <td className="dim">{s.nationCode}</td>
+                  <td className="dim"><FlagByCode code={s.nationCode} /> {s.nationCode}</td>
                   <td>{s.clubName}</td>
                   <td className="num dim">{s.inGameDate}</td>
                   <td className="num dim">{new Date(s.updatedAt).toLocaleString()}</td>
@@ -269,7 +269,7 @@ export function ClubSelect(): JSX.Element {
                 : 0;
               return (
                 <tr key={c.id} className="clickable" onClick={() => g.takeCharge(c.id)}>
-                  <td>{c.name}</td>
+                  <td><Flag nation={c.nation} /> {c.name}</td>
                   <td className="dim">{NATIONS[c.nation].name}</td>
                   <td className="num">{c.tier}</td>
                   <td className="num">{c.reputation}</td>
