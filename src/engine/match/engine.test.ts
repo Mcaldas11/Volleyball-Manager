@@ -74,22 +74,49 @@ test('substitute() rejects a player outside the squad', () => {
   assert.equal(result.ok, false);
 });
 
-test('substitute() enforces the six-per-set limit', () => {
+test('substitute() enforces the five-per-set limit', () => {
   const { store, setup } = buildMatch(5, 333);
-  assert.ok(setup.home.bench.length >= 7, 'this test needs at least 7 bench players');
+  assert.ok(setup.home.bench.length >= 6, 'this test needs at least 6 bench players');
   const sim = new MatchSimulator(store, setup);
   sim.step();
 
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     const outPlayer = setup.home.lineup[i];
     const inPlayer = setup.home.bench[i];
     const result = sim.substitute(0, outPlayer, inPlayer);
     assert.equal(result.ok, true, `substitution ${i} should succeed`);
   }
 
-  const seventhOut = sim.snapshot().homeCourt[0];
-  const seventhIn = setup.home.bench[6];
-  const seventh = sim.substitute(0, seventhOut, seventhIn);
-  assert.equal(seventh.ok, false);
+  // Zone 5 was never touched by the loop above, so this is a fresh pair —
+  // it should still fail, but purely on the count limit, not the pairing rule.
+  const sixthOut = sim.snapshot().homeCourt[5];
+  const sixthIn = setup.home.bench[5];
+  const sixth = sim.substitute(0, sixthOut, sixthIn);
+  assert.equal(sixth.ok, false);
   assert.equal(sim.subsRemaining(0), 0);
+});
+
+test('substitute() only lets a substituted starter return for the player who replaced them', () => {
+  const { store, setup } = buildMatch(6, 444);
+  assert.ok(setup.home.bench.length >= 2, 'this test needs at least 2 bench players');
+  const sim = new MatchSimulator(store, setup);
+  sim.step();
+
+  const starter = setup.home.lineup[0];
+  const sub1 = setup.home.bench[0];
+  const sub2 = setup.home.bench[1];
+
+  assert.equal(sim.substitute(0, starter, sub1).ok, true);
+
+  // A different bench player may not come in for sub1 — only the starter may.
+  assert.equal(sim.substitute(0, sub1, sub2).ok, false);
+
+  // The starter returning for sub1 (their own replacement) is fine.
+  assert.equal(sim.substitute(0, sub1, starter).ok, true);
+  assert.ok(sim.snapshot().homeCourt.includes(starter));
+
+  // The pair is locked for the rest of the set: sub2 still can't break in...
+  assert.equal(sim.substitute(0, starter, sub2).ok, false);
+  // ...only sub1 can replace the starter again.
+  assert.equal(sim.substitute(0, starter, sub1).ok, true);
 });

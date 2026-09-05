@@ -7,31 +7,10 @@ import { POSITION_NAMES, POSITION_SHORT, type Position } from '../../engine/mode
 import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engine/model/staff.ts';
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
-import { abilityClass, Bar, ClubLink, Empty, Flag, money, MoneyInput, Pos } from '../components.tsx';
+import {
+  abilityClass, Bar, ChoiceField, ClubLink, Empty, Flag, money, MoneyInput, Pos,
+} from '../components.tsx';
 import { useGame } from '../state.ts';
-
-/** A labelled dropdown bound to a value on the club's tactics object. */
-function Choice<T extends number>({
-  label, value, options, onChange, hint,
-}: {
-  label: string;
-  value: T;
-  options: Array<[T, string]>;
-  onChange: (v: T) => void;
-  hint?: string;
-}): JSX.Element {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div className="kv">
-        <span className="k">{label}</span>
-        <select value={value} onChange={(e) => onChange(Number(e.target.value) as T)}>
-          {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-      </div>
-      {hint !== undefined && <div className="faint" style={{ fontSize: 12 }}>{hint}</div>}
-    </div>
-  );
-}
 
 export function TacticsScreen(): JSX.Element {
   const g = useGame();
@@ -50,7 +29,7 @@ export function TacticsScreen(): JSX.Element {
       <div className="grid2">
         <div className="panel">
           <h3>Offence</h3>
-          <Choice
+          <ChoiceField
             label="System"
             value={t.offense}
             onChange={(v) => { t.offense = v; g.touch(); }}
@@ -65,7 +44,7 @@ export function TacticsScreen(): JSX.Element {
               [OffensiveSystem.BackRowHeavy, 'Back-row heavy'],
             ]}
           />
-          <Choice
+          <ChoiceField
             label="Tempo"
             value={t.tempo}
             onChange={(v) => { t.tempo = v; g.touch(); }}
@@ -81,7 +60,7 @@ export function TacticsScreen(): JSX.Element {
 
         <div className="panel">
           <h3>Defence and serve</h3>
-          <Choice
+          <ChoiceField
             label="Defensive system"
             value={t.defense}
             onChange={(v) => { t.defense = v; g.touch(); }}
@@ -94,7 +73,7 @@ export function TacticsScreen(): JSX.Element {
               [DefensiveSystem.ReceptionStability, 'Reception stability'],
             ]}
           />
-          <Choice
+          <ChoiceField
             label="Serve strategy"
             value={t.serve}
             onChange={(v) => { t.serve = v; g.touch(); }}
@@ -181,7 +160,7 @@ export function RotationsScreen(): JSX.Element {
 
         <div className="panel" style={{ flex: 1 }}>
           <h3>Instructions for P{rot + 1}</h3>
-          <Choice
+          <ChoiceField
             label="Preferred attacker"
             value={r.preferredAttacker}
             onChange={(v) => { r.preferredAttacker = v as Position | -1; g.touch(); }}
@@ -192,7 +171,7 @@ export function RotationsScreen(): JSX.Element {
               ),
             ]}
           />
-          <Choice
+          <ChoiceField
             label="Serve target"
             value={r.serveTarget}
             onChange={(v) => { r.serveTarget = v; g.touch(); }}
@@ -205,7 +184,7 @@ export function RotationsScreen(): JSX.Element {
               [ServeTarget.ShortZone, 'Short zone'],
             ]}
           />
-          <Choice
+          <ChoiceField
             label="Block assignment"
             value={r.blockAssignment}
             onChange={(v) => { r.blockAssignment = v; g.touch(); }}
@@ -216,7 +195,7 @@ export function RotationsScreen(): JSX.Element {
               [BlockAssignment.ReleaseToLine, 'Release to line'],
             ]}
           />
-          <Choice
+          <ChoiceField
             label="Defensive shape"
             value={r.defensiveShape}
             onChange={(v) => { r.defensiveShape = v; g.touch(); }}

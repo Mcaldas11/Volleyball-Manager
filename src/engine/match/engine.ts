@@ -224,8 +224,16 @@ export class MatchSimulator {
   private setTarget = 25;
   private setsToWin = 3;
   private maxSets = 5;
-  /** Substitutions used this set, per team. Resets each set; FIVB allows 6. */
+  /** Substitutions used this set, per team. Resets each set. */
   private readonly subsUsedThisSet: [number, number] = [0, 0];
+  /**
+   * Once a starter is replaced by a bench player, that pair is locked for the
+   * rest of the set — the starter can only re-enter by swapping back in for
+   * that same substitute, never a different one. Keyed by player id, both
+   * directions, so a lookup works from whichever side is currently on court.
+   * Resets each set.
+   */
+  private readonly subPairing: [Map<number, number>, Map<number, number>] = [new Map(), new Map()];
 
   constructor(
     private readonly store: PlayerStore,
@@ -345,6 +353,8 @@ export class MatchSimulator {
     this.setTarget = isDecider ? 15 : 25;
     this.subsUsedThisSet[0] = 0;
     this.subsUsedThisSet[1] = 0;
+    this.subPairing[0].clear();
+    this.subPairing[1].clear();
   }
 
   buildResult(): MatchResult {
@@ -362,8 +372,10 @@ export class MatchSimulator {
   /**
    * Bring a bench player on for one currently on court, if the rules allow
    * it — the substitute must be part of the matchday squad, the outgoing
-   * player must actually be on court, and each side gets six substitutions
-   * per set (the real FIVB limit). No libero re-entry rules are modelled.
+   * player must actually be on court, each side gets five substitutions per
+   * set, and once a pair has swapped, only that pair may swap again (a
+   * starter who comes off can only return for the player who replaced them,
+   * never a different bench player). No libero re-entry rules are modelled.
    */
   substitute(
     team: 0 | 1,
@@ -375,16 +387,32 @@ export class MatchSimulator {
     if (zone === -1) return { ok: false, reason: 'That player is not on court.' };
     if (!t.ratings.has(inPlayerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
     if (t.court.includes(inPlayerIdx)) return { ok: false, reason: 'That player is already on court.' };
-    if (this.subsUsedThisSet[team] >= 6) return { ok: false, reason: 'No substitutions left this set.' };
+    if (this.subsUsedThisSet[team] >= 5) return { ok: false, reason: 'No substitutions left this set.' };
+
+    const pairing = this.subPairing[team];
+    const requiredPartner = pairing.get(outPlayerIdx);
+    if (requiredPartner !== undefined && requiredPartner !== inPlayerIdx) {
+      return { ok: false, reason: 'That player can only be replaced by whoever substituted for them.' };
+    }
 
     t.court[zone] = inPlayerIdx;
     if (t.setterIdx === outPlayerIdx) t.setterIdx = inPlayerIdx;
     this.subsUsedThisSet[team]++;
+    if (requiredPartner === undefined) {
+      pairing.set(outPlayerIdx, inPlayerIdx);
+      pairing.set(inPlayerIdx, outPlayerIdx);
+    }
     return { ok: true };
   }
 
   subsRemaining(team: 0 | 1): number {
-    return 6 - this.subsUsedThisSet[team];
+    return 5 - this.subsUsedThisSet[team];
+  }
+
+  /** The matchday squad's bench for this team — not currently on court. */
+  benchFor(team: 0 | 1): number[] {
+    const t = this.teams[team];
+    return t.setup.bench.filter((p) => !t.court.includes(p));
   }
 
   /** Read-only snapshot for a live viewer to render after each step(). */

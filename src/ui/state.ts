@@ -104,12 +104,18 @@ export interface MatchdayState {
   homeBench: number[];
   speed: 0.75 | 1 | 1.5;
   paused: boolean;
+  /** Wall-clock ms; once reached the rally loop auto-resumes — a substitution stoppage, not a real pause. */
+  pauseUntil: number | null;
   /** Rallies revealed so far, for the live commentary feed and ball animation. */
   log: MatchdayLogEntry[];
   /** Latest read from liveSim.snapshot(), refreshed after every rally. */
   snapshot: MatchdaySnapshot | null;
-  /** The user's side only; mirrors the engine's own per-set limit. */
-  subsUsed: number;
+  /** Per team (0=home, 1=away). Resets each set, same as the engine's own limit. */
+  timeoutsUsed: [number, number];
+  /** Which team's timeout is currently open (pausing play for tactics/subs), or null. */
+  timeoutActive: 0 | 1 | null;
+  /** The most recent substitution, either side — drives the live "X off, Y on" banner. */
+  lastSubstitution: { team: 0 | 1; outPlayerIdx: number; inPlayerIdx: number; seq: number } | null;
 }
 
 class Game {
@@ -124,6 +130,10 @@ class Game {
   incomingOffer: IncomingOfferReview | null = null;
   matchday: MatchdayState | null = null;
   private liveSim: MatchSimulator | null = null;
+  /** Distinguishes each substitution for React, even if the same two players swap twice. */
+  private subSeq = 0;
+  /** Index into matchday.log at the last timeout (either side) — a simple anti-spam cooldown for the AI. */
+  private lastTimeoutAtRally = -Infinity;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   busy = false;
@@ -479,9 +489,12 @@ class Game {
       homeBench: bench,
       speed: 1,
       paused: false,
+      pauseUntil: null,
       log: [],
       snapshot: null,
-      subsUsed: 0,
+      timeoutsUsed: [0, 0],
+      timeoutActive: null,
+      lastSubstitution: null,
     };
     this.selectedPlayer = null;
     this.selectedClub = null;
@@ -540,7 +553,7 @@ class Game {
     });
     md.stage = 'live';
     md.log = [];
-    md.subsUsed = 0;
+    md.timeoutsUsed = [0, 0];
     md.snapshot = this.liveSim.snapshot();
     this.emit();
   }
@@ -556,6 +569,7 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.paused = true;
+    md.pauseUntil = null; // a manual pause is indefinite, not a timed stoppage
     this.emit();
   }
 
@@ -563,6 +577,7 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.paused = false;
+    md.pauseUntil = null;
     this.emit();
   }
 
@@ -586,8 +601,14 @@ class Game {
     };
     md.log.push(logEntry);
     md.snapshot = sim.snapshot();
-    if (md.snapshot.matchOver) this.finalizeMatchday();
-    else this.emit();
+    // Fresh timeout allowance each set, same as the engine's own substitution limit.
+    if (md.snapshot.set !== preSnap.set) md.timeoutsUsed = [0, 0];
+    if (md.snapshot.matchOver) {
+      this.finalizeMatchday();
+    } else {
+      this.maybeAIAct();
+      this.emit();
+    }
     return logEntry;
   }
 
@@ -599,20 +620,124 @@ class Game {
     this.finalizeMatchday();
   }
 
+  /**
+   * The shared core of every substitution, either side: applies it to the
+   * live sim, then triggers the ~3-second real-stoppage pause and the "X off,
+   * Y on" banner. Both the user's own substitute() and the AI's use this.
+   */
+  private performSubstitution(
+    team: 0 | 1,
+    outPlayerIdx: number,
+    inPlayerIdx: number,
+  ): { ok: boolean; reason?: string } {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return { ok: false };
+    const result = sim.substitute(team, outPlayerIdx, inPlayerIdx);
+    if (result.ok) {
+      md.snapshot = sim.snapshot();
+      md.paused = true;
+      md.pauseUntil = Date.now() + 3000;
+      md.lastSubstitution = { team, outPlayerIdx, inPlayerIdx, seq: ++this.subSeq };
+    }
+    return result;
+  }
+
   /** Bring on a bench player for the user's own side, mid-match. */
   substitute(outPlayerIdx: number, inPlayerIdx: number): void {
     const md = this.matchday;
-    const sim = this.liveSim;
-    if (md === null || sim === null || md.stage !== 'live') return;
+    if (md === null || md.stage !== 'live') return;
     const teamIdx = md.userIsHome ? 0 : 1;
-    const result = sim.substitute(teamIdx, outPlayerIdx, inPlayerIdx);
-    if (result.ok) {
-      md.subsUsed++;
-      md.snapshot = sim.snapshot();
-    } else {
-      this.notice = result.reason ?? 'That substitution is not allowed.';
-    }
+    const result = this.performSubstitution(teamIdx, outPlayerIdx, inPlayerIdx);
+    if (!result.ok) this.notice = result.reason ?? 'That substitution is not allowed.';
     this.emit();
+  }
+
+  /** Substitutions left this set for the user's own side — the engine resets this every set. */
+  subsRemaining(): number {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return 5;
+    return sim.subsRemaining(md.userIsHome ? 0 : 1);
+  }
+
+  /** The shared core of calling a timeout, either side. */
+  private startTimeout(team: 0 | 1): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.timeoutsUsed[team]++;
+    md.timeoutActive = team;
+    md.paused = true;
+    md.pauseUntil = null;
+    this.lastTimeoutAtRally = md.log.length;
+    this.emit();
+  }
+
+  /**
+   * Call one of the user's two 30-second timeouts this set. Pauses play and
+   * opens the tactics/substitutions window — resumeFromTimeout() ends it.
+   */
+  callTimeout(): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'live' || md.timeoutActive !== null) return;
+    const teamIdx = md.userIsHome ? 0 : 1;
+    if (md.timeoutsUsed[teamIdx] >= 2) return;
+    this.startTimeout(teamIdx);
+  }
+
+  resumeFromTimeout(): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.timeoutActive = null;
+    md.paused = false;
+    this.emit();
+  }
+
+  /**
+   * A simple heuristic for the AI side's timeouts and substitutions — not
+   * real tactical reasoning, just enough that the opponent isn't a
+   * fire-and-forget spectator: call a timeout after conceding an unanswered
+   * run, and occasionally strengthen a clearly weak matchup off the bench.
+   * Deliberately uses Math.random(), not the world's seeded rng — this is
+   * real-time UI flavour, not part of the deterministic world simulation.
+   */
+  private maybeAIAct(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    const world = this.world;
+    if (md === null || sim === null || world === null || md.timeoutActive !== null) return;
+    const snap = md.snapshot;
+    if (snap === null) return;
+
+    const aiTeam: 0 | 1 = md.userIsHome ? 1 : 0;
+    const store = world.players;
+
+    const recent = md.log.slice(-3);
+    const concededRun = recent.length === 3 && recent.every((l) => l.entry.winner !== aiTeam);
+    if (
+      concededRun && md.timeoutsUsed[aiTeam] < 2 &&
+      md.log.length - this.lastTimeoutAtRally >= 6 && Math.random() < 0.4
+    ) {
+      this.startTimeout(aiTeam);
+      return;
+    }
+
+    if (sim.subsRemaining(aiTeam) > 0 && Math.random() < 0.012) {
+      const court = aiTeam === 0 ? snap.homeCourt : snap.awayCourt;
+      const bench = sim.benchFor(aiTeam);
+      let bestOut = -1;
+      let bestIn = -1;
+      let bestGain = 80; // only a meaningful upgrade is worth using a sub on
+      for (const onCourtIdx of court) {
+        const pos = store.position[onCourtIdx];
+        for (const benchIdx of bench) {
+          if (store.position[benchIdx] !== pos) continue;
+          const gain = store.currentAbility[benchIdx] - store.currentAbility[onCourtIdx];
+          if (gain > bestGain) { bestGain = gain; bestOut = onCourtIdx; bestIn = benchIdx; }
+        }
+      }
+      if (bestOut !== -1) this.performSubstitution(aiTeam, bestOut, bestIn);
+    }
   }
 
   private finalizeMatchday(): void {

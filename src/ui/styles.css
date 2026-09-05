@@ -418,6 +418,19 @@ tbody tr.selected { background: var(--accent-dim); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
 }
 
+/* A calmer, informational sibling of .big-play — announces a substitution
+   rather than hyping a big moment, so it reads differently at a glance. */
+.sub-announcement {
+  font-size: 14px;
+  font-weight: 600;
+  font-style: normal;
+  padding: 8px 16px;
+  background: rgba(10, 14, 20, 0.75);
+  animation: big-play-pop 3s ease-out forwards;
+}
+.sub-announcement.home { border-color: var(--accent); }
+.sub-announcement.away { border-color: var(--gold); }
+
 .court2d {
   position: relative;
   width: 100%;
@@ -702,6 +715,36 @@ tbody tr.selected { background: var(--accent-dim); }
   cursor: pointer;
   border: none;
   padding: 0;
+}
+
+/* ---- Substitutions: same card language as the team sheet ---- */
+
+.sub-panel { max-width: 760px; margin: 16px auto 0; }
+.sub-section-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-faint);
+  margin: 12px 0 6px;
+}
+.sub-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.sub-card { cursor: pointer; }
+.sub-card.selected {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 3px rgba(255, 199, 44, 0.35);
+  transform: translateY(-3px);
+}
+
+/* ---- Timeout ---- */
+
+.timeout-panel { margin-bottom: 14px; border-color: var(--gold); }
+.timeout-header { display: flex; align-items: center; gap: 12px; }
+.timeout-countdown {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
 }
 
 /* The ball marker itself sits inside .court2d (position: relative there). */

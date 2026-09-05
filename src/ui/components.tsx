@@ -37,6 +37,30 @@ export function starRating(ca: number): string {
   return '★★★★★'.slice(0, filled) + '☆☆☆☆☆'.slice(0, 5 - filled);
 }
 
+/** A labelled dropdown bound to a value on a tactics-shaped object — used both on the
+ *  full Tactics/Rotations screens and in the compact in-match timeout panel. */
+export function ChoiceField<T extends number>({
+  label, value, options, onChange, hint,
+}: {
+  label: string;
+  value: T;
+  options: Array<[T, string]>;
+  onChange: (v: T) => void;
+  hint?: string;
+}): JSX.Element {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div className="kv">
+        <span className="k">{label}</span>
+        <select value={value} onChange={(e) => onChange(Number(e.target.value) as T)}>
+          {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      {hint !== undefined && <div className="faint" style={{ fontSize: 12 }}>{hint}</div>}
+    </div>
+  );
+}
+
 export function money(v: number): string {
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';

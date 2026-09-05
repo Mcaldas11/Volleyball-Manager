@@ -3,7 +3,10 @@ import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact } from '../../engine/match/engine.ts';
 import {
-  abilityClass, ClubLink, Flag, initials, PlayerFace, POSITION_ACCENT, starRating,
+  DefensiveSystem, OffensiveSystem, ServeStrategy, Tempo,
+} from '../../engine/match/tactics.ts';
+import {
+  abilityClass, ChoiceField, ClubLink, Flag, initials, PlayerFace, POSITION_ACCENT, starRating,
 } from '../components.tsx';
 import { playerFaceUrl } from '../faces.ts';
 import { RallyTicker } from './Match.tsx';
@@ -461,6 +464,82 @@ function LineupSetup(): JSX.Element {
   );
 }
 
+const TIMEOUT_SECONDS = 30;
+
+/** The compact tactics editor shown while a timeout is active — the same club.tactics
+ *  object the rally engine reads live, so a change here applies from the next rally on. */
+function TimeoutPanel({
+  secondsLeft, calledBy,
+}: {
+  secondsLeft: number;
+  calledBy?: string;
+}): JSX.Element {
+  const g = useGame();
+  const club = g.club!;
+  const t = club.tactics;
+  return (
+    <div className="panel timeout-panel">
+      <div className="timeout-header">
+        <h3 style={{ margin: 0 }}>⏱ Timeout{calledBy !== undefined ? ` — ${calledBy}` : ''}</h3>
+        <span className="timeout-countdown">0:{secondsLeft.toString().padStart(2, '0')}</span>
+        <button className="primary" onClick={() => g.resumeFromTimeout()}>Resume play</button>
+      </div>
+      <p className="faint" style={{ fontSize: 12, margin: '4px 0 10px' }}>
+        Adjust your tactics or make substitutions below — changes apply from the next rally.
+      </p>
+      <div className="grid2">
+        <ChoiceField
+          label="Offensive system"
+          value={t.offense}
+          onChange={(v) => { t.offense = v; g.touch(); }}
+          options={[
+            [OffensiveSystem.Fast, 'Fast offence'],
+            [OffensiveSystem.Balanced, 'Balanced'],
+            [OffensiveSystem.OutsideFocused, 'Outside focused'],
+            [OffensiveSystem.OppositeFocused, 'Opposite focused'],
+            [OffensiveSystem.MiddleFocused, 'Middle focused'],
+            [OffensiveSystem.PipeHeavy, 'Pipe heavy'],
+            [OffensiveSystem.BackRowHeavy, 'Back-row heavy'],
+          ]}
+        />
+        <ChoiceField
+          label="Tempo"
+          value={t.tempo}
+          onChange={(v) => { t.tempo = v; g.touch(); }}
+          options={[
+            [Tempo.VeryFast, 'Very fast'],
+            [Tempo.Fast, 'Fast'],
+            [Tempo.Balanced, 'Balanced'],
+            [Tempo.Slow, 'Slow'],
+          ]}
+        />
+        <ChoiceField
+          label="Defensive system"
+          value={t.defense}
+          onChange={(v) => { t.defense = v; g.touch(); }}
+          options={[
+            [DefensiveSystem.Conservative, 'Conservative'],
+            [DefensiveSystem.Aggressive, 'Aggressive'],
+            [DefensiveSystem.TripleBlockPriority, 'Triple block priority'],
+            [DefensiveSystem.ServicePressure, 'Service pressure'],
+            [DefensiveSystem.ReceptionStability, 'Reception stability'],
+          ]}
+        />
+        <ChoiceField
+          label="Serve strategy"
+          value={t.serve}
+          onChange={(v) => { t.serve = v; g.touch(); }}
+          options={[
+            [ServeStrategy.Risky, 'Risky'],
+            [ServeStrategy.Balanced, 'Balanced'],
+            [ServeStrategy.Conservative, 'Conservative'],
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
 function LiveMatchView(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -471,14 +550,49 @@ function LiveMatchView(): JSX.Element {
   const [ball, setBall] = useState<BallPos | null>(null);
   const [active, setActive] = useState<ActiveContact | null>(null);
   const [bigPlay, setBigPlay] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
+  const [subAnnouncement, setSubAnnouncement] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
+  const [timeoutSecondsLeft, setTimeoutSecondsLeft] = useState(TIMEOUT_SECONDS);
   const cancelledRef = useRef(false);
   const bigPlayTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const subAnnounceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Counts down a called timeout. Purely a presentation-layer clock — the
+  // engine has no concept of timeouts — kept as one tick-the-clock effect...
+  useEffect(() => {
+    if (md.timeoutActive === null) { setTimeoutSecondsLeft(TIMEOUT_SECONDS); return; }
+    setTimeoutSecondsLeft(TIMEOUT_SECONDS);
+    const interval = setInterval(() => {
+      setTimeoutSecondsLeft((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [md.timeoutActive]);
+
+  // ...and one separate effect that reacts to the clock hitting zero, rather
+  // than calling back into game state from inside a setState updater.
+  useEffect(() => {
+    if (md.timeoutActive !== null && timeoutSecondsLeft === 0) g.resumeFromTimeout();
+  }, [md.timeoutActive, timeoutSecondsLeft]);
 
   const triggerBigPlay = (text: string, team: 0 | 1): void => {
     setBigPlay({ text, team, key: Date.now() });
     if (bigPlayTimer.current !== undefined) clearTimeout(bigPlayTimer.current);
     bigPlayTimer.current = setTimeout(() => setBigPlay(null), 1100);
   };
+
+  // Announces every substitution live, either side — driven off state.ts's
+  // own record of the last one rather than the call site, since it can come
+  // from the user's Substitutions panel or from the AI's own decisions.
+  const lastSubSeq = md.lastSubstitution?.seq;
+  useEffect(() => {
+    const sub = md.lastSubstitution;
+    if (sub === null) return;
+    const teamName = (sub.team === 0 ? world.clubs[md.fixture.home] : world.clubs[md.fixture.away])
+      ?.shortName ?? '';
+    const text = `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}`;
+    setSubAnnouncement({ text, team: sub.team, key: sub.seq });
+    if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
+    subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
+  }, [lastSubSeq]);
 
   // Drives the match forward itself: play a rally, animate it, repeat.
   // No timer in state.ts — pacing is entirely a presentation concern here.
@@ -504,6 +618,7 @@ function LiveMatchView(): JSX.Element {
     return () => {
       cancelledRef.current = true;
       clearTimeout(bigPlayTimer.current);
+      clearTimeout(subAnnounceTimer.current);
     };
   }, []);
 
@@ -537,10 +652,23 @@ function LiveMatchView(): JSX.Element {
           </button>
         ))}
         {md.paused
-          ? <button onClick={() => g.resume()}>Resume</button>
-          : <button onClick={() => g.pause()}>Pause</button>}
+          ? <button disabled={md.timeoutActive !== null} onClick={() => g.resume()}>Resume</button>
+          : <button disabled={md.timeoutActive !== null} onClick={() => g.pause()}>Pause</button>}
+        <button
+          disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
+          onClick={() => g.callTimeout()}
+        >
+          Timeout ({2 - md.timeoutsUsed[userTeamIdx]} left)
+        </button>
         <button onClick={() => g.finishMatchdayNow()}>Finish match</button>
       </div>
+
+      {md.timeoutActive !== null && (
+        <TimeoutPanel
+          secondsLeft={timeoutSecondsLeft}
+          calledBy={md.timeoutActive === 0 ? homeClub?.shortName : awayClub?.shortName}
+        />
+      )}
 
       <div className="live-match-layout">
         <div className="panel court-panel">
@@ -580,6 +708,14 @@ function LiveMatchView(): JSX.Element {
               {bigPlay.text}
             </div>
           )}
+          {subAnnouncement !== null && (
+            <div
+              key={subAnnouncement.key}
+              className={`big-play sub-announcement ${subAnnouncement.team === 0 ? 'home' : 'away'}`}
+            >
+              {subAnnouncement.text}
+            </div>
+          )}
         </div>
 
         <div className="panel ticker-panel">
@@ -601,6 +737,54 @@ function LiveMatchView(): JSX.Element {
   );
 }
 
+/** A small clickable player card for the substitution picker — selecting toggles a gold highlight. */
+/** A clickable, draggable player card for the substitution picker. Dragging one
+ *  onto another (in either direction — bench-to-court or court-to-bench) subs
+ *  them in one motion; clicking both, then confirming, does the same thing. */
+function SubCard({
+  playerIdx, store, selected, isDragOver, onClick, onDropPlayer, onDragOverCard, onDragLeaveCard,
+}: {
+  playerIdx: number;
+  store: PlayerStore;
+  selected: boolean;
+  isDragOver: boolean;
+  onClick: () => void;
+  onDropPlayer: (draggedPlayerIdx: number) => void;
+  onDragOverCard: () => void;
+  onDragLeaveCard: () => void;
+}): JSX.Element {
+  const pos = store.position[playerIdx] as Position;
+  return (
+    <div
+      className={`lineup-card lineup-card-small sub-card${selected ? ' selected' : ''}${isDragOver ? ' drag-over' : ''}`}
+      style={{ borderColor: POSITION_ACCENT[pos], backgroundImage: cardTint(pos) }}
+      onClick={onClick}
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData('text/plain', String(playerIdx))}
+      onDragOver={(e) => { e.preventDefault(); onDragOverCard(); }}
+      onDragLeave={onDragLeaveCard}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDragLeaveCard();
+        const dragged = Number(e.dataTransfer.getData('text/plain'));
+        if (!Number.isNaN(dragged)) onDropPlayer(dragged);
+      }}
+    >
+      <span className="lineup-card-shine" />
+      <span className="lineup-card-pos" style={{ background: POSITION_ACCENT[pos] }}>
+        {POSITION_SHORT[pos]}
+      </span>
+      <CardPhoto playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} />
+      <div className="lineup-card-info">
+        <div className="lineup-card-name">{store.shortName(playerIdx)}</div>
+        <div className="lineup-card-meta">
+          <span className="lineup-card-ability">{store.currentAbility[playerIdx]}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -609,10 +793,13 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   const store = world.players;
   const [outPlayer, setOutPlayer] = useState<number | null>(null);
   const [inPlayer, setInPlayer] = useState<number | null>(null);
+  const [dragOverPlayer, setDragOverPlayer] = useState<number | null>(null);
 
   const onCourt = (teamIdx === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
   const bench = club.players.filter((p) => !onCourt.includes(p) && store.isAvailable(p));
-  const remaining = 6 - md.subsUsed;
+  // Reads the engine's own per-set counter — it resets every set, unlike a
+  // UI-tracked total would (that used to be the bug here: it never reset).
+  const remaining = g.subsRemaining();
 
   const makeSub = (): void => {
     if (outPlayer === null || inPlayer === null) return;
@@ -621,29 +808,73 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
     setInPlayer(null);
   };
 
+  // Dropping either card onto the other works the same regardless of which
+  // one was dragged — whichever of the pair is on court is the one going off.
+  const dropPair = (targetIdx: number, draggedIdx: number): void => {
+    if (targetIdx === draggedIdx) return;
+    const targetIsOnCourt = onCourt.includes(targetIdx);
+    const draggedIsOnCourt = onCourt.includes(draggedIdx);
+    if (targetIsOnCourt === draggedIsOnCourt) return; // need one of each
+    g.substitute(targetIsOnCourt ? targetIdx : draggedIdx, targetIsOnCourt ? draggedIdx : targetIdx);
+    setOutPlayer(null);
+    setInPlayer(null);
+  };
+
+  const dragProps = (p: number): {
+    isDragOver: boolean; onDropPlayer: (d: number) => void;
+    onDragOverCard: () => void; onDragLeaveCard: () => void;
+  } => ({
+    isDragOver: dragOverPlayer === p,
+    onDropPlayer: (dragged) => dropPair(p, dragged),
+    onDragOverCard: () => setDragOverPlayer(p),
+    onDragLeaveCard: () => setDragOverPlayer((cur) => (cur === p ? null : cur)),
+  });
+
   return (
-    <div className="panel" style={{ marginTop: 16, maxWidth: 480 }}>
-      <h3>Substitutions ({remaining} left this set)</h3>
-      <div className="kv">
-        <span className="k">Off</span>
-        <select value={outPlayer ?? ''} onChange={(e) => setOutPlayer(Number(e.target.value))}>
-          <option value="" disabled>Choose a player</option>
-          {onCourt.map((p) => <option key={p} value={p}>{store.shortName(p)}</option>)}
-        </select>
+    <div className="panel sub-panel">
+      <h3>Substitutions <span className="faint">({remaining} left this set)</span></h3>
+      <p className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>
+        Drag a bench player onto someone on court to bring them on — or pick
+        both and confirm. A player who comes off can only return for whoever
+        replaced them.
+      </p>
+
+      <div className="sub-section-label">On court — pick who comes off</div>
+      <div className="sub-row">
+        {onCourt.map((p) => (
+          <SubCard
+            key={p}
+            playerIdx={p}
+            store={store}
+            selected={outPlayer === p}
+            onClick={() => setOutPlayer(outPlayer === p ? null : p)}
+            {...dragProps(p)}
+          />
+        ))}
       </div>
-      <div className="kv">
-        <span className="k">On</span>
-        <select value={inPlayer ?? ''} onChange={(e) => setInPlayer(Number(e.target.value))}>
-          <option value="" disabled>Choose a replacement</option>
-          {bench.map((p) => <option key={p} value={p}>{store.shortName(p)}</option>)}
-        </select>
+
+      <div className="sub-section-label">Bench — pick who comes on</div>
+      <div className="sub-row">
+        {bench.length === 0 && <p className="faint">No fit players available.</p>}
+        {bench.map((p) => (
+          <SubCard
+            key={p}
+            playerIdx={p}
+            store={store}
+            selected={inPlayer === p}
+            onClick={() => setInPlayer(inPlayer === p ? null : p)}
+            {...dragProps(p)}
+          />
+        ))}
       </div>
+
       <button
-        style={{ marginTop: 8 }}
+        className="primary"
+        style={{ marginTop: 12 }}
         disabled={outPlayer === null || inPlayer === null || remaining <= 0}
         onClick={makeSub}
       >
-        Make substitution
+        Confirm substitution
       </button>
     </div>
   );
