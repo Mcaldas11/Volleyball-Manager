@@ -9,6 +9,7 @@ import { useEffect, useState, type JSX } from 'react';
 import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../engine/model/players.ts';
 import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/nations.ts';
+import { playerFaceUrl } from './faces.ts';
 import { useGame } from './state.ts';
 
 /** Ability bands, so a squad list can be read without parsing every number. */
@@ -101,6 +102,45 @@ export function Flag({ nation }: { nation: number }): JSX.Element {
   const n = NATIONS[nation];
   if (n === undefined) return <span className="flag-img flag-fallback" title="Unknown nation" />;
   return <FlagByCode code={n.code} />;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '';
+  return (first + last).toUpperCase();
+}
+
+/**
+ * A player's photo, deterministic from their permanent id (see faces.ts) so
+ * the same face always shows up for them. Falls back to initials if the
+ * photo fails to load (offline, service down).
+ */
+export function PlayerFace({
+  playerId, name, size = 64,
+}: {
+  playerId: number;
+  name: string;
+  size?: number;
+}): JSX.Element {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <span className="player-face" style={{ width: size, height: size }}>
+      {!failed
+        ? (
+          <img
+            src={playerFaceUrl(playerId)}
+            alt={name}
+            width={size}
+            height={size}
+            loading="lazy"
+            onError={() => setFailed(true)}
+          />
+        )
+        : <span className="player-face-fallback" style={{ fontSize: size * 0.36 }}>{initials(name)}</span>}
+    </span>
+  );
 }
 
 /** A small horizontal meter, used for condition and morale. */

@@ -5,7 +5,7 @@ import {
 } from '../../engine/model/attributes.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { abilityClass, Bar, ClubLink, Empty, Flag, money, Pos, Status } from '../components.tsx';
+import { abilityClass, Bar, ClubLink, Empty, Flag, money, PlayerFace, Pos, Status } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 export function SquadScreen(): JSX.Element {
@@ -31,6 +31,7 @@ export function SquadScreen(): JSX.Element {
       <table>
         <thead>
           <tr>
+            <th />
             <th>Name</th>
             <th>Pos</th>
             <th className="num">Age</th>
@@ -53,6 +54,7 @@ export function SquadScreen(): JSX.Element {
               className={`clickable${g.selectedPlayer === p ? ' selected' : ''}`}
               onClick={() => g.select(p)}
             >
+              <td><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
               <td>
                 {starters.has(p) && <span className="good" title="In the starting six">● </span>}
                 {p === libero && <span className="elite" title="Starting libero">◆ </span>}
@@ -116,6 +118,7 @@ export function PlayerDetail(): JSX.Element | null {
   return (
     <>
       <h2 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={64} />
         {store.fullName(p)}
         <button onClick={() => g.select(null)}>Close</button>
       </h2>
@@ -215,6 +218,7 @@ export function YouthScreen(): JSX.Element {
           <table>
             <thead>
               <tr>
+                <th />
                 <th>Name</th>
                 <th>Pos</th>
                 <th className="num">Age</th>
@@ -230,6 +234,7 @@ export function YouthScreen(): JSX.Element {
                 const pa = store.potentialAbility[p];
                 return (
                   <tr key={p} className="clickable" onClick={() => g.select(p)}>
+                    <td><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
                     <td>{store.fullName(p)}</td>
                     <td><Pos pos={store.position[p] as Position} /></td>
                     <td className="num">{store.ageOn(p, world.year, 181)}</td>
