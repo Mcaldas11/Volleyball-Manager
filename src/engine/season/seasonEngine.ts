@@ -33,10 +33,13 @@ export interface SeasonContext {
   stats: SeasonStats;
   /** Detailed results the user has asked to keep, keyed by fixture id. */
   detailedResults: Map<number, MatchResult>;
+  /** Every active player's ability as of the start of the current season, for
+   *  the end-of-season "most improved" award. */
+  seasonStartAbility: Map<number, number>;
 }
 
 export function newSeasonContext(): SeasonContext {
-  return { stats: new Map(), detailedResults: new Map() };
+  return { stats: new Map(), detailedResults: new Map(), seasonStartAbility: new Map() };
 }
 
 /**
@@ -347,11 +350,20 @@ function dailyRecovery(world: World, store: PlayerStore): void {
 /**
  * Lay out every domestic league for the coming season.
  */
-export function startSeason(world: World): void {
+export function startSeason(world: World, ctx?: SeasonContext): void {
   const seasonStart = world.season * DAYS_PER_SEASON;
   for (const comp of world.competitions) {
     if (comp.kind !== 'league') continue;
     scheduleLeagueSeason(world, comp, seasonStart, world.rng);
+  }
+
+  if (ctx !== undefined) {
+    const store = world.players;
+    ctx.seasonStartAbility.clear();
+    for (let i = 0; i < store.count; i++) {
+      if (!store.isActive(i)) continue;
+      ctx.seasonStartAbility.set(i, store.currentAbility[i]);
+    }
   }
 }
 

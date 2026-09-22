@@ -62,6 +62,22 @@ export function OverviewScreen(): JSX.Element {
                       <span className="faint">{g.dateLabelForDay(m.day)}</span>
                     </div>
                     <div className="dim">{m.body}</div>
+                    {m.seasonAwards !== undefined && (
+                      <table style={{ marginTop: 6 }}>
+                        <tbody>
+                          {m.seasonAwards.map((a, i) => (
+                            <tr
+                              key={i}
+                              className="clickable"
+                              onClick={(e) => { e.stopPropagation(); g.select(a.playerIdx); }}
+                            >
+                              <td className="dim">{a.label}</td>
+                              <td>{a.detail}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 );
               })}

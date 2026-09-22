@@ -82,6 +82,12 @@ export interface SeasonRecord {
   /** Player index of the season's outstanding performer. */
   playerOfTheYear: number;
   topScorer: { player: number; points: number };
+  /** Best performer aged 21 or under — the season's breakthrough player. */
+  youngPlayerOfTheYear: number;
+  /** Biggest rise in current ability across the season, among players who featured. */
+  mostImproved: { player: number; gain: number };
+  /** Youngest player to hold a regular place this season. */
+  youngestPlayer: number;
   /** Clubs that went bankrupt or dissolved this season. */
   dissolved: number[];
 }
@@ -96,6 +102,13 @@ export interface HallOfFameEntry {
   citation: string;
 }
 
+/** One row of the end-of-season awards table shown in a GameMessage. */
+export interface SeasonAwardLine {
+  label: string;
+  playerIdx: number;
+  detail: string;
+}
+
 /** A news item for the club's inbox — a scouting report, a season result, etc. */
 export interface GameMessage {
   id: number;
@@ -107,6 +120,8 @@ export interface GameMessage {
   playerIdx?: number;
   /** Pending incoming offer this message concerns, if any. */
   offerId?: number;
+  /** End-of-season awards table, rendered specially in the inbox. */
+  seasonAwards?: SeasonAwardLine[];
 }
 
 /** The human user's own profile — created once, at the start of a career. */

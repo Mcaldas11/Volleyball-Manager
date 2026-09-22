@@ -168,9 +168,9 @@ class Game {
     const manager = this.pendingManager;
     if (manager === null) return;
     const world = generateWorld({ seed, startYear: 2026, scale, manager });
-    startSeason(world);
-    this.world = world;
     this.ctx = newSeasonContext();
+    startSeason(world, this.ctx);
+    this.world = world;
     this.watched = null;
     this.lastRollover = null;
     this.notice = '';

@@ -19,7 +19,7 @@ import {
 } from '../world/progression.ts';
 import { selectAllNationalSquads } from '../world/worldGen.ts';
 import {
-  DAYS_PER_SEASON, type HallOfFameEntry, type SeasonRecord, type World,
+  DAYS_PER_SEASON, type HallOfFameEntry, type SeasonAwardLine, type SeasonRecord, type World,
 } from '../world/world.ts';
 import { startSeason, type SeasonContext } from './seasonEngine.ts';
 
@@ -56,6 +56,9 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
     champions: [],
     playerOfTheYear: -1,
     topScorer: { player: -1, points: 0 },
+    youngPlayerOfTheYear: -1,
+    mostImproved: { player: -1, gain: 0 },
+    youngestPlayer: -1,
     dissolved: [],
   };
 
@@ -80,14 +83,15 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   revalueSquads(world);
   selectAllNationalSquads(world);
 
-  recordSeasonAwards(ctx, record);
+  recordSeasonAwards(world, ctx, record);
+  pushSeasonAwardsMessage(world, record);
   world.history.push(record);
 
   // Reset for the new season.
   world.season++;
   ctx.stats.clear();
   ctx.detailedResults.clear();
-  startSeason(world);
+  startSeason(world, ctx);
 
   return report;
 }
@@ -425,11 +429,18 @@ export function refreshPreferredLineup(world: World, club: Club): void {
 
 // ---- Records --------------------------------------------------------------
 
-function recordSeasonAwards(ctx: SeasonContext, record: SeasonRecord): void {
+/** Minimum appearances for a performance-based season award to mean anything. */
+const MIN_MATCHES_FOR_AWARD = 8;
+
+function recordSeasonAwards(world: World, ctx: SeasonContext, record: SeasonRecord): void {
+  const store = world.players;
   let bestScore = -Infinity;
   let bestPoints = 0;
+  let bestYoungScore = -Infinity;
+  let youngestAge = Infinity;
+
   for (const [p, line] of ctx.stats) {
-    if (line.matches < 8) continue;
+    if (line.matches < MIN_MATCHES_FOR_AWARD) continue;
     const points = line.attackKills + line.serveAces + line.blockPoints;
     if (points > bestPoints) {
       bestPoints = points;
@@ -444,7 +455,81 @@ function recordSeasonAwards(ctx: SeasonContext, record: SeasonRecord): void {
       bestScore = score;
       record.playerOfTheYear = p;
     }
+
+    // The breakthrough award: same merit, restricted to young players.
+    const age = store.ageOn(p, world.year, 181);
+    if (age <= 21 && score > bestYoungScore) {
+      bestYoungScore = score;
+      record.youngPlayerOfTheYear = p;
+    }
+    if (age < youngestAge) {
+      youngestAge = age;
+      record.youngestPlayer = p;
+    }
   }
+
+  // Most improved: the biggest rise in current ability since the season
+  // began, among players who actually took the field for it.
+  for (const [p, startCA] of ctx.seasonStartAbility) {
+    const line = ctx.stats.get(p);
+    if (line === undefined || line.matches < MIN_MATCHES_FOR_AWARD) continue;
+    const gain = store.currentAbility[p] - startCA;
+    if (gain > record.mostImproved.gain) {
+      record.mostImproved = { player: p, gain };
+    }
+  }
+}
+
+/** Build the club's end-of-season awards message from the record just computed. */
+function pushSeasonAwardsMessage(world: World, record: SeasonRecord): void {
+  const store = world.players;
+  const describe = (p: number): string => {
+    const club = store.clubId[p] >= 0 ? world.clubs[store.clubId[p]] : undefined;
+    return club !== undefined ? `${store.fullName(p)} (${club.name})` : store.fullName(p);
+  };
+
+  const lines: SeasonAwardLine[] = [];
+  if (record.playerOfTheYear >= 0) {
+    lines.push({
+      label: 'Player of the Season', playerIdx: record.playerOfTheYear,
+      detail: describe(record.playerOfTheYear),
+    });
+  }
+  if (record.youngPlayerOfTheYear >= 0) {
+    lines.push({
+      label: 'Breakthrough Player', playerIdx: record.youngPlayerOfTheYear,
+      detail: describe(record.youngPlayerOfTheYear),
+    });
+  }
+  if (record.topScorer.player >= 0) {
+    lines.push({
+      label: 'Top Scorer', playerIdx: record.topScorer.player,
+      detail: `${describe(record.topScorer.player)} — ${record.topScorer.points} pts`,
+    });
+  }
+  if (record.mostImproved.player >= 0) {
+    lines.push({
+      label: 'Most Improved', playerIdx: record.mostImproved.player,
+      detail: `${describe(record.mostImproved.player)} — ability +${record.mostImproved.gain}`,
+    });
+  }
+  if (record.youngestPlayer >= 0) {
+    const age = store.ageOn(record.youngestPlayer, world.year, 181);
+    lines.push({
+      label: 'Youngest Player', playerIdx: record.youngestPlayer,
+      detail: `${describe(record.youngestPlayer)} — age ${age}`,
+    });
+  }
+  if (lines.length === 0) return;
+
+  world.messages.push({
+    id: world.messages.length,
+    day: world.day,
+    year: world.year,
+    subject: `${world.year} season awards`,
+    body: 'The season\'s standout performers.',
+    seasonAwards: lines,
+  });
 }
 
 /**

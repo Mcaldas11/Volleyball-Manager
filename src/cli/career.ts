@@ -40,7 +40,7 @@ export function runCareer(seasons: number, scale: WorldScale, seed = 20260728): 
 } {
   const world = generateWorld({ seed, startYear: 2026, scale, manager: stubManager() });
   const ctx = newSeasonContext();
-  startSeason(world);
+  startSeason(world, ctx);
 
   const snapshots: SeasonSnapshot[] = [];
   const t0 = process.hrtime.bigint();
