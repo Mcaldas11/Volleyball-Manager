@@ -186,7 +186,12 @@ export function PlayerDetail(): JSX.Element | null {
             <span>{store.careerTitles[p]}</span></div>
           <div className="kv"><span className="k">Caps</span>
             <span>{store.nationalCaps[p]}</span></div>
-          {club?.id === g.world!.userClubId && (
+          {club?.id === g.world!.userClubId && club.youthPlayers.includes(p) && (
+            <button style={{ marginTop: 10 }} onClick={() => { g.promotePlayer(p); g.select(null); }}>
+              Promote to first team
+            </button>
+          )}
+          {club?.id === g.world!.userClubId && !club.youthPlayers.includes(p) && (
             <button style={{ marginTop: 10 }} onClick={() => { g.releasePlayer(p); g.select(null); }}>
               Release
             </button>
@@ -238,6 +243,7 @@ export function YouthScreen(): JSX.Element {
                 <th className="num">Ability</th>
                 <th className="num">Potential</th>
                 <th>Assessment</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -260,6 +266,13 @@ export function YouthScreen(): JSX.Element {
                         : pa > 1250 ? 'Could play at the top level'
                           : pa > 950 ? 'Solid professional prospect'
                             : 'Unlikely to make the grade'}
+                    </td>
+                    <td>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); g.promotePlayer(p); }}
+                      >
+                        Promote
+                      </button>
                     </td>
                   </tr>
                 );

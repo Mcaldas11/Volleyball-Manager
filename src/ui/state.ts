@@ -1076,6 +1076,19 @@ class Game {
     this.emit();
   }
 
+  /** Promote a youth player into the senior squad, contract and all. */
+  promotePlayer(playerIdx: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    club.youthPlayers = club.youthPlayers.filter((p) => p !== playerIdx);
+    club.players.push(playerIdx);
+    world.players.setFlag(playerIdx, PlayerFlag.Youth, false);
+    world.players.contractUntil[playerIdx] = world.day + 2 * DAYS_PER_SEASON;
+    this.notice = `${world.players.fullName(playerIdx)} has been promoted to the first team.`;
+    this.emit();
+  }
+
   /** Generate a fresh batch of unattached candidates for a role, to browse and hire. */
   recruitStaffCandidates(role: StaffRole, count = 3): Staff[] {
     const world = this.world;
