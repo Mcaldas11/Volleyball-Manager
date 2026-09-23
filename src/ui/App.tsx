@@ -1,6 +1,6 @@
-import type { JSX } from 'react';
+import { useId, type JSX } from 'react';
 import { NATIONS } from '../engine/world/nations.ts';
-import { ClubLink, money } from './components.tsx';
+import { ClubCrest, ClubLink, money } from './components.tsx';
 import { PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
@@ -126,6 +126,7 @@ export function App(): JSX.Element {
   return (
     <div className="app">
       <TopBar />
+      <TrophyOverlay />
       <div className="body">
         <nav className="nav">
           {NAV.map((section) => (
@@ -238,6 +239,93 @@ function TopBar(): JSX.Element {
         Save &amp; Exit
       </button>
     </header>
+  );
+}
+
+const CONFETTI_COLORS = ['var(--gold)', 'var(--accent)', '#ffffff', '#ffe6a3', '#9db8ff'];
+
+/** A burst of falling confetti behind the trophy card — regenerated each
+ *  time the celebration opens. */
+function Confetti(): JSX.Element {
+  const pieces = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    left: Math.random() * 100,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    delay: Math.random() * 1.4,
+    duration: 2.6 + Math.random() * 2,
+    rotate: Math.round(Math.random() * 360),
+  }));
+  return (
+    <>
+      {pieces.map((p) => (
+        <span
+          key={p.id}
+          className="confetti-piece"
+          style={{
+            left: `${p.left}%`,
+            background: p.color,
+            animationDelay: `${p.delay}s`,
+            animationDuration: `${p.duration}s`,
+            transform: `rotate(${p.rotate}deg)`,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+function TrophyIcon({ className }: { className?: string }): JSX.Element {
+  const gradId = useId();
+  return (
+    <svg viewBox="0 0 64 64" className={className}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffe07a" />
+          <stop offset="100%" stopColor="var(--gold)" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M20 8h24v13c0 8-5.4 14-12 14s-12-6-12-14V8Z"
+        fill={`url(#${gradId})`} stroke="#a67c00" strokeWidth="1.5"
+      />
+      <path
+        d="M20 12h-7a6 6 0 0 0 6 10.5"
+        fill="none" stroke="#a67c00" strokeWidth="2.5" strokeLinecap="round"
+      />
+      <path
+        d="M44 12h7a6 6 0 0 1-6 10.5"
+        fill="none" stroke="#a67c00" strokeWidth="2.5" strokeLinecap="round"
+      />
+      <rect x="29" y="35" width="6" height="9" fill={`url(#${gradId})`} />
+      <path d="M20 52h24l-2.5-6h-19L20 52Z" fill={`url(#${gradId})`} stroke="#a67c00" strokeWidth="1.5" />
+      <rect x="16" y="52" width="32" height="5" rx="2" fill={`url(#${gradId})`} stroke="#a67c00" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+/** Pops up right after a rollover in which the user's own club was crowned
+ *  champion of whatever it was playing in. */
+function TrophyOverlay(): JSX.Element | null {
+  const g = useGame();
+  const cel = g.trophyCelebration;
+  if (cel === null) return null;
+  const club = g.world?.clubs[cel.clubId];
+
+  return (
+    <div className="trophy-overlay" onClick={() => g.dismissTrophyCelebration()}>
+      <Confetti />
+      <div className="trophy-card" onClick={(e) => e.stopPropagation()}>
+        <span className="trophy-glow" />
+        <TrophyIcon className="trophy-icon" />
+        <span className="trophy-kicker">Champions</span>
+        <h2 className="trophy-title">Champions!</h2>
+        {club !== undefined && (
+          <div className="trophy-club"><ClubCrest club={club} size={32} /> {club.name}</div>
+        )}
+        <div className="trophy-competition">{cel.competitionName}</div>
+        <button className="primary" onClick={() => g.dismissTrophyCelebration()}>Continue</button>
+      </div>
+    </div>
   );
 }
 

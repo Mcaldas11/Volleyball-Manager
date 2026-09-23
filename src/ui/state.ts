@@ -50,6 +50,13 @@ export interface WatchedMatch {
   awayName: string;
 }
 
+/** The user's own club has just been crowned champion of something —
+ *  triggers the trophy-lift celebration overlay. */
+export interface TrophyCelebration {
+  clubId: number;
+  competitionName: string;
+}
+
 export interface Negotiation {
   playerIdx: number;
   stage: 'fee' | 'terms';
@@ -136,6 +143,9 @@ class Game {
   private lastTimeoutAtRally = -Infinity;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
+  /** Set right after a rollover the user's own club won a league title in —
+   *  cleared once the celebration has been shown. */
+  trophyCelebration: TrophyCelebration | null = null;
   busy = false;
   notice = '';
 
@@ -173,6 +183,7 @@ class Game {
     this.world = world;
     this.watched = null;
     this.lastRollover = null;
+    this.trophyCelebration = null;
     this.notice = '';
     this.screen = 'overview';
     this.selectedPlayer = null;
@@ -219,6 +230,7 @@ class Game {
       this.ctx = newSeasonContext();
       this.watched = null;
       this.lastRollover = null;
+      this.trophyCelebration = null;
       this.notice = '';
       this.screen = 'overview';
       this.selectedPlayer = null;
@@ -410,11 +422,28 @@ class Game {
     if (world === null) return;
     this.lastRollover = endSeason(world, this.ctx);
     this.notice = `Season ${world.year} complete.`;
+
+    // world.history's last entry is the season that just ended — check it for
+    // a title win before anything else (like relegation reshuffling leagues)
+    // makes "which competition did we just win" harder to answer.
+    const record = world.history[world.history.length - 1];
+    const title = record?.champions.find((c) => c.winner === world.userClubId);
+    if (title !== undefined) {
+      const comp = world.competitions[title.competitionId];
+      this.trophyCelebration = { clubId: world.userClubId, competitionName: comp?.name ?? 'the league' };
+    }
+
     // Step into the new season.
     while (dayOfSeason(world) >= 350) {
       world.day++;
       if (world.day % DAYS_PER_SEASON === 0) world.year++;
     }
+  }
+
+  /** Close the trophy celebration overlay. */
+  dismissTrophyCelebration(): void {
+    this.trophyCelebration = null;
+    this.emit();
   }
 
   private captureWatched(fixture: Fixture): void {

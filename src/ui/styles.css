@@ -550,7 +550,8 @@ tbody tr.selected { background: var(--accent-dim); }
 .contract .club-link:hover { color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
-  .notice, .view-fade, .spinner, .ball, .player-marker, .big-play { animation: none !important; }
+  .notice, .view-fade, .spinner, .ball, .player-marker, .big-play,
+  .trophy-overlay, .trophy-card, .trophy-icon, .trophy-glow, .confetti-piece { animation: none !important; }
   * { transition-duration: 0.001ms !important; }
 }
 
@@ -1148,4 +1149,107 @@ tbody tr.selected { background: var(--accent-dim); }
   .main-menu { flex-direction: column; }
   .main-menu-panel { width: 100%; }
   .main-menu-hero { display: none; }
+}
+
+/* ---- Trophy celebration ---- */
+
+.trophy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 10, 0.72);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+  animation: trophy-backdrop-in 0.3s ease;
+  overflow: hidden;
+}
+@keyframes trophy-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+
+.trophy-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 48px 30px;
+  background: linear-gradient(180deg, var(--bg-raised), var(--bg));
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 80px -10px rgba(255, 199, 44, 0.35), var(--shadow-md);
+  cursor: default;
+  animation: trophy-card-in 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes trophy-card-in {
+  from { opacity: 0; transform: scale(0.7) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.trophy-glow {
+  position: absolute;
+  top: 8%;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 199, 44, 0.45), transparent 70%);
+  animation: trophy-glow-pulse 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes trophy-glow-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.trophy-icon {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 4px;
+  animation: trophy-pop 0.7s cubic-bezier(0.2, 1.6, 0.4, 1) 0.15s both, trophy-bob 2.4s ease-in-out 0.9s infinite;
+  filter: drop-shadow(0 6px 18px rgba(255, 199, 44, 0.5));
+}
+@keyframes trophy-pop {
+  0% { transform: scale(0) rotate(-25deg); opacity: 0; }
+  60% { transform: scale(1.15) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes trophy-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(-2deg); }
+}
+
+.trophy-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+}
+.trophy-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 2px 0 10px;
+  background: linear-gradient(90deg, var(--gold), #fff6d8, var(--gold));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+.trophy-club { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; }
+.trophy-competition { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+.trophy-card button { margin-top: 20px; }
+
+.confetti-piece {
+  position: absolute;
+  top: -10%;
+  width: 8px;
+  height: 14px;
+  opacity: 0.9;
+  animation: confetti-fall linear infinite;
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(600deg); opacity: 0.7; }
 }
