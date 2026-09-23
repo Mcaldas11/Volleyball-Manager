@@ -27,3 +27,16 @@ test('world round-trips through structuredClone with prototypes restored', () =>
   assert.equal(revived.manager.firstName, 'Alex');
   assert.equal(revived.manager.nation, 3);
 });
+
+test('reviveWorld backfills fields added after a save was written', () => {
+  const world = generateWorld({ seed: 2, startYear: 2026, scale: 'small', manager: stubManager() });
+  // Simulate a save written before the playoff system existed: strip the
+  // field entirely, the way an old IndexedDB blob would arrive.
+  for (const comp of world.competitions) delete (comp as { playoffGroups?: unknown }).playoffGroups;
+
+  const revived = reviveWorld(structuredClone(world));
+
+  for (const comp of revived.competitions) {
+    assert.ok(Array.isArray(comp.playoffGroups), `competition ${comp.id} missing playoffGroups after revive`);
+  }
+});

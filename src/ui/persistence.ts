@@ -119,7 +119,8 @@ export async function deleteSave(id: string): Promise<void> {
 }
 
 /**
- * Restore the prototypes structured clone drops. Exported so it can be
+ * Restore the prototypes structured clone drops, and backfill fields that
+ * didn't exist when an older save was written. Exported so it can be
  * exercised headlessly via `structuredClone()`, which implements the same
  * algorithm IndexedDB uses internally.
  */
@@ -127,5 +128,9 @@ export function reviveWorld(raw: World): World {
   Object.setPrototypeOf(raw.rng, Rng.prototype);
   Object.setPrototypeOf(raw.players, PlayerStore.prototype);
   Object.setPrototypeOf(raw.players.names, StringTable.prototype);
+  // Saves from before the playoff system existed have no bracket state at all.
+  for (const comp of raw.competitions) {
+    comp.playoffGroups ??= [];
+  }
   return raw;
 }
