@@ -340,7 +340,7 @@ export function ClubSelect(): JSX.Element {
               <th className="num">Reputation</th>
               <th className="num">Arena</th>
               <th className="num">Wage budget</th>
-              <th className="num">Squad</th>
+              <th className="num">Avg ability</th>
               <th />
             </tr>
           </thead>

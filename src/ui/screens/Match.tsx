@@ -2,6 +2,8 @@ import { useState, type JSX } from 'react';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { RallyContact, RallyLogEntry } from '../../engine/match/engine.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
+import { playoffBandSizes } from '../../engine/season/playoffs.ts';
+import type { PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
 import { ClubLink, Empty } from '../components.tsx';
 import { useGame } from '../state.ts';
 
@@ -399,9 +401,12 @@ export function TableScreen(): JSX.Element {
   const world = g.world!;
   const club = g.club!;
   const comp = world.competitions[club.leagueId];
+  const [tab, setTab] = useState('table');
   if (comp === undefined) return <Empty>No league assigned.</Empty>;
 
   const rows = [...comp.table].sort(compareTableRows);
+  const { championship: champSize, relegation: relegationSize } = playoffBandSizes(comp);
+  const activeGroup = comp.playoffGroups.find((grp) => grp.id === tab);
 
   return (
     <>
@@ -409,34 +414,156 @@ export function TableScreen(): JSX.Element {
       <p className="subtitle">
         3 points for a 3-0 or 3-1 win, 2 for a 3-2 win, 1 for losing 2-3.
       </p>
-      <table>
-        <thead>
-          <tr>
-            <th className="num">#</th>
-            <th>Club</th>
-            <th className="num">P</th>
-            <th className="num">W</th>
-            <th className="num">L</th>
-            <th className="num">Pts</th>
-            <th className="num">Sets</th>
-            <th className="num">Ratio</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.clubId} className={r.clubId === club.id ? 'selected' : ''}>
-              <td className="num faint">{i + 1}</td>
-              <td><ClubLink id={r.clubId} /></td>
-              <td className="num dim">{r.played}</td>
-              <td className="num">{r.won}</td>
-              <td className="num">{r.lost}</td>
-              <td className="num"><strong>{r.points}</strong></td>
-              <td className="num dim">{r.setsFor}:{r.setsAgainst}</td>
-              <td className="num dim">{setRatio(r).toFixed(2)}</td>
-            </tr>
+
+      {comp.playoffGroups.length > 0 && (
+        <div className="toolbar">
+          <button className={tab === 'table' ? 'primary' : ''} onClick={() => setTab('table')}>Table</button>
+          {comp.playoffGroups.map((grp) => (
+            <button key={grp.id} className={tab === grp.id ? 'primary' : ''} onClick={() => setTab(grp.id)}>
+              {grp.label}
+            </button>
           ))}
-        </tbody>
-      </table>
+        </div>
+      )}
+
+      {activeGroup !== undefined ? (
+        <BracketView group={activeGroup} world={world} />
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th className="num">#</th>
+                <th>Club</th>
+                <th className="num">P</th>
+                <th className="num">W</th>
+                <th className="num">L</th>
+                <th className="num">Pts</th>
+                <th className="num">Sets</th>
+                <th className="num">Ratio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const zone = i < champSize ? 'champ' : i >= rows.length - relegationSize ? 'releg' : '';
+                return (
+                  <tr key={r.clubId} className={r.clubId === club.id ? 'selected' : ''}>
+                    <td className="num faint">
+                      {zone !== '' && <span className={`zone-dot ${zone}`} />}
+                      {i + 1}
+                    </td>
+                    <td><ClubLink id={r.clubId} /></td>
+                    <td className="num dim">{r.played}</td>
+                    <td className="num">{r.won}</td>
+                    <td className="num">{r.lost}</td>
+                    <td className="num"><strong>{r.points}</strong></td>
+                    <td className="num dim">{r.setsFor}:{r.setsAgainst}</td>
+                    <td className="num dim">{setRatio(r).toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {champSize > 0 && (
+            <p className="faint" style={{ fontSize: 12, marginTop: 10 }}>
+              <span className="zone-dot champ" /> Top {champSize} — championship playoff
+              {relegationSize > 0 && (
+                <> &nbsp;&nbsp; <span className="zone-dot releg" /> Bottom {relegationSize} — relegation playoff</>
+              )}
+            </p>
+          )}
+        </>
+      )}
     </>
+  );
+}
+
+/** How many rounds a bracket of `seedCount` entrants eventually needs. */
+function totalPlayoffRounds(seedCount: number): number {
+  let size = 1;
+  let rounds = 0;
+  while (size < seedCount) { size *= 2; rounds++; }
+  return rounds;
+}
+
+function roundLabel(index: number, total: number): string {
+  const fromEnd = total - index;
+  if (fromEnd === 1) return 'Final';
+  if (fromEnd === 2) return 'Semifinals';
+  if (fromEnd === 3) return 'Quarterfinals';
+  return `Round ${index + 1}`;
+}
+
+/** A single-elimination bracket: one column per round, filled in as results
+ *  come in. Rounds not yet reached show as empty "TBD" placeholders so the
+ *  whole shape of the playoff is visible from the day it is drawn. */
+function BracketView({ group, world }: { group: PlayoffGroup; world: World }): JSX.Element {
+  const totalRounds = totalPlayoffRounds(group.seeds.length);
+
+  return (
+    <div className="bracket">
+      {Array.from({ length: totalRounds }, (_, ri) => {
+        const round = group.rounds[ri];
+        const tieCount = 2 ** (totalRounds - ri - 1);
+        return (
+          <div className="bracket-round" key={ri}>
+            <div className="bracket-round-label">{roundLabel(ri, totalRounds)}</div>
+            <div className="bracket-ties">
+              {round !== undefined
+                ? round.map((tie, ti) => (
+                  <BracketTie key={ti} tie={tie} group={group} world={world} />
+                ))
+                : Array.from({ length: tieCount }, (_, ti) => (
+                  <div className="bracket-tie bracket-tie-pending" key={ti}>
+                    <span className="faint">TBD</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        );
+      })}
+      {group.resolved && (
+        <div className="bracket-round bracket-round-winner">
+          <div className="bracket-round-label">Winner</div>
+          <div className="bracket-tie">
+            <div className="bracket-slot winner">
+              <ClubLink id={group.finalOrder[0]} short />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BracketTie({
+  tie, group, world,
+}: {
+  tie: PlayoffTie;
+  group: PlayoffGroup;
+  world: World;
+}): JSX.Element {
+  const fixture = tie.fixtureId >= 0 ? world.fixtures[tie.fixtureId] : undefined;
+  const played = fixture !== undefined && fixture.played;
+
+  const slot = (seed: number, sets: number | undefined): JSX.Element | null => {
+    if (seed === -1) return null;
+    const clubId = group.seeds[seed];
+    return (
+      <div className={`bracket-slot${tie.winnerSeed === seed ? ' winner' : ''}`}>
+        <span className="bracket-seed">{seed + 1}</span>
+        <ClubLink id={clubId} short />
+        <span className="bracket-score">{played ? sets : ''}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bracket-tie">
+      {slot(tie.homeSeed, fixture?.homeSets)}
+      {tie.awaySeed === -1
+        ? <div className="bracket-slot bracket-bye"><span className="faint">Bye</span></div>
+        : slot(tie.awaySeed, fixture?.awaySets)}
+    </div>
   );
 }

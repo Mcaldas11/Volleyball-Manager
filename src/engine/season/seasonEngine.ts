@@ -20,8 +20,9 @@ import { Position } from '../model/positions.ts';
 import { simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
 import { addToSeason, newSeasonLine, type PlayerMatchStats, type SeasonStatLine } from '../match/stats.ts';
 import { DAYS_PER_SEASON, currentPhase, dayOfSeason, SeasonPhase, type Fixture, type World } from '../world/world.ts';
-import { scheduleLeagueSeason } from './schedule.ts';
+import { PLAYOFF_ROUND_BASE, scheduleLeagueSeason } from './schedule.ts';
 import { quickSimulate } from './quickSim.ts';
+import { progressPlayoffs } from './playoffs.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers } from '../world/negotiation.ts';
@@ -219,7 +220,10 @@ function applyMatchLoad(store: PlayerStore, match: Map<number, PlayerMatchStats>
 
 function updateTable(world: World, fixture: Fixture): void {
   const comp = world.competitions[fixture.competitionId];
-  if (comp === undefined || comp.kind !== 'league') return;
+  // Playoff ties settle who plays whom next and, eventually, final standing —
+  // they must never feed back into the regular-season table they were seeded
+  // from.
+  if (comp === undefined || comp.kind !== 'league' || fixture.round >= PLAYOFF_ROUND_BASE) return;
 
   const row = (clubId: number): LeagueTableRow | undefined =>
     comp.table.find((r) => r.clubId === clubId);
@@ -295,6 +299,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   }
 
   dailyRecovery(world, store);
+  progressPlayoffs(world);
 
   // Training and injury rolls happen on a weekly cadence rather than daily, so
   // their cost does not scale with how many matches were played.

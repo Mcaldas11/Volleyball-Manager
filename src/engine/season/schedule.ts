@@ -56,6 +56,7 @@ export function scheduleLeagueSeason(
   // Reset the table for the new season.
   comp.table = clubs.map((c) => newTableRow(c));
   comp.fixtureIds = [];
+  comp.playoffGroups = [];
 
   const firstHalf = roundRobin(rng.shuffle(clubs.slice()));
   // The reverse fixtures swap home and away.
@@ -95,69 +96,42 @@ export function scheduleLeagueSeason(
   });
 }
 
-/**
- * Playoff bracket for the top N of a league. Volleyball playoffs are usually
- * best-of-five series; this schedules single deciding matches at neutral
- * venues, which keeps a fifty-season career tractable without changing who
- * tends to win.
- */
-export function schedulePlayoffs(
+/** Playoff round fixtures live at round numbers from here up, so they're
+ *  never confused with a regular-season round index. */
+export const PLAYOFF_ROUND_BASE = 1000;
+
+/** The day the regular season's own fixtures are guaranteed finished by. */
+export const PLAYOFF_START_OFFSET = 272;
+/** Days of rest between one playoff round and the next. */
+export const PLAYOFF_ROUND_GAP = 10;
+
+/** Schedule one playoff tie as a single deciding match. Shared by every round
+ *  of every bracket (championship, placement, relegation alike). */
+export function schedulePlayoffFixture(
   world: World,
   comp: Competition,
-  seasonStartDay: number,
-  seeds: number[],
-): void {
-  if (seeds.length < 2) return;
-  let round = seeds.slice();
-  let day = seasonStartDay + 278;
-  let roundNo = 1000; // distinguishes playoff rounds from regular ones
-
-  while (round.length > 1) {
-    const next: number[] = [];
-    for (let i = 0; i < round.length; i += 2) {
-      const home = round[i];
-      const away = round[round.length - 1 - i];
-      if (home === away) {
-        next.push(home);
-        continue;
-      }
-      const f: Fixture = {
-        id: world.fixtures.length,
-        competitionId: comp.id,
-        day,
-        home,
-        away,
-        round: roundNo,
-        format: MatchFormat.BestOf5,
-        importance: 0.85,
-        neutralVenue: false,
-        played: false,
-        homeSets: 0,
-        awaySets: 0,
-        setScores: [],
-        mvp: -1,
-      };
-      addFixture(world, f);
-      comp.fixtureIds.push(f.id);
-      next.push(-1); // resolved when the match is played
-    }
-    round = next;
-    day += 7;
-    roundNo++;
-    if (round.length <= 1) break;
-    // Subsequent rounds are scheduled once the previous ones resolve.
-    break;
-  }
-}
-
-/**
- * Knockout pairings for a cup: straight seeded bracket.
- */
-export function seededBracket(seeds: number[]): Array<[number, number]> {
-  const pairs: Array<[number, number]> = [];
-  const n = seeds.length;
-  for (let i = 0; i < n / 2; i++) {
-    pairs.push([seeds[i], seeds[n - 1 - i]]);
-  }
-  return pairs;
+  day: number,
+  roundNo: number,
+  home: number,
+  away: number,
+): number {
+  const f: Fixture = {
+    id: world.fixtures.length,
+    competitionId: comp.id,
+    day,
+    home,
+    away,
+    round: PLAYOFF_ROUND_BASE + roundNo,
+    format: MatchFormat.BestOf5,
+    importance: 0.85,
+    neutralVenue: false,
+    played: false,
+    homeSets: 0,
+    awaySets: 0,
+    setScores: [],
+    mvp: -1,
+  };
+  addFixture(world, f);
+  comp.fixtureIds.push(f.id);
+  return f.id;
 }

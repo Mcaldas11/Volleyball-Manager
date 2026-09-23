@@ -143,6 +143,7 @@ function createLeague(
     playoffTeams: tier === 1 ? Math.min(8, size) : 4,
     champion: -1,
     prizePool: Math.round(Math.pow(reputation / 10000, 2.2) * 3_000_000),
+    playoffGroups: [],
   };
   world.competitions.push(comp);
   void size;
@@ -518,6 +519,7 @@ function createContinentalCups(world: World): void {
       playoffTeams: 8,
       champion: -1,
       prizePool: conf === 'CEV' ? 2_500_000 : 600_000,
+      playoffGroups: [],
     };
     world.competitions.push(comp);
   }

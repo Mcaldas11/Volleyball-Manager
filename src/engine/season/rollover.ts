@@ -14,6 +14,7 @@
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, SQUAD_TARGET } from '../model/positions.ts';
+import { finalStandingsOrder } from './playoffs.ts';
 import {
   applyAgeing, generateYouthIntake, processRetirements, revalueSquads, revisePotential,
 } from '../world/progression.ts';
@@ -104,7 +105,10 @@ function awardTitles(world: World, report: RolloverReport, record: SeasonRecord)
     const sorted = [...comp.table].sort(compareTableRows);
     if (sorted[0].played === 0) continue;
 
-    const winner = sorted[0].clubId;
+    // Where a championship playoff was contested, its winner is champion —
+    // not necessarily whoever topped the regular-season table.
+    const finalOrder = finalStandingsOrder(comp);
+    const winner = finalOrder[0];
     comp.champion = winner;
     record.champions.push({ competitionId: comp.id, winner });
 
@@ -121,9 +125,9 @@ function awardTitles(world: World, report: RolloverReport, record: SeasonRecord)
       }
     }
 
-    // Prize money down the table.
-    sorted.forEach((row, i) => {
-      const c = world.clubs[row.clubId];
+    // Prize money down the final standings (playoff-adjusted where applicable).
+    finalOrder.forEach((clubId, i) => {
+      const c = world.clubs[clubId];
       if (c === undefined) return;
       const share = comp.prizePool * Math.pow(0.82, i);
       c.finances.prizeMoney = Math.round(share);
@@ -217,10 +221,14 @@ function applyPromotionRelegation(world: World, report: RolloverReport): void {
     const sorted = [...comp.table].sort(compareTableRows);
     if (sorted[0].played === 0) continue;
 
+    // A relegation playoff, where one was contested, decides who actually
+    // goes down — not simply whoever sat at the bottom of the table.
+    const finalOrder = finalStandingsOrder(comp);
+
     // Relegate the bottom clubs if there is a division beneath.
     if (below !== undefined && below.length > 0) {
-      for (let i = 0; i < comp.relegationSlots && i < sorted.length; i++) {
-        const clubId = sorted[sorted.length - 1 - i].clubId;
+      for (let i = 0; i < comp.relegationSlots && i < finalOrder.length; i++) {
+        const clubId = finalOrder[finalOrder.length - 1 - i];
         const target = world.competitions[below[i % below.length]];
         moveClub(world, clubId, comp.id, target.id);
         report.relegated++;
@@ -228,8 +236,8 @@ function applyPromotionRelegation(world: World, report: RolloverReport): void {
     }
     // Promote the top clubs if there is a division above.
     if (above !== undefined && above.length > 0 && comp.promotionSlots > 0) {
-      for (let i = 0; i < comp.promotionSlots && i < sorted.length; i++) {
-        const clubId = sorted[i].clubId;
+      for (let i = 0; i < comp.promotionSlots && i < finalOrder.length; i++) {
+        const clubId = finalOrder[i];
         const target = world.competitions[above[i % above.length]];
         moveClub(world, clubId, comp.id, target.id);
         report.promoted++;

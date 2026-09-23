@@ -37,6 +37,45 @@ export interface Competition {
   champion: number;
   /** Prize money for finishing first, scaled down the table. */
   prizePool: number;
+  /** The end-of-season knockout groups (championship / placement / relegation),
+   *  built once the regular season finishes. Empty until then, and reset each
+   *  new season by `scheduleLeagueSeason`. */
+  playoffGroups: PlayoffGroup[];
+}
+
+/** One tie in a knockout bracket: two seeds (index into the group's `seeds`
+ *  array) resolving to a winning seed, either by playing a fixture or — for a
+ *  bye — immediately. `-1` means "not yet known" (seed) or "not yet
+ *  happened" (fixtureId/winnerSeed). */
+export interface PlayoffTie {
+  homeSeed: number;
+  awaySeed: number;
+  fixtureId: number;
+  winnerSeed: number;
+}
+
+export type PlayoffGroupId = 'championship' | 'placement' | 'relegation';
+
+/**
+ * A single-elimination bracket carved out of a league's final table: the top
+ * clubs play off for the title, a middle band plays off for their final
+ * placing, and the bottom band plays off for who actually goes down — each
+ * is the same generic bracket, seeded from table position, only the seed
+ * list and what the result is used for differ.
+ */
+export interface PlayoffGroup {
+  id: PlayoffGroupId;
+  label: string;
+  /** Club ids in seed order — index 0 is the top seed. */
+  seeds: number[];
+  /** rounds[0] is the first round; each later round pairs the previous
+   *  round's winners once every tie in it has resolved. */
+  rounds: PlayoffTie[][];
+  /** Round currently being played or awaited. */
+  currentRound: number;
+  resolved: boolean;
+  /** Club ids from best to worst once resolved; empty until then. */
+  finalOrder: number[];
 }
 
 export interface Fixture {
