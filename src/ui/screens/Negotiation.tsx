@@ -1,6 +1,8 @@
 import type { JSX } from 'react';
 import { SQUAD_ROLE_NAMES, SquadRole } from '../../engine/world/negotiation.ts';
-import { ClubLink, money, MoneyInput } from '../components.tsx';
+import {
+  ClubLink, ContractPaper, ContractRow, money, MoneyInput,
+} from '../components.tsx';
 import { useGame } from '../state.ts';
 
 const ROLE_OPTIONS = (Object.values(SquadRole) as Array<SquadRole | string>)
@@ -24,64 +26,66 @@ export function NegotiationScreen(): JSX.Element | null {
   const sellingClub = n.sellingClubId >= 0 ? world.clubs[n.sellingClubId] : null;
   const ceiling = Math.min(club.finances.transferBudget, club.finances.balance);
 
+  if (n.stage === 'fee' && sellingClub !== null) {
+    return (
+      <ContractPaper
+        kicker="Transfer negotiation"
+        title={store.fullName(player)}
+        subtitle={`Fee talks with ${sellingClub.name}`}
+        onClose={() => g.cancelNegotiation()}
+      >
+        <ContractRow label="Selling club"><ClubLink id={sellingClub.id} /></ContractRow>
+        <ContractRow label="Current wage">{money(store.wage[player])}</ContractRow>
+        <ContractRow label="Market value">{money(store.value[player])}</ContractRow>
+
+        <hr className="contract-rule" />
+
+        <ContractRow label="Your offer">
+          <MoneyInput value={n.feeOffer} onChange={(v) => g.setFeeOffer(v)} />
+        </ContractRow>
+        <p className="contract-note" style={{ fontStyle: 'normal', color: '#6b5c38' }}>
+          Transfer budget: {money(ceiling)}
+          {n.feeValuation !== null && <> · valued around {money(n.feeValuation)}</>}
+        </p>
+        {n.feeMessage !== null && <p className="contract-note">{n.feeMessage}</p>}
+
+        <div className="contract-actions">
+          <button className="contract-stamp accept" onClick={() => g.submitFeeOffer()}>Make offer</button>
+          <button className="contract-stamp reject" onClick={() => g.cancelNegotiation()}>Withdraw</button>
+        </div>
+      </ContractPaper>
+    );
+  }
+
   return (
-    <>
-      <h2 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        Negotiate — {store.fullName(player)}
-        <button onClick={() => g.cancelNegotiation()}>Cancel</button>
-      </h2>
+    <ContractPaper
+      kicker="Player contract"
+      title={store.fullName(player)}
+      subtitle={sellingClub !== null ? `Signing from ${sellingClub.name}` : 'Signing as a free agent'}
+      onClose={() => g.cancelNegotiation()}
+    >
+      <ContractRow label="Current wage">{money(store.wage[player])}</ContractRow>
+      <ContractRow label="Market value">{money(store.value[player])}</ContractRow>
 
-      <div className="panels" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
-        <div className="panel" style={{ minWidth: 240 }}>
-          <h3>Player</h3>
-          <div className="kv">
-            <span className="k">Club</span>
-            <span>{sellingClub !== null ? <ClubLink id={sellingClub.id} /> : 'Free agent'}</span>
-          </div>
-          <div className="kv"><span className="k">Current wage</span><span>{money(store.wage[player])}</span></div>
-          <div className="kv"><span className="k">Market value</span><span>{money(store.value[player])}</span></div>
-        </div>
+      <hr className="contract-rule" />
+
+      <ContractRow label="Promised role">
+        <select
+          value={n.termsRole}
+          onChange={(e) => g.setTermsRole(Number(e.target.value) as SquadRole)}
+        >
+          {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{SQUAD_ROLE_NAMES[r]}</option>)}
+        </select>
+      </ContractRow>
+      <ContractRow label="Annual wage">
+        <MoneyInput value={n.termsWage} onChange={(v) => g.setTermsWage(v)} />
+      </ContractRow>
+      {n.termsMessage !== null && <p className="contract-note">{n.termsMessage}</p>}
+
+      <div className="contract-actions">
+        <button className="contract-stamp accept" onClick={() => g.submitTermsOffer()}>Offer terms</button>
+        <button className="contract-stamp reject" onClick={() => g.cancelNegotiation()}>Withdraw</button>
       </div>
-
-      {n.stage === 'fee' && sellingClub !== null && (
-        <div key="fee" className="panel view-fade" style={{ maxWidth: 420 }}>
-          <h3>Transfer fee — {sellingClub.name}</h3>
-          <div className="kv">
-            <span className="k">Offer</span>
-            <MoneyInput value={n.feeOffer} onChange={(v) => g.setFeeOffer(v)} />
-          </div>
-          <p className="faint" style={{ fontSize: 12 }}>
-            Transfer budget: {money(ceiling)}
-            {n.feeValuation !== null && <> · They value him around {money(n.feeValuation)}.</>}
-          </p>
-          {n.feeMessage !== null && <p className="bad">{n.feeMessage}</p>}
-          <button className="primary" onClick={() => g.submitFeeOffer()}>Make offer</button>
-        </div>
-      )}
-
-      {n.stage === 'terms' && (
-        <div key="terms" className="panel view-fade" style={{ maxWidth: 420 }}>
-          <h3>Personal terms</h3>
-          <div className="kv">
-            <span className="k">Promised role</span>
-            <select
-              value={n.termsRole}
-              onChange={(e) => g.setTermsRole(Number(e.target.value) as SquadRole)}
-            >
-              {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{SQUAD_ROLE_NAMES[r]}</option>)}
-            </select>
-          </div>
-          <div className="kv">
-            <span className="k">Annual wage</span>
-            <MoneyInput value={n.termsWage} onChange={(v) => g.setTermsWage(v)} />
-          </div>
-          <p className="faint" style={{ fontSize: 12 }}>
-            Current wage: {money(store.wage[player])}
-          </p>
-          {n.termsMessage !== null && <p className="bad">{n.termsMessage}</p>}
-          <button className="primary" onClick={() => g.submitTermsOffer()}>Offer terms</button>
-        </div>
-      )}
-    </>
+    </ContractPaper>
   );
 }

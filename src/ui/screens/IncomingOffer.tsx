@@ -1,12 +1,12 @@
 import type { JSX } from 'react';
-import { ClubLink, money, MoneyInput } from '../components.tsx';
+import { ClubLink, ContractPaper, ContractRow, money, MoneyInput } from '../components.tsx';
 import { useGame } from '../state.ts';
 
 /**
- * The reverse of NegotiationScreen: another club wants one of ours. Any
- * message shown here is always a rejection of a counter-offer — accepting
- * (outright or via a successful counter) closes the screen and reports the
- * player's decision as a message instead.
+ * The reverse of NegotiationScreen: another club wants one of ours, presented
+ * as the bid sheet it is. Any message shown here is always a rejection of a
+ * counter-offer — accepting (outright or via a successful counter) closes the
+ * screen and reports the player's decision as a message instead.
  */
 export function IncomingOfferScreen(): JSX.Element | null {
   const g = useGame();
@@ -19,39 +19,31 @@ export function IncomingOfferScreen(): JSX.Element | null {
   if (buyingClub === undefined) return null;
 
   return (
-    <>
-      <h2 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        Transfer offer — {store.fullName(n.playerIdx)}
-        <button onClick={() => g.declineOffer()}>Cancel</button>
-      </h2>
+    <ContractPaper
+      kicker="Transfer offer"
+      title={store.fullName(n.playerIdx)}
+      subtitle={`Bid received from ${buyingClub.name}`}
+      onClose={() => g.closeOfferView()}
+    >
+      <ContractRow label="From"><ClubLink id={buyingClub.id} /></ContractRow>
+      <ContractRow label="Offer">{money(n.fee)}</ContractRow>
+      <ContractRow label="Market value">{money(store.value[n.playerIdx])}</ContractRow>
+      <ContractRow label="Expires">{g.dateLabelForDay(n.expiresOnDay)}</ContractRow>
 
-      <div className="panel" style={{ maxWidth: 420 }}>
-        <div className="kv">
-          <span className="k">From</span>
-          <span><ClubLink id={buyingClub.id} /></span>
-        </div>
-        <div className="kv"><span className="k">Offer</span><span>{money(n.fee)}</span></div>
-        <div className="kv">
-          <span className="k">Market value</span>
-          <span>{money(store.value[n.playerIdx])}</span>
-        </div>
-        <div className="kv">
-          <span className="k">Expires</span>
-          <span className="faint">{g.dateLabelForDay(n.expiresOnDay)}</span>
-        </div>
+      <hr className="contract-rule" />
 
-        <div className="toolbar" style={{ margin: '8px 0' }}>
-          <button className="primary" onClick={() => g.acceptOffer()}>Accept</button>
-        </div>
-
-        <h3 style={{ marginTop: 14 }}>Counter-offer</h3>
-        <div className="kv">
-          <span className="k">Your asking price</span>
-          <MoneyInput value={n.counterFee} onChange={(v) => g.setCounterFee(v)} />
-        </div>
-        {n.message !== null && <p className="bad">{n.message}</p>}
+      <ContractRow label="Your asking price">
+        <MoneyInput value={n.counterFee} onChange={(v) => g.setCounterFee(v)} />
+      </ContractRow>
+      {n.message !== null && <p className="contract-note">{n.message}</p>}
+      <div className="contract-footer">
         <button onClick={() => g.counterOffer()}>Send counter-offer</button>
       </div>
-    </>
+
+      <div className="contract-actions">
+        <button className="contract-stamp accept" onClick={() => g.acceptOffer()}>Accept</button>
+        <button className="contract-stamp reject" onClick={() => g.declineOffer()}>Reject</button>
+      </div>
+    </ContractPaper>
   );
 }

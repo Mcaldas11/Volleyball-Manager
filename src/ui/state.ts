@@ -313,6 +313,11 @@ class Game {
     this.screen = screen;
     this.selectedPlayer = null;
     this.selectedClub = null;
+    // Navigating away must always work, even mid-negotiation — the deal
+    // itself is untouched (it lives in world.incomingOffers), only the
+    // full-screen prompt for it closes.
+    this.negotiation = null;
+    this.incomingOffer = null;
     this.emit();
   }
 
@@ -995,7 +1000,7 @@ class Game {
     }
   }
 
-  /** Walk away from the negotiation entirely. */
+  /** Reject the offer outright — the buying club walks away for good. */
   declineOffer(): void {
     const n = this.incomingOffer;
     const world = this.world;
@@ -1003,6 +1008,12 @@ class Game {
     world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
     this.incomingOffer = null;
     this.notice = 'You turned down the offer.';
+    this.emit();
+  }
+
+  /** Close the offer sheet without deciding — it stays pending and can be reopened later. */
+  closeOfferView(): void {
+    this.incomingOffer = null;
     this.emit();
   }
 

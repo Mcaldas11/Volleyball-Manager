@@ -256,6 +256,52 @@ export function Empty({ children }: { children: React.ReactNode }): JSX.Element 
   return <p className="dim" style={{ padding: '20px 0' }}>{children}</p>;
 }
 
+/**
+ * A document-styled card for transfer bids and player signings — the one
+ * place the interface deliberately looks like paper instead of a table.
+ */
+export function ContractPaper({
+  kicker, title, subtitle, onClose, children,
+}: {
+  kicker?: string;
+  title: string;
+  subtitle?: string;
+  /** Close the sheet without deciding anything, if the caller supports that. */
+  onClose?: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="contract-wrap">
+      <div className="contract">
+        {onClose !== undefined && (
+          <button className="contract-close" title="Close" onClick={onClose}>×</button>
+        )}
+        {kicker !== undefined && <span className="contract-kicker">{kicker}</span>}
+        <h2 className="contract-title">{title}</h2>
+        {subtitle !== undefined && <p className="contract-subtitle">{subtitle}</p>}
+        <hr className="contract-rule" />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** One line of a ContractPaper: a label, a dotted leader, and the value. */
+export function ContractRow({
+  label, children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="contract-row">
+      <span className="contract-label">{label}</span>
+      <span className="contract-leader" />
+      <span className="contract-value">{children}</span>
+    </div>
+  );
+}
+
 /** A club name that opens that club's detail page when clicked. */
 export function ClubLink({ id, short = false }: { id: number; short?: boolean }): JSX.Element {
   const g = useGame();

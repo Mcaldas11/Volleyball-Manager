@@ -162,10 +162,17 @@ export function generateIncomingOffers(world: World): void {
     .slice(0, 5);
   const playerIdx = world.rng.pick(candidates);
   const playerLevel = store.currentAbility[playerIdx] / 2000;
-  const clubLevel = club.reputation / 10000;
+
+  // Interest is driven by standing out from your own squad, not by your
+  // club's reputation — reputation compounds much faster than ability ever
+  // can (a title alone lifts it 3.5%), so a successful club's reputation
+  // routinely outruns what its players are actually worth. Comparing the two
+  // directly made good, well-run clubs receive almost no offers at all.
+  const squadLevel =
+    club.players.reduce((sum, p) => sum + store.currentAbility[p], 0) / club.players.length / 2000;
 
   // Only genuinely appealing players attract interest, and only occasionally.
-  const appeal = Math.max(0, playerLevel - clubLevel + 0.05);
+  const appeal = Math.max(0, playerLevel - squadLevel + 0.05);
   if (!world.rng.chance(Math.min(0.35, appeal * 1.8 + 0.02))) return;
 
   const suitors = world.clubs.filter(
