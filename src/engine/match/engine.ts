@@ -419,6 +419,8 @@ export class MatchSimulator {
   snapshot(): {
     homeCourt: number[];
     awayCourt: number[];
+    homeLibero: number;
+    awayLibero: number;
     homeScore: number;
     awayScore: number;
     homeSets: number;
@@ -430,6 +432,8 @@ export class MatchSimulator {
     return {
       homeCourt: Array.from(this.teams[0].court),
       awayCourt: Array.from(this.teams[1].court),
+      homeLibero: this.teams[0].liberoIdx,
+      awayLibero: this.teams[1].liberoIdx,
       homeScore: this.teams[0].score,
       awayScore: this.teams[1].score,
       homeSets: this.teams[0].setsWon,

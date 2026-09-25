@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact } from '../../engine/match/engine.ts';
+import { effectivePlayerAt } from '../../engine/match/court.ts';
 import {
   DefensiveSystem, OffensiveSystem, ServeStrategy, Tempo,
 } from '../../engine/match/tactics.ts';
@@ -64,6 +65,18 @@ function phaseFromKind(kind: RallyContact['kind']): Phase {
 
 interface ActiveContact { kind: RallyContact['kind']; team: 0 | 1; player: number; }
 
+/** Which zone (0-5) a resolved on-court player is standing in, accounting for
+ *  the libero substitution — the inverse of `effectivePlayerAt`. Used to place
+ *  the ball and to read a player's true role (libero, not the middle blocker
+ *  they replaced) wherever the raw court array would otherwise be searched
+ *  directly for a player index. */
+function zoneOf(court: number[], store: PlayerStore, liberoIdx: number, playerIdx: number): number {
+  for (let z = 0; z < 6; z++) {
+    if (effectivePlayerAt(court, z, store.position, liberoIdx) === playerIdx) return z;
+  }
+  return -1;
+}
+
 /** Positive `amount` always means "toward the shared net," on either half. */
 function towardNet(side: 'home' | 'away', amount: number): number {
   return side === 'home' ? amount : -amount;
@@ -88,6 +101,8 @@ function formationPosition(
   active: ActiveContact | null,
   homeCourt: number[],
   awayCourt: number[],
+  homeLibero: number,
+  awayLibero: number,
 ): { x: number; y: number } {
   const base = zonePercent(zone, side);
   if (active === null) return base;
@@ -125,7 +140,8 @@ function formationPosition(
     y += towardNet(side, 3); // blockers start reading the set
   } else if (phase === 'attack' && isFrontRow) {
     const attackerCourt = actingSide === 'home' ? homeCourt : awayCourt;
-    const attackerZone = attackerCourt.indexOf(active.player);
+    const attackerLibero = actingSide === 'home' ? homeLibero : awayLibero;
+    const attackerZone = zoneOf(attackerCourt, store, attackerLibero, active.player);
     if (attackerZone !== -1) {
       const attackerX = zonePercent(attackerZone, actingSide).x;
       x += (attackerX - x) * 0.5; // blockers shift to match the hitter
@@ -166,6 +182,7 @@ function creditTeamFor(kind: RallyContact['kind'], actingTeam: 0 | 1): 0 | 1 {
 /** Move the ball through one rally's contacts, one at a time. */
 async function animateRally(
   logEntry: MatchdayLogEntry,
+  store: PlayerStore,
   speed: number,
   cancelled: { current: boolean },
   setBall: (pos: BallPos | null) => void,
@@ -178,7 +195,8 @@ async function animateRally(
     if (cancelled.current) return;
     const side: 'home' | 'away' = c.team === 0 ? 'home' : 'away';
     const court = c.team === 0 ? logEntry.homeCourt : logEntry.awayCourt;
-    const zone = court.indexOf(c.player);
+    const libero = c.team === 0 ? logEntry.homeLibero : logEntry.awayLibero;
+    const zone = zoneOf(court, store, libero, c.player);
     if (zone !== -1) setBall({ side, ...zonePercent(zone, side) });
     setActive({ kind: c.kind, team: c.team, player: c.player });
     const callout = pickBigPlay(c.kind);
@@ -189,7 +207,7 @@ async function animateRally(
 
 /** A player's dot on the 2D court: their photo, ringed in their role's colour. */
 function PlayerMarker({
-  playerIdx, zone, side, store, active, homeCourt, awayCourt,
+  playerIdx, zone, side, store, active, homeCourt, awayCourt, homeLibero, awayLibero,
 }: {
   playerIdx: number;
   zone: number;
@@ -198,8 +216,12 @@ function PlayerMarker({
   active: ActiveContact | null;
   homeCourt: number[];
   awayCourt: number[];
+  homeLibero: number;
+  awayLibero: number;
 }): JSX.Element {
-  const { x, y } = formationPosition(zone, side, playerIdx, store, active, homeCourt, awayCourt);
+  const { x, y } = formationPosition(
+    zone, side, playerIdx, store, active, homeCourt, awayCourt, homeLibero, awayLibero,
+  );
   const pos = store.position[playerIdx] as Position;
   const isActor = active !== null && active.player === playerIdx;
   return (
@@ -217,10 +239,12 @@ function PlayerMarker({
 
 /** The court itself: a two-team pitch with every starter's photo in their zone. */
 function Court2D({
-  homeCourt, awayCourt, store, ball, active,
+  homeCourt, awayCourt, homeLibero, awayLibero, store, ball, active,
 }: {
   homeCourt: number[];
   awayCourt: number[];
+  homeLibero: number;
+  awayLibero: number;
   store: PlayerStore;
   ball: BallPos | null;
   active: ActiveContact | null;
@@ -231,20 +255,25 @@ function Court2D({
       <div className="court2d-net" />
       <div className="court2d-attack-line home" />
       {[0, 1, 2, 3, 4, 5].map((z) => {
-        const p = homeCourt[z];
+        // Resolved through the libero substitution, so the back-row middle
+        // blocker's zone shows the libero who actually replaced them out
+        // there rather than the middle blocker they came off for.
+        const p = effectivePlayerAt(homeCourt, z, store.position, homeLibero);
         return p === undefined ? null : (
           <PlayerMarker
             key={`h${z}`} playerIdx={p} zone={z} side="home" store={store}
             active={active} homeCourt={homeCourt} awayCourt={awayCourt}
+            homeLibero={homeLibero} awayLibero={awayLibero}
           />
         );
       })}
       {[0, 1, 2, 3, 4, 5].map((z) => {
-        const p = awayCourt[z];
+        const p = effectivePlayerAt(awayCourt, z, store.position, awayLibero);
         return p === undefined ? null : (
           <PlayerMarker
             key={`a${z}`} playerIdx={p} zone={z} side="away" store={store}
             active={active} homeCourt={homeCourt} awayCourt={awayCourt}
+            homeLibero={homeLibero} awayLibero={awayLibero}
           />
         );
       })}
@@ -454,7 +483,7 @@ function LiveMatchView(): JSX.Element {
         }
         const logEntry = g.playNextRally();
         if (logEntry === null) break;
-        await animateRally(logEntry, current.speed, cancelledRef, setBall, setActive, triggerBigPlay);
+        await animateRally(logEntry, store, current.speed, cancelledRef, setBall, setActive, triggerBigPlay);
         if (cancelledRef.current) break;
         setActive(null); // reset to base rotation positions between points
         await sleep(733 / current.speed);
@@ -538,6 +567,8 @@ function LiveMatchView(): JSX.Element {
           <Court2D
             homeCourt={snap?.homeCourt ?? []}
             awayCourt={snap?.awayCourt ?? []}
+            homeLibero={snap?.homeLibero ?? -1}
+            awayLibero={snap?.awayLibero ?? -1}
             store={store}
             ball={ball}
             active={active}

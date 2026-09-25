@@ -65,11 +65,16 @@ export function liberoCoversZone(zone: number): boolean {
 /**
  * Resolve who is actually standing in a zone once the libero substitution is
  * applied.
+ *
+ * `court` and `positions` take `ArrayLike<number>` rather than the engine's
+ * own `Int32Array`/`Uint8Array` so the UI can call this with the plain
+ * `number[]` snapshots it renders from — one substitution rule, shared by
+ * the simulation and the court view, instead of the view re-deriving it.
  */
 export function effectivePlayerAt(
-  court: Int32Array,
+  court: ArrayLike<number>,
   zone: number,
-  positions: Uint8Array,
+  positions: ArrayLike<number>,
   liberoIdx: number,
 ): number {
   const p = court[zone];

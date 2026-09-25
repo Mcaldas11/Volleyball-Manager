@@ -111,6 +111,9 @@ export interface IncomingOfferReview {
 export interface MatchdaySnapshot {
   homeCourt: number[];
   awayCourt: number[];
+  /** -1 if that side has no libero on the floor. */
+  homeLibero: number;
+  awayLibero: number;
   homeScore: number;
   awayScore: number;
   homeSets: number;
@@ -127,6 +130,8 @@ export interface MatchdayLogEntry {
   entry: RallyLogEntry;
   homeCourt: number[];
   awayCourt: number[];
+  homeLibero: number;
+  awayLibero: number;
 }
 
 export interface MatchdayState {
@@ -716,6 +721,7 @@ class Game {
 
     const logEntry: MatchdayLogEntry = {
       entry, homeCourt: preSnap.homeCourt, awayCourt: preSnap.awayCourt,
+      homeLibero: preSnap.homeLibero, awayLibero: preSnap.awayLibero,
     };
     md.log.push(logEntry);
     md.snapshot = sim.snapshot();
