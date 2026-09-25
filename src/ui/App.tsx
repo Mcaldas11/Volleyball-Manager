@@ -11,6 +11,7 @@ import { MatchdayScreen } from './screens/Matchday.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { OverviewScreen } from './screens/Overview.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
+import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
 import {
   TacticsScreen, RotationsScreen, TrainingScreen, FinancesScreen,
@@ -37,6 +38,7 @@ const NAV: Array<{ group: string; icon: NavIconName; items: Array<[ScreenId, str
     items: [
       ['overview', 'Overview'],
       ['squad', 'Squad'],
+      ['lineup', 'Lineup'],
       ['tactics', 'Tactics'],
       ['rotations', 'Rotations'],
       ['training', 'Training'],
@@ -185,6 +187,7 @@ function Screen(): JSX.Element {
   switch (g.screen) {
     case 'overview': return <OverviewScreen />;
     case 'squad': return <SquadScreen />;
+    case 'lineup': return <LineupScreen />;
     case 'tactics': return <TacticsScreen />;
     case 'rotations': return <RotationsScreen />;
     case 'training': return <TrainingScreen />;

@@ -37,7 +37,7 @@ import {
 } from './persistence.ts';
 
 export type ScreenId =
-  | 'overview' | 'squad' | 'tactics' | 'rotations' | 'fixtures' | 'table'
+  | 'overview' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame';
 
@@ -552,6 +552,55 @@ class Game {
     const a = md.homeLineup[zoneA];
     md.homeLineup[zoneA] = md.homeLineup[zoneB];
     md.homeLineup[zoneB] = a;
+    this.emit();
+  }
+
+  /** Change the libero on the pre-match lineup screen. */
+  setMatchdayLibero(playerIdx: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup') return;
+    md.homeLibero = playerIdx;
+    this.emit();
+  }
+
+  /**
+   * Edit the club's saved starting lineup directly — from the Squad screen,
+   * any time, not just right before kickoff. `pickLineup` reads this first
+   * and only falls back to auto-picking whichever slots it doesn't cover
+   * (empty, or a name who's since left or gotten hurt), so this is a genuine
+   * default rather than a one-off arrangement that gets thrown away.
+   */
+  setPreferredLineupSlot(slot: number, playerIdx: number): void {
+    const club = this.club;
+    if (club === null) return;
+    while (club.preferredLineup.length <= slot) club.preferredLineup.push(-1);
+    club.preferredLineup[slot] = playerIdx;
+    this.emit();
+  }
+
+  swapPreferredLineupSlots(slotA: number, slotB: number): void {
+    const club = this.club;
+    if (club === null) return;
+    while (club.preferredLineup.length < 6) club.preferredLineup.push(-1);
+    const a = club.preferredLineup[slotA];
+    club.preferredLineup[slotA] = club.preferredLineup[slotB];
+    club.preferredLineup[slotB] = a;
+    this.emit();
+  }
+
+  setPreferredLibero(playerIdx: number): void {
+    const club = this.club;
+    if (club === null) return;
+    club.preferredLibero = playerIdx;
+    this.emit();
+  }
+
+  /** Clear the saved lineup so every slot goes back to auto-picking the best available player. */
+  resetPreferredLineup(): void {
+    const club = this.club;
+    if (club === null) return;
+    club.preferredLineup = [];
+    club.preferredLibero = -1;
     this.emit();
   }
 

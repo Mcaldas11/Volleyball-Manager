@@ -43,15 +43,25 @@ export function newSeasonContext(): SeasonContext {
   return { stats: new Map(), detailedResults: new Map(), seasonStartAbility: new Map() };
 }
 
+/** Slot order used by `club.preferredLineup`, `pickLineup`'s result, and the
+ *  team-sheet UI alike: setter and opposite diagonal, the two outsides
+ *  diagonal, the two middles diagonal. */
+export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
+  Position.Setter, Position.MiddleBlocker, Position.OutsideHitter,
+  Position.Opposite, Position.MiddleBlocker, Position.OutsideHitter,
+];
+
 /**
  * Choose a starting seven, respecting the coach's preferred lineup but
- * replacing anyone injured or exhausted with the best available alternative.
+ * replacing anyone injured, sold or otherwise unavailable with the best fit
+ * alternative.
  */
 export function pickLineup(
   store: PlayerStore,
   club: Club,
 ): { lineup: number[]; libero: number; bench: number[] } {
   const available = club.players.filter((p) => store.isAvailable(p));
+  const availableSet = new Set(available);
   const byPos = (pos: Position): number[] =>
     available
       .filter((p) => store.position[p] === pos)
@@ -62,37 +72,59 @@ export function pickLineup(
         return score(b) - score(a);
       });
 
-  const s = byPos(Position.Setter);
-  const o = byPos(Position.Opposite);
-  const oh = byPos(Position.OutsideHitter);
-  const mb = byPos(Position.MiddleBlocker);
-  const li = byPos(Position.Libero);
-
-  // Fall back to anyone fit if a position is wiped out by injuries; playing
-  // out of position is heavily penalised, which is the point.
-  const fill = (list: number[], n: number): number[] => {
-    const out = list.slice(0, n);
-    while (out.length < n) {
-      const spare = available.find((p) => !out.includes(p));
-      if (spare === undefined) break;
-      out.push(spare);
-    }
-    return out;
+  const pools: Partial<Record<Position, number[]>> = {
+    [Position.Setter]: byPos(Position.Setter),
+    [Position.Opposite]: byPos(Position.Opposite),
+    [Position.OutsideHitter]: byPos(Position.OutsideHitter),
+    [Position.MiddleBlocker]: byPos(Position.MiddleBlocker),
+    [Position.Libero]: byPos(Position.Libero),
   };
 
-  const setters = fill(s, 1);
-  const opposites = fill(o, 1);
-  const outsides = fill(oh, 2);
-  const middles = fill(mb, 2);
-  const liberos = fill(li, 1);
+  const used = new Set<number>();
 
-  const lineup = [
-    setters[0], middles[0], outsides[0],
-    opposites[0], middles[1], outsides[1],
-  ].filter((p) => p !== undefined);
+  // Honour whichever named starters are still fit to play their slot; an
+  // empty or stale preference (nobody has set one, or the player named for
+  // it left, got injured, or changed position) just falls through below.
+  const lineup: number[] = LINEUP_SLOT_POSITIONS.map((pos, slot) => {
+    const preferred = club.preferredLineup[slot];
+    if (
+      preferred !== undefined && preferred >= 0
+      && availableSet.has(preferred) && store.position[preferred] === pos
+      && !used.has(preferred)
+    ) {
+      used.add(preferred);
+      return preferred;
+    }
+    return -1;
+  });
 
-  const bench = available.filter((p) => !lineup.includes(p) && p !== liberos[0]);
-  return { lineup, libero: liberos[0] ?? -1, bench };
+  // Anything the preference didn't cover: best remaining player at that slot's
+  // position — the auto-pick rule this has always used.
+  for (let slot = 0; slot < lineup.length; slot++) {
+    if (lineup[slot] !== -1) continue;
+    const pick = pools[LINEUP_SLOT_POSITIONS[slot]]?.find((p) => !used.has(p));
+    if (pick !== undefined) { lineup[slot] = pick; used.add(pick); }
+  }
+
+  // A position wiped out entirely by injuries: fill with anyone still fit,
+  // heavily penalised by playing out of position, which is the point.
+  for (let slot = 0; slot < lineup.length; slot++) {
+    if (lineup[slot] !== -1) continue;
+    const spare = available.find((p) => !used.has(p));
+    if (spare !== undefined) { lineup[slot] = spare; used.add(spare); }
+  }
+
+  const preferredLibero = club.preferredLibero;
+  const libero =
+    preferredLibero >= 0 && availableSet.has(preferredLibero)
+    && store.position[preferredLibero] === Position.Libero && !used.has(preferredLibero)
+      ? preferredLibero
+      : pools[Position.Libero]?.find((p) => !used.has(p)) ?? -1;
+  if (libero !== -1) used.add(libero);
+
+  const finalLineup = lineup.filter((p) => p !== -1);
+  const bench = available.filter((p) => !used.has(p));
+  return { lineup: finalLineup, libero, bench };
 }
 
 export function toTeamSetup(store: PlayerStore, club: Club): TeamSetup {

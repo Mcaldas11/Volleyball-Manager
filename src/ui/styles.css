@@ -800,6 +800,14 @@ tbody tr.selected { background: var(--accent-dim); }
   margin: 26px 0 10px;
 }
 
+.lineup-court-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
 .lineup-formation {
   display: flex;
   flex-direction: column;
@@ -814,6 +822,17 @@ tbody tr.selected { background: var(--accent-dim); }
   min-width: 200px;
   height: 0;
   border-top: 2px dashed var(--border-strong);
+}
+
+/* The libero sits beside the formation rather than in the bench — it is a
+   starter, just one that can never actually take a hitting/setting zone. */
+.lineup-libero-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-left: 24px;
+  margin-top: 18px;
+  border-left: 2px dashed var(--border-strong);
 }
 
 .lineup-bench {
