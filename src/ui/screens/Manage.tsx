@@ -3,14 +3,17 @@ import {
   BlockAssignment, DefensiveShape, DefensiveSystem, OffensiveSystem,
   ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
-import { POSITION_NAMES, POSITION_SHORT, type Position } from '../../engine/model/positions.ts';
+import {
+  POSITION_NAMES, POSITION_SHORT, POSITIONS, type Position,
+} from '../../engine/model/positions.ts';
 import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engine/model/staff.ts';
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import {
-  abilityClass, Bar, ChoiceField, ClubLink, Empty, Flag, money, MoneyInput, Pos,
+  abilityClass, Bar, ChoiceField, ClubLink, Empty, Flag, money, moneyShort, MoneyInput,
+  parseMoneyShort, Pos,
 } from '../components.tsx';
-import { useGame } from '../state.ts';
+import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
 
 export function TacticsScreen(): JSX.Element {
   const g = useGame();
@@ -516,19 +519,49 @@ export function StaffScreen(): JSX.Element {
  * record, whether from dedicated scouting work or (for the genuinely famous)
  * from reputation alone. Ranges narrow as that knowledge accumulates.
  */
+/** Bands offered by the scouting screen's "min potential" filter, on the
+ *  same 0-2000 scale (and the same thresholds) as {@link abilityClass}. */
+const POTENTIAL_BANDS: ReadonlyArray<[number, string]> = [
+  [0, 'Any potential'],
+  [800, 'Promising (800+)'],
+  [1100, 'Good (1100+)'],
+  [1400, 'Great (1400+)'],
+  [1650, 'Elite (1650+)'],
+];
+
 export function ScoutingScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
   const [target, setTarget] = useState<number | null>(g.scoutingFocus);
-  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<ScoutFilters>(DEFAULT_SCOUT_FILTERS);
+  const [priceText, setPriceText] = useState('');
 
   // Consume any pending scouting focus exactly once, right after mounting.
   useEffect(() => {
     if (g.scoutingFocus !== null) g.clearScoutingFocus();
   }, []);
 
-  const targets = g.scoutingPool(query);
+  const setFilter = <K extends keyof ScoutFilters>(key: K, value: ScoutFilters[K]): void => {
+    setFilters((f) => ({ ...f, [key]: value }));
+  };
+  const toNum = (s: string): number | null => (s.trim() === '' ? null : Number(s));
+
+  const commitPrice = (): void => {
+    const trimmed = priceText.trim();
+    if (trimmed === '') { setFilter('valueMax', null); return; }
+    const parsed = parseMoneyShort(trimmed);
+    if (parsed !== null) { setFilter('valueMax', parsed); setPriceText(moneyShort(parsed)); }
+    else setPriceText(filters.valueMax !== null ? moneyShort(filters.valueMax) : '');
+  };
+
+  const clearFilters = (): void => {
+    setFilters(DEFAULT_SCOUT_FILTERS);
+    setPriceText('');
+  };
+  const filtersActive = JSON.stringify(filters) !== JSON.stringify(DEFAULT_SCOUT_FILTERS);
+
+  const targets = g.scoutingPool(filters);
   const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
   const report = target !== null && matchesWatched > 0
     ? buildScoutReport(world, world.userClubId, target, { matchesWatched })
@@ -547,21 +580,124 @@ export function ScoutingScreen(): JSX.Element {
         the estimate — potential is always harder to judge than current ability.
       </p>
 
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <h3>Filters</h3>
+        <div className="filter-bar">
+          <div className="filter-field" style={{ gridColumn: 'span 2' }}>
+            <label>Name</label>
+            <input
+              placeholder="Search by name…"
+              value={filters.query}
+              onChange={(e) => setFilter('query', e.target.value)}
+            />
+          </div>
+
+          <div className="filter-field" style={{ gridColumn: 'span 2' }}>
+            <label>Position</label>
+            <div className="chip-group">
+              <span
+                className={`chip${filters.position === null ? ' active' : ''}`}
+                onClick={() => setFilter('position', null)}
+              >
+                Any
+              </span>
+              {POSITIONS.map((pos) => (
+                <span
+                  key={pos}
+                  className={`chip${filters.position === pos ? ' active' : ''}`}
+                  onClick={() => setFilter('position', pos)}
+                >
+                  {POSITION_NAMES[pos]}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-field">
+            <label>Age</label>
+            <div className="filter-range">
+              <input
+                type="number" min={16} max={45} placeholder="Min"
+                value={filters.ageMin ?? ''}
+                onChange={(e) => setFilter('ageMin', toNum(e.target.value))}
+              />
+              <span>–</span>
+              <input
+                type="number" min={16} max={45} placeholder="Max"
+                value={filters.ageMax ?? ''}
+                onChange={(e) => setFilter('ageMax', toNum(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="filter-field">
+            <label>Height (cm)</label>
+            <div className="filter-range">
+              <input
+                type="number" min={150} max={230} placeholder="Min"
+                value={filters.heightMin ?? ''}
+                onChange={(e) => setFilter('heightMin', toNum(e.target.value))}
+              />
+              <span>–</span>
+              <input
+                type="number" min={150} max={230} placeholder="Max"
+                value={filters.heightMax ?? ''}
+                onChange={(e) => setFilter('heightMax', toNum(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="filter-field">
+            <label>Potential</label>
+            <select
+              value={filters.potentialMin}
+              onChange={(e) => setFilter('potentialMin', Number(e.target.value))}
+            >
+              {POTENTIAL_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+
+          <div className="filter-field">
+            <label>Max price</label>
+            <input
+              placeholder="No limit"
+              value={priceText}
+              onChange={(e) => setPriceText(e.target.value)}
+              onBlur={commitPrice}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { commitPrice(); (e.target as HTMLInputElement).blur(); }
+              }}
+            />
+          </div>
+
+          <div className="filter-field">
+            <label>&nbsp;</label>
+            <span className="filter-check">
+              <input
+                type="checkbox"
+                checked={filters.freeAgentOnly}
+                onChange={(e) => setFilter('freeAgentOnly', e.target.checked)}
+              />
+              Free agents only
+            </span>
+          </div>
+
+          <div className="filter-field filter-actions">
+            <button disabled={!filtersActive} onClick={clearFilters}>Clear filters</button>
+          </div>
+        </div>
+      </div>
+
       <div className="panels" style={{ alignItems: 'stretch' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2>Available players</h2>
-          <input
-            placeholder="Search by name…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{ width: '100%', marginBottom: 8 }}
-          />
+          <h2>Available players <span className="faint">({targets.length})</span></h2>
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             <table>
               <thead>
                 <tr>
-                  <th>Name</th><th>Pos</th><th className="num">Age</th><th>Nat</th>
-                  <th>Club</th><th className="num">Scouted</th>
+                  <th>Name</th><th>Pos</th><th className="num">Age</th>
+                  <th className="num">Height</th><th>Nat</th>
+                  <th>Club</th><th className="num">Value</th><th className="num">Scouted</th>
                 </tr>
               </thead>
               <tbody>
@@ -576,16 +712,18 @@ export function ScoutingScreen(): JSX.Element {
                       <td>{store.fullName(p)}</td>
                       <td><Pos pos={store.position[p] as Position} /></td>
                       <td className="num">{store.ageOn(p, world.year, 181)}</td>
+                      <td className="num dim">{store.heightCm[p]}</td>
                       <td><Flag nation={store.nation[p]} /></td>
                       <td className="dim">
                         {store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} short /> : 'Free agent'}
                       </td>
+                      <td className="num dim">{money(store.value[p])}</td>
                       <td className={`num ${known > 0 ? 'dim' : 'faint'}`}>{known > 0 ? known : '—'}</td>
                     </tr>
                   );
                 })}
                 {targets.length === 0 && (
-                  <tr><td colSpan={6}><Empty>No matching players found.</Empty></td></tr>
+                  <tr><td colSpan={8}><Empty>No players match these filters.</Empty></td></tr>
                 )}
               </tbody>
             </table>

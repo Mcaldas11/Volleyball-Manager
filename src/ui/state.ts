@@ -13,7 +13,8 @@ import {
   MatchSimulator, type MatchResult, type RallyLogEntry, type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
-import { PlayerFlag } from '../engine/model/players.ts';
+import { NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
+import { type Position } from '../engine/model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
   advanceDay, applyMatchResult, newSeasonContext, pickLineup, toTeamSetup,
@@ -69,6 +70,33 @@ export interface Negotiation {
   termsRole: SquadRole;
   termsMessage: string | null;
 }
+
+/** Narrowing controls for the Scouting screen's player pool. `null` on any
+ *  bound means "no constraint" — the filter is simply not applied. */
+export interface ScoutFilters {
+  query: string;
+  position: Position | null;
+  ageMin: number | null;
+  ageMax: number | null;
+  heightMin: number | null;
+  heightMax: number | null;
+  /** 0 means no minimum — the ability scale never goes negative. */
+  potentialMin: number;
+  valueMax: number | null;
+  freeAgentOnly: boolean;
+}
+
+export const DEFAULT_SCOUT_FILTERS: ScoutFilters = {
+  query: '',
+  position: null,
+  ageMin: null,
+  ageMax: null,
+  heightMin: null,
+  heightMax: null,
+  potentialMin: 0,
+  valueMax: null,
+  freeAgentOnly: false,
+};
 
 export interface IncomingOfferReview {
   offerId: number;
@@ -921,19 +949,35 @@ class Game {
    * Players worth researching — anyone active outside the club, free agent or
    * not. A text query searches the whole player pool by name; with no query,
    * this is simply the best players in the world you don't already know.
+   * `filters` narrows the pool by position, age, height, potential and price
+   * so a scout can hunt for a specific profile rather than scrolling names.
    */
-  scoutingPool(query: string, limit = 150): number[] {
+  scoutingPool(filters: ScoutFilters, limit = 150): number[] {
     const world = this.world;
     const club = this.club;
     if (world === null) return [];
     const store = world.players;
-    const q = query.trim().toLowerCase();
+    const q = filters.query.trim().toLowerCase();
     const out: number[] = [];
     for (let i = 0; i < store.count; i++) {
       if (!store.isActive(i)) continue;
       if (club !== null && store.clubId[i] === club.id) continue;
       if (store.hasFlag(i, PlayerFlag.Youth)) continue;
       if (q !== '' && !store.fullName(i).toLowerCase().includes(q)) continue;
+      if (filters.position !== null && store.position[i] !== filters.position) continue;
+      if (filters.freeAgentOnly && store.clubId[i] !== NO_CLUB) continue;
+
+      const age = store.ageOn(i, world.year, 181);
+      if (filters.ageMin !== null && age < filters.ageMin) continue;
+      if (filters.ageMax !== null && age > filters.ageMax) continue;
+
+      const height = store.heightCm[i];
+      if (filters.heightMin !== null && height < filters.heightMin) continue;
+      if (filters.heightMax !== null && height > filters.heightMax) continue;
+
+      if (filters.potentialMin > 0 && store.potentialAbility[i] < filters.potentialMin) continue;
+      if (filters.valueMax !== null && store.value[i] > filters.valueMax) continue;
+
       out.push(i);
     }
     return out
