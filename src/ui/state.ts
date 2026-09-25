@@ -425,9 +425,16 @@ class Game {
 
     // world.history's last entry is the season that just ended — check it for
     // a title win before anything else (like relegation reshuffling leagues)
-    // makes "which competition did we just win" harder to answer.
+    // makes "which competition did we just win" harder to answer. A
+    // playoff-decided title was already celebrated the instant the final was
+    // won (see checkChampionshipWin), so only pick up titles decided by the
+    // plain table (leagues too small to run playoffs) here.
     const record = world.history[world.history.length - 1];
-    const title = record?.champions.find((c) => c.winner === world.userClubId);
+    const title = record?.champions.find((c) => {
+      if (c.winner !== world.userClubId) return false;
+      const comp = world.competitions[c.competitionId];
+      return comp === undefined || !comp.hasPlayoffs;
+    });
     if (title !== undefined) {
       const comp = world.competitions[title.competitionId];
       this.trophyCelebration = { clubId: world.userClubId, competitionName: comp?.name ?? 'the league' };
@@ -838,10 +845,31 @@ class Game {
       homeName: world.clubs[md.fixture.home]?.name ?? '?',
       awayName: world.clubs[md.fixture.away]?.name ?? '?',
     };
+    this.checkChampionshipWin(world, md.fixture);
     this.liveSim = null;
     this.matchday = null;
     advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
     this.go('fixtures');
+  }
+
+  /**
+   * Fires the trophy celebration the instant the user's club wins a
+   * championship playoff final — rather than waiting for the end-of-season
+   * rollover, which can be many days later and, for a title decided by a
+   * playoff, is really just confirming what already happened here.
+   */
+  private checkChampionshipWin(world: World, fixture: Fixture): void {
+    if (fixture.home !== world.userClubId && fixture.away !== world.userClubId) return;
+    const comp = world.competitions[fixture.competitionId];
+    const champGroup = comp?.playoffGroups.find((g) => g.id === 'championship');
+    if (champGroup === undefined) return;
+    const finalRound = champGroup.rounds[champGroup.rounds.length - 1];
+    if (finalRound === undefined || finalRound.length !== 1 || finalRound[0].fixtureId !== fixture.id) return;
+
+    const winnerClubId = fixture.homeSets > fixture.awaySets ? fixture.home : fixture.away;
+    if (winnerClubId === world.userClubId) {
+      this.trophyCelebration = { clubId: world.userClubId, competitionName: comp.name };
+    }
   }
 
   // ---- Squad ------------------------------------------------------------
