@@ -537,6 +537,7 @@ function pushSeasonAwardsMessage(world: World, record: SeasonRecord): void {
     subject: `${world.year} season awards`,
     body: 'The season\'s standout performers.',
     seasonAwards: lines,
+    category: 'news',
   });
 }
 

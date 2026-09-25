@@ -14,6 +14,7 @@ import type { Staff } from '../model/staff.ts';
 import { MatchFormat } from '../match/engine.ts';
 import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 import type { IncomingOffer } from './negotiation.ts';
+import type { InterviewSession } from './interviews.ts';
 
 export type CompetitionKind = 'league' | 'cup' | 'continental' | 'international';
 
@@ -148,6 +149,9 @@ export interface SeasonAwardLine {
   detail: string;
 }
 
+/** Which inbox tab a message belongs in. */
+export type MessageCategory = 'news' | 'task' | 'offer' | 'interview';
+
 /** A news item for the club's inbox — a scouting report, a season result, etc. */
 export interface GameMessage {
   id: number;
@@ -161,6 +165,24 @@ export interface GameMessage {
   offerId?: number;
   /** End-of-season awards table, rendered specially in the inbox. */
   seasonAwards?: SeasonAwardLine[];
+  /** Fixture a pre-match interview request concerns — looked up against
+   *  `World.pendingInterviews` to render the question and answer options. */
+  fixtureId?: number;
+  /** Inbox tab this belongs in. Optional so saves written before the inbox
+   *  tabs existed still load — {@link messageCategory} derives it from the
+   *  older fields when absent. */
+  category?: MessageCategory;
+  /** Whether the manager has opened this message yet. Absent means unread. */
+  read?: boolean;
+}
+
+/** A message's inbox category, falling back to a guess from its other fields
+ *  for messages written before `category` existed. */
+export function messageCategory(m: GameMessage): MessageCategory {
+  if (m.category !== undefined) return m.category;
+  if (m.offerId !== undefined) return 'offer';
+  if (m.playerIdx !== undefined) return 'task';
+  return 'news';
 }
 
 /** The human user's own profile — created once, at the start of a career. */
@@ -252,6 +274,12 @@ export interface World {
   incomingOffers: IncomingOffer[];
   /** Monotonic id source for incomingOffers — they get removed, unlike messages. */
   nextOfferId: number;
+
+  /** Pre-match press conferences in progress or awaiting their summary to be
+   *  dismissed, keyed off their fixture. */
+  pendingInterviews: InterviewSession[];
+  /** Fixture ids already offered a press conference, so the same match is never asked twice. */
+  interviewedFixtures: Set<number>;
 }
 
 export function dayOfSeason(world: World): number {
@@ -294,6 +322,8 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     messages: [],
     incomingOffers: [],
     nextOfferId: 0,
+    pendingInterviews: [],
+    interviewedFixtures: new Set(),
   };
 }
 

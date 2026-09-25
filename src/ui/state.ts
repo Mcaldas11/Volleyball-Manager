@@ -33,6 +33,12 @@ import {
 } from '../engine/world/negotiation.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import {
+  answerInterviewQuestion as resolveInterviewAnswer,
+  closeInterview as closeInterviewSession,
+  declineInterview as declineInterviewSession,
+  type AnswerResult,
+} from '../engine/world/interviews.ts';
+import {
   deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
   newSaveId, saveGame as writeSaveWorld, type SaveMeta,
 } from './persistence.ts';
@@ -168,6 +174,8 @@ class Game {
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
   incomingOffer: IncomingOfferReview | null = null;
+  /** Fixture id of the press conference currently open full-screen, if any. */
+  activeInterviewFixtureId: number | null = null;
   matchday: MatchdayState | null = null;
   private liveSim: MatchSimulator | null = null;
   /** Distinguishes each substitution for React, even if the same two players swap twice. */
@@ -381,6 +389,69 @@ class Game {
       this.selectedPlayer = null;
       this.incomingOffer = null;
     }
+    this.emit();
+  }
+
+  /** Mark an inbox message as opened — idempotent, and a no-op if it's gone. */
+  markMessageRead(messageId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const m = world.messages.find((x) => x.id === messageId);
+    if (m === undefined || m.read === true) return;
+    m.read = true;
+    this.emit();
+  }
+
+  /** Open the full-screen press conference for a fixture the user chose to
+   *  attend — a no-op if there's no open session for it. */
+  openInterview(fixtureId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    if (!world.pendingInterviews.some((s) => s.fixtureId === fixtureId)) return;
+    const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === fixtureId);
+    if (msg !== undefined) msg.read = true;
+    this.activeInterviewFixtureId = fixtureId;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /** Skip a press conference entirely — always safe: no morale risk, but no
+   *  boost either. */
+  declineInterview(fixtureId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    if (!declineInterviewSession(world, fixtureId)) return;
+    const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === fixtureId);
+    if (msg !== undefined) msg.read = true;
+    this.notice = 'You declined the press conference.';
+    this.emit();
+  }
+
+  /** Answer the current question of the open press conference. Nudges both
+   *  squads' morale, updates that journalist's body language, and advances
+   *  to the next question (or finishes the conference). */
+  answerInterviewQuestion(fixtureId: number, optionIndex: number): AnswerResult | null {
+    const world = this.world;
+    if (world === null) return null;
+    const result = resolveInterviewAnswer(world, fixtureId, optionIndex);
+    if (result === null) return null;
+    // Answering is itself reading the message — without this, a manager who
+    // goes straight into the conference from the notification would still
+    // see it flagged unread afterwards.
+    const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === fixtureId);
+    if (msg !== undefined) msg.read = true;
+    this.emit();
+    return result;
+  }
+
+  /** Close a finished press conference's summary and return to the game. */
+  closeInterview(): void {
+    const world = this.world;
+    const fixtureId = this.activeInterviewFixtureId;
+    if (world !== null && fixtureId !== null) closeInterviewSession(world, fixtureId);
+    this.activeInterviewFixtureId = null;
     this.emit();
   }
 

@@ -33,10 +33,16 @@ test('reviveWorld backfills fields added after a save was written', () => {
   // Simulate a save written before the playoff system existed: strip the
   // field entirely, the way an old IndexedDB blob would arrive.
   for (const comp of world.competitions) delete (comp as { playoffGroups?: unknown }).playoffGroups;
+  // Same for the pre-match interview system.
+  const stripped = world as { pendingInterviews?: unknown; interviewedFixtures?: unknown };
+  delete stripped.pendingInterviews;
+  delete stripped.interviewedFixtures;
 
   const revived = reviveWorld(structuredClone(world));
 
   for (const comp of revived.competitions) {
     assert.ok(Array.isArray(comp.playoffGroups), `competition ${comp.id} missing playoffGroups after revive`);
   }
+  assert.ok(Array.isArray(revived.pendingInterviews));
+  assert.ok(revived.interviewedFixtures instanceof Set);
 });

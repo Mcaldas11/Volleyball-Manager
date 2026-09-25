@@ -7,6 +7,7 @@ import {
 } from './screens/Menu.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
+import { InterviewScreen } from './screens/Interview.tsx';
 import { MatchdayScreen } from './screens/Matchday.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { OverviewScreen } from './screens/Overview.tsx';
@@ -24,6 +25,7 @@ function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.matchday !== null) return 'matchday';
   if (g.negotiation !== null) return 'negotiation';
   if (g.incomingOffer !== null) return 'offer';
+  if (g.activeInterviewFixtureId !== null) return `interview-${g.activeInterviewFixtureId}`;
   if (g.selectedClub !== null) return `club-${g.selectedClub}`;
   if (g.selectedPlayer !== null) return `player-${g.selectedPlayer}`;
   return `screen-${g.screen}`;
@@ -159,11 +161,13 @@ export function App(): JSX.Element {
                 ? <NegotiationScreen />
                 : g.incomingOffer !== null
                   ? <IncomingOfferScreen />
-                  : g.selectedClub !== null
-                    ? <ClubDetail />
-                    : g.selectedPlayer !== null
-                      ? <PlayerDetail />
-                      : <Screen />}
+                  : g.activeInterviewFixtureId !== null
+                    ? <InterviewScreen />
+                    : g.selectedClub !== null
+                      ? <ClubDetail />
+                      : g.selectedPlayer !== null
+                        ? <PlayerDetail />
+                        : <Screen />}
           </div>
         </main>
       </div>

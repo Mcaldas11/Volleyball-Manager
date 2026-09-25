@@ -1092,6 +1092,126 @@ tbody tr.selected { background: var(--accent-dim); }
 }
 .club-list { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
 
+/** Small filled dot ahead of an unread message's subject in the inbox. */
+.msg-unread-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* ---- Overview: messages run the full page height on the left, everything
+   else stacks to its right in reading order (news, table, fixtures). ---- */
+.overview-layout { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+.overview-messages {
+  flex: 1 1 340px;
+  min-width: 320px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.overview-messages .club-list { flex: 1; min-height: 0; max-height: none; }
+.overview-main {
+  flex: 2 1 480px;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---- Press conference ----
+   A full-screen takeover, not a panel among others: a journalist speaking on
+   the left with the room behind them, the manager's own answer choices on
+   the right, grouped by tone under a coloured category bar. */
+.interview-screen { max-width: 1180px; margin: 0 auto; }
+.interview-topline { margin-bottom: 14px; }
+.interview-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.interview-left { flex: 1.3 1 480px; min-width: 320px; }
+.interview-right { flex: 1 1 340px; min-width: 300px; }
+
+.interview-speaker { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.interview-speaker-info { flex: 1; min-width: 0; }
+.interview-speaker-name { font-weight: 700; }
+.interview-body-language { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+
+.interview-bubble {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.interview-journo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+}
+.interview-journo-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.interview-journo-card.active {
+  background: color-mix(in srgb, var(--elite) 20%, var(--bg-raised));
+  border-color: var(--elite);
+}
+.interview-journo-card.answered:not(.active) { opacity: 0.82; }
+.interview-journo-name { font-size: 11.5px; font-weight: 600; }
+
+.interview-manager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.interview-category-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  padding-left: 9px;
+  margin: 14px 0 8px;
+  color: var(--text-faint);
+}
+.interview-category-label:first-child { margin-top: 0; }
+.interview-category-label.cat-positive { border-left: 2px solid var(--good); }
+.interview-category-label.cat-neutral { border-left: 2px solid var(--accent); }
+.interview-category-label.cat-convince { border-left: 2px solid var(--elite); }
+
+.interview-answer {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.pill.bl-hostile { color: var(--bad); border-color: var(--bad); }
+.pill.bl-skeptical { color: var(--warn); border-color: var(--warn); }
+.pill.bl-neutral { color: var(--text-dim); }
+.pill.bl-pleased { color: var(--good); }
+.pill.bl-encouraged { color: var(--good); border-color: var(--good); font-weight: 600; }
+.pill.bl-delighted { color: var(--elite); border-color: var(--elite); font-weight: 600; }
+
+.interview-summary-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.interview-summary-row:last-of-type { border-bottom: none; }
+
 /* ---- Main menu ---- */
 
 .main-menu { display: flex; min-height: 100vh; }

@@ -26,6 +26,7 @@ import { progressPlayoffs } from './playoffs.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers } from '../world/negotiation.ts';
+import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
 
 /** Season-long statistics, keyed by player index. */
 export type SeasonStats = Map<number, SeasonStatLine>;
@@ -329,6 +330,11 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
       playFixture(world, ctx, f, detailed);
     }
   }
+
+  // Any press conference for a match just played goes stale unfinished; line
+  // up tomorrow's, if the user's club has one, before the day rolls over.
+  expireStaleInterviews(world);
+  generateInterviewSessions(world, world.day + 1);
 
   dailyRecovery(world, store);
   progressPlayoffs(world);

@@ -194,6 +194,7 @@ export function generateIncomingOffers(world: World): void {
     subject: 'Transfer offer received',
     body: `${buyingClub.name} have made an offer for ${store.fullName(playerIdx)}.`,
     offerId: id,
+    category: 'offer',
   });
 }
 

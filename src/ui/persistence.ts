@@ -132,5 +132,8 @@ export function reviveWorld(raw: World): World {
   for (const comp of raw.competitions) {
     comp.playoffGroups ??= [];
   }
+  // Saves from before pre-match interviews existed have neither field.
+  raw.pendingInterviews ??= [];
+  raw.interviewedFixtures ??= new Set();
   return raw;
 }

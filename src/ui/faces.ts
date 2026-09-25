@@ -18,3 +18,11 @@ export function playerFaceUrl(playerId: number): string {
   const index = ((playerId % PORTRAIT_COUNT) + PORTRAIT_COUNT) % PORTRAIT_COUNT;
   return `https://randomuser.me/api/portraits/men/${index}.jpg`;
 }
+
+/** Same portrait set as {@link playerFaceUrl}, but for off-pitch faces —
+ *  journalists, the manager's own likeness — where a mixed gender pool
+ *  actually applies. */
+export function portraitUrl(index: number, gender: 'men' | 'women'): string {
+  const i = ((index % PORTRAIT_COUNT) + PORTRAIT_COUNT) % PORTRAIT_COUNT;
+  return `https://randomuser.me/api/portraits/${gender}/${i}.jpg`;
+}

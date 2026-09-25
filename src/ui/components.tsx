@@ -193,6 +193,39 @@ export function initials(name: string): string {
 }
 
 /**
+ * Any off-pitch face keyed by a direct photo URL rather than a player id —
+ * a journalist, the manager's own likeness. Same fallback-to-initials
+ * behaviour as {@link PlayerFace}, which is just this with the player photo
+ * lookup baked in.
+ */
+export function PersonFace({
+  photoUrl, name, size = 64,
+}: {
+  photoUrl: string;
+  name: string;
+  size?: number;
+}): JSX.Element {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <span className="player-face" style={{ width: size, height: size }}>
+      {!failed
+        ? (
+          <img
+            src={photoUrl}
+            alt={name}
+            width={size}
+            height={size}
+            loading="lazy"
+            onError={() => setFailed(true)}
+          />
+        )
+        : <span className="player-face-fallback" style={{ fontSize: size * 0.36 }}>{initials(name)}</span>}
+    </span>
+  );
+}
+
+/**
  * A player's photo, deterministic from their permanent id (see faces.ts) so
  * the same face always shows up for them. Falls back to initials if the
  * photo fails to load (offline, service down).
@@ -204,24 +237,7 @@ export function PlayerFace({
   name: string;
   size?: number;
 }): JSX.Element {
-  const [failed, setFailed] = useState(false);
-
-  return (
-    <span className="player-face" style={{ width: size, height: size }}>
-      {!failed
-        ? (
-          <img
-            src={playerFaceUrl(playerId)}
-            alt={name}
-            width={size}
-            height={size}
-            loading="lazy"
-            onError={() => setFailed(true)}
-          />
-        )
-        : <span className="player-face-fallback" style={{ fontSize: size * 0.36 }}>{initials(name)}</span>}
-    </span>
-  );
+  return <PersonFace photoUrl={playerFaceUrl(playerId)} name={name} size={size} />;
 }
 
 /** A small horizontal meter, used for condition and morale. */
