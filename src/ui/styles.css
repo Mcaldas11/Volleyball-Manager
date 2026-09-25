@@ -1103,9 +1103,21 @@ tbody tr.selected { background: var(--accent-dim); }
   vertical-align: middle;
 }
 
-/* ---- Overview: messages run the full page height on the left, everything
-   else stacks to its right in reading order (news, table, fixtures). ---- */
-.overview-layout { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+/* ---- Overview: messages sit in a tall column on the left, everything else
+   stacks to its right in reading order (news, table, fixtures).
+   `.view-fade` (every screen's own root wrapper) is ordinarily unbounded —
+   the norm, since most screens grow with their content and let `.main`
+   scroll the whole page. This screen alone needs a hard ceiling, so that
+   rule is scoped with `:has()` to just this one wrapper rather than
+   changing the behaviour every other screen relies on. `.overview-page` then
+   claims that full height as a plain flex column (no magic-number
+   `calc(100vh - …)` needed), handing it to `.overview-layout` via `flex: 1`.
+   The message list is the one part expected to keep growing across a
+   career, so it alone scrolls internally — the rest of the screen stays in
+   view instead of the whole page scrolling to follow the inbox down. */
+.view-fade:has(> .overview-page) { height: 100%; }
+.overview-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.overview-layout { flex: 1; min-height: 0; display: flex; gap: 16px; align-items: stretch; }
 .overview-messages {
   flex: 1 1 340px;
   min-width: 320px;
@@ -1113,13 +1125,15 @@ tbody tr.selected { background: var(--accent-dim); }
   display: flex;
   flex-direction: column;
 }
-.overview-messages .club-list { flex: 1; min-height: 0; max-height: none; }
+.overview-messages .club-list { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
 .overview-main {
   flex: 2 1 480px;
   min-width: 320px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
 }
 
 /* ---- Press conference ----

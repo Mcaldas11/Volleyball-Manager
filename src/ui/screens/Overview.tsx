@@ -60,13 +60,15 @@ export function OverviewScreen(): JSX.Element {
     : [];
 
   return (
-    <>
+    <div className="overview-page">
       <h1>Overview</h1>
       <p className="subtitle">{g.dateLabel()}</p>
 
-      {/* Messages run the full height of the page on the left, exactly as
-          wide a single column as it needs — everything else (news, the
-          table, the fixture list) stacks in reading order to its right. */}
+      {/* Messages fill a tall column on the left, exactly as wide as it
+          needs — everything else (news, the table, the fixture list) stacks
+          in reading order to its right. The whole block claims the page's
+          full available height so the messages list is the only thing that
+          scrolls as the inbox grows, rather than the page itself. */}
       <div className="overview-layout">
         <div className="panel overview-messages">
           <h3>Messages</h3>
@@ -210,6 +212,6 @@ export function OverviewScreen(): JSX.Element {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
