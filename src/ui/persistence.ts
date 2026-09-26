@@ -139,6 +139,8 @@ export function reviveWorld(raw: World): World {
   // Saves from before match ratings and the second libero existed.
   raw.competitionRecords ??= new Map();
   raw.ratingForm ??= new Map();
+  // Saves from before the season review existed have no transfer log.
+  raw.transferLog ??= [];
   for (const club of raw.clubs) {
     club.preferredDefensiveLibero ??= -1;
     migrateLineupOrder(club.preferredLineup, raw.players.position);

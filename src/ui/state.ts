@@ -25,7 +25,7 @@ import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
 import { startSeason } from '../engine/season/seasonEngine.ts';
 import { generateStaff, generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
-  currentPhase, dayOfSeason, DAYS_PER_SEASON, SeasonPhase,
+  currentPhase, dayOfSeason, DAYS_PER_SEASON, logTransfer, SeasonPhase,
   type Fixture, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import {
@@ -1518,6 +1518,7 @@ class Game {
     if (world === null || club === null) return;
     club.players = club.players.filter((p) => p !== playerIdx);
     world.players.clubId[playerIdx] = -1;
+    logTransfer(world, playerIdx, club.id, -1, 0);
     this.notice = `${world.players.fullName(playerIdx)} has been released.`;
     this.emit();
   }

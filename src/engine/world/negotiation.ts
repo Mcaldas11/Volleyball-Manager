@@ -12,7 +12,7 @@
  */
 
 import type { Club } from '../model/club.ts';
-import { DAYS_PER_SEASON, type World } from './world.ts';
+import { DAYS_PER_SEASON, logTransfer, type World } from './world.ts';
 
 export enum SquadRole {
   Star = 0,
@@ -117,6 +117,7 @@ export function completeTransfer(
 ): void {
   const store = world.players;
   const oldClubId = store.clubId[playerIdx];
+  logTransfer(world, playerIdx, oldClubId, buyingClub.id, oldClubId >= 0 ? fee : 0);
   if (oldClubId >= 0) {
     const oldClub = world.clubs[oldClubId];
     oldClub.players = oldClub.players.filter((p) => p !== playerIdx);

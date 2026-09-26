@@ -150,6 +150,86 @@ export interface SeasonAwardLine {
   detail: string;
 }
 
+/** A player joining or leaving the user's club, kept for the season review. */
+export interface TransferLogEntry {
+  /** Season the move counts towards — a signing made in the summer window
+   *  belongs to the season about to start. */
+  season: number;
+  day: number;
+  playerIdx: number;
+  /** Club ids; -1 on either side for a free agent or a released player. */
+  fromClub: number;
+  toClub: number;
+  /** Fee paid, 0 for a free transfer or release. */
+  fee: number;
+}
+
+/** How the user's club finished one competition, for the season review. */
+export interface SeasonReviewStanding {
+  competitionId: number;
+  /** Final placing, 1-based, once any playoffs are settled. */
+  position: number;
+  /** Placing in the regular-season table, before any playoffs. */
+  tablePosition: number;
+  teams: number;
+  won: number;
+  lost: number;
+  points: number;
+  setsFor: number;
+  setsAgainst: number;
+  champion: boolean;
+}
+
+/** One of the club's own end-of-season awards. */
+export interface SeasonReviewAward {
+  kind: 'player' | 'scorer' | 'signing' | 'young' | 'improved';
+  playerIdx: number;
+  /** Average match rating over the season, across every competition. */
+  rating: number;
+  apps: number;
+  points: number;
+  /** Player-of-the-match awards. */
+  mvps: number;
+  /** Fee paid, for the best signing. */
+  fee: number;
+  /** Rise in current ability over the season, for the most improved. */
+  gain: number;
+}
+
+/** A player who joined or left during the season; `clubId` is the other club (-1 for none). */
+export interface SeasonReviewMove {
+  playerIdx: number;
+  clubId: number;
+  fee: number;
+}
+
+/** The user's club's season in one place — posted to the inbox at the rollover. */
+export interface SeasonReview {
+  season: number;
+  clubId: number;
+  standings: SeasonReviewStanding[];
+  /** Change of division decided by the season, if any. */
+  movement: 'promoted' | 'relegated' | null;
+  won: number;
+  lost: number;
+  homeWon: number;
+  homeLost: number;
+  awayWon: number;
+  awayLost: number;
+  longestWinStreak: number;
+  /** The most one-sided win, from the club's side: sets and every set score. */
+  biggestWin: { fixtureId: number; opponent: number; setsFor: number; setsAgainst: number; setScores: Array<[number, number]> } | null;
+  awards: SeasonReviewAward[];
+  signings: SeasonReviewMove[];
+  departures: SeasonReviewMove[];
+  /** The season's books as they were settled, one line per stream. */
+  income: Array<[string, number]>;
+  costs: Array<[string, number]>;
+  transferSpend: number;
+  transferIncome: number;
+  closingBalance: number;
+}
+
 /** Which inbox tab a message belongs in. */
 export type MessageCategory = 'news' | 'task' | 'offer' | 'interview';
 
@@ -166,6 +246,8 @@ export interface GameMessage {
   offerId?: number;
   /** End-of-season awards table, rendered specially in the inbox. */
   seasonAwards?: SeasonAwardLine[];
+  /** The club's end-of-season review, rendered as a full report in the inbox. */
+  seasonReview?: SeasonReview;
   /** Fixture a pre-match interview request concerns — looked up against
    *  `World.pendingInterviews` to render the question and answer options. */
   fixtureId?: number;
@@ -287,6 +369,8 @@ export interface World {
   competitionRecords: Map<number, CompetitionRecord[]>;
   /** Each player's most recent match ratings, oldest first. */
   ratingForm: Map<number, number[]>;
+  /** Moves in and out of the user's club, this season and the last. */
+  transferLog: TransferLogEntry[];
 }
 
 export function dayOfSeason(world: World): number {
@@ -333,7 +417,23 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     interviewedFixtures: new Set(),
     competitionRecords: new Map(),
     ratingForm: new Map(),
+    transferLog: [],
   };
+}
+
+/** Record a move if it involves the user's club — the only club the season
+ *  review needs it for, so the log stays small. */
+export function logTransfer(
+  world: World,
+  playerIdx: number,
+  fromClub: number,
+  toClub: number,
+  fee: number,
+  season = world.season,
+): void {
+  if (world.userClubId < 0) return;
+  if (fromClub !== world.userClubId && toClub !== world.userClubId) return;
+  world.transferLog.push({ season, day: world.day, playerIdx, fromClub, toClub, fee });
 }
 
 export function addFixture(world: World, f: Fixture): void {

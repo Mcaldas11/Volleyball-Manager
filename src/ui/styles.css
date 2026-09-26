@@ -1244,6 +1244,163 @@ td.col-sorted { background: rgba(255, 199, 44, 0.05) !important; font-weight: 70
 .reader-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-faint); padding: 40px; }
 .awards-table { max-width: 620px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 
+/* ---- Season review (a message in the inbox) ---- */
+
+/* Laid out for the message pane, narrow or wide: every row of cards wraps. */
+.sr { display: flex; flex-direction: column; gap: 16px; max-width: 900px; container-type: inline-size; }
+.sr-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  color: #fff;
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 9px),
+    linear-gradient(100deg, hsl(var(--club-h) 52% 30%), hsl(var(--club-h) 44% 16%) 60%, hsl(var(--club-h) 36% 11%));
+  box-shadow: var(--shadow-card);
+}
+.sr-hero .club-crest { filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5)); }
+.sr-hero-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 160px; }
+.sr-kicker { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255, 255, 255, 0.7); }
+.sr-hero-title { font: 700 28px/1.05 var(--font-display); letter-spacing: 0.01em; }
+.sr-hero-sub { font-size: 12.5px; color: rgba(255, 255, 255, 0.78); }
+.sr-outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font: 700 13px/1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.sr-outcome.gold { color: #211800; background: linear-gradient(180deg, #ffd650, var(--gold)); border-color: var(--gold-deep); }
+.sr-outcome.good { color: #b8f5cd; border-color: rgba(60, 207, 110, 0.6); }
+.sr-outcome.bad { color: #ffb3b0; border-color: rgba(240, 90, 87, 0.6); }
+
+.sr-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.sr-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.sr-figure-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
+.sr-figure-value { font: 700 22px/1.1 var(--font-display); }
+.sr-figure-sub { font-size: 11px; color: var(--text-faint); }
+
+.sr-section .section-label { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+
+.sr-comps { display: flex; flex-direction: column; gap: 6px; }
+.sr-comp {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.sr-comp.champion { border-color: rgba(255, 199, 44, 0.6); background: linear-gradient(90deg, var(--gold-soft), var(--surface-2) 60%); }
+.sr-comp-pos { font: 800 22px/1 var(--font-display); text-align: center; }
+.sr-comp.champion .sr-comp-pos { color: var(--gold); }
+.sr-comp-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sr-comp-main strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-comp-main .faint { font-size: 12px; }
+.sr-comp-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; }
+.sr-comp-stats b { font: 700 16px/1 var(--font-display); }
+
+.sr-awards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.sr-award {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.sr-award:hover { background: var(--surface-3); }
+.sr-award-player { border-left-color: var(--gold); background: linear-gradient(90deg, var(--gold-soft), var(--surface-2) 55%); }
+.sr-award-scorer { border-left-color: var(--bad); }
+.sr-award-signing { border-left-color: var(--accent); }
+.sr-award-young { border-left-color: var(--good); }
+.sr-award-improved { border-left-color: var(--elite); }
+.sr-award-title { display: inline-flex; align-items: center; gap: 6px; font: 700 11px/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); }
+.sr-award-player .sr-award-title { color: var(--gold); }
+.sr-award-body { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.sr-award-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sr-award-who .player-link { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-award-who .faint { font-size: 12px; }
+.sr-award-side { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+
+.sr-highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.sr-highlight {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+.sr-highlight:first-child:not(:only-child) { grid-column: span 2; }
+.sr-highlight-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
+.sr-highlight-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sr-highlight-main b { font: 700 17px/1 var(--font-display); }
+.sr-highlight .mono { font-size: 11.5px; }
+
+/* Two columns (in | out, income | costs) when there is room, stacked when not. */
+.sr-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 18px; }
+.sr-books-title { display: block; margin-bottom: 4px; font-weight: 700; font-size: 12.5px; }
+.sr-moves { display: flex; flex-direction: column; min-width: 0; }
+.sr-moves-none { padding: 6px 0; font-size: 12.5px; }
+.sr-move { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.sr-move-arrow { font-size: 10px; }
+.sr-move-arrow.in { color: var(--good); }
+.sr-move-arrow.out { color: var(--bad); }
+.sr-move-who { display: flex; flex-direction: column; min-width: 0; }
+.sr-move-who .player-link { font-weight: 600; }
+.sr-move-who .faint { font-size: 11.5px; }
+.sr-move-fee { font-weight: 700; font-size: 12.5px; }
+.sr-book-line { display: grid; grid-template-columns: minmax(0, 1fr) 60px 70px; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; }
+.sr-book-label { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-book-value { text-align: right; font-weight: 600; }
+.sr-books-total { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 2px solid var(--line-strong); font-weight: 600; }
+.sr-books-total b { font: 700 15px/1 var(--font-display); }
+.sr-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.sr-totals b { margin-left: 4px; font: 700 15px/1 var(--font-display); color: var(--text); }
+.sr-totals b.good { color: var(--good); }
+.sr-totals b.bad { color: var(--bad); }
+@container (max-width: 380px) {
+  .sr-highlight:first-child:not(:only-child) { grid-column: auto; }
+  .sr-hero-title { font-size: 24px; }
+}
+
 .home-side { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; padding-right: 2px; }
 .home-side .card { flex: none; }
 

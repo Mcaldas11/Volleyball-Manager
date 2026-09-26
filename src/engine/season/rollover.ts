@@ -20,10 +20,12 @@ import {
 } from '../world/progression.ts';
 import { selectAllNationalSquads } from '../world/worldGen.ts';
 import {
-  DAYS_PER_SEASON, type HallOfFameEntry, type SeasonAwardLine, type SeasonRecord, type World,
+  DAYS_PER_SEASON, logTransfer, type HallOfFameEntry, type SeasonAwardLine, type SeasonRecord, type World,
 } from '../world/world.ts';
 import { startSeason, type SeasonContext } from './seasonEngine.ts';
 import { pruneCompetitionRecords } from '../world/records.ts';
+import { clubBooks } from './books.ts';
+import { beginSeasonReview, postSeasonReview } from './seasonReview.ts';
 
 export interface RolloverReport {
   season: number;
@@ -65,6 +67,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   };
 
   awardTitles(world, report, record);
+  // The user's season review reads the tables and books before they are settled.
+  const review = beginSeasonReview(world, ctx);
   settleFinances(world, report, record);
   applyPromotionRelegation(world, report);
 
@@ -87,11 +91,13 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
 
   recordSeasonAwards(world, ctx, record);
   pushSeasonAwardsMessage(world, record);
+  if (review !== null) postSeasonReview(world, review);
   world.history.push(record);
 
   // Reset for the new season.
   world.season++;
   pruneCompetitionRecords(world);
+  world.transferLog = world.transferLog.filter((t) => t.season >= world.season - 1);
   ctx.stats.clear();
   ctx.detailedResults.clear();
   startSeason(world, ctx);
@@ -156,16 +162,7 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
 
   for (const club of world.clubs) {
     const f = club.finances;
-
-    let wages = 0;
-    for (const p of club.players) wages += store.wage[p];
-    for (const p of club.youthPlayers) wages += store.wage[p];
-    for (const sid of club.staff) wages += world.staff[sid]?.wage ?? 0;
-
-    const income =
-      f.sponsorshipIncome + f.tvRightsIncome + f.merchandiseIncome + f.seasonIncome;
-    const costs =
-      wages + f.arenaMaintenance + f.medicalCosts + f.youthAcademyCosts + f.seasonExpenditure;
+    const { totalIncome: income, totalCosts: costs } = clubBooks(world, club);
 
     f.balance += income - costs;
 
@@ -329,6 +326,7 @@ function trimSquads(world: World): void {
         counts.set(pos, have + 1);
       } else {
         store.clubId[p] = -1;
+        logTransfer(world, p, club.id, -1, 0);
       }
     }
     club.players = kept;
@@ -366,6 +364,8 @@ function runTransferWindow(world: World): number {
 
       if (world.rng.chance(Math.min(0.92, wantsOut * (1.25 - loyalty * 0.6)))) {
         if (club !== undefined) club.players = club.players.filter((p) => p !== i);
+        // Leaving at the end of the contract is part of the season just ended.
+        logTransfer(world, i, store.clubId[i], -1, 0);
         store.clubId[i] = -1;
         freeAgents.push(i);
       } else {
@@ -404,6 +404,8 @@ function runTransferWindow(world: World): number {
         club.players.push(p);
         store.clubId[p] = club.id;
         store.contractUntil[p] = world.day + world.rng.int(1, 4) * DAYS_PER_SEASON;
+        // A summer signing belongs to the season about to start.
+        logTransfer(world, p, -1, club.id, 0, world.season + 1);
         available.delete(p);
         wageRoom -= store.wage[p];
         need--;
