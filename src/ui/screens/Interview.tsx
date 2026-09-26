@@ -1,12 +1,12 @@
 import { useEffect, type JSX } from 'react';
-import { hashString } from '../../engine/core/rng.ts';
 import type { Club } from '../../engine/model/club.ts';
 import type { ManagerProfile } from '../../engine/world/world.ts';
 import type {
   AnswerCategory, BodyLanguage, InterviewQuestion, InterviewSession,
 } from '../../engine/world/interviews.ts';
-import { ClubLink, PersonFace } from '../components.tsx';
+import { Card, ClubLink, managerPhotoUrl, PersonFace } from '../components.tsx';
 import { portraitUrl } from '../faces.ts';
+import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
 const CATEGORY_LABEL: Readonly<Record<AnswerCategory, string>> = {
@@ -25,14 +25,6 @@ const BODY_LANGUAGE_LABEL: Readonly<Record<BodyLanguage, string>> = {
   encouraged: 'Encouraged',
   delighted: 'Delighted',
 };
-
-/** A stable portrait for the manager's own likeness — there is no photo field
- *  on {@link ManagerProfile}, so one is derived deterministically from their
- *  name, the same way a player's face is derived from their store id. */
-function managerPhotoUrl(manager: ManagerProfile): string {
-  const idx = hashString(`${manager.firstName} ${manager.lastName}`) % 100;
-  return portraitUrl(idx, manager.gender === 'female' ? 'women' : 'men');
-}
 
 function JournalistBadge({
   q, active,
@@ -70,7 +62,7 @@ function QuestionView({
 
   return (
     <div className="interview-layout">
-      <div className="panel interview-left">
+      <Card className="interview-left" title="The Room" icon="press">
         <div className="interview-speaker">
           <PersonFace
             photoUrl={portraitUrl(question.journalist.photoId, question.journalist.gender)}
@@ -94,9 +86,9 @@ function QuestionView({
             <JournalistBadge key={i} q={q} active={i === session.currentIndex} />
           ))}
         </div>
-      </div>
+      </Card>
 
-      <div className="panel interview-right">
+      <Card className="interview-right" title="Your Answer" icon="user">
         <div className="interview-manager">
           <PersonFace photoUrl={managerPhotoUrl(manager)} name={`${manager.firstName} ${manager.lastName}`} size={44} />
           <div>
@@ -119,7 +111,7 @@ function QuestionView({
             ) : null))}
           </div>
         ))}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -135,11 +127,10 @@ function SummaryView({
 }): JSX.Element {
   return (
     <>
-      <p className="subtitle">
+      <p className="page-intro">
         Conference complete{opponent !== undefined ? <> — ahead of the match with <ClubLink id={opponent.id} short /></> : null}.
       </p>
-      <div className="panel" style={{ maxWidth: 640 }}>
-        <h3>What you told them</h3>
+      <Card title="What You Told Them" icon="press" style={{ maxWidth: 720 }}>
         {session.questions.map((q, i) => (
           <div className="interview-summary-row" key={i}>
             <div className="kv">
@@ -153,7 +144,7 @@ function SummaryView({
         <div className="toolbar" style={{ marginTop: 14 }}>
           <button className="primary" onClick={() => g.closeInterview()}>Done</button>
         </div>
-      </div>
+      </Card>
     </>
   );
 }
@@ -188,22 +179,26 @@ export function InterviewScreen(): JSX.Element | null {
 
   return (
     <div className="interview-screen">
-      <div className="interview-topline">
-        <div className="kv">
-          <h1 style={{ margin: 0 }}>Press Conference</h1>
-          {!session.finished && (
-            <button onClick={() => g.closeInterview()}>Leave for now</button>
-          )}
-        </div>
-        {!session.finished && (
-          <p className="subtitle">
+      {!session.finished && (
+        <div className="interview-topline">
+          <span className="interview-context">
             {opponent !== undefined
               ? <>Ahead of {isHome ? 'hosting' : 'facing'} <ClubLink id={opponent.id} short /></>
               : 'Pre-match'}
-            {' · '}Question {session.currentIndex + 1} of {session.questions.length}
-          </p>
-        )}
-      </div>
+          </span>
+          <span className="interview-progress">
+            {session.questions.map((_, i) => (
+              <span
+                key={i}
+                className={`interview-step${i < session.currentIndex ? ' done' : i === session.currentIndex ? ' current' : ''}`}
+              />
+            ))}
+            <span className="faint">Question {session.currentIndex + 1} of {session.questions.length}</span>
+          </span>
+          <span className="flex-spacer" />
+          <button onClick={() => g.closeInterview()}><Icon name="exit" size={14} /> Leave for now</button>
+        </div>
+      )}
 
       {session.finished
         ? <SummaryView g={g} session={session} opponent={opponent} />

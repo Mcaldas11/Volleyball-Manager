@@ -1,15 +1,15 @@
 /**
- * The team-sheet card UI: the six starting-zone cards, the libero's own card,
- * and the bench — shared by the pre-match Team Sheet screen and the Squad
- * screen's persistent starting-lineup editor, so both look and behave
- * identically and neither reimplements the drag-and-drop.
+ * The team-sheet UI: the six starting zones laid out on a court, the libero's
+ * own slot beside it, and the bench as a list alongside — shared by the
+ * pre-match Team Selection screen and the Tactics › Team Sheet editor, so
+ * both look and behave identically and neither reimplements the drag-and-drop.
  */
 
-import { useState, type JSX } from 'react';
+import { useState, type CSSProperties, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import type { PlayerStore } from '../engine/model/players.ts';
 import { LINEUP_SLOT_POSITIONS } from '../engine/season/seasonEngine.ts';
-import { initials, POSITION_ACCENT, starRating } from './components.tsx';
+import { Bar, initials, PlayerFace, Pos, POSITION_ACCENT, starRating } from './components.tsx';
 import { playerFaceUrl } from './faces.ts';
 
 export const ZONE_ORDER = [3, 2, 1, 4, 5, 0]; // front row first: 4,3,2 then back row 5,6,1
@@ -29,7 +29,17 @@ export function CardPhoto({ playerId, name }: { playerId: number; name: string }
 
 /** The colour tint every card gets, radiating from the top in its role's colour. */
 export function cardTint(pos: Position): string {
-  return `linear-gradient(165deg, color-mix(in srgb, ${POSITION_ACCENT[pos]} 38%, transparent), transparent 60%)`;
+  return `linear-gradient(170deg, color-mix(in srgb, ${POSITION_ACCENT[pos]} 34%, transparent), transparent 58%)`;
+}
+
+/** A thin condition strip along a card's foot — full and green when fresh. */
+function ConditionStrip({ value }: { value: number }): JSX.Element {
+  const colour = value > 66 ? 'var(--good)' : value > 33 ? 'var(--warn)' : 'var(--bad)';
+  return (
+    <span className="lineup-card-cond" title={`Condition ${value}%`}>
+      <span style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: colour }} />
+    </span>
+  );
 }
 
 /** One starting slot — a court zone or the libero: a full player card, a drop
@@ -68,6 +78,7 @@ export function LineupCard({
       }}
     >
       <span className="lineup-card-shine" />
+      <span className="lineup-card-zone">{label}</span>
       <span className="lineup-card-pos" style={{ background: POSITION_ACCENT[pos] }}>
         {POSITION_SHORT[pos]}
       </span>
@@ -79,6 +90,7 @@ export function LineupCard({
           <span className="lineup-card-ability">{ca}</span>
         </div>
       </div>
+      <ConditionStrip value={store.condition[playerIdx]} />
       {swapOptions.length > 0 && (
         <>
           <span className="lineup-card-swap-hint">⇅</span>
@@ -101,7 +113,7 @@ export function LineupCard({
   );
 }
 
-/** A bench card, draggable onto any starting slot unless told otherwise. */
+/** A bench row, draggable onto any starting slot unless told otherwise. */
 export function BenchCard({
   playerIdx, store, tag, draggable = true,
 }: {
@@ -113,23 +125,20 @@ export function BenchCard({
   const pos = store.position[playerIdx] as Position;
   return (
     <div
-      className="lineup-card lineup-card-small"
-      style={{ borderColor: POSITION_ACCENT[pos], backgroundImage: cardTint(pos) }}
+      className={`bench-token${draggable ? ' draggable' : ''}`}
+      style={{ '--token-accent': POSITION_ACCENT[pos] } as CSSProperties}
       draggable={draggable}
       onDragStart={draggable ? (e) => e.dataTransfer.setData('text/plain', String(playerIdx)) : undefined}
     >
-      <span className="lineup-card-shine" />
-      {tag !== undefined && <span className="lineup-card-tag">{tag}</span>}
-      <span className="lineup-card-pos" style={{ background: POSITION_ACCENT[pos] }}>
-        {POSITION_SHORT[pos]}
+      {draggable && <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>}
+      <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
+      <span className="bench-token-name">
+        {store.shortName(playerIdx)}
+        {tag !== undefined && <span className="bench-token-tag">{tag}</span>}
       </span>
-      <CardPhoto playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} />
-      <div className="lineup-card-info">
-        <div className="lineup-card-name">{store.shortName(playerIdx)}</div>
-        <div className="lineup-card-meta">
-          <span className="lineup-card-ability">{store.currentAbility[playerIdx]}</span>
-        </div>
-      </div>
+      <Pos pos={pos} />
+      <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
+      <Bar value={store.condition[playerIdx]} />
     </div>
   );
 }
@@ -154,7 +163,8 @@ export interface TeamSheetProps {
 }
 
 /**
- * The formation grid, the libero's own card beside it, and the bench below.
+ * The court with the six starting zones, the libero's own slot beside it,
+ * and the bench list alongside.
  *
  * The libero gets a dedicated slot rather than sitting in the bench list: it
  * can never actually take one of the six rotation zones (it may not serve or
@@ -179,7 +189,24 @@ export function TeamSheet({
 
   const renderZone = (z: number): JSX.Element | null => {
     const p = lineup[z];
-    if (p === undefined || p < 0) return null;
+    if (p === undefined || p < 0) {
+      return (
+        <div
+          key={z}
+          className={`lineup-card-empty${dragOverZone === z ? ' drag-over' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOverZone(z); }}
+          onDragLeave={() => setDragOverZone((cur) => (cur === z ? null : cur))}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOverZone(null);
+            const dragged = Number(e.dataTransfer.getData('text/plain'));
+            if (!Number.isNaN(dragged)) dropOnZone(z, dragged);
+          }}
+        >
+          Zone {ZONE_LABELS[z]}
+        </div>
+      );
+    }
     const swapOptions = restrictSwapsByPosition
       ? bench.filter((b) => store.position[b] === LINEUP_SLOT_POSITIONS[z])
       : bench;
@@ -204,16 +231,19 @@ export function TeamSheet({
   const backZones = ZONE_ORDER.slice(3);
 
   return (
-    <>
-      <div className="lineup-court-row">
-        <div className="lineup-formation">
-          <div className="lineup-row">{frontZones.map(renderZone)}</div>
-          <div className="lineup-net" />
-          <div className="lineup-row">{backZones.map(renderZone)}</div>
+    <div className="ts">
+      <div className="ts-main">
+        <div className="ts-court">
+          <div className="ts-net"><span>Net</span></div>
+          <div className="ts-row-label">Front row</div>
+          <div className="ts-row">{frontZones.map(renderZone)}</div>
+          <div className="ts-attack-line"><span>3 m</span></div>
+          <div className="ts-row-label">Back row</div>
+          <div className="ts-row">{backZones.map(renderZone)}</div>
         </div>
         {libero >= 0 && (
-          <div className="lineup-libero-slot">
-            <div className="lineup-subheading" style={{ margin: '0 0 8px' }}>Libero</div>
+          <div className="ts-libero">
+            <span className="ts-libero-label">Libero</span>
             <LineupCard
               label="Libero"
               playerIdx={libero}
@@ -228,15 +258,22 @@ export function TeamSheet({
               onDragOverZone={() => setLiberoDragOver(true)}
               onDragLeaveZone={() => setLiberoDragOver(false)}
             />
+            <span className="ts-libero-note">Replaces the back-row middle</span>
           </div>
         )}
       </div>
 
-      <h3 className="lineup-subheading">Bench — drag onto a slot above to bring a player on</h3>
-      <div className="lineup-bench">
-        {bench.map((p) => <BenchCard key={p} playerIdx={p} store={store} />)}
-        {bench.length === 0 && <p className="faint">No other players available.</p>}
-      </div>
-    </>
+      <section className="card ts-bench">
+        <header className="card-head">
+          <h3 className="card-title">Substitutes</h3>
+          <span className="card-actions faint">{bench.length}</span>
+        </header>
+        <p className="ts-bench-hint">Drag a player onto a court slot to bring them in, or use ⇅ on a card.</p>
+        <div className="ts-bench-list">
+          {bench.map((p) => <BenchCard key={p} playerIdx={p} store={store} />)}
+          {bench.length === 0 && <p className="empty">No other players available.</p>}
+        </div>
+      </section>
+    </div>
   );
 }

@@ -3,8 +3,10 @@ import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { RallyContact, RallyLogEntry } from '../../engine/match/engine.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
 import { playoffBandSizes } from '../../engine/season/playoffs.ts';
-import type { PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
-import { ClubLink, Empty } from '../components.tsx';
+import type { Competition, PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
+import {
+  Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerLink, Segmented, StatTile,
+} from '../components.tsx';
 import { useGame } from '../state.ts';
 
 type NameLookup = { shortName: (i: number) => string };
@@ -14,54 +16,81 @@ export function FixturesScreen(): JSX.Element {
   const world = g.world!;
   const fixtures = g.ownFixtures();
   const watched = g.reviewLast();
+  const played = fixtures.filter((f) => f.played);
+  const wins = played.filter((f) => {
+    const isHome = f.home === world.userClubId;
+    return isHome ? f.homeSets > f.awaySets : f.awaySets > f.homeSets;
+  }).length;
+  const nextIdx = fixtures.findIndex((f) => !f.played);
 
   return (
     <>
-      <h1>Fixtures</h1>
-      <p className="subtitle">
-        {fixtures.filter((f) => f.played).length} of {fixtures.length} played
-      </p>
+      <div className="tiles">
+        <StatTile label="Played" value={`${played.length}/${fixtures.length}`} sub="matches this season" />
+        <StatTile label="Won" value={wins} tone="good" />
+        <StatTile label="Lost" value={played.length - wins} tone={played.length - wins > 0 ? 'bad' : undefined} />
+        <StatTile
+          label="Win rate"
+          value={played.length > 0 ? `${Math.round((wins / played.length) * 100)}%` : '—'}
+        />
+      </div>
 
       {watched !== null && <MatchScreen />}
 
-      <h2>Schedule</h2>
-      <table>
-        <thead>
-          <tr>
-            <th className="num">Rd</th>
-            <th>Opponent</th>
-            <th>Venue</th>
-            <th>Competition</th>
-            <th className="num">Result</th>
-            <th>Sets</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fixtures.map((f) => {
-            const isHome = f.home === world.userClubId;
-            const opponent = world.clubs[isHome ? f.away : f.home];
-            const comp = world.competitions[f.competitionId];
-            const won = f.played && ((isHome && f.homeSets > f.awaySets) || (!isHome && f.awaySets > f.homeSets));
-            return (
-              <tr key={f.id}>
-                <td className="num faint">{f.round >= 1000 ? 'PO' : f.round + 1}</td>
-                <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
-                <td className="dim">{isHome ? 'Home' : 'Away'}</td>
-                <td className="faint">{comp?.name ?? ''}</td>
-                <td className={`num ${f.played ? (won ? 'good' : 'bad') : 'faint'}`}>
-                  {f.played ? `${isHome ? f.homeSets : f.awaySets}-${isHome ? f.awaySets : f.homeSets}` : '—'}
-                </td>
-                <td className="faint mono">
-                  {f.setScores.map(([h, a]) => `${isHome ? h : a}-${isHome ? a : h}`).join('  ')}
-                </td>
+      <Card title="Schedule" icon="schedule" flush>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th className="num">Rd</th>
+                <th>Competition</th>
+                <th>Venue</th>
+                <th>Opponent</th>
+                <th>Result</th>
+                <th>Sets</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {fixtures.map((f, i) => {
+                const isHome = f.home === world.userClubId;
+                const opponent = world.clubs[isHome ? f.away : f.home];
+                const comp = world.competitions[f.competitionId];
+                const won = f.played && ((isHome && f.homeSets > f.awaySets) || (!isHome && f.awaySets > f.homeSets));
+                return (
+                  <tr key={f.id} className={i === nextIdx ? 'next-fixture' : ''}>
+                    <td className="dim">
+                      {g.weekdayLabelForDay(f.day)} {g.dateLabelForDay(f.day)}
+                      {i === nextIdx && <span className="next-tag">Next</span>}
+                    </td>
+                    <td className="num faint">{f.round >= 1000 ? 'PO' : f.round + 1}</td>
+                    <td className="faint">{comp?.name ?? ''}</td>
+                    <td><span className={`venue-tag ${isHome ? 'home' : 'away'}`}>{isHome ? 'Home' : 'Away'}</span></td>
+                    <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
+                    <td>
+                      {f.played
+                        ? (
+                          <span className={`result-badge ${won ? 'win' : 'loss'}`}>
+                            {won ? 'W' : 'L'} {isHome ? f.homeSets : f.awaySets}-{isHome ? f.awaySets : f.homeSets}
+                          </span>
+                        )
+                        : <span className="faint">—</span>}
+                    </td>
+                    <td className="faint mono">
+                      {f.setScores.map(([h, a]) => `${isHome ? h : a}-${isHome ? a : h}`).join('  ')}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </>
   );
 }
+
+type ReportTab = 'log' | 'box' | 'rotations';
 
 /**
  * The match viewer.
@@ -73,38 +102,57 @@ export function FixturesScreen(): JSX.Element {
 export function MatchScreen(): JSX.Element {
   const g = useGame();
   const watched = g.reviewLast();
-  const [tab, setTab] = useState<'log' | 'box' | 'rotations'>('log');
+  const [tab, setTab] = useState<ReportTab>('log');
   if (watched === null) return <Empty>No match has been played yet.</Empty>;
 
   const { result, homeName, awayName } = watched;
-  const store = g.world!.players;
-  const homeClub = g.world!.clubs[watched.fixture.home];
-  const awayClub = g.world!.clubs[watched.fixture.away];
+  const world = g.world!;
+  const homeClub = world.clubs[watched.fixture.home];
+  const awayClub = world.clubs[watched.fixture.away];
+  const homeWon = result.homeSets > result.awaySets;
 
   return (
-    <div style={{ marginBottom: 24 }}>
-      <div className="scoreline">
-        <span className="team"><ClubLink id={watched.fixture.home} /></span>
-        <span className="sets">{result.homeSets} — {result.awaySets}</span>
-        <span className="team"><ClubLink id={watched.fixture.away} /></span>
-        <span className="mono faint">
-          {result.setScores.map(([h, a]) => `${h}-${a}`).join('   ')}
-        </span>
-        {result.mvp >= 0 && (
-          <span className="dim">MVP: {store.fullName(result.mvp)}</span>
-        )}
+    <Card
+      title="Last Match Report"
+      icon="stats"
+      className="match-report"
+      actions={(
+        <Segmented<ReportTab>
+          size="sm"
+          options={[['log', 'Rally log'], ['box', 'Box score'], ['rotations', 'Rotation analysis']]}
+          value={tab}
+          onChange={setTab}
+        />
+      )}
+    >
+      <div className="report-score">
+        <div className={`report-team${homeWon ? ' won' : ''}`}>
+          {homeClub !== undefined && <ClubCrest club={homeClub} size={44} />}
+          <ClubLink id={watched.fixture.home} crest={false} />
+        </div>
+        <div className="report-center">
+          <div className="report-sets">
+            <span className={homeWon ? 'won' : ''}>{result.homeSets}</span>
+            <span className="report-sep">–</span>
+            <span className={!homeWon ? 'won' : ''}>{result.awaySets}</span>
+          </div>
+          <div className="set-chips">
+            {result.setScores.map(([h, a], i) => (
+              <span key={i} className="set-chip">
+                <span className={h > a ? 'won' : ''}>{h}</span>
+                <span className={a > h ? 'won' : ''}>{a}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className={`report-team right${!homeWon ? ' won' : ''}`}>
+          <ClubLink id={watched.fixture.away} crest={false} />
+          {awayClub !== undefined && <ClubCrest club={awayClub} size={44} />}
+        </div>
       </div>
-
-      <div className="toolbar">
-        <button className={tab === 'log' ? 'primary' : ''} onClick={() => setTab('log')}>
-          Rally log
-        </button>
-        <button className={tab === 'box' ? 'primary' : ''} onClick={() => setTab('box')}>
-          Box score
-        </button>
-        <button className={tab === 'rotations' ? 'primary' : ''} onClick={() => setTab('rotations')}>
-          Rotation analysis
-        </button>
+      <div className="report-meta">
+        {result.mvp >= 0 && <span className="mvp-tag">MVP</span>}
+        {result.mvp >= 0 && <PlayerLink idx={result.mvp} />}
         <span className="faint">{result.totalRallies} rallies simulated</span>
       </div>
 
@@ -117,7 +165,7 @@ export function MatchScreen(): JSX.Element {
       )}
       {tab === 'box' && <BoxScore />}
       {tab === 'rotations' && <RotationAnalysis />}
-    </div>
+    </Card>
   );
 }
 
@@ -138,16 +186,16 @@ function RallyLog({
   return (
     <>
       <div className="toolbar">
-        <button className={setFilter === -1 ? 'primary' : ''} onClick={() => setSetFilter(-1)}>
-          Last 60
-        </button>
-        {sets.map((s) => (
-          <button key={s} className={setFilter === s ? 'primary' : ''} onClick={() => setSetFilter(s)}>
-            Set {s + 1}
-          </button>
-        ))}
+        <Segmented
+          size="sm"
+          options={[[-1, 'Last 60'], ...sets.map((s) => [s, `Set ${s + 1}`] as const)]}
+          value={setFilter}
+          onChange={setSetFilter}
+        />
       </div>
-      <RallyTicker entries={shown} store={store} homeCode={homeCode} awayCode={awayCode} showProb />
+      <div className="ticker-scroll">
+        <RallyTicker entries={shown} store={store} homeCode={homeCode} awayCode={awayCode} showProb />
+      </div>
     </>
   );
 }
@@ -180,7 +228,7 @@ export function RallyTicker({
               {after}
             </span>
             {showProb && (
-              <span className="faint ticker-prob" title="Home win probability">
+              <span className="ticker-prob" title="Home win probability">
                 {(r.homeWinProb * 100).toFixed(0)}%
               </span>
             )}
@@ -258,9 +306,9 @@ function BoxScore(): JSX.Element {
         (b.attackKills + b.serveAces + b.blockPoints) - (a.attackKills + a.serveAces + a.blockPoints));
     const total = aggregateTeam(teamStats);
     return (
-      <div>
-        <h2>{label}</h2>
-        <table>
+      <div className="box-score">
+        <h4 className="section-label">{label}</h4>
+        <table className="data-table">
           <thead>
             <tr>
               <th>Player</th>
@@ -281,9 +329,9 @@ function BoxScore(): JSX.Element {
               const recPos = s.receptionsTotal > 0
                 ? (s.receptionPerfect + s.receptionPositive) / s.receptionsTotal : 0;
               return (
-                <tr key={s.playerIdx}>
-                  <td>{store.fullName(s.playerIdx)}</td>
-                  <td className="num">{s.attackKills + s.serveAces + s.blockPoints}</td>
+                <tr key={s.playerIdx} className="clickable" onClick={() => g.select(s.playerIdx)}>
+                  <td className="strong">{store.fullName(s.playerIdx)}</td>
+                  <td className="num"><strong>{s.attackKills + s.serveAces + s.blockPoints}</strong></td>
                   <td className="num dim">{s.attackKills}/{s.attacksTotal}</td>
                   <td className={`num ${eff > 0.3 ? 'good' : eff < 0.1 ? 'bad' : ''}`}>
                     {s.attacksTotal > 0 ? eff.toFixed(3) : '—'}
@@ -298,8 +346,8 @@ function BoxScore(): JSX.Element {
                 </tr>
               );
             })}
-            <tr>
-              <td className="dim">Team</td>
+            <tr className="total-row">
+              <td>Team</td>
               <td className="num">{total.attackKills + total.serveAces + total.blockPoints}</td>
               <td className="num dim">{total.attackKills}/{total.attacksTotal}</td>
               <td className="num">
@@ -340,9 +388,9 @@ function RotationAnalysis(): JSX.Element {
   const watched = g.reviewLast()!;
 
   const table = (label: string, stats: typeof watched.result.stats.home): JSX.Element => (
-    <div>
-      <h2>{label}</h2>
-      <table>
+    <div className="box-score">
+      <h4 className="section-label">{label}</h4>
+      <table className="data-table">
         <thead>
           <tr>
             <th>Rotation</th>
@@ -361,7 +409,7 @@ function RotationAnalysis(): JSX.Element {
               ((r.receiveRallies - r.sideOutsWon) + (r.serveRallies - r.servePointsWon));
             return (
               <tr key={i}>
-                <td>P{i + 1}</td>
+                <td className="strong">P{i + 1}</td>
                 <td className="num dim">{r.receiveRallies}</td>
                 <td className={`num ${so > 0.68 ? 'good' : so < 0.55 ? 'bad' : ''}`}>
                   {r.receiveRallies > 0 ? `${(so * 100).toFixed(0)}%` : '—'}
@@ -370,8 +418,10 @@ function RotationAnalysis(): JSX.Element {
                 <td className={`num ${bp > 0.42 ? 'good' : bp < 0.30 ? 'bad' : ''}`}>
                   {r.serveRallies > 0 ? `${(bp * 100).toFixed(0)}%` : '—'}
                 </td>
-                <td className={`num ${net > 0 ? 'good' : net < 0 ? 'bad' : 'dim'}`}>
-                  {net > 0 ? `+${net}` : net}
+                <td className="num">
+                  <span className={`net-badge ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`}>
+                    {net > 0 ? `+${net}` : net}
+                  </span>
                 </td>
               </tr>
             );
@@ -387,13 +437,31 @@ function RotationAnalysis(): JSX.Element {
         {table(watched.homeName, watched.result.stats.home)}
         {table(watched.awayName, watched.result.stats.away)}
       </div>
-      <p className="faint" style={{ fontSize: 12, marginTop: 10 }}>
-        Rotations are named for the zone the setter occupies. Side-out above 68%
-        is strong; below 55% is a rotation that needs a different first-ball
-        option — change it on the Rotations screen.
+      <p className="footnote">
+        Rotations are named for the zone the setter occupies. Side-out above 68% is strong; below 55%
+        is a rotation that needs a different first-ball option — change it under Tactics › Rotations.
       </p>
     </>
   );
+}
+
+/** Each club's last five results in a competition, oldest first. */
+function formByClub(comp: Competition, world: World): Map<number, Array<'W' | 'L'>> {
+  const form = new Map<number, Array<'W' | 'L'>>();
+  const played = comp.fixtureIds
+    .map((id) => world.fixtures[id])
+    .filter((f) => f !== undefined && f.played)
+    .sort((a, b) => a.day - b.day);
+  for (const f of played) {
+    const homeWon = f.homeSets > f.awaySets;
+    for (const [club, won] of [[f.home, homeWon], [f.away, !homeWon]] as const) {
+      const list = form.get(club) ?? [];
+      list.push(won ? 'W' : 'L');
+      if (list.length > 5) list.shift();
+      form.set(club, list);
+    }
+  }
+  return form;
 }
 
 export function TableScreen(): JSX.Element {
@@ -407,72 +475,79 @@ export function TableScreen(): JSX.Element {
   const rows = [...comp.table].sort(compareTableRows);
   const { championship: champSize, relegation: relegationSize } = playoffBandSizes(comp);
   const activeGroup = comp.playoffGroups.find((grp) => grp.id === tab);
+  const form = formByClub(comp, world);
 
   return (
     <>
-      <h1>{comp.name}</h1>
-      <p className="subtitle">
-        3 points for a 3-0 or 3-1 win, 2 for a 3-2 win, 1 for losing 2-3.
-      </p>
-
-      {comp.playoffGroups.length > 0 && (
-        <div className="toolbar">
-          <button className={tab === 'table' ? 'primary' : ''} onClick={() => setTab('table')}>Table</button>
-          {comp.playoffGroups.map((grp) => (
-            <button key={grp.id} className={tab === grp.id ? 'primary' : ''} onClick={() => setTab(grp.id)}>
-              {grp.label}
-            </button>
-          ))}
+      <div className="comp-bar">
+        <div className="comp-bar-title">
+          <span className="comp-bar-name">{comp.name}</span>
+          <span className="faint">Tier {comp.tier} · {comp.participants.length} clubs</span>
         </div>
-      )}
+        {comp.playoffGroups.length > 0 && (
+          <Segmented
+            options={[['table', 'Table'], ...comp.playoffGroups.map((grp) => [grp.id, grp.label] as const)]}
+            value={tab}
+            onChange={setTab}
+          />
+        )}
+      </div>
 
       {activeGroup !== undefined ? (
-        <BracketView group={activeGroup} world={world} />
+        <Card title={activeGroup.label} icon="trophy">
+          <BracketView group={activeGroup} world={world} />
+        </Card>
       ) : (
-        <>
-          <table>
-            <thead>
-              <tr>
-                <th className="num">#</th>
-                <th>Club</th>
-                <th className="num">P</th>
-                <th className="num">W</th>
-                <th className="num">L</th>
-                <th className="num">Pts</th>
-                <th className="num">Sets</th>
-                <th className="num">Ratio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const zone = i < champSize ? 'champ' : i >= rows.length - relegationSize ? 'releg' : '';
-                return (
-                  <tr key={r.clubId} className={r.clubId === club.id ? 'selected' : ''}>
-                    <td className="num faint">
-                      {zone !== '' && <span className={`zone-dot ${zone}`} />}
-                      {i + 1}
-                    </td>
-                    <td><ClubLink id={r.clubId} /></td>
-                    <td className="num dim">{r.played}</td>
-                    <td className="num">{r.won}</td>
-                    <td className="num">{r.lost}</td>
-                    <td className="num"><strong>{r.points}</strong></td>
-                    <td className="num dim">{r.setsFor}:{r.setsAgainst}</td>
-                    <td className="num dim">{setRatio(r).toFixed(2)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {champSize > 0 && (
-            <p className="faint" style={{ fontSize: 12, marginTop: 10 }}>
-              <span className="zone-dot champ" /> Top {champSize} — championship playoff
-              {relegationSize > 0 && (
-                <> &nbsp;&nbsp; <span className="zone-dot releg" /> Bottom {relegationSize} — relegation playoff</>
-              )}
-            </p>
+        <Card
+          title="League Table"
+          icon="trophy"
+          flush
+          actions={<span className="faint">3 pts for a 3-0 or 3-1 win, 2 for 3-2, 1 for losing 2-3</span>}
+        >
+          <div className="table-wrap">
+            <table className="data-table league-table">
+              <thead>
+                <tr>
+                  <th className="num">Pos</th>
+                  <th>Club</th>
+                  <th className="num">P</th>
+                  <th className="num">W</th>
+                  <th className="num">L</th>
+                  <th className="num">Sets</th>
+                  <th className="num">Ratio</th>
+                  <th>Form</th>
+                  <th className="num">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const zone = i < champSize ? 'zone-champ' : i >= rows.length - relegationSize ? 'zone-releg' : '';
+                  return (
+                    <tr key={r.clubId} className={`${zone}${r.clubId === club.id ? ' me' : ''}`}>
+                      <td className="num pos-cell">{i + 1}</td>
+                      <td><ClubLink id={r.clubId} /></td>
+                      <td className="num dim">{r.played}</td>
+                      <td className="num">{r.won}</td>
+                      <td className="num">{r.lost}</td>
+                      <td className="num dim">{r.setsFor}:{r.setsAgainst}</td>
+                      <td className="num dim">{setRatio(r).toFixed(2)}</td>
+                      <td><FormGuide results={form.get(r.clubId) ?? []} /></td>
+                      <td className="num pts-cell">{r.points}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+      {activeGroup === undefined && champSize > 0 && (
+        <p className="legend">
+          <span className="zone-key champ" /> Top {champSize} — championship playoff
+          {relegationSize > 0 && (
+            <><span className="zone-key releg" /> Bottom {relegationSize} — relegation playoff</>
           )}
-        </>
+        </p>
       )}
     </>
   );

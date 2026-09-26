@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
-import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
+import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import { Position } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact } from '../../engine/match/engine.ts';
 import { effectivePlayerAt } from '../../engine/match/court.ts';
 import {
-  DefensiveSystem, OffensiveSystem, ServeStrategy, Tempo,
-} from '../../engine/match/tactics.ts';
-import {
-  abilityClass, ChoiceField, ClubLink, Flag, PlayerFace, POSITION_ACCENT,
+  abilityClass, Bar, Card, ChoiceField, ClubCrest, PlayerFace, Pos, POSITION_ACCENT, Segmented, StarMeter,
 } from '../components.tsx';
-import { cardTint, CardPhoto, TeamSheet, ZONE_LABELS, ZONE_ORDER } from '../teamSheet.tsx';
+import { Icon } from '../icons.tsx';
+import { TeamSheet, ZONE_LABELS, ZONE_ORDER } from '../teamSheet.tsx';
+import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
 import { RallyTicker } from './Match.tsx';
 import { useGame, type MatchdayLogEntry } from '../state.ts';
 
@@ -291,6 +290,15 @@ export function MatchdayScreen(): JSX.Element | null {
   return md.stage === 'lineup' ? <LineupSetup /> : <LiveMatchView />;
 }
 
+/** Average current ability of a squad's best six — a quick read of how strong a side is. */
+function bestSixAverage(players: readonly number[], store: PlayerStore): number {
+  const top = [...players]
+    .filter((p) => store.isAvailable(p))
+    .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
+    .slice(0, 6);
+  return top.length > 0 ? Math.round(top.reduce((s, p) => s + store.currentAbility[p], 0) / top.length) : 0;
+}
+
 function LineupSetup(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -299,6 +307,9 @@ function LineupSetup(): JSX.Element {
   const store = world.players;
 
   const opponent = world.clubs[md.userIsHome ? md.fixture.away : md.fixture.home];
+  const home = world.clubs[md.fixture.home];
+  const away = world.clubs[md.fixture.away];
+  const comp = world.competitions[md.fixture.competitionId];
   const available = club.players.filter((p) => store.isAvailable(p));
   const bench = available.filter((p) => !md.homeLineup.includes(p) && p !== md.homeLibero);
 
@@ -306,20 +317,49 @@ function LineupSetup(): JSX.Element {
   const teamAvg = starters.length > 0
     ? Math.round(starters.reduce((s, p) => s + store.currentAbility[p], 0) / starters.length)
     : 0;
+  const oppAvg = opponent !== undefined ? bestSixAverage(opponent.players, store) : 0;
 
   return (
-    <div className="lineup-screen">
-      <div className="lineup-header">
-        <div>
-          <h1>Team Sheet</h1>
-          <p className="subtitle">
-            {md.userIsHome ? 'vs' : 'at'} {opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}
-          </p>
+    <div className="md-setup">
+      <div className="md-banner">
+        <div className="md-banner-team">
+          {home !== undefined && <ClubCrest club={home} size={60} />}
+          <div className="md-banner-team-text">
+            <span className="md-banner-name">{home?.name ?? '—'}</span>
+            <span className="md-banner-tag">Home{md.userIsHome ? ' · Your team' : ''}</span>
+          </div>
         </div>
-        <div className="lineup-team-avg">
-          <span className="faint">Team ability</span>
+        <div className="md-banner-mid">
+          <span className="md-banner-comp">{comp?.name ?? 'Match'}</span>
+          <span className="md-banner-vs">VS</span>
+          <span className="md-banner-date">{g.weekdayLabelForDay(md.fixture.day)} {g.dateLabelForDay(md.fixture.day)}</span>
+        </div>
+        <div className="md-banner-team right">
+          <div className="md-banner-team-text">
+            <span className="md-banner-name">{away?.name ?? '—'}</span>
+            <span className="md-banner-tag">Away{!md.userIsHome ? ' · Your team' : ''}</span>
+          </div>
+          {away !== undefined && <ClubCrest club={away} size={60} />}
+        </div>
+      </div>
+
+      <div className="md-setup-bar">
+        <div className="lineup-bar-rating">
+          <span className="faint">Your starting six</span>
+          <StarMeter value={teamAvg} size={16} />
           <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
         </div>
+        {opponent !== undefined && (
+          <div className="lineup-bar-rating">
+            <span className="faint">{opponent.shortName} best six</span>
+            <StarMeter value={oppAvg} size={16} />
+            <strong className={abilityClass(oppAvg)}>{oppAvg}</strong>
+          </div>
+        )}
+        <span className="flex-spacer" />
+        <button className="primary lg" onClick={() => g.kickOff()}>
+          <Icon name="whistle" size={18} /> Kick off
+        </button>
       </div>
 
       <TeamSheet
@@ -331,10 +371,6 @@ function LineupSetup(): JSX.Element {
         onSwapPlayers={(a, b) => g.swapMatchdayPlayers(a, b)}
         onSetLibero={(p) => g.setMatchdayLibero(p)}
       />
-
-      <div className="toolbar" style={{ marginTop: 20, justifyContent: 'center' }}>
-        <button className="primary" onClick={() => g.kickOff()}>Kick off</button>
-      </div>
     </div>
   );
 }
@@ -353,67 +389,96 @@ function TimeoutPanel({
   const club = g.club!;
   const t = club.tactics;
   return (
-    <div className="panel timeout-panel">
-      <div className="timeout-header">
-        <h3 style={{ margin: 0 }}>⏱ Timeout{calledBy !== undefined ? ` — ${calledBy}` : ''}</h3>
+    <div className="timeout-panel">
+      <div className="timeout-head">
+        <span className="timeout-icon"><Icon name="whistle" size={22} /></span>
+        <div className="timeout-title">
+          <strong>Timeout{calledBy !== undefined ? ` — ${calledBy}` : ''}</strong>
+          <span className="faint">Adjust your tactics or make substitutions below — changes apply from the next rally.</span>
+        </div>
         <span className="timeout-countdown">0:{secondsLeft.toString().padStart(2, '0')}</span>
-        <button className="primary" onClick={() => g.resumeFromTimeout()}>Resume play</button>
+        <button className="primary" onClick={() => g.resumeFromTimeout()}>
+          <Icon name="play" size={14} /> Resume play
+        </button>
       </div>
-      <p className="faint" style={{ fontSize: 12, margin: '4px 0 10px' }}>
-        Adjust your tactics or make substitutions below — changes apply from the next rally.
-      </p>
-      <div className="grid2">
+      <div className="timeout-clock"><span style={{ width: `${(secondsLeft / TIMEOUT_SECONDS) * 100}%` }} /></div>
+      <div className="grid2 timeout-fields">
         <ChoiceField
           label="Offensive system"
           value={t.offense}
           onChange={(v) => { t.offense = v; g.touch(); }}
-          options={[
-            [OffensiveSystem.Fast, 'Fast offence'],
-            [OffensiveSystem.Balanced, 'Balanced'],
-            [OffensiveSystem.OutsideFocused, 'Outside focused'],
-            [OffensiveSystem.OppositeFocused, 'Opposite focused'],
-            [OffensiveSystem.MiddleFocused, 'Middle focused'],
-            [OffensiveSystem.PipeHeavy, 'Pipe heavy'],
-            [OffensiveSystem.BackRowHeavy, 'Back-row heavy'],
-          ]}
+          options={OFFENSE_OPTIONS}
         />
         <ChoiceField
           label="Tempo"
           value={t.tempo}
           onChange={(v) => { t.tempo = v; g.touch(); }}
-          options={[
-            [Tempo.VeryFast, 'Very fast'],
-            [Tempo.Fast, 'Fast'],
-            [Tempo.Balanced, 'Balanced'],
-            [Tempo.Slow, 'Slow'],
-          ]}
+          options={TEMPO_OPTIONS}
         />
         <ChoiceField
           label="Defensive system"
           value={t.defense}
           onChange={(v) => { t.defense = v; g.touch(); }}
-          options={[
-            [DefensiveSystem.Conservative, 'Conservative'],
-            [DefensiveSystem.Aggressive, 'Aggressive'],
-            [DefensiveSystem.TripleBlockPriority, 'Triple block priority'],
-            [DefensiveSystem.ServicePressure, 'Service pressure'],
-            [DefensiveSystem.ReceptionStability, 'Reception stability'],
-          ]}
+          options={DEFENSE_OPTIONS}
         />
         <ChoiceField
           label="Serve strategy"
           value={t.serve}
           onChange={(v) => { t.serve = v; g.touch(); }}
-          options={[
-            [ServeStrategy.Risky, 'Risky'],
-            [ServeStrategy.Balanced, 'Balanced'],
-            [ServeStrategy.Conservative, 'Conservative'],
-          ]}
+          options={SERVE_OPTIONS}
         />
       </div>
     </div>
   );
 }
+
+interface TeamLiveStats { points: number; kills: number; aces: number; blocks: number; errors: number; }
+
+/** Running per-team totals, read off how each revealed rally ended. A block
+ *  or an error is logged against the player who lost the point, so the
+ *  credit for a block goes to the other side. */
+function liveStats(log: readonly MatchdayLogEntry[]): [TeamLiveStats, TeamLiveStats] {
+  const s: [TeamLiveStats, TeamLiveStats] = [
+    { points: 0, kills: 0, aces: 0, blocks: 0, errors: 0 },
+    { points: 0, kills: 0, aces: 0, blocks: 0, errors: 0 },
+  ];
+  for (const { entry } of log) {
+    s[entry.winner].points++;
+    const last = entry.contacts[entry.contacts.length - 1];
+    if (last === undefined) continue;
+    switch (last.kind) {
+      case 'kill': s[last.team].kills++; break;
+      case 'ace': s[last.team].aces++; break;
+      case 'blocked': s[1 - last.team].blocks++; break;
+      case 'attackError': case 'serveError': case 'receptionError': case 'setError': case 'digError':
+        s[last.team].errors++;
+        break;
+      default: break;
+    }
+  }
+  return s;
+}
+
+/** Final scores of every set already finished, from the last rally of each. */
+function completedSets(log: readonly MatchdayLogEntry[], currentSet: number, matchOver: boolean): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const last = new Map<number, MatchdayLogEntry>();
+  for (const l of log) last.set(l.entry.set, l);
+  for (const [set, l] of [...last.entries()].sort((a, b) => a[0] - b[0])) {
+    if (set >= currentSet && !matchOver) continue;
+    const e = l.entry;
+    out.push([e.scoreBefore[0] + (e.winner === 0 ? 1 : 0), e.scoreBefore[1] + (e.winner === 1 ? 1 : 0)]);
+  }
+  return out;
+}
+
+const STAT_ROWS: ReadonlyArray<[keyof TeamLiveStats, string]> = [
+  ['points', 'Points won'],
+  ['kills', 'Kills'],
+  ['aces', 'Aces'],
+  ['blocks', 'Blocks'],
+  ['errors', 'Errors'],
+];
 
 function LiveMatchView(): JSX.Element {
   const g = useGame();
@@ -478,6 +543,13 @@ function LiveMatchView(): JSX.Element {
         const current = g.matchday;
         if (current === null) break;
         if (current.paused) {
+          // A substitution stoppage ends by itself once its wall-clock time is
+          // up — but never while a timeout is open, which only the clock or
+          // the Resume button may close.
+          if (current.pauseUntil !== null && current.timeoutActive === null && Date.now() >= current.pauseUntil) {
+            g.resume();
+            continue;
+          }
           await sleep(150);
           continue;
         }
@@ -504,38 +576,92 @@ function LiveMatchView(): JSX.Element {
   const homeClub = world.clubs[md.fixture.home];
   const awayClub = world.clubs[md.fixture.away];
   const userTeamIdx: 0 | 1 = md.userIsHome ? 0 : 1;
+  const stats = liveStats(md.log);
+  const setHistory = completedSets(md.log, snap?.set ?? 0, snap?.matchOver ?? false);
+  const homeProb = md.log.length > 0 ? md.log[md.log.length - 1].entry.homeWinProb : 0.5;
+  const status = md.timeoutActive !== null
+    ? 'Timeout'
+    : md.paused && md.pauseUntil !== null
+      ? 'Substitution'
+      : md.paused ? 'Paused' : 'Live';
 
   return (
-    <>
-      <div className="scoreline">
-        <span className="team">
-          {homeClub !== undefined && <Flag nation={homeClub.nation} />} {homeClub?.shortName ?? '—'}
-        </span>
-        <span className="sets">{snap?.homeSets ?? 0} — {snap?.awaySets ?? 0}</span>
-        <span className="team">
-          {awayClub !== undefined && <Flag nation={awayClub.nation} />} {awayClub?.shortName ?? '—'}
-        </span>
-        {snap !== null && (
-          <span className="mono faint">Set {snap.set + 1} · {snap.homeScore}-{snap.awayScore}</span>
-        )}
+    <div className="live">
+      <div className="scoreboard">
+        <div className={`sb-team${snap?.serving === 0 ? ' serving' : ''}`}>
+          {homeClub !== undefined && <ClubCrest club={homeClub} size={54} />}
+          <div className="sb-team-text">
+            <span className="sb-name">{homeClub?.name ?? '—'}</span>
+            <span className="sb-tag">Home{userTeamIdx === 0 ? ' · You' : ''}</span>
+          </div>
+          <span className="sb-serve" title="Serving"><Icon name="ball" size={18} /></span>
+        </div>
+        <div className="sb-center">
+          <div className="sb-sets">
+            <span>{snap?.homeSets ?? 0}</span>
+            <span className="sb-colon">:</span>
+            <span>{snap?.awaySets ?? 0}</span>
+          </div>
+          <div className="sb-live">
+            <span className="sb-set-label">Set {(snap?.set ?? 0) + 1}</span>
+            <span className="sb-points">{snap?.homeScore ?? 0} – {snap?.awayScore ?? 0}</span>
+          </div>
+          {setHistory.length > 0 && (
+            <div className="set-chips">
+              {setHistory.map(([h, a], i) => (
+                <span key={i} className="set-chip">
+                  <span className={h > a ? 'won' : ''}>{h}</span>
+                  <span className={a > h ? 'won' : ''}>{a}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className={`sb-team right${snap?.serving === 1 ? ' serving' : ''}`}>
+          <span className="sb-serve" title="Serving"><Icon name="ball" size={18} /></span>
+          <div className="sb-team-text">
+            <span className="sb-name">{awayClub?.name ?? '—'}</span>
+            <span className="sb-tag">Away{userTeamIdx === 1 ? ' · You' : ''}</span>
+          </div>
+          {awayClub !== undefined && <ClubCrest club={awayClub} size={54} />}
+        </div>
       </div>
 
-      <div className="toolbar">
-        {([0.75, 1, 1.5] as const).map((s) => (
-          <button key={s} className={md.speed === s ? 'primary' : ''} onClick={() => g.setSpeed(s)}>
-            {s}x
-          </button>
-        ))}
+      <div className="live-controls">
+        <div className="live-controls-group">
+          <span className="faint">Speed</span>
+          <Segmented
+            size="sm"
+            options={[[0.75, '0.75×'], [1, '1×'], [1.5, '1.5×']] as const}
+            value={md.speed}
+            onChange={(s) => g.setSpeed(s)}
+          />
+        </div>
         {md.paused
-          ? <button disabled={md.timeoutActive !== null} onClick={() => g.resume()}>Resume</button>
-          : <button disabled={md.timeoutActive !== null} onClick={() => g.pause()}>Pause</button>}
+          ? (
+            <button disabled={md.timeoutActive !== null} onClick={() => g.resume()}>
+              <Icon name="play" size={14} /> Resume
+            </button>
+          )
+          : (
+            <button disabled={md.timeoutActive !== null} onClick={() => g.pause()}>
+              <Icon name="pause" size={14} /> Pause
+            </button>
+          )}
         <button
           disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
           onClick={() => g.callTimeout()}
         >
-          Timeout ({2 - md.timeoutsUsed[userTeamIdx]} left)
+          <Icon name="whistle" size={14} /> Timeout
+          <span className="count-chip">{2 - md.timeoutsUsed[userTeamIdx]} left</span>
         </button>
-        <button onClick={() => g.finishMatchdayNow()}>Finish match</button>
+        <span className="flex-spacer" />
+        <span className={`live-status status-${status.toLowerCase()}`}>
+          <span className="live-dot" />{status}
+        </span>
+        <button className="danger" onClick={() => g.finishMatchdayNow()}>
+          <Icon name="fastForward" size={14} /> Finish match
+        </button>
       </div>
 
       {md.timeoutActive !== null && (
@@ -545,23 +671,57 @@ function LiveMatchView(): JSX.Element {
         />
       )}
 
-      <div className="live-match-layout">
-        <div className="panel court-panel">
+      <div className="live-grid">
+        <div className="live-side">
+          <Card title="Match Stats" icon="stats">
+            <div className="cmp-head">
+              <span>{homeClub?.shortName ?? 'Home'}</span>
+              <span>{awayClub?.shortName ?? 'Away'}</span>
+            </div>
+            {STAT_ROWS.map(([key, label]) => {
+              const h = stats[0][key];
+              const a = stats[1][key];
+              const total = h + a;
+              return (
+                <div className="cmp" key={key}>
+                  <div className="cmp-row">
+                    <span className="cmp-val">{h}</span>
+                    <span className="cmp-label">{label}</span>
+                    <span className="cmp-val">{a}</span>
+                  </div>
+                  <div className="cmp-bar">
+                    <span className="cmp-home" style={{ width: `${total > 0 ? (h / total) * 100 : 50}%` }} />
+                    <span className="cmp-away" style={{ width: `${total > 0 ? (a / total) * 100 : 50}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+          <Card title="Win Probability" icon="stats">
+            <div className="prob">
+              <span className="prob-val">{(homeProb * 100).toFixed(0)}%</span>
+              <div className="prob-bar">
+                <span className="cmp-home" style={{ width: `${homeProb * 100}%` }} />
+                <span className="cmp-away" style={{ width: `${(1 - homeProb) * 100}%` }} />
+              </div>
+              <span className="prob-val">{((1 - homeProb) * 100).toFixed(0)}%</span>
+            </div>
+            <div className="cmp-head">
+              <span>{homeClub?.shortName ?? 'Home'}</span>
+              <span>{awayClub?.shortName ?? 'Away'}</span>
+            </div>
+          </Card>
+        </div>
+
+        <div className="card court-panel">
           {/* Court2D always draws the fixture's home club in the top half and
               away in the bottom half (see zonePercent) — these strips must
               match that or a team's label ends up over the other team's players. */}
           <div className="team-strip">
             <span className="team-strip-name">
-              {homeClub !== undefined && <Flag nation={homeClub.nation} />} {homeClub?.name ?? '—'}
+              {homeClub !== undefined && <ClubCrest club={homeClub} size={18} />} {homeClub?.name ?? '—'}
             </span>
-            <span className="pill">Sets: {snap?.homeSets ?? 0}</span>
-          </div>
-
-          <div className="court-scoreboard">
-            <span className="dim">Set {(snap?.set ?? 0) + 1}</span>
-            <span className="court-scoreboard-score">
-              {snap?.homeScore ?? 0} – {snap?.awayScore ?? 0}
-            </span>
+            <span className="team-strip-sets">Sets {snap?.homeSets ?? 0}</span>
           </div>
 
           <Court2D
@@ -574,9 +734,9 @@ function LiveMatchView(): JSX.Element {
             active={active}
           />
           <div className="team-strip">
-            <span className="pill">Sets: {snap?.awaySets ?? 0}</span>
+            <span className="team-strip-sets">Sets {snap?.awaySets ?? 0}</span>
             <span className="team-strip-name">
-              {awayClub !== undefined && <Flag nation={awayClub.nation} />} {awayClub?.name ?? '—'}
+              {awayClub !== undefined && <ClubCrest club={awayClub} size={18} />} {awayClub?.name ?? '—'}
             </span>
           </div>
 
@@ -595,8 +755,7 @@ function LiveMatchView(): JSX.Element {
           )}
         </div>
 
-        <div className="panel ticker-panel">
-          <h3 style={{ marginTop: 0 }}>Live ticker</h3>
+        <Card className="ticker-panel" title="Commentary" icon="press" flush>
           <div className="ticker-scroll" ref={logRef}>
             <RallyTicker
               entries={md.log.map((l) => l.entry)}
@@ -606,16 +765,15 @@ function LiveMatchView(): JSX.Element {
             />
             {md.log.length === 0 && <div className="ticker-entry dim">Kicking off…</div>}
           </div>
-        </div>
+        </Card>
       </div>
 
       <Substitutions teamIdx={userTeamIdx} />
-    </>
+    </div>
   );
 }
 
-/** A small clickable player card for the substitution picker — selecting toggles a gold highlight. */
-/** A clickable, draggable player card for the substitution picker. Dragging one
+/** A clickable, draggable player row for the substitution picker. Dragging one
  *  onto another (in either direction — bench-to-court or court-to-bench) subs
  *  them in one motion; clicking both, then confirming, does the same thing. */
 function SubCard({
@@ -633,8 +791,8 @@ function SubCard({
   const pos = store.position[playerIdx] as Position;
   return (
     <div
-      className={`lineup-card lineup-card-small sub-card${selected ? ' selected' : ''}${isDragOver ? ' drag-over' : ''}`}
-      style={{ borderColor: POSITION_ACCENT[pos], backgroundImage: cardTint(pos) }}
+      className={`bench-token sub-token draggable${selected ? ' selected' : ''}${isDragOver ? ' drag-over' : ''}`}
+      style={{ '--token-accent': POSITION_ACCENT[pos] } as CSSProperties}
       onClick={onClick}
       draggable
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(playerIdx))}
@@ -647,17 +805,12 @@ function SubCard({
         if (!Number.isNaN(dragged)) onDropPlayer(dragged);
       }}
     >
-      <span className="lineup-card-shine" />
-      <span className="lineup-card-pos" style={{ background: POSITION_ACCENT[pos] }}>
-        {POSITION_SHORT[pos]}
-      </span>
-      <CardPhoto playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} />
-      <div className="lineup-card-info">
-        <div className="lineup-card-name">{store.shortName(playerIdx)}</div>
-        <div className="lineup-card-meta">
-          <span className="lineup-card-ability">{store.currentAbility[playerIdx]}</span>
-        </div>
-      </div>
+      <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>
+      <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
+      <span className="bench-token-name">{store.shortName(playerIdx)}</span>
+      <Pos pos={pos} />
+      <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
+      <Bar value={store.condition[playerIdx]} />
     </div>
   );
 }
@@ -708,51 +861,70 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   });
 
   return (
-    <div className="panel sub-panel">
-      <h3>Substitutions <span className="faint">({remaining} left this set)</span></h3>
-      <p className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>
-        Drag a bench player onto someone on court to bring them on — or pick
-        both and confirm. A player who comes off can only return for whoever
-        replaced them.
+    <Card
+      className="sub-panel"
+      title="Substitutions"
+      icon="swap"
+      actions={<span className={`count-chip${remaining <= 0 ? ' bad' : ''}`}>{remaining} left this set</span>}
+    >
+      <p className="field-hint">
+        Drag a bench player onto someone on court to bring them on — or pick both and confirm. A player
+        who comes off can only return for whoever replaced them.
       </p>
 
-      <div className="sub-section-label">On court — pick who comes off</div>
-      <div className="sub-row">
-        {onCourt.map((p) => (
-          <SubCard
-            key={p}
-            playerIdx={p}
-            store={store}
-            selected={outPlayer === p}
-            onClick={() => setOutPlayer(outPlayer === p ? null : p)}
-            {...dragProps(p)}
-          />
-        ))}
+      <div className="sub-cols">
+        <div className="sub-col">
+          <div className="section-label">On court — pick who comes off</div>
+          <div className="sub-list">
+            {onCourt.map((p) => (
+              <SubCard
+                key={p}
+                playerIdx={p}
+                store={store}
+                selected={outPlayer === p}
+                onClick={() => setOutPlayer(outPlayer === p ? null : p)}
+                {...dragProps(p)}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="sub-arrow"><Icon name="swap" size={22} /></div>
+        <div className="sub-col">
+          <div className="section-label">Bench — pick who comes on</div>
+          <div className="sub-list">
+            {bench.length === 0 && <p className="empty">No fit players available.</p>}
+            {bench.map((p) => (
+              <SubCard
+                key={p}
+                playerIdx={p}
+                store={store}
+                selected={inPlayer === p}
+                onClick={() => setInPlayer(inPlayer === p ? null : p)}
+                {...dragProps(p)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="sub-section-label">Bench — pick who comes on</div>
-      <div className="sub-row">
-        {bench.length === 0 && <p className="faint">No fit players available.</p>}
-        {bench.map((p) => (
-          <SubCard
-            key={p}
-            playerIdx={p}
-            store={store}
-            selected={inPlayer === p}
-            onClick={() => setInPlayer(inPlayer === p ? null : p)}
-            {...dragProps(p)}
-          />
-        ))}
+      <div className="sub-confirm">
+        <span className="sub-summary">
+          {outPlayer !== null
+            ? <><span className="bad">▼ {store.shortName(outPlayer)}</span> off</>
+            : <span className="faint">Pick who comes off</span>}
+          <span className="faint">·</span>
+          {inPlayer !== null
+            ? <><span className="good">▲ {store.shortName(inPlayer)}</span> on</>
+            : <span className="faint">Pick who comes on</span>}
+        </span>
+        <button
+          className="primary"
+          disabled={outPlayer === null || inPlayer === null || remaining <= 0}
+          onClick={makeSub}
+        >
+          Confirm substitution
+        </button>
       </div>
-
-      <button
-        className="primary"
-        style={{ marginTop: 12 }}
-        disabled={outPlayer === null || inPlayer === null || remaining <= 0}
-        onClick={makeSub}
-      >
-        Confirm substitution
-      </button>
-    </div>
+    </Card>
   );
 }

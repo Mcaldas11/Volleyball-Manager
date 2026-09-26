@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import {
   BlockAssignment, DefensiveShape, DefensiveSystem, OffensiveSystem,
   ServeStrategy, ServeTarget, Tempo,
@@ -10,10 +10,74 @@ import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engi
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import {
-  abilityClass, Bar, ChoiceField, ClubLink, Empty, Flag, money, moneyShort, MoneyInput,
-  parseMoneyShort, Pos,
+  abilityClass, Bar, Card, ChoiceField, ClubLink, Empty, Flag, KV, money, moneyShort, MoneyInput,
+  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useSort,
 } from '../components.tsx';
+import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
+
+/** The team-instruction choices, shared by the Tactics screen and the
+ *  in-match timeout panel so both always offer exactly the same options. */
+export const OFFENSE_OPTIONS: Array<[OffensiveSystem, string]> = [
+  [OffensiveSystem.Fast, 'Fast offence'],
+  [OffensiveSystem.Balanced, 'Balanced'],
+  [OffensiveSystem.OutsideFocused, 'Outside focused'],
+  [OffensiveSystem.OppositeFocused, 'Opposite focused'],
+  [OffensiveSystem.MiddleFocused, 'Middle focused'],
+  [OffensiveSystem.PipeHeavy, 'Pipe heavy'],
+  [OffensiveSystem.BackRowHeavy, 'Back-row heavy'],
+];
+
+export const TEMPO_OPTIONS: Array<[Tempo, string]> = [
+  [Tempo.VeryFast, 'Very fast'],
+  [Tempo.Fast, 'Fast'],
+  [Tempo.Balanced, 'Balanced'],
+  [Tempo.Slow, 'Slow'],
+];
+
+export const DEFENSE_OPTIONS: Array<[DefensiveSystem, string]> = [
+  [DefensiveSystem.Conservative, 'Conservative'],
+  [DefensiveSystem.Aggressive, 'Aggressive'],
+  [DefensiveSystem.TripleBlockPriority, 'Triple block priority'],
+  [DefensiveSystem.ServicePressure, 'Service pressure'],
+  [DefensiveSystem.ReceptionStability, 'Reception stability'],
+];
+
+export const SERVE_OPTIONS: Array<[ServeStrategy, string]> = [
+  [ServeStrategy.Risky, 'Risky'],
+  [ServeStrategy.Balanced, 'Balanced'],
+  [ServeStrategy.Conservative, 'Conservative'],
+];
+
+/** A team instruction as a row of toggle tiles — every option visible at
+ *  once, the current one lit — rather than hidden behind a dropdown. */
+function InstructionTiles<T extends number>({
+  label, hint, value, options, onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: T;
+  options: Array<[T, string]>;
+  onChange: (v: T) => void;
+}): JSX.Element {
+  return (
+    <div className="instr">
+      <div className="instr-head">
+        <span className="instr-label">{label}</span>
+        <span className="instr-current">{options.find(([v]) => v === value)?.[1] ?? ''}</span>
+      </div>
+      <div className="instr-tiles">
+        {options.map(([v, l]) => (
+          <button key={v} className={`instr-tile${v === value ? ' active' : ''}`} onClick={() => onChange(v)}>
+            {v === value && <Icon name="check" size={13} />}
+            {l}
+          </button>
+        ))}
+      </div>
+      {hint !== undefined && <p className="field-hint">{hint}</p>}
+    </div>
+  );
+}
 
 export function TacticsScreen(): JSX.Element {
   const g = useGame();
@@ -22,74 +86,76 @@ export function TacticsScreen(): JSX.Element {
 
   return (
     <>
-      <h1>Tactics</h1>
-      <p className="subtitle">
-        These instructions feed straight into the rally engine — they change
-        which attacker the setter picks and how the block forms, not a hidden
-        team rating.
+      <p className="page-intro">
+        These instructions feed straight into the rally engine — they change which attacker the
+        setter picks and how the block forms, not a hidden team rating.
       </p>
 
       <div className="grid2">
-        <div className="panel">
-          <h3>Offence</h3>
-          <ChoiceField
-            label="System"
+        <Card title="In Possession" icon="ball">
+          <InstructionTiles
+            label="Offensive system"
             value={t.offense}
             onChange={(v) => { t.offense = v; g.touch(); }}
             hint="Determines how the setter distributes the ball across the available attack lanes."
-            options={[
-              [OffensiveSystem.Fast, 'Fast offence'],
-              [OffensiveSystem.Balanced, 'Balanced'],
-              [OffensiveSystem.OutsideFocused, 'Outside focused'],
-              [OffensiveSystem.OppositeFocused, 'Opposite focused'],
-              [OffensiveSystem.MiddleFocused, 'Middle focused'],
-              [OffensiveSystem.PipeHeavy, 'Pipe heavy'],
-              [OffensiveSystem.BackRowHeavy, 'Back-row heavy'],
-            ]}
+            options={OFFENSE_OPTIONS}
           />
-          <ChoiceField
+          <InstructionTiles
             label="Tempo"
             value={t.tempo}
             onChange={(v) => { t.tempo = v; g.touch(); }}
             hint="Faster tempo beats the block but demands a better pass and a better setter."
-            options={[
-              [Tempo.VeryFast, 'Very fast'],
-              [Tempo.Fast, 'Fast'],
-              [Tempo.Balanced, 'Balanced'],
-              [Tempo.Slow, 'Slow'],
-            ]}
+            options={TEMPO_OPTIONS}
           />
-        </div>
+        </Card>
 
-        <div className="panel">
-          <h3>Defence and serve</h3>
-          <ChoiceField
-            label="Defensive system"
-            value={t.defense}
-            onChange={(v) => { t.defense = v; g.touch(); }}
-            hint="Trades block pressure against floor coverage."
-            options={[
-              [DefensiveSystem.Conservative, 'Conservative'],
-              [DefensiveSystem.Aggressive, 'Aggressive'],
-              [DefensiveSystem.TripleBlockPriority, 'Triple block priority'],
-              [DefensiveSystem.ServicePressure, 'Service pressure'],
-              [DefensiveSystem.ReceptionStability, 'Reception stability'],
-            ]}
-          />
-          <ChoiceField
-            label="Serve strategy"
-            value={t.serve}
-            onChange={(v) => { t.serve = v; g.touch(); }}
-            hint="Risky serving buys aces and pays for them in errors."
-            options={[
-              [ServeStrategy.Risky, 'Risky'],
-              [ServeStrategy.Balanced, 'Balanced'],
-              [ServeStrategy.Conservative, 'Conservative'],
-            ]}
-          />
+        <div className="stack">
+          <Card title="Out of Possession" icon="club">
+            <InstructionTiles
+              label="Defensive system"
+              value={t.defense}
+              onChange={(v) => { t.defense = v; g.touch(); }}
+              hint="Trades block pressure against floor coverage."
+              options={DEFENSE_OPTIONS}
+            />
+          </Card>
+          <Card title="Serving" icon="fastForward">
+            <InstructionTiles
+              label="Serve strategy"
+              value={t.serve}
+              onChange={(v) => { t.serve = v; g.touch(); }}
+              hint="Risky serving buys aces and pays for them in errors."
+              options={SERVE_OPTIONS}
+            />
+          </Card>
         </div>
       </div>
     </>
+  );
+}
+
+/** A slider with its current value spelled out beside it. */
+function SliderField({
+  label, value, onChange, left, right,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  left: string;
+  right: string;
+}): JSX.Element {
+  return (
+    <div className="field">
+      <div className="field-row">
+        <span className="field-label">{label}</span>
+        <span className="slider-value">{value}</span>
+      </div>
+      <input
+        type="range" min={0} max={100} value={value} className="slider"
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <div className="slider-ends"><span>{left}</span><span>{right}</span></div>
+    </div>
   );
 }
 
@@ -119,50 +185,54 @@ export function RotationsScreen(): JSX.Element {
   const zones = Array.from({ length: 6 }, (_, z) => selection.lineup[(z - rot + 6) % 6]);
   const zoneOrder = [3, 2, 1, 4, 5, 0]; // display order: 4,3,2 front then 5,6,1 back
   const zoneLabels = ['1', '2', '3', '4', '5', '6'];
+  const setterFront = rot >= 1 && rot <= 3;
 
   return (
     <>
-      <h1>Rotations</h1>
-      <p className="subtitle">
-        Rotations are named for the zone the setter stands in. When the setter is
-        front row only two attackers are available — those rotations score less
-        and need different instructions.
+      <p className="page-intro">
+        Rotations are named for the zone the setter stands in. When the setter is front row only two
+        attackers are available — those rotations score less and need different instructions.
       </p>
 
-      <div className="toolbar">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <button key={i} className={rot === i ? 'primary' : ''} onClick={() => setRot(i)}>
-            P{i + 1}
-          </button>
-        ))}
+      <div className="rot-bar">
+        <Segmented
+          options={[0, 1, 2, 3, 4, 5].map((i) => [i, `P${i + 1}`] as const)}
+          value={rot}
+          onChange={setRot}
+        />
+        <span className={`rot-flag${setterFront ? ' warn' : ''}`}>
+          {setterFront ? 'Setter front row · two attackers' : 'Setter back row · three attackers'}
+        </span>
       </div>
 
-      <div className="panels">
-        <div className="panel">
-          <h3>Court — rotation P{rot + 1}</h3>
-          <div className="court">
-            {zoneOrder.map((z) => {
-              const p = zones[z];
-              if (p === undefined) return <div className="zone" key={z} />;
-              const pos = store.position[p] as Position;
-              const isSetter = POSITION_SHORT[pos] === 'S';
-              return (
-                <div className={`zone${isSetter ? ' setter' : ''}`} key={z}>
-                  <div className="z">Zone {zoneLabels[z]}{z >= 1 && z <= 3 ? ' · front' : ''}</div>
-                  <div>{store.shortName(p)}</div>
-                  <div className="faint">{POSITION_SHORT[pos]}</div>
-                </div>
-              );
-            })}
+      <div className="rot-layout">
+        <Card title={`Rotation P${rot + 1}`} icon="tactics">
+          <div className="rot-court">
+            <div className="rot-net">Net</div>
+            <div className="rot-grid">
+              {zoneOrder.map((z) => {
+                const p = zones[z];
+                if (p === undefined) return <div className="rot-zone" key={z} />;
+                const pos = store.position[p] as Position;
+                const isSetter = POSITION_SHORT[pos] === 'S';
+                return (
+                  <div className={`rot-zone${isSetter ? ' setter' : ''}${z >= 1 && z <= 3 ? ' front' : ''}`} key={z}>
+                    <span className="rot-zone-num">{zoneLabels[z]}</span>
+                    <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={40} />
+                    <span className="rot-zone-name">{store.shortName(p)}</span>
+                    <Pos pos={pos} />
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>
-            Libero replaces the middle blocker in zones 5 and 6. The middle
-            serves from zone 1, since a libero may not serve.
+          <p className="footnote">
+            Libero replaces the middle blocker in zones 5 and 6. The middle serves from zone 1, since a
+            libero may not serve.
           </p>
-        </div>
+        </Card>
 
-        <div className="panel" style={{ flex: 1 }}>
-          <h3>Instructions for P{rot + 1}</h3>
+        <Card title={`Instructions for P${rot + 1}`} icon="whistle">
           <ChoiceField
             label="Preferred attacker"
             value={r.preferredAttacker}
@@ -208,24 +278,32 @@ export function RotationsScreen(): JSX.Element {
               [DefensiveShape.ManUpDefense, 'Man-up'],
             ]}
           />
-          <div className="kv">
-            <span className="k">Back-row transition</span>
-            <input
-              type="range" min={0} max={100} value={r.transitionBackRow}
-              onChange={(e) => { r.transitionBackRow = Number(e.target.value); g.touch(); }}
-            />
-          </div>
-          <div className="kv">
-            <span className="k">Setter tempo bias</span>
-            <input
-              type="range" min={0} max={100} value={r.setterTempoBias}
-              onChange={(e) => { r.setterTempoBias = Number(e.target.value); g.touch(); }}
-            />
-          </div>
-        </div>
+          <SliderField
+            label="Back-row transition"
+            value={r.transitionBackRow}
+            onChange={(v) => { r.transitionBackRow = v; g.touch(); }}
+            left="Rarely"
+            right="Often"
+          />
+          <SliderField
+            label="Setter tempo bias"
+            value={r.setterTempoBias}
+            onChange={(v) => { r.setterTempoBias = v; g.touch(); }}
+            left="Slower"
+            right="Quicker"
+          />
+        </Card>
       </div>
     </>
   );
+}
+
+function outlook(age: number, headroom: number): { text: string; cls: string } {
+  if (age <= 21 && headroom > 250) return { text: 'Rapid development expected', cls: 'good' };
+  if (age <= 24 && headroom > 120) return { text: 'Still improving', cls: 'good' };
+  if (age <= 30) return { text: 'At or near peak', cls: '' };
+  if (age <= 33) return { text: 'Gradual decline', cls: 'warn' };
+  return { text: 'In steep decline', cls: 'bad' };
 }
 
 export function TrainingScreen(): JSX.Element {
@@ -234,69 +312,111 @@ export function TrainingScreen(): JSX.Element {
   const club = g.club!;
   const store = world.players;
   const squad = g.squad();
+  const improving = squad.filter((p) => {
+    const age = store.ageOn(p, world.year, 181);
+    return age <= 24 && store.potentialAbility[p] - store.currentAbility[p] > 120;
+  }).length;
 
   return (
     <>
-      <h1>Training</h1>
-      <p className="subtitle">
-        Training facilities {club.trainingFacilities}/20. Development runs weekly
-        and depends on age, potential, coaching, facilities and the player's own
-        professionalism.
+      <div className="tiles">
+        <StatTile
+          label="Training facilities"
+          value={`${club.trainingFacilities}/20`}
+          sub={<Bar value={club.trainingFacilities} max={20} wide />}
+        />
+        <StatTile label="Still developing" value={improving} sub="players with room to grow" tone="good" />
+        <StatTile label="Squad" value={squad.length} sub="senior players training" />
+      </div>
+      <p className="page-intro">
+        Development runs weekly and depends on age, potential, coaching, facilities and the player's
+        own professionalism.
       </p>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Player</th>
-            <th>Pos</th>
-            <th className="num">Age</th>
-            <th className="num">Ability</th>
-            <th className="num">Potential</th>
-            <th className="num">Headroom</th>
-            <th>Condition</th>
-            <th className="num" title="Professionalism and work ethic">Application</th>
-            <th>Outlook</th>
-          </tr>
-        </thead>
-        <tbody>
-          {squad.map((p) => {
-            const age = store.ageOn(p, world.year, 181);
-            const ca = store.currentAbility[p];
-            const pa = store.potentialAbility[p];
-            const headroom = pa - ca;
-            // Coachability deliberately excluded: it's a hidden attribute, and
-            // averaging it in here would let a coach back-solve its value from
-            // the two visible ones — breaking the "never shown as a number" rule.
-            const application = Math.round(
-              (store.getAttr(p, 'professionalism') + store.getAttr(p, 'workEthic')) / 2,
-            );
-            return (
-              <tr key={p} className="clickable" onClick={() => g.select(p)}>
-                <td>{store.fullName(p)}</td>
-                <td><Pos pos={store.position[p] as Position} /></td>
-                <td className="num">{age}</td>
-                <td className={`num ${abilityClass(ca)}`}>{ca}</td>
-                <td className="num faint">{pa}</td>
-                <td className={`num ${headroom > 200 ? 'good' : 'dim'}`}>
-                  {headroom > 0 ? `+${headroom}` : '—'}
-                </td>
-                <td><Bar value={store.condition[p]} /></td>
-                <td className={`num ${application >= 15 ? 'good' : application <= 8 ? 'bad' : ''}`}>
-                  {application}
-                </td>
-                <td className="dim">
-                  {age <= 21 && headroom > 250 ? 'Rapid development expected'
-                    : age <= 24 && headroom > 120 ? 'Still improving'
-                      : age <= 30 ? 'At or near peak'
-                        : age <= 33 ? 'Gradual decline'
-                          : 'In steep decline'}
-                </td>
+      <Card title="Player Development" icon="training" flush>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th />
+                <th>Player</th>
+                <th>Pos</th>
+                <th className="num">Age</th>
+                <th className="num">Ability</th>
+                <th className="num">Potential</th>
+                <th>Headroom</th>
+                <th>Condition</th>
+                <th className="num" title="Professionalism and work ethic">Application</th>
+                <th>Outlook</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {squad.map((p) => {
+                const age = store.ageOn(p, world.year, 181);
+                const ca = store.currentAbility[p];
+                const pa = store.potentialAbility[p];
+                const headroom = pa - ca;
+                // Coachability deliberately excluded: it's a hidden attribute, and
+                // averaging it in here would let a coach back-solve its value from
+                // the two visible ones — breaking the "never shown as a number" rule.
+                const application = Math.round(
+                  (store.getAttr(p, 'professionalism') + store.getAttr(p, 'workEthic')) / 2,
+                );
+                const o = outlook(age, headroom);
+                return (
+                  <tr key={p} className="clickable" onClick={() => g.select(p)}>
+                    <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                    <td className="strong">{store.fullName(p)}</td>
+                    <td><Pos pos={store.position[p] as Position} /></td>
+                    <td className="num">{age}</td>
+                    <td className={`num ${abilityClass(ca)}`}>{ca}</td>
+                    <td className="num faint">{pa}</td>
+                    <td>
+                      <span className="headroom">
+                        <span className="headroom-bar">
+                          <span className="headroom-ca" style={{ width: `${(ca / 2000) * 100}%` }} />
+                          <span
+                            className="headroom-gap"
+                            style={{ left: `${(ca / 2000) * 100}%`, width: `${(Math.max(0, headroom) / 2000) * 100}%` }}
+                          />
+                        </span>
+                        <span className={headroom > 200 ? 'good' : 'dim'}>{headroom > 0 ? `+${headroom}` : '—'}</span>
+                      </span>
+                    </td>
+                    <td><Bar value={store.condition[p]} /></td>
+                    <td className={`num ${application >= 15 ? 'good' : application <= 8 ? 'bad' : ''}`}>
+                      {application}
+                    </td>
+                    <td className={o.cls}>{o.text}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </>
+  );
+}
+
+/** A money line with a bar sized against the largest line in its card. */
+function MoneyLine({
+  label, value, max, tone,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  tone: 'income' | 'cost';
+}): JSX.Element {
+  const pct = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
+  return (
+    <div className="money-line">
+      <span className="money-line-label">{label}</span>
+      <span className={`money-line-bar ${tone}`}><span style={{ width: `${pct}%` }} /></span>
+      <span className={`money-line-value ${tone === 'income' ? 'good' : 'bad'}`}>
+        {tone === 'cost' && value !== 0 ? '-' : ''}{money(Math.abs(value))}
+      </span>
+    </div>
   );
 }
 
@@ -316,77 +436,105 @@ export function FinancesScreen(): JSX.Element {
   const totalIncome = f.sponsorshipIncome + f.tvRightsIncome + f.merchandiseIncome + f.seasonIncome;
   const totalCosts = wages + youthWages + staffWages +
     f.arenaMaintenance + f.medicalCosts + f.youthAcademyCosts + f.seasonExpenditure;
+  const result = totalIncome - totalCosts;
+  const envelope = f.wageBudget + f.transferBudget;
+  const wageShare = envelope > 0 ? (f.wageBudget / envelope) * 100 : 50;
 
-  const line = (k: string, v: number, good = false): JSX.Element => (
-    <div className="kv">
-      <span className="k">{k}</span>
-      <span className={good ? 'good' : v < 0 ? 'bad' : ''}>{money(v)}</span>
-    </div>
-  );
+  const incomeLines: Array<[string, number]> = [
+    ['Sponsorship', f.sponsorshipIncome],
+    ['TV rights', f.tvRightsIncome],
+    ['Merchandise', f.merchandiseIncome],
+    ['Gate receipts so far', f.seasonIncome],
+  ];
+  const costLines: Array<[string, number]> = [
+    ['Player wages', wages],
+    ['Youth wages', youthWages],
+    ['Staff wages', staffWages],
+    ['Arena maintenance', f.arenaMaintenance],
+    ['Medical', f.medicalCosts],
+    ['Youth academy', f.youthAcademyCosts],
+    ['Travel so far', f.seasonExpenditure],
+  ];
+  const maxLine = Math.max(...incomeLines.map(([, v]) => v), ...costLines.map(([, v]) => v), 1);
 
   return (
     <>
-      <h1>Finances</h1>
-      <p className="subtitle">
-        {club.arenaName} · {club.arenaCapacity.toLocaleString()} seats.
-        {f.seasonsInDebt > 0 && (
-          <span className="bad"> {f.seasonsInDebt} consecutive season(s) in the red — three means dissolution.</span>
-        )}
-      </p>
+      {f.seasonsInDebt > 0 && (
+        <div className="alert alert-bad">
+          <Icon name="alert" size={18} />
+          <span>
+            {f.seasonsInDebt} consecutive season(s) in the red — three means dissolution.
+          </span>
+        </div>
+      )}
+
+      <div className="tiles">
+        <StatTile label="Balance" value={money(f.balance)} tone={f.balance < 0 ? 'bad' : 'good'} sub={`${club.arenaName}`} />
+        <StatTile label="Wage budget" value={money(f.wageBudget)} sub={`${money(f.wageBudget - wages)} unused`} />
+        <StatTile label="Transfer budget" value={money(f.transferBudget)} />
+        <StatTile
+          label="Projected result"
+          value={`${result >= 0 ? '+' : ''}${money(result)}`}
+          tone={result >= 0 ? 'good' : 'bad'}
+          sub="if the season ended today"
+        />
+      </div>
 
       <div className="grid3">
-        <div className="panel">
-          <h3>Position</h3>
-          {line('Balance', f.balance)}
-          <div className="kv">
-            <span className="k">Wage budget</span>
-            <MoneyInput value={f.wageBudget} onChange={(v) => g.setWageBudget(v)} />
+        <Card title="Budgets" icon="finances">
+          <KV k="Wage budget"><MoneyInput value={f.wageBudget} onChange={(v) => g.setWageBudget(v)} /></KV>
+          <KV k="Transfer budget"><MoneyInput value={f.transferBudget} onChange={(v) => g.setTransferBudget(v)} /></KV>
+          <div className="split-bar" title="Wage / transfer split">
+            <span className="split-wage" style={{ width: `${wageShare}%` }} />
+            <span className="split-transfer" style={{ width: `${100 - wageShare}%` }} />
           </div>
-          {line('Committed wages (senior squad)', -wages)}
-          {line('Remaining for signings', f.wageBudget - wages)}
-          <div className="kv">
-            <span className="k">Transfer budget</span>
-            <MoneyInput value={f.transferBudget} onChange={(v) => g.setTransferBudget(v)} />
+          <div className="split-legend">
+            <span><i className="dot split-wage" /> Wages {wageShare.toFixed(0)}%</span>
+            <span><i className="dot split-transfer" /> Transfers {(100 - wageShare).toFixed(0)}%</span>
           </div>
-          <p className="faint" style={{ fontSize: 12, marginTop: 4 }}>
-            The board sets {money(f.wageBudget + f.transferBudget)} to split between wages and
-            transfers each season — moving money into one side takes it from the other.
+          <KV k="Committed wages (senior squad)" cls="bad">{money(-wages)}</KV>
+          <KV k="Remaining for signings" cls={f.wageBudget - wages < 0 ? 'bad' : 'good'}>{money(f.wageBudget - wages)}</KV>
+          <p className="footnote">
+            The board sets {money(envelope)} to split between wages and transfers each season — moving
+            money into one side takes it from the other.
           </p>
-        </div>
-        <div className="panel">
-          <h3>Income (annual)</h3>
-          {line('Sponsorship', f.sponsorshipIncome, true)}
-          {line('TV rights', f.tvRightsIncome, true)}
-          {line('Merchandise', f.merchandiseIncome, true)}
-          {line('Gate receipts so far', f.seasonIncome, true)}
-          {f.prizeMoney > 0 && line('Of which prize money', f.prizeMoney, true)}
-          {line('Per match (full house)', f.ticketIncomePerMatch, true)}
-        </div>
-        <div className="panel">
-          <h3>Expenditure (annual)</h3>
-          {line('Player wages', -wages)}
-          {line('Youth wages', -youthWages)}
-          {line('Staff wages', -staffWages)}
-          {line('Arena maintenance', -f.arenaMaintenance)}
-          {line('Medical', -f.medicalCosts)}
-          {line('Youth academy', -f.youthAcademyCosts)}
-          {line('Travel so far', -f.seasonExpenditure)}
-        </div>
+        </Card>
+
+        <Card title="Income (annual)" icon="stats">
+          {incomeLines.map(([k, v]) => <MoneyLine key={k} label={k} value={v} max={maxLine} tone="income" />)}
+          {f.prizeMoney > 0 && <KV k="Of which prize money" cls="good">{money(f.prizeMoney)}</KV>}
+          <KV k="Per match (full house)" cls="good">{money(f.ticketIncomePerMatch)}</KV>
+          <div className="money-total"><span>Income so far</span><strong className="good">{money(totalIncome)}</strong></div>
+        </Card>
+
+        <Card title="Expenditure (annual)" icon="stats">
+          {costLines.map(([k, v]) => <MoneyLine key={k} label={k} value={v} max={maxLine} tone="cost" />)}
+          <div className="money-total"><span>Costs so far</span><strong className="bad">{money(-totalCosts)}</strong></div>
+        </Card>
       </div>
 
-      <h2>Projection</h2>
-      <div className="panel">
-        {line('Income so far', totalIncome, true)}
-        {line('Costs so far', -totalCosts)}
-        {line('Result if the season ended today', totalIncome - totalCosts)}
-        <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>
-          Sponsorship and TV rights are locked in for the season; gate receipts
-          and travel costs accrue match by match, so this figure moves as the
-          season goes on.
+      <Card title="Projection" icon="calendar" style={{ marginTop: 16 }}>
+        <div className="projection">
+          <div><span className="faint">Income so far</span><strong className="good">{money(totalIncome)}</strong></div>
+          <span className="projection-op">−</span>
+          <div><span className="faint">Costs so far</span><strong className="bad">{money(totalCosts)}</strong></div>
+          <span className="projection-op">=</span>
+          <div>
+            <span className="faint">Result if the season ended today</span>
+            <strong className={result < 0 ? 'bad' : 'good'}>{money(result)}</strong>
+          </div>
+        </div>
+        <p className="footnote">
+          Sponsorship and TV rights are locked in for the season; gate receipts and travel costs accrue
+          match by match, so this figure moves as the season goes on.
         </p>
-      </div>
+      </Card>
     </>
   );
+}
+
+function ratingCls(rating: number): string {
+  return rating >= 15 ? 'good' : rating <= 8 ? 'bad' : '';
 }
 
 export function StaffScreen(): JSX.Element {
@@ -404,121 +552,142 @@ export function StaffScreen(): JSX.Element {
     setCandidates((cs) => cs.filter((c) => c.id !== id));
   };
 
+  const members = club.staff
+    .map((id) => world.staff[id])
+    .filter((s): s is Staff => s !== undefined && s.role !== StaffRole.HeadCoach);
+  const wageTotal = members.reduce((s, m) => s + m.wage, 0);
+  const avgRating = members.length > 0 ? members.reduce((s, m) => s + staffRating(m), 0) / members.length : 0;
+
   return (
     <>
-      <h1>Staff</h1>
-      <p className="subtitle">
-        Coaching quality drives development; medical staff drive injury recovery;
-        scouts determine how precise your reports are.
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Role</th>
-            <th>Nat</th>
-            <th className="num">Age</th>
-            <th className="num">Rating</th>
-            <th className="num">Wage</th>
-            <th>Best regions</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {club.staff
-            .filter((id) => world.staff[id]?.role !== StaffRole.HeadCoach)
-            .map((id) => {
-              const s = world.staff[id];
-              if (s === undefined) return null;
-              const rating = staffRating(s);
-              const scoutsRegions = s.role === StaffRole.Scout || s.role === StaffRole.HeadScout ||
-                s.role === StaffRole.RecruitmentAnalyst;
-              const regions = scoutsRegions
-                ? Object.entries(s.regionKnowledge)
-                  .sort((a, b) => b[1] - a[1]).slice(0, 2)
-                  .map(([k, v]) => `${k} ${v}`).join(', ')
-                : '';
-              return (
-                <tr key={id}>
-                  <td>{s.firstName} {s.lastName}</td>
-                  <td className="dim">{STAFF_ROLE_NAMES[s.role]}</td>
-                  <td><Flag nation={s.nation} /></td>
-                  <td className="num">{world.year - s.birthYear}</td>
-                  <td className={`num ${rating >= 15 ? 'good' : rating <= 8 ? 'bad' : ''}`}>
-                    {rating.toFixed(1)}
-                  </td>
-                  <td className="num dim">{money(s.wage)}</td>
-                  <td className="faint">{scoutsRegions ? regions : '—'}</td>
-                  <td>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Let ${s.firstName} ${s.lastName} go?`)) g.fireStaffMember(id);
-                      }}
-                    >
-                      Fire
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-        </tbody>
-      </table>
-
-      <h2>Recruit staff</h2>
-      <div className="toolbar">
-        <select
-          value={role}
-          onChange={(e) => { setRole(Number(e.target.value) as StaffRole); setCandidates([]); }}
-        >
-          {hirableRoles.map((r) => <option key={r} value={r}>{STAFF_ROLE_NAMES[r]}</option>)}
-        </select>
-        <button onClick={() => setCandidates(g.recruitStaffCandidates(role))}>
-          Search candidates
-        </button>
+      <div className="tiles">
+        <StatTile label="Staff members" value={members.length} />
+        <StatTile label="Average rating" value={avgRating.toFixed(1)} sub={<Bar value={avgRating} max={20} wide />} />
+        <StatTile label="Staff wages" value={money(wageTotal)} sub="per season" />
       </div>
-      {candidates.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Nat</th>
-              <th className="num">Age</th>
-              <th className="num">Rating</th>
-              <th className="num">Wage</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {candidates.map((s) => {
-              const rating = staffRating(s);
-              return (
-                <tr key={s.id}>
-                  <td>{s.firstName} {s.lastName}</td>
-                  <td><Flag nation={s.nation} /></td>
-                  <td className="num">{world.year - s.birthYear}</td>
-                  <td className={`num ${rating >= 15 ? 'good' : rating <= 8 ? 'bad' : ''}`}>
-                    {rating.toFixed(1)}
-                  </td>
-                  <td className="num dim">{money(s.wage)}</td>
-                  <td><button onClick={() => hire(s.id)}>Hire</button></td>
+      <p className="page-intro">
+        Coaching quality drives development; medical staff drive injury recovery; scouts determine
+        how precise your reports are.
+      </p>
+
+      <Card title="Backroom Staff" icon="staff" flush>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Nat</th>
+                <th className="num">Age</th>
+                <th>Rating</th>
+                <th className="num">Wage</th>
+                <th>Best regions</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((s) => {
+                const rating = staffRating(s);
+                const scoutsRegions = s.role === StaffRole.Scout || s.role === StaffRole.HeadScout ||
+                  s.role === StaffRole.RecruitmentAnalyst;
+                const regions = scoutsRegions
+                  ? Object.entries(s.regionKnowledge)
+                    .sort((a, b) => b[1] - a[1]).slice(0, 2)
+                    .map(([k, v]) => `${k} ${v}`).join(', ')
+                  : '';
+                return (
+                  <tr key={s.id}>
+                    <td className="strong">{s.firstName} {s.lastName}</td>
+                    <td><span className="role-chip">{STAFF_ROLE_NAMES[s.role]}</span></td>
+                    <td><Flag nation={s.nation} /></td>
+                    <td className="num">{world.year - s.birthYear}</td>
+                    <td>
+                      <span className="rating-cell">
+                        <Bar value={rating} max={20} />
+                        <span className={ratingCls(rating)}>{rating.toFixed(1)}</span>
+                      </span>
+                    </td>
+                    <td className="num dim">{money(s.wage)}</td>
+                    <td className="faint">{scoutsRegions ? regions : '—'}</td>
+                    <td className="num">
+                      <button
+                        className="sm danger"
+                        onClick={() => {
+                          if (window.confirm(`Let ${s.firstName} ${s.lastName} go?`)) g.fireStaffMember(s.id);
+                        }}
+                      >
+                        Fire
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {members.length === 0 && <tr><td colSpan={8}><Empty>No backroom staff employed.</Empty></td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card
+        title="Recruit Staff"
+        icon="search"
+        style={{ marginTop: 16 }}
+        flush={candidates.length > 0}
+        actions={(
+          <div className="toolbar-inline">
+            <select
+              value={role}
+              onChange={(e) => { setRole(Number(e.target.value) as StaffRole); setCandidates([]); }}
+            >
+              {hirableRoles.map((r) => <option key={r} value={r}>{STAFF_ROLE_NAMES[r]}</option>)}
+            </select>
+            <button className="accent" onClick={() => setCandidates(g.recruitStaffCandidates(role))}>
+              <Icon name="search" size={14} /> Search candidates
+            </button>
+          </div>
+        )}
+      >
+        {candidates.length === 0
+          ? <Empty>Pick a role and search to see who is available.</Empty>
+          : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Nat</th>
+                  <th className="num">Age</th>
+                  <th>Rating</th>
+                  <th className="num">Wage</th>
+                  <th />
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+              </thead>
+              <tbody>
+                {candidates.map((s) => {
+                  const rating = staffRating(s);
+                  return (
+                    <tr key={s.id}>
+                      <td className="strong">{s.firstName} {s.lastName}</td>
+                      <td><Flag nation={s.nation} /></td>
+                      <td className="num">{world.year - s.birthYear}</td>
+                      <td>
+                        <span className="rating-cell">
+                          <Bar value={rating} max={20} />
+                          <span className={ratingCls(rating)}>{rating.toFixed(1)}</span>
+                        </span>
+                      </td>
+                      <td className="num dim">{money(s.wage)}</td>
+                      <td className="num"><button className="sm primary" onClick={() => hire(s.id)}>Hire</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+      </Card>
     </>
   );
 }
 
-/**
- * Scouting.
- *
- * A player is a name on a list until a scout has actually watched them play —
- * attributes only appear once there is some matches-watched knowledge on
- * record, whether from dedicated scouting work or (for the genuinely famous)
- * from reputation alone. Ranges narrow as that knowledge accumulates.
- */
 /** Bands offered by the scouting screen's "min potential" filter, on the
  *  same 0-2000 scale (and the same thresholds) as {@link abilityClass}. */
 const POTENTIAL_BANDS: ReadonlyArray<[number, string]> = [
@@ -529,6 +698,34 @@ const POTENTIAL_BANDS: ReadonlyArray<[number, string]> = [
   [1650, 'Elite (1650+)'],
 ];
 
+/** An estimated range on the 0-2000 ability scale, drawn as a band. */
+function RangeBar({ low, high }: { low: number; high: number }): JSX.Element {
+  return (
+    <span className="range-bar" title={`${low}–${high}`}>
+      <span style={{ left: `${(low / 2000) * 100}%`, width: `${Math.max(1.2, ((high - low) / 2000) * 100)}%` }} />
+    </span>
+  );
+}
+
+function FilterField({ label, span, children }: { label: string; span?: number; children: ReactNode }): JSX.Element {
+  return (
+    <div className="filter-field" style={span !== undefined ? { gridColumn: `span ${span}` } : undefined}>
+      <label>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+type ScoutSort = 'name' | 'pos' | 'age' | 'height' | 'value' | 'scouted';
+
+/**
+ * Scouting.
+ *
+ * A player is a name on a list until a scout has actually watched them play —
+ * attributes only appear once there is some matches-watched knowledge on
+ * record, whether from dedicated scouting work or (for the genuinely famous)
+ * from reputation alone. Ranges narrow as that knowledge accumulates.
+ */
 export function ScoutingScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -536,6 +733,7 @@ export function ScoutingScreen(): JSX.Element {
   const [target, setTarget] = useState<number | null>(g.scoutingFocus);
   const [filters, setFilters] = useState<ScoutFilters>(DEFAULT_SCOUT_FILTERS);
   const [priceText, setPriceText] = useState('');
+  const [sort, onSort] = useSort<ScoutSort | 'default'>('default');
 
   // Consume any pending scouting focus exactly once, right after mounting.
   useEffect(() => {
@@ -561,7 +759,19 @@ export function ScoutingScreen(): JSX.Element {
   };
   const filtersActive = JSON.stringify(filters) !== JSON.stringify(DEFAULT_SCOUT_FILTERS);
 
-  const targets = g.scoutingPool(filters);
+  const pool = g.scoutingPool(filters);
+  // The pool arrives best-first; only re-sort once a column is chosen.
+  const targets = sort.key === 'default' ? pool : sortBy(pool, sort, (p, k) => {
+    switch (k) {
+      case 'name': return store.fullName(p);
+      case 'pos': return store.position[p];
+      case 'age': return store.ageOn(p, world.year, 181);
+      case 'height': return store.heightCm[p];
+      case 'value': return store.value[p];
+      case 'scouted': return totalMatchesWatched(world, p);
+      default: return 0;
+    }
+  });
   const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
   const report = target !== null && matchesWatched > 0
     ? buildScoutReport(world, world.userClubId, target, { matchesWatched })
@@ -573,48 +783,37 @@ export function ScoutingScreen(): JSX.Element {
 
   return (
     <>
-      <h1>Scouting</h1>
-      <p className="subtitle">
-        Reports show ranges, not numbers, and stay blank until your scouts have
-        actually seen the player. Send a scout to watch more matches to narrow
-        the estimate — potential is always harder to judge than current ability.
+      <p className="page-intro">
+        Reports show ranges, not numbers, and stay blank until your scouts have actually seen the
+        player. Send a scout to watch more matches to narrow the estimate — potential is always harder
+        to judge than current ability.
       </p>
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h3>Filters</h3>
+      <Card
+        title="Search Filters"
+        icon="search"
+        style={{ marginBottom: 16 }}
+        actions={<button className="sm" disabled={!filtersActive} onClick={clearFilters}>Clear filters</button>}
+      >
         <div className="filter-bar">
-          <div className="filter-field" style={{ gridColumn: 'span 2' }}>
-            <label>Name</label>
+          <FilterField label="Name" span={2}>
             <input
               placeholder="Search by name…"
               value={filters.query}
               onChange={(e) => setFilter('query', e.target.value)}
             />
-          </div>
+          </FilterField>
 
-          <div className="filter-field" style={{ gridColumn: 'span 2' }}>
-            <label>Position</label>
-            <div className="chip-group">
-              <span
-                className={`chip${filters.position === null ? ' active' : ''}`}
-                onClick={() => setFilter('position', null)}
-              >
-                Any
-              </span>
-              {POSITIONS.map((pos) => (
-                <span
-                  key={pos}
-                  className={`chip${filters.position === pos ? ' active' : ''}`}
-                  onClick={() => setFilter('position', pos)}
-                >
-                  {POSITION_NAMES[pos]}
-                </span>
-              ))}
-            </div>
-          </div>
+          <FilterField label="Position" span={3}>
+            <Segmented
+              size="sm"
+              options={[[-1, 'Any'], ...POSITIONS.map((pos) => [pos, POSITION_NAMES[pos]] as const)]}
+              value={filters.position ?? -1}
+              onChange={(v) => setFilter('position', v < 0 ? null : (v as Position))}
+            />
+          </FilterField>
 
-          <div className="filter-field">
-            <label>Age</label>
+          <FilterField label="Age">
             <div className="filter-range">
               <input
                 type="number" min={16} max={45} placeholder="Min"
@@ -628,10 +827,9 @@ export function ScoutingScreen(): JSX.Element {
                 onChange={(e) => setFilter('ageMax', toNum(e.target.value))}
               />
             </div>
-          </div>
+          </FilterField>
 
-          <div className="filter-field">
-            <label>Height (cm)</label>
+          <FilterField label="Height (cm)">
             <div className="filter-range">
               <input
                 type="number" min={150} max={230} placeholder="Min"
@@ -645,20 +843,18 @@ export function ScoutingScreen(): JSX.Element {
                 onChange={(e) => setFilter('heightMax', toNum(e.target.value))}
               />
             </div>
-          </div>
+          </FilterField>
 
-          <div className="filter-field">
-            <label>Potential</label>
+          <FilterField label="Potential">
             <select
               value={filters.potentialMin}
               onChange={(e) => setFilter('potentialMin', Number(e.target.value))}
             >
               {POTENTIAL_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-          </div>
+          </FilterField>
 
-          <div className="filter-field">
-            <label>Max price</label>
+          <FilterField label="Max price">
             <input
               placeholder="No limit"
               value={priceText}
@@ -668,36 +864,40 @@ export function ScoutingScreen(): JSX.Element {
                 if (e.key === 'Enter') { commitPrice(); (e.target as HTMLInputElement).blur(); }
               }}
             />
-          </div>
+          </FilterField>
 
-          <div className="filter-field">
-            <label>&nbsp;</label>
-            <span className="filter-check">
+          <FilterField label="Contract">
+            <label className="filter-check">
               <input
                 type="checkbox"
                 checked={filters.freeAgentOnly}
                 onChange={(e) => setFilter('freeAgentOnly', e.target.checked)}
               />
               Free agents only
-            </span>
-          </div>
-
-          <div className="filter-field filter-actions">
-            <button disabled={!filtersActive} onClick={clearFilters}>Clear filters</button>
-          </div>
+            </label>
+          </FilterField>
         </div>
-      </div>
+      </Card>
 
-      <div className="panels" style={{ alignItems: 'stretch' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2>Available players <span className="faint">({targets.length})</span></h2>
-          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-            <table>
+      <div className="scout-layout">
+        <Card
+          title="Players"
+          icon="squad"
+          flush
+          actions={<span className="faint">{targets.length} found</span>}
+        >
+          <div className="table-wrap scout-table">
+            <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th><th>Pos</th><th className="num">Age</th>
-                  <th className="num">Height</th><th>Nat</th>
-                  <th>Club</th><th className="num">Value</th><th className="num">Scouted</th>
+                  <SortTh k="name" sort={sort} onSort={onSort}>Name</SortTh>
+                  <SortTh k="pos" sort={sort} onSort={onSort}>Pos</SortTh>
+                  <SortTh k="age" sort={sort} onSort={onSort} num>Age</SortTh>
+                  <SortTh k="height" sort={sort} onSort={onSort} num>Ht</SortTh>
+                  <th>Nat</th>
+                  <th>Club</th>
+                  <SortTh k="value" sort={sort} onSort={onSort} num>Value</SortTh>
+                  <SortTh k="scouted" sort={sort} onSort={onSort} num title="Matches watched">Scouted</SortTh>
                 </tr>
               </thead>
               <tbody>
@@ -709,16 +909,18 @@ export function ScoutingScreen(): JSX.Element {
                       className={`clickable${target === p ? ' selected' : ''}`}
                       onClick={() => setTarget(p)}
                     >
-                      <td>{store.fullName(p)}</td>
+                      <td className="strong">{store.fullName(p)}</td>
                       <td><Pos pos={store.position[p] as Position} /></td>
                       <td className="num">{store.ageOn(p, world.year, 181)}</td>
                       <td className="num dim">{store.heightCm[p]}</td>
                       <td><Flag nation={store.nation[p]} /></td>
                       <td className="dim">
-                        {store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} short /> : 'Free agent'}
+                        {store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} short /> : <span className="free-tag">Free</span>}
                       </td>
                       <td className="num dim">{money(store.value[p])}</td>
-                      <td className={`num ${known > 0 ? 'dim' : 'faint'}`}>{known > 0 ? known : '—'}</td>
+                      <td className="num">
+                        {known > 0 ? <span className="scouted-tag">{known}</span> : <span className="faint">—</span>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -728,76 +930,77 @@ export function ScoutingScreen(): JSX.Element {
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
 
-        <div style={{ flex: 1.4, minWidth: 0 }}>
-          <h2>Scout report</h2>
+        <Card title="Scout Report" icon="scouting" className="scout-report">
           {target === null
             ? <Empty>Select a player to see what your scouts make of them.</Empty>
             : (
-              <div className="panel">
-                <div className="kv">
-                  <span className="k">Player</span>
-                  <strong>{store.fullName(target)}</strong>
-                </div>
-                <div className="kv">
-                  <span className="k">Club</span>
-                  <span>
-                    {store.clubId[target] >= 0 ? <ClubLink id={store.clubId[target]} /> : 'Free agent'}
-                  </span>
-                </div>
-                <div className="kv">
-                  <span className="k">Matches watched</span>
-                  <span>{matchesWatched}</span>
-                </div>
-                {pending !== undefined && (
-                  <div className="kv">
-                    <span className="k">Scouting trip</span>
-                    <span className="faint">Report due {g.dateLabelForDay(pending.completesOnDay)}</span>
+              <>
+                <div className="report-head">
+                  <PlayerFace playerId={store.id[target]} name={store.fullName(target)} size={56} />
+                  <div className="report-head-text">
+                    <strong className="report-name">{store.fullName(target)}</strong>
+                    <span className="report-sub">
+                      <Pos pos={store.position[target] as Position} />
+                      <Flag nation={store.nation[target]} />
+                      <span>Age {store.ageOn(target, world.year, 181)}</span>
+                      <span>{store.heightCm[target]} cm</span>
+                    </span>
+                    <span className="report-sub">
+                      {store.clubId[target] >= 0 ? <ClubLink id={store.clubId[target]} /> : 'Free agent'}
+                    </span>
                   </div>
+                </div>
+
+                <KV k="Market value">{money(store.value[target])}</KV>
+                <KV k="Matches watched">{matchesWatched}</KV>
+                {pending !== undefined && (
+                  <KV k="Scouting trip" cls="warn">Report due {g.dateLabelForDay(pending.completesOnDay)}</KV>
                 )}
-                <div className="toolbar" style={{ margin: '8px 0' }}>
+                <div className="report-actions">
                   <button disabled={pending !== undefined} onClick={() => g.scoutPlayer(target)}>
+                    <Icon name="scouting" size={14} />
                     {pending !== undefined ? 'Scouting in progress…' : 'Scout this player'}
                   </button>
                   <button className="primary" onClick={() => g.startNegotiation(target)}>
-                    Negotiate transfer
+                    <Icon name="transfers" size={14} /> Negotiate transfer
                   </button>
                 </div>
 
                 {report === null ? (
                   <Empty>
-                    Your scouts have not seen this player yet — send a scout to
-                    watch a few matches before any assessment is possible.
+                    Your scouts have not seen this player yet — send a scout to watch a few matches
+                    before any assessment is possible.
                   </Empty>
                 ) : (
                   <>
-                    <div className="kv">
-                      <span className="k">Scout</span>
-                      <span>{report.scoutName ?? 'No specialist scout employed'}</span>
-                    </div>
-                    <div className="kv">
-                      <span className="k">Confidence</span>
-                      <span><Bar value={report.confidence * 100} /></span>
-                    </div>
+                    <KV k="Scout">{report.scoutName ?? 'No specialist scout employed'}</KV>
+                    <KV k="Confidence"><Bar value={report.confidence * 100} wide /></KV>
 
-                    <h3 style={{ marginTop: 14 }}>Assessment</h3>
-                    <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
-                      {report.summary.map((s, i) => <li key={i} className="dim">{s}</li>)}
+                    <h4 className="section-label">Assessment</h4>
+                    <ul className="report-summary">
+                      {report.summary.map((s, i) => <li key={i}>{s}</li>)}
                     </ul>
 
-                    <div className="kv">
-                      <span className="k">Estimated ability</span>
-                      <span>{report.abilityLow}–{report.abilityHigh}</span>
+                    <div className="range-row">
+                      <span className="range-label">Estimated ability</span>
+                      <RangeBar low={report.abilityLow} high={report.abilityHigh} />
+                      <span className="range-value">{report.abilityLow}–{report.abilityHigh}</span>
                     </div>
-                    <div className="kv">
-                      <span className="k">Estimated potential</span>
-                      <span className={abilityClass((report.potentialLow + report.potentialHigh) / 2)}>
+                    <div className="range-row">
+                      <span className="range-label">Estimated potential</span>
+                      <RangeBar low={report.potentialLow} high={report.potentialHigh} />
+                      <span className={`range-value ${abilityClass((report.potentialLow + report.potentialHigh) / 2)}`}>
                         {report.potentialLow}–{report.potentialHigh}
                       </span>
                     </div>
+                    <div className="range-stars">
+                      <StarMeter value={(report.potentialLow + report.potentialHigh) / 2} size={14} />
+                      <span className="faint">scout's view of potential</span>
+                    </div>
 
-                    <h3 style={{ marginTop: 14 }}>Attributes</h3>
+                    <h4 className="section-label">Attributes</h4>
                     <div className="attrs">
                       {report.attributes.slice(0, 24).map((a) => (
                         <div className="attr" key={a.attribute}>
@@ -808,13 +1011,15 @@ export function ScoutingScreen(): JSX.Element {
                     </div>
                   </>
                 )}
-              </div>
+              </>
             )}
-        </div>
+        </Card>
       </div>
     </>
   );
 }
+
+type TransferSort = 'name' | 'pos' | 'age' | 'height' | 'ability' | 'value' | 'wage';
 
 export function TransfersScreen(): JSX.Element {
   const g = useGame();
@@ -823,51 +1028,116 @@ export function TransfersScreen(): JSX.Element {
   const club = g.club!;
   const targets = g.transferTargets(100);
   const committed = club.players.reduce((s, p) => s + store.wage[p], 0);
+  const wageRoom = club.finances.wageBudget - committed;
+  const offers = world.incomingOffers;
+  const [sort, onSort] = useSort<TransferSort>('ability');
+
+  const rows = sortBy(targets, sort, (p, k) => {
+    switch (k) {
+      case 'name': return store.fullName(p);
+      case 'pos': return store.position[p];
+      case 'age': return store.ageOn(p, world.year, 181);
+      case 'height': return store.heightCm[p];
+      case 'value': return store.value[p];
+      case 'wage': return store.wage[p];
+      default: return store.currentAbility[p];
+    }
+  });
 
   return (
     <>
-      <h1>Transfers</h1>
-      <p className="subtitle">
-        Volleyball moves happen mostly at contract expiry rather than for fees.
-        Wage room: {money(club.finances.wageBudget - committed)} · Squad{' '}
-        {club.players.length}/16
-      </p>
+      <div className="tiles">
+        <StatTile label="Transfer budget" value={money(Math.min(club.finances.transferBudget, club.finances.balance))} sub="available to spend" />
+        <StatTile label="Wage room" value={money(wageRoom)} tone={wageRoom < 0 ? 'bad' : 'good'} sub={`of ${money(club.finances.wageBudget)}`} />
+        <StatTile label="Squad" value={`${club.players.length}/16`} tone={club.players.length >= 16 ? 'warn' : undefined} sub={club.players.length >= 16 ? 'full — release to sign' : 'places available'} />
+        <StatTile label="Offers received" value={offers.length} tone={offers.length > 0 ? 'gold' : undefined} sub="awaiting a decision" />
+      </div>
 
-      {targets.length === 0
-        ? <Empty>No free agents available right now. More become available at the season rollover.</Empty>
-        : (
-          <table>
+      {offers.length > 0 && (
+        <Card title="Offers Received" icon="offer" flush style={{ marginBottom: 16 }}>
+          <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th><th>Pos</th><th className="num">Age</th><th>Nat</th>
-                <th className="num">Height</th><th className="num">Ability</th>
-                <th className="num">Value</th><th className="num">Wage</th><th />
+                <th>Player</th><th>Pos</th><th>Bidding club</th>
+                <th className="num">Offer</th><th className="num">Value</th><th>Expires</th><th />
               </tr>
             </thead>
             <tbody>
-              {targets.map((p) => {
-                const affordable = store.wage[p] <= club.finances.wageBudget - committed;
-                return (
-                  <tr key={p}>
-                    <td className="clickable" onClick={() => g.select(p)}>{store.fullName(p)}</td>
-                    <td><Pos pos={store.position[p] as Position} /></td>
-                    <td className="num">{store.ageOn(p, world.year, 181)}</td>
-                    <td><Flag nation={store.nation[p]} /></td>
-                    <td className="num dim">{store.heightCm[p]}</td>
-                    <td className={`num ${abilityClass(store.currentAbility[p])}`}>
-                      {store.currentAbility[p]}
-                    </td>
-                    <td className="num dim">{money(store.value[p])}</td>
-                    <td className={`num ${affordable ? '' : 'bad'}`}>{money(store.wage[p])}</td>
-                    <td>
-                      <button onClick={() => g.startNegotiation(p)}>Negotiate</button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {offers.map((o) => (
+                <tr key={o.id}>
+                  <td className="strong">{store.fullName(o.playerIdx)}</td>
+                  <td><Pos pos={store.position[o.playerIdx] as Position} /></td>
+                  <td><ClubLink id={o.buyingClubId} /></td>
+                  <td className="num gold-text">{money(o.fee)}</td>
+                  <td className="num dim">{money(store.value[o.playerIdx])}</td>
+                  <td className="dim">{g.dateLabelForDay(o.expiresOnDay)}</td>
+                  <td className="num"><button className="sm primary" onClick={() => g.openOffer(o.id)}>Review</button></td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        )}
+        </Card>
+      )}
+
+      <p className="page-intro">
+        Volleyball moves happen mostly at contract expiry rather than for fees — these are the best
+        unattached players available now. Use Scouting to approach players under contract elsewhere.
+      </p>
+
+      <Card title="Free Agents" icon="transfers" flush actions={<span className="faint">{targets.length} available</span>}>
+        {targets.length === 0
+          ? <Empty>No free agents available right now. More become available at the season rollover.</Empty>
+          : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th />
+                    <SortTh k="name" sort={sort} onSort={onSort}>Name</SortTh>
+                    <SortTh k="pos" sort={sort} onSort={onSort}>Pos</SortTh>
+                    <SortTh k="age" sort={sort} onSort={onSort} num>Age</SortTh>
+                    <th>Nat</th>
+                    <SortTh k="height" sort={sort} onSort={onSort} num>Height</SortTh>
+                    <SortTh k="ability" sort={sort} onSort={onSort}>Ability</SortTh>
+                    <SortTh k="value" sort={sort} onSort={onSort} num>Value</SortTh>
+                    <SortTh k="wage" sort={sort} onSort={onSort} num>Wage</SortTh>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((p) => {
+                    const affordable = store.wage[p] <= wageRoom;
+                    return (
+                      <tr key={p} className="clickable" onClick={() => g.select(p)}>
+                        <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                        <td className="strong">{store.fullName(p)}</td>
+                        <td><Pos pos={store.position[p] as Position} /></td>
+                        <td className="num">{store.ageOn(p, world.year, 181)}</td>
+                        <td><Flag nation={store.nation[p]} /></td>
+                        <td className="num dim">{store.heightCm[p]}</td>
+                        <td>
+                          <span className="ability-cell">
+                            <StarMeter value={store.currentAbility[p]} size={11} />
+                            <span className={abilityClass(store.currentAbility[p])}>{store.currentAbility[p]}</span>
+                          </span>
+                        </td>
+                        <td className="num dim">{money(store.value[p])}</td>
+                        <td className={`num ${affordable ? '' : 'bad'}`} title={affordable ? undefined : 'Over your remaining wage budget'}>
+                          {money(store.wage[p])}
+                        </td>
+                        <td className="num">
+                          <button className="sm primary" onClick={(e) => { e.stopPropagation(); g.startNegotiation(p); }}>
+                            Negotiate
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </Card>
     </>
   );
 }

@@ -1,6 +1,10 @@
-import { useId, type JSX } from 'react';
-import { NATIONS } from '../engine/world/nations.ts';
-import { ClubCrest, ClubLink, money } from './components.tsx';
+import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import { PlayerFlag } from '../engine/model/players.ts';
+import type { Position } from '../engine/model/positions.ts';
+import {
+  ClubCrest, clubThemeStyle, managerPhotoUrl, money, PersonFace, PlayerFace, Pos,
+} from './components.tsx';
+import { Icon, type IconName } from './icons.tsx';
 import { PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
@@ -31,93 +35,60 @@ function viewKey(g: ReturnType<typeof useGame>): string {
   return `screen-${g.screen}`;
 }
 
-type NavIconName = 'club' | 'competition' | 'management' | 'world';
+/** A sidebar entry: one area of the club, split into the sub-screens shown as header tabs. */
+interface Section {
+  id: string;
+  label: string;
+  icon: IconName;
+  tabs: Array<[ScreenId, string]>;
+}
 
-const NAV: Array<{ group: string; icon: NavIconName; items: Array<[ScreenId, string]> }> = [
-  {
-    group: 'Club',
-    icon: 'club',
-    items: [
-      ['overview', 'Overview'],
-      ['squad', 'Squad'],
-      ['lineup', 'Lineup'],
-      ['tactics', 'Tactics'],
-      ['rotations', 'Rotations'],
-      ['training', 'Training'],
-      ['youth', 'Youth Academy'],
-    ],
-  },
-  {
-    group: 'Competition',
-    icon: 'competition',
-    items: [
-      ['fixtures', 'Fixtures'],
-      ['table', 'League Table'],
-      ['stats', 'Statistics'],
-    ],
-  },
-  {
-    group: 'Management',
-    icon: 'management',
-    items: [
-      ['transfers', 'Transfers'],
-      ['scouting', 'Scouting'],
-      ['staff', 'Staff'],
-      ['finances', 'Finances'],
-    ],
-  },
-  {
-    group: 'World',
-    icon: 'world',
-    items: [
-      ['rankings', 'World Rankings'],
-      ['halloffame', 'Hall of Fame'],
-    ],
-  },
+/** The sidebar, in groups — a thin rule separates each group, the way the
+ *  real thing keeps day-to-day club work apart from the wider world. */
+const SECTION_GROUPS: Section[][] = [
+  [
+    { id: 'home', label: 'Home', icon: 'home', tabs: [['overview', 'Inbox']] },
+  ],
+  [
+    { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Players'], ['youth', 'Youth Academy']] },
+    {
+      id: 'tactics',
+      label: 'Tactics',
+      icon: 'tactics',
+      tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
+    },
+    { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Development']] },
+  ],
+  [
+    { id: 'schedule', label: 'Schedule', icon: 'schedule', tabs: [['fixtures', 'Fixtures & Results']] },
+    { id: 'competitions', label: 'Competitions', icon: 'trophy', tabs: [['table', 'Standings'], ['stats', 'Player Stats']] },
+  ],
+  [
+    { id: 'scouting', label: 'Scouting', icon: 'scouting', tabs: [['scouting', 'Player Search']] },
+    { id: 'transfers', label: 'Transfers', icon: 'transfers', tabs: [['transfers', 'Transfer Centre']] },
+  ],
+  [
+    { id: 'staff', label: 'Staff', icon: 'staff', tabs: [['staff', 'Overview']] },
+    { id: 'finances', label: 'Finances', icon: 'finances', tabs: [['finances', 'Summary']] },
+  ],
+  [
+    { id: 'world', label: 'World', icon: 'world', tabs: [['rankings', 'World Rankings'], ['halloffame', 'Hall of Fame']] },
+  ],
 ];
 
-/** Small monochrome line icons for the nav group headers — inherits `color` from its container. */
-function NavIcon({ name }: { name: NavIconName }): JSX.Element {
-  const common = {
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.8,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    className: 'nav-icon',
-  };
-  switch (name) {
-    case 'club':
-      return (
-        <svg {...common}>
-          <path d="M8 3 L4 6 L6 9 L8 7.5 V20 H16 V7.5 L18 9 L20 6 L16 3 C16 4.5 14.5 5.5 12 5.5 C9.5 5.5 8 4.5 8 3 Z" />
-        </svg>
-      );
-    case 'competition':
-      return (
-        <svg {...common}>
-          <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
-          <path d="M7 5H4a1 1 0 0 0-1 1c0 2.5 1.8 4 4 4.2" />
-          <path d="M17 5h3a1 1 0 0 1 1 1c0 2.5-1.8 4-4 4.2" />
-          <path d="M9 20h6M12 15v5" />
-        </svg>
-      );
-    case 'management':
-      return (
-        <svg {...common}>
-          <rect x="3" y="7.5" width="18" height="12" rx="1.5" />
-          <path d="M8 7.5V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1.5" />
-          <path d="M3 12.5h18" />
-        </svg>
-      );
-    case 'world':
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M3.5 12h17M12 3.5c2.5 2.4 3.8 5.4 3.8 8.5s-1.3 6.1-3.8 8.5c-2.5-2.4-3.8-5.4-3.8-8.5S9.5 5.9 12 3.5Z" />
-        </svg>
-      );
+const ALL_SECTIONS = SECTION_GROUPS.flat();
+
+function sectionFor(screen: ScreenId): Section {
+  return ALL_SECTIONS.find((s) => s.tabs.some(([id]) => id === screen)) ?? ALL_SECTIONS[0];
+}
+
+const SIDEBAR_KEY = 'vm.sidebarCollapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -126,35 +97,35 @@ export function App(): JSX.Element {
 
   if (g.world === null) return <MenuScreen />;
   if (g.world.userClubId < 0) return <ClubSelect />;
+  return <GameShell />;
+}
+
+function GameShell(): JSX.Element {
+  const g = useGame();
+  const club = g.club!;
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+
+  const toggleCollapsed = (): void => {
+    setCollapsed((c) => {
+      try {
+        window.localStorage.setItem(SIDEBAR_KEY, c ? '0' : '1');
+      } catch { /* per-viewer convenience only */ }
+      return !c;
+    });
+  };
+
+  const key = viewKey(g);
+  // The inbox claims the whole content height so only its message list
+  // scrolls; every other view grows with its content and scrolls the page.
+  const fill = key === 'screen-overview';
 
   return (
-    <div className="app">
-      <TopBar />
-      <TrophyOverlay />
-      <div className="body">
-        <nav className="nav">
-          {NAV.map((section) => (
-            <div key={section.group}>
-              <div className="group"><NavIcon name={section.icon} /> {section.group}</div>
-              {section.items.map(([id, label]) => (
-                <button
-                  key={id}
-                  className={g.screen === id ? 'active' : ''}
-                  onClick={() => g.go(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <main className="main">
-          {g.notice !== '' && (
-            <div key={g.notice} className="notice" onClick={() => { g.notice = ''; g.touch(); }}>
-              {g.notice}
-            </div>
-          )}
-          <div key={viewKey(g)} className="view-fade">
+    <div className={`app${collapsed ? ' sidebar-collapsed' : ''}`} style={clubThemeStyle(club)}>
+      <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
+      <div className="main-col">
+        <Header />
+        <main className={`content${fill ? ' content-fill' : ''}`}>
+          <div key={key} className="view-fade">
             {g.matchday !== null
               ? <MatchdayScreen />
               : g.negotiation !== null
@@ -171,6 +142,8 @@ export function App(): JSX.Element {
           </div>
         </main>
       </div>
+      <Toast />
+      <TrophyOverlay />
     </div>
   );
 }
@@ -209,43 +182,427 @@ function Screen(): JSX.Element {
   }
 }
 
-function TopBar(): JSX.Element {
+/** True while a full-screen flow (a match, a press conference) owns the
+ *  content area — sidebar navigation would only change what's underneath. */
+function inTakeover(g: ReturnType<typeof useGame>): boolean {
+  return g.matchday !== null || g.activeInterviewFixtureId !== null;
+}
+
+function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }): JSX.Element {
   const g = useGame();
-  const club = g.club!;
-  const next = g.nextFixture();
   const world = g.world!;
+  const club = g.club!;
+  const manager = world.manager;
+  const unread = world.messages.filter((m) => m.read !== true).length;
+  const takeover = inTakeover(g);
+  const onProfile = g.selectedClub !== null || g.selectedPlayer !== null ||
+    g.negotiation !== null || g.incomingOffer !== null;
+  const activeSection = onProfile ? null : sectionFor(g.screen).id;
+  const clubInfoActive = g.selectedClub === club.id;
+
+  const item = (
+    key: string, label: string, icon: IconName, active: boolean, onClick: () => void, badge?: number,
+  ): JSX.Element => (
+    <button
+      key={key}
+      className={`side-item${active ? ' active' : ''}`}
+      onClick={onClick}
+      disabled={takeover}
+      title={collapsed ? label : undefined}
+    >
+      <Icon name={icon} size={19} />
+      <span className="side-item-label">{label}</span>
+      {badge !== undefined && badge > 0 && <span className="side-badge">{badge > 99 ? '99+' : badge}</span>}
+    </button>
+  );
 
   return (
-    <header className="topbar">
-      <span className="club"><ClubLink id={club.id} /></span>
-      <span className="meta">
-        {NATIONS[club.nation].name} · Tier {club.tier} · Rep {club.reputation}
-      </span>
-      <span className="meta">{world.manager.firstName} {world.manager.lastName}</span>
-      <span className="spacer" />
-      <span className="meta">{money(club.finances.balance)}</span>
-      <span className="meta">{g.dateLabel()}</span>
-      <span className="meta">{PHASE_NAMES[g.phase()]}</span>
-      <button disabled={next?.day === world.day} onClick={() => g.advance(1)}>+1 day</button>
-      <button disabled={next?.day === world.day} onClick={() => g.advance(7)}>+1 week</button>
-      <button
-        className="primary"
-        disabled={next === null}
-        onClick={() => g.openMatchday()}
-      >
-        {next === null
-          ? 'No fixture'
-          : `Play ${next.home === world.userClubId ? 'vs' : 'at'} ${
-              world.clubs[next.home === world.userClubId ? next.away : next.home]?.shortName ?? ''
-            }`}
+    <aside className="sidebar">
+      <div className="side-brand">
+        <span className="brand-badge">VM</span>
+        <span className="side-brand-text">
+          <strong>Volleyball</strong>
+          <span>Manager</span>
+        </span>
+      </div>
+
+      <div className="side-manager" title={`${manager.firstName} ${manager.lastName}`}>
+        <PersonFace photoUrl={managerPhotoUrl(manager)} name={`${manager.firstName} ${manager.lastName}`} size={34} />
+        <span className="side-manager-text">
+          <strong>{manager.firstName} {manager.lastName}</strong>
+          <span>Manager · {club.shortName}</span>
+        </span>
+      </div>
+
+      <nav className="side-nav">
+        {SECTION_GROUPS.map((group, gi) => (
+          <div className="side-group" key={gi}>
+            {group.map((s) => item(
+              s.id, s.label, s.icon, activeSection === s.id,
+              () => g.go(s.tabs[0][0]),
+              s.id === 'home' ? unread : undefined,
+            ))}
+            {gi === 4 && item('clubinfo', 'Club Info', 'club', clubInfoActive, () => g.selectClub(club.id))}
+          </div>
+        ))}
+      </nav>
+
+      <button className="side-collapse" onClick={onToggle} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+        <Icon name={collapsed ? 'expand' : 'collapse'} size={18} />
+        <span className="side-item-label">Collapse</span>
       </button>
-      <button onClick={() => { void g.saveCurrentGame(); }} disabled={g.busy}>
-        {g.busy ? 'Saving…' : 'Save'}
-      </button>
-      <button onClick={() => { void g.exitToMenu(); }} disabled={g.busy}>
-        Save &amp; Exit
-      </button>
+    </aside>
+  );
+}
+
+/** What the header names the current view, and which tabs sit beneath it. */
+function headerInfo(g: ReturnType<typeof useGame>): {
+  kicker: string;
+  title: string;
+  tabs: Array<[ScreenId, string]> | null;
+} {
+  const world = g.world!;
+  const club = g.club!;
+  if (g.matchday !== null) {
+    const comp = world.competitions[g.matchday.fixture.competitionId];
+    return {
+      kicker: comp?.name ?? 'Match day',
+      title: g.matchday.stage === 'lineup' ? 'Team Selection' : 'Live Match',
+      tabs: null,
+    };
+  }
+  if (g.negotiation !== null) return { kicker: 'Transfers', title: 'Contract Negotiation', tabs: null };
+  if (g.incomingOffer !== null) return { kicker: 'Transfers', title: 'Transfer Offer', tabs: null };
+  if (g.activeInterviewFixtureId !== null) return { kicker: 'Media', title: 'Press Conference', tabs: null };
+  if (g.selectedClub !== null) {
+    const c = world.clubs[g.selectedClub];
+    return { kicker: 'Club Profile', title: c?.name ?? 'Club', tabs: null };
+  }
+  if (g.selectedPlayer !== null) {
+    return { kicker: 'Player Profile', title: world.players.fullName(g.selectedPlayer), tabs: null };
+  }
+  const section = sectionFor(g.screen);
+  return { kicker: club.name, title: section.label, tabs: section.tabs };
+}
+
+function Header(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const info = headerInfo(g);
+  const takeover = inTakeover(g);
+
+  return (
+    <header className="hdr">
+      <div className="hdr-top">
+        <div className="hdr-nav">
+          <button
+            className="icon-btn hdr-icon-btn"
+            title="Back"
+            disabled={takeover || !g.canGoBack()}
+            onClick={() => g.back()}
+          >
+            <Icon name="back" size={18} />
+          </button>
+          <button
+            className="icon-btn hdr-icon-btn"
+            title="Forward"
+            disabled={takeover || !g.canGoForward()}
+            onClick={() => g.forward()}
+          >
+            <Icon name="forward" size={18} />
+          </button>
+        </div>
+
+        <div className="hdr-title">
+          <ClubCrest club={club} size={38} />
+          <div className="hdr-title-text">
+            <span className="hdr-kicker">{info.kicker}</span>
+            <h1 className="hdr-h1">{info.title}</h1>
+          </div>
+        </div>
+
+        <span className="hdr-spacer" />
+
+        <GlobalSearch disabled={takeover} />
+
+        <div className="hdr-date" title={PHASE_NAMES[g.phase()]}>
+          <span className="hdr-date-day">{g.weekdayLabelForDay(world.day)}</span>
+          <span className="hdr-date-main">{g.dateLabel()}</span>
+          <span className="hdr-date-phase">{PHASE_NAMES[g.phase()]}</span>
+        </div>
+
+        <div className={`hdr-balance${club.finances.balance < 0 ? ' negative' : ''}`} title="Club balance">
+          <span>Balance</span>
+          <strong>{money(club.finances.balance)}</strong>
+        </div>
+
+        <GameMenu />
+        <ContinueButton />
+      </div>
+
+      {info.tabs !== null && (
+        <nav className="hdr-tabs">
+          {info.tabs.map(([id, label]) => (
+            <button
+              key={id}
+              className={`hdr-tab${g.screen === id && g.selectedClub === null && g.selectedPlayer === null ? ' active' : ''}`}
+              onClick={() => g.go(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
     </header>
+  );
+}
+
+/** Close a popover when the user clicks anywhere outside it or presses Escape. */
+function useDismiss(open: boolean, close: () => void): React.RefObject<HTMLDivElement> {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent): void => {
+      if (ref.current !== null && !ref.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return ref;
+}
+
+/**
+ * The big button in the corner: moves the calendar on. On the day of one of
+ * the user's own fixtures it becomes the way into the match instead, since
+ * time never skips past a fixture. The chevron beside it offers the longer
+ * jumps — a week, or straight to the next match.
+ */
+function ContinueButton(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const next = g.nextFixture();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const matchToday = next !== null && next.day === world.day;
+  const inMatch = g.matchday !== null;
+  const blocked = inMatch || g.activeInterviewFixtureId !== null;
+
+  const opponentId = next === null ? -1 : next.home === world.userClubId ? next.away : next.home;
+  const opponent = world.clubs[opponentId];
+
+  const primary = (): void => {
+    if (matchToday) g.openMatchday();
+    else g.advance(1);
+  };
+
+  return (
+    <div className="continue" ref={ref}>
+      <button className="continue-main" disabled={blocked} onClick={primary}>
+        <span className="continue-label">
+          {inMatch
+            ? (g.matchday?.stage === 'lineup' ? 'Team selection' : 'Match in progress')
+            : matchToday ? 'Match Day' : 'Continue'}
+        </span>
+        <Icon name={matchToday && !inMatch ? 'ball' : 'play'} size={16} />
+      </button>
+      <button
+        className="continue-more"
+        disabled={blocked}
+        onClick={() => setOpen((o) => !o)}
+        title="More options"
+      >
+        <Icon name="chevronDown" size={16} />
+      </button>
+      {open && (
+        <div className="menu-pop menu-pop-right">
+          <button disabled={matchToday} onClick={() => { g.advance(1); setOpen(false); }}>
+            <Icon name="forward" size={16} /> Advance one day
+          </button>
+          <button disabled={matchToday} onClick={() => { g.advance(7); setOpen(false); }}>
+            <Icon name="fastForward" size={16} /> Advance one week
+          </button>
+          <div className="menu-sep" />
+          <button disabled={next === null} onClick={() => { g.openMatchday(); setOpen(false); }}>
+            <Icon name="ball" size={16} />
+            <span className="menu-pop-stack">
+              <span>{next === null ? 'No fixture scheduled' : 'Go to next match'}</span>
+              {next !== null && opponent !== undefined && (
+                <span className="faint">
+                  {next.home === world.userClubId ? 'vs' : 'at'} {opponent.shortName} · {g.dateLabelForDay(next.day)}
+                </span>
+              )}
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Save / exit, tucked behind one button like a game's system menu. */
+function GameMenu(): JSX.Element {
+  const g = useGame();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    <div className="game-menu" ref={ref}>
+      <button className="icon-btn hdr-icon-btn" title="Game menu" onClick={() => setOpen((o) => !o)}>
+        <Icon name="menu" size={18} />
+      </button>
+      {open && (
+        <div className="menu-pop menu-pop-right">
+          <button disabled={g.busy} onClick={() => { void g.saveCurrentGame(); setOpen(false); }}>
+            <Icon name="save" size={16} /> {g.busy ? 'Saving…' : 'Save game'}
+          </button>
+          <button disabled={g.busy} onClick={() => { setOpen(false); void g.exitToMenu(); }}>
+            <Icon name="exit" size={16} /> Save &amp; exit to menu
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SearchResult {
+  kind: 'club' | 'player';
+  id: number;
+}
+
+/**
+ * The header's search box: any club or player in the world by name, opened
+ * straight into their profile. Results are capped and debounced so typing
+ * never stalls even with a large world's full player pool behind it.
+ */
+function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const ref = useDismiss(open, () => setOpen(false));
+  const listId = useId();
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query.trim().toLowerCase()), 140);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const results = useMemo((): SearchResult[] => {
+    if (debounced.length < 2) return [];
+    const clubs = world.clubs
+      .filter((c) => c.name.toLowerCase().includes(debounced) || c.shortName.toLowerCase() === debounced)
+      .sort((a, b) => b.reputation - a.reputation)
+      .slice(0, 4)
+      .map((c): SearchResult => ({ kind: 'club', id: c.id }));
+    const players: number[] = [];
+    for (let i = 0; i < store.count; i++) {
+      if (!store.isActive(i)) continue;
+      if (store.hasFlag(i, PlayerFlag.Youth) && store.clubId[i] !== world.userClubId) continue;
+      if (!store.fullName(i).toLowerCase().includes(debounced)) continue;
+      players.push(i);
+    }
+    players.sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
+    return [...clubs, ...players.slice(0, 8).map((p): SearchResult => ({ kind: 'player', id: p }))];
+  }, [debounced, world]);
+
+  useEffect(() => setHighlight(0), [debounced]);
+
+  const openResult = (r: SearchResult): void => {
+    if (r.kind === 'club') g.selectClub(r.id);
+    else g.select(r.id);
+    setQuery('');
+    setDebounced('');
+    setOpen(false);
+  };
+
+  return (
+    <div className="search" ref={ref}>
+      <Icon name="search" size={16} className="search-icon" />
+      <input
+        className="search-input"
+        placeholder="Search players & clubs"
+        value={query}
+        disabled={disabled}
+        aria-controls={listId}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => Math.min(results.length - 1, h + 1)); }
+          if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => Math.max(0, h - 1)); }
+          if (e.key === 'Enter' && results[highlight] !== undefined) openResult(results[highlight]);
+        }}
+      />
+      {open && debounced.length >= 2 && (
+        <div className="search-pop" id={listId} role="listbox">
+          {results.length === 0 && <div className="search-empty">No players or clubs match “{query.trim()}”.</div>}
+          {results.map((r, i) => {
+            if (r.kind === 'club') {
+              const c = world.clubs[r.id];
+              return (
+                <button
+                  key={`c${r.id}`}
+                  className={`search-row${i === highlight ? ' active' : ''}`}
+                  onMouseEnter={() => setHighlight(i)}
+                  onClick={() => openResult(r)}
+                >
+                  <ClubCrest club={c} size={26} />
+                  <span className="search-row-main">
+                    <strong>{c.name}</strong>
+                    <span className="faint">Club · Tier {c.tier}</span>
+                  </span>
+                </button>
+              );
+            }
+            const clubId = store.clubId[r.id];
+            const c = clubId >= 0 ? world.clubs[clubId] : undefined;
+            return (
+              <button
+                key={`p${r.id}`}
+                className={`search-row${i === highlight ? ' active' : ''}`}
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => openResult(r)}
+              >
+                <PlayerFace playerId={store.id[r.id]} name={store.fullName(r.id)} size={26} />
+                <span className="search-row-main">
+                  <strong>{store.fullName(r.id)}</strong>
+                  <span className="faint">{c !== undefined ? c.name : 'Free agent'}</span>
+                </span>
+                <Pos pos={store.position[r.id] as Position} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Notices appear as a toast in the corner and fade out by themselves. */
+function Toast(): JSX.Element | null {
+  const g = useGame();
+  const text = g.notice;
+  useEffect(() => {
+    if (text === '') return;
+    const t = setTimeout(() => g.dismissNotice(text), 6000);
+    return () => clearTimeout(t);
+  }, [text]);
+  if (text === '') return null;
+  return (
+    <div key={text} className="toast" role="status" onClick={() => g.dismissNotice()}>
+      <Icon name="news" size={17} />
+      <span>{text}</span>
+      <Icon name="close" size={14} className="toast-close" />
+    </div>
   );
 }
 
@@ -335,4 +692,3 @@ function TrophyOverlay(): JSX.Element | null {
     </div>
   );
 }
-

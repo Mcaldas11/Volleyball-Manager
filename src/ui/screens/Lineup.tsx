@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
-import { abilityClass, Empty } from '../components.tsx';
+import { abilityClass, Empty, StarMeter } from '../components.tsx';
+import { Icon } from '../icons.tsx';
 import { TeamSheet } from '../teamSheet.tsx';
 import { useGame } from '../state.ts';
 
@@ -27,20 +28,23 @@ export function LineupScreen(): JSX.Element {
   const hasPreference = club.preferredLineup.some((p) => p >= 0) || club.preferredLibero >= 0;
 
   return (
-    <div className="lineup-screen">
-      <div className="lineup-header">
-        <div>
-          <h1>Starting Lineup</h1>
-          <p className="subtitle">
-            Your default team sheet — used automatically for every match, and still the starting
-            point the next time you rearrange it there. Anyone injured or sold is swapped out
-            for the next best fit until you pick a replacement.
-          </p>
+    <div className="lineup-page">
+      <div className="lineup-bar">
+        <div className="lineup-bar-text">
+          <strong>Default team sheet</strong>
+          <span className="dim">
+            Used automatically for every match, and the starting point whenever you rearrange it on
+            match day. Anyone injured or sold is swapped for the next best fit until you pick a replacement.
+          </span>
         </div>
-        <div className="lineup-team-avg">
-          <span className="faint">Team ability</span>
+        <div className="lineup-bar-rating">
+          <span className="faint">Starting six</span>
+          <StarMeter value={teamAvg} size={16} />
           <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
         </div>
+        <button disabled={!hasPreference} onClick={() => g.resetPreferredLineup()}>
+          <Icon name="swap" size={14} /> Reset to auto-pick
+        </button>
       </div>
 
       <TeamSheet
@@ -53,12 +57,6 @@ export function LineupScreen(): JSX.Element {
         onSetLibero={(p) => g.setPreferredLibero(p)}
         restrictSwapsByPosition
       />
-
-      <div className="toolbar" style={{ marginTop: 20, justifyContent: 'center' }}>
-        <button disabled={!hasPreference} onClick={() => g.resetPreferredLineup()}>
-          Reset to auto-pick
-        </button>
-      </div>
     </div>
   );
 }

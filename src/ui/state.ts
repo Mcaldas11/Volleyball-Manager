@@ -114,6 +114,21 @@ export interface IncomingOfferReview {
   expiresOnDay: number;
 }
 
+/** One step in the in-game back/forward history — which screen, and which
+ *  player or club profile (if any) was open over it. */
+interface NavEntry {
+  screen: ScreenId;
+  selectedPlayer: number | null;
+  selectedClub: number | null;
+}
+
+function sameNav(a: NavEntry, b: NavEntry): boolean {
+  return a.screen === b.screen && a.selectedPlayer === b.selectedPlayer && a.selectedClub === b.selectedClub;
+}
+
+/** How many steps back the header's back button remembers. */
+const NAV_HISTORY_LIMIT = 50;
+
 export interface MatchdaySnapshot {
   homeCourt: number[];
   awayCourt: number[];
@@ -189,6 +204,10 @@ class Game {
   trophyCelebration: TrophyCelebration | null = null;
   busy = false;
   notice = '';
+  /** Where the header's back/forward buttons lead — browser-style: any fresh
+   *  navigation pushes onto `backStack` and discards `forwardStack`. */
+  private backStack: NavEntry[] = [];
+  private forwardStack: NavEntry[] = [];
 
   // ---- Menu / save-game flow --------------------------------------------
   menuStage: MenuStage = 'main';
@@ -237,6 +256,7 @@ class Game {
     this.currentScale = scale;
     this.currentSaveId = newSaveId();
     this.saveCreatedAt = Date.now();
+    this.resetHistory();
     this.emit();
   }
 
@@ -284,6 +304,7 @@ class Game {
       const meta = this.saves.find((s) => s.id === id);
       this.currentScale = meta?.scale ?? null;
       this.saveCreatedAt = meta?.createdAt ?? Date.now();
+      this.resetHistory();
     } catch {
       this.notice = 'Could not load that save.';
     }
@@ -322,6 +343,7 @@ class Game {
 
   async exitToMenu(): Promise<void> {
     await this.saveCurrentGame();
+    this.resetHistory();
     this.world = null;
     this.currentSaveId = null;
     this.saveCreatedAt = null;
@@ -352,6 +374,7 @@ class Game {
     if (this.world === null) return;
     this.world.userClubId = clubId;
     this.screen = 'overview';
+    this.resetHistory();
     this.emit();
   }
 
@@ -362,7 +385,70 @@ class Game {
 
   // ---- Navigation -------------------------------------------------------
 
+  private navEntry(): NavEntry {
+    return { screen: this.screen, selectedPlayer: this.selectedPlayer, selectedClub: this.selectedClub };
+  }
+
+  /** Remember where we are before moving somewhere new. Closing a profile is
+   *  deliberately not recorded — only moves *to* somewhere are. */
+  private pushHistory(next: NavEntry): void {
+    const current = this.navEntry();
+    if (sameNav(current, next)) return;
+    this.backStack.push(current);
+    if (this.backStack.length > NAV_HISTORY_LIMIT) this.backStack.shift();
+    this.forwardStack = [];
+  }
+
+  private resetHistory(): void {
+    this.backStack = [];
+    this.forwardStack = [];
+  }
+
+  private restoreNav(entry: NavEntry): void {
+    this.screen = entry.screen;
+    this.selectedPlayer = entry.selectedPlayer;
+    this.selectedClub = entry.selectedClub;
+    this.negotiation = null;
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /** Whether the back/forward buttons would actually lead anywhere — entries
+   *  identical to the current view (left behind by closing a profile) don't count. */
+  canGoBack(): boolean {
+    const current = this.navEntry();
+    return this.backStack.some((e) => !sameNav(e, current));
+  }
+
+  canGoForward(): boolean {
+    const current = this.navEntry();
+    return this.forwardStack.some((e) => !sameNav(e, current));
+  }
+
+  back(): void {
+    const current = this.navEntry();
+    while (this.backStack.length > 0) {
+      const entry = this.backStack.pop()!;
+      if (sameNav(entry, current)) continue;
+      this.forwardStack.push(current);
+      this.restoreNav(entry);
+      return;
+    }
+  }
+
+  forward(): void {
+    const current = this.navEntry();
+    while (this.forwardStack.length > 0) {
+      const entry = this.forwardStack.pop()!;
+      if (sameNav(entry, current)) continue;
+      this.backStack.push(current);
+      this.restoreNav(entry);
+      return;
+    }
+  }
+
   go(screen: ScreenId): void {
+    this.pushHistory({ screen, selectedPlayer: null, selectedClub: null });
     this.screen = screen;
     this.selectedPlayer = null;
     this.selectedClub = null;
@@ -375,6 +461,7 @@ class Game {
   }
 
   select(playerIdx: number | null): void {
+    if (playerIdx !== null) this.pushHistory({ screen: this.screen, selectedPlayer: playerIdx, selectedClub: null });
     this.selectedPlayer = playerIdx;
     if (playerIdx !== null) {
       this.selectedClub = null;
@@ -384,11 +471,21 @@ class Game {
   }
 
   selectClub(clubId: number | null): void {
+    if (clubId !== null) this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: clubId });
     this.selectedClub = clubId;
     if (clubId !== null) {
       this.selectedPlayer = null;
       this.incomingOffer = null;
     }
+    this.emit();
+  }
+
+  /** Clear the toast, but only if it still shows `text` — a newer notice
+   *  that replaced it in the meantime keeps its own full display time. */
+  dismissNotice(text?: string): void {
+    if (text !== undefined && this.notice !== text) return;
+    if (this.notice === '') return;
+    this.notice = '';
     this.emit();
   }
 
@@ -457,6 +554,7 @@ class Game {
 
   /** Jump to the Scouting screen with a specific player already selected. */
   focusScouting(playerIdx: number): void {
+    this.pushHistory({ screen: 'scouting', selectedPlayer: null, selectedClub: null });
     this.scoutingFocus = playerIdx;
     this.screen = 'scouting';
     this.selectedPlayer = null;
@@ -1382,15 +1480,28 @@ class Game {
 
   /** Calendar date label for any absolute world day, past or future. */
   dateLabelForDay(day: number): string {
+    const date = this.calendarDate(day);
+    if (date === null) return '';
+    return date.toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+    });
+  }
+
+  /** Short weekday name ("Sat") for an absolute world day — for the header's date block. */
+  weekdayLabelForDay(day: number): string {
+    const date = this.calendarDate(day);
+    if (date === null) return '';
+    return date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+  }
+
+  private calendarDate(day: number): Date | null {
     const world = this.world;
-    if (world === null) return '';
+    if (world === null) return null;
     // The save begins on 1 July, so season day 0 is calendar day 181.
     const doy = ((day % DAYS_PER_SEASON) + 181) % 365;
     const date = new Date(Date.UTC(world.year, 0, 1));
     date.setUTCDate(date.getUTCDate() + doy);
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-    });
+    return date;
   }
 }
 
