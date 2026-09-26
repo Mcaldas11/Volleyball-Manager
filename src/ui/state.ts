@@ -121,10 +121,13 @@ interface NavEntry {
   screen: ScreenId;
   selectedPlayer: number | null;
   selectedClub: number | null;
+  /** Inbox message whose season review is open full-screen. */
+  selectedReview: number | null;
 }
 
 function sameNav(a: NavEntry, b: NavEntry): boolean {
-  return a.screen === b.screen && a.selectedPlayer === b.selectedPlayer && a.selectedClub === b.selectedClub;
+  return a.screen === b.screen && a.selectedPlayer === b.selectedPlayer &&
+    a.selectedClub === b.selectedClub && a.selectedReview === b.selectedReview;
 }
 
 /** How many steps back the header's back button remembers. */
@@ -199,6 +202,8 @@ class Game {
   screen: ScreenId = 'overview';
   selectedPlayer: number | null = null;
   selectedClub: number | null = null;
+  /** Id of the inbox message whose season review is open full-screen, if any. */
+  selectedReview: number | null = null;
   /** Player the Scouting screen should jump to next time it opens; consumed once. */
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
@@ -262,6 +267,7 @@ class Game {
     this.screen = 'overview';
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.selectedReview = null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.matchday = null;
@@ -310,6 +316,7 @@ class Game {
       this.screen = 'overview';
       this.selectedPlayer = null;
       this.selectedClub = null;
+      this.selectedReview = null;
       this.negotiation = null;
       this.incomingOffer = null;
       this.matchday = null;
@@ -392,7 +399,12 @@ class Game {
   // ---- Navigation -------------------------------------------------------
 
   private navEntry(): NavEntry {
-    return { screen: this.screen, selectedPlayer: this.selectedPlayer, selectedClub: this.selectedClub };
+    return {
+      screen: this.screen,
+      selectedPlayer: this.selectedPlayer,
+      selectedClub: this.selectedClub,
+      selectedReview: this.selectedReview,
+    };
   }
 
   /** Remember where we are before moving somewhere new. Closing a profile is
@@ -414,6 +426,7 @@ class Game {
     this.screen = entry.screen;
     this.selectedPlayer = entry.selectedPlayer;
     this.selectedClub = entry.selectedClub;
+    this.selectedReview = entry.selectedReview;
     this.negotiation = null;
     this.incomingOffer = null;
     this.emit();
@@ -454,10 +467,11 @@ class Game {
   }
 
   go(screen: ScreenId): void {
-    this.pushHistory({ screen, selectedPlayer: null, selectedClub: null });
+    this.pushHistory({ screen, selectedPlayer: null, selectedClub: null, selectedReview: null });
     this.screen = screen;
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.selectedReview = null;
     // Navigating away must always work, even mid-negotiation — the deal
     // itself is untouched (it lives in world.incomingOffers), only the
     // full-screen prompt for it closes.
@@ -467,20 +481,26 @@ class Game {
   }
 
   select(playerIdx: number | null): void {
-    if (playerIdx !== null) this.pushHistory({ screen: this.screen, selectedPlayer: playerIdx, selectedClub: null });
+    if (playerIdx !== null) {
+      this.pushHistory({ screen: this.screen, selectedPlayer: playerIdx, selectedClub: null, selectedReview: null });
+    }
     this.selectedPlayer = playerIdx;
     if (playerIdx !== null) {
       this.selectedClub = null;
+      this.selectedReview = null;
       this.incomingOffer = null;
     }
     this.emit();
   }
 
   selectClub(clubId: number | null): void {
-    if (clubId !== null) this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: clubId });
+    if (clubId !== null) {
+      this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: clubId, selectedReview: null });
+    }
     this.selectedClub = clubId;
     if (clubId !== null) {
       this.selectedPlayer = null;
+      this.selectedReview = null;
       this.incomingOffer = null;
     }
     this.emit();
@@ -496,6 +516,28 @@ class Game {
   }
 
   /** Mark an inbox message as opened — idempotent, and a no-op if it's gone. */
+  /** Open an end-of-season review full-screen, from its inbox message. */
+  openSeasonReview(messageId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const msg = world.messages.find((m) => m.id === messageId);
+    if (msg?.seasonReview === undefined) return;
+    msg.read = true;
+    this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: null, selectedReview: messageId });
+    this.selectedReview = messageId;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.negotiation = null;
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /** Close the full-screen season review — like closing a profile, not a step in the history. */
+  closeSeasonReview(): void {
+    this.selectedReview = null;
+    this.emit();
+  }
+
   markMessageRead(messageId: number): void {
     const world = this.world;
     if (world === null) return;
@@ -516,6 +558,7 @@ class Game {
     this.activeInterviewFixtureId = fixtureId;
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.selectedReview = null;
     this.incomingOffer = null;
     this.emit();
   }
@@ -560,11 +603,12 @@ class Game {
 
   /** Jump to the Scouting screen with a specific player already selected. */
   focusScouting(playerIdx: number): void {
-    this.pushHistory({ screen: 'scouting', selectedPlayer: null, selectedClub: null });
+    this.pushHistory({ screen: 'scouting', selectedPlayer: null, selectedClub: null, selectedReview: null });
     this.scoutingFocus = playerIdx;
     this.screen = 'scouting';
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.selectedReview = null;
     this.incomingOffer = null;
     this.emit();
   }
@@ -630,6 +674,13 @@ class Game {
     if (world === null) return;
     this.lastRollover = endSeason(world, this.ctx);
     this.notice = `Season ${world.year} complete.`;
+
+    // The season just ended opens as its full-screen review, the way FM
+    // closes a season; it stays in the inbox to come back to.
+    const reviewMsg = [...world.messages].reverse().find((m) => m.seasonReview !== undefined);
+    if (reviewMsg !== undefined && reviewMsg.seasonReview?.season === world.season - 1) {
+      this.openSeasonReview(reviewMsg.id);
+    }
 
     // world.history's last entry is the season that just ended — check it for
     // a title win before anything else (like relegation reshuffling leagues)
@@ -748,6 +799,7 @@ class Game {
     };
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.selectedReview = null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.emit();
@@ -1309,6 +1361,7 @@ class Game {
     };
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.selectedReview = null;
     this.incomingOffer = null;
     this.emit();
   }
@@ -1401,6 +1454,7 @@ class Game {
     };
     this.selectedPlayer = null;
     this.selectedClub = null;
+    this.selectedReview = null;
     this.negotiation = null;
     this.emit();
   }

@@ -615,7 +615,7 @@ select:disabled { opacity: 0.4; cursor: default; }
 .card:has(.table-wrap) > .card-body > * { flex-shrink: 0; }
 .content-fill .card > .card-body > .table-wrap { flex: 0 1 auto; min-height: 0; max-height: none; }
 /* Screens built around one wrapper element pass the window's height down. */
-.content-fill > .view-fade > :is(.profile, .club-profile, .lineup-page) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.content-fill > .view-fade > :is(.profile, .club-profile, .lineup-page, .srs) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 /* A two-column body (list | detail) takes what is left; each column scrolls on its own. */
 .content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout) {
   flex: 1 1 0;
@@ -1265,7 +1265,9 @@ td.col-sorted { background: rgba(255, 199, 44, 0.05) !important; font-weight: 70
 .sr-hero .club-crest { filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5)); }
 .sr-hero-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 160px; }
 .sr-kicker { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255, 255, 255, 0.7); }
+.sr-hero-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .sr-hero-title { font: 700 28px/1.05 var(--font-display); letter-spacing: 0.01em; }
+.sr-headline { margin: 6px 0 0; max-width: 680px; font-size: 13px; line-height: 1.45; color: rgba(255, 255, 255, 0.85); }
 .sr-hero-sub { font-size: 12.5px; color: rgba(255, 255, 255, 0.78); }
 .sr-outcome {
   display: inline-flex;
@@ -1357,7 +1359,7 @@ td.col-sorted { background: rgba(255, 199, 44, 0.05) !important; font-weight: 70
   border-radius: var(--radius-sm);
   min-width: 0;
 }
-.sr-highlight:first-child:not(:only-child) { grid-column: span 2; }
+.sr-highlight-wide { grid-column: 1 / -1; }
 .sr-highlight-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
 .sr-highlight-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sr-highlight-main b { font: 700 17px/1 var(--font-display); }
@@ -1397,9 +1399,45 @@ td.col-sorted { background: rgba(255, 199, 44, 0.05) !important; font-weight: 70
 .sr-totals b.good { color: var(--good); }
 .sr-totals b.bad { color: var(--bad); }
 @container (max-width: 380px) {
-  .sr-highlight:first-child:not(:only-child) { grid-column: auto; }
   .sr-hero-title { font-size: 24px; }
 }
+/* A narrow panel: a competition's record goes under its name rather than beside it. */
+@container (max-width: 300px) {
+  .sr-comp { grid-template-columns: 40px minmax(0, 1fr); gap: 4px 10px; }
+  .sr-comp-stats { grid-column: 2; flex-direction: row; align-items: baseline; gap: 8px; }
+}
+
+/* In the inbox: the headline figures and the way into the full review. */
+.sr-preview-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.sr-preview-line > .icon, .sr-preview-line > svg { color: var(--gold); }
+.sr-preview-line .player-link { font-weight: 700; }
+.sr-open { align-self: flex-start; }
+
+/* The full-screen review: the hero across the top, four panels filling the
+   rest of the window, each scrolling on its own if it has to. */
+.srs { display: flex; flex-direction: column; gap: 14px; }
+.srs > .sr-hero { flex: none; align-items: flex-start; padding: 16px 20px; }
+.srs .sr-hero-text { min-width: 260px; }
+.sr-hero > .sr-figures { flex: 0 1 540px; align-self: center; }
+.sr-hero .sr-figure { background: rgba(0, 0, 0, 0.3); border-color: rgba(255, 255, 255, 0.12); }
+.sr-hero .sr-figure-label, .sr-hero .sr-figure-sub { color: rgba(255, 255, 255, 0.62); }
+.sr-close { flex: none; background: rgba(0, 0, 0, 0.3); border-color: rgba(255, 255, 255, 0.2); color: #fff; }
+.sr-close:hover:not(:disabled) { background: rgba(0, 0, 0, 0.45); border-color: rgba(255, 255, 255, 0.35); }
+.srs-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: 14px; }
+.srs-panel { min-height: 0; }
+.srs-panel > .card-body { min-height: 0; overflow-y: auto; container-type: inline-size; }
+.srs-panel .section-label { margin: 16px 0 8px; }
+.srs-panel .sr-comp-main strong { white-space: normal; }
+.srs-panel .sr-book-line { grid-template-columns: minmax(0, 1fr) 48px 64px; padding: 4px 0; }
 
 .home-side { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; padding-right: 2px; }
 .home-side .card { flex: none; }
@@ -3143,6 +3181,21 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 
 /* A short window (a laptop): tighten the match screen's spacing. */
 @media (max-height: 760px) {
+  .srs { gap: 10px; }
+  .srs > .sr-hero { padding: 10px 16px; gap: 12px; }
+  .srs .sr-hero-title { font-size: 24px; }
+  .srs .sr-headline { margin-top: 3px; font-size: 12px; }
+  .srs .sr-figure { padding: 6px 10px; }
+  .srs .sr-figure-value { font-size: 19px; }
+  .srs-grid { gap: 10px; }
+  .srs-panel > .card-body { padding: 10px 12px; }
+  .srs-panel .sr-book-line { padding: 3px 0; font-size: 12px; }
+  .srs-panel .sr-books-title { margin-bottom: 2px; }
+  .srs-panel .sr-books-total { margin-top: 4px; padding-top: 4px; }
+  .srs-panel .sr-two { gap: 8px 16px; }
+  .srs-panel .sr-totals { margin-top: 8px; padding: 6px 10px; }
+  .srs-panel .sr-award { padding: 8px 10px; gap: 6px; }
+  .srs-panel .sr-highlight { padding: 7px 10px; }
   .content-live { padding: 8px 12px 10px; }
   .live, .live-side, .court-col { gap: 8px; }
   .live-grid { gap: 10px; }
@@ -3198,6 +3251,10 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .attr-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+@media (max-width: 1280px) {
+  .srs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 1100px) {
   /* Team selection: court, liberos and a slimmer bench still side by side. */
   .md-setup { --card-h: clamp(110px, calc((100vh - 380px) / 2), 150px); }
@@ -3219,6 +3276,8 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .content-fill > .view-fade > *,
   .content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout, .ts) { flex: none; min-height: auto; }
   .content-fill :is(.club-side, .profile-side) { overflow: visible; }
+  .content-fill > .view-fade > :is(.profile, .club-profile, .lineup-page, .srs) { flex: none; min-height: auto; }
+  .srs-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .content-fill .interview-layout { flex: none; flex-wrap: wrap; }
   .home-grid > .inbox, .home-grid > .reader { height: 70vh; }
   .home-side { overflow: visible; }

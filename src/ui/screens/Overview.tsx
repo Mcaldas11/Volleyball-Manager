@@ -6,7 +6,7 @@ import {
   Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerFace, Pos,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
-import { SeasonReviewReport } from '../seasonReview.tsx';
+import { SeasonReviewPreview } from '../seasonReview.tsx';
 import { useGame } from '../state.ts';
 
 type MessageTab = 'all' | 'new' | 'task' | 'offer' | 'interview';
@@ -183,7 +183,7 @@ function MessageReader({ message: m }: { message: GameMessage }): JSX.Element {
           </div>
         )}
 
-        {m.seasonReview !== undefined && <SeasonReviewReport review={m.seasonReview} />}
+        {m.seasonReview !== undefined && <SeasonReviewPreview messageId={m.id} review={m.seasonReview} />}
 
         {m.seasonAwards !== undefined && (
           <table className="awards-table">

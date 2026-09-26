@@ -23,6 +23,7 @@ import {
   StaffScreen, ScoutingScreen, TransfersScreen,
 } from './screens/Manage.tsx';
 import { StatsScreen, RankingsScreen, HallOfFameScreen } from './screens/World.tsx';
+import { SeasonReviewScreen } from './seasonReview.tsx';
 
 /** Identifies the current main-content view, so it can be keyed to replay the fade-in on change. */
 function viewKey(g: ReturnType<typeof useGame>): string {
@@ -32,6 +33,7 @@ function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.activeInterviewFixtureId !== null) return `interview-${g.activeInterviewFixtureId}`;
   if (g.selectedClub !== null) return `club-${g.selectedClub}`;
   if (g.selectedPlayer !== null) return `player-${g.selectedPlayer}`;
+  if (g.selectedReview !== null) return `review-${g.selectedReview}`;
   return `screen-${g.screen}`;
 }
 
@@ -140,7 +142,9 @@ function GameShell(): JSX.Element {
                       ? <ClubDetail />
                       : g.selectedPlayer !== null
                         ? <PlayerDetail />
-                        : <Screen />}
+                        : g.selectedReview !== null
+                          ? <SeasonReviewScreen />
+                          : <Screen />}
           </div>
         </main>
       </div>
@@ -204,7 +208,7 @@ function Sidebar({
   const manager = world.manager;
   const unread = world.messages.filter((m) => m.read !== true).length;
   const takeover = inTakeover(g);
-  const onProfile = g.selectedClub !== null || g.selectedPlayer !== null ||
+  const onProfile = g.selectedClub !== null || g.selectedPlayer !== null || g.selectedReview !== null ||
     g.negotiation !== null || g.incomingOffer !== null;
   const activeSection = onProfile ? null : sectionFor(g.screen).id;
   const clubInfoActive = g.selectedClub === club.id;
@@ -294,6 +298,9 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   }
   if (g.selectedPlayer !== null) {
     return { kicker: 'Player Profile', title: world.players.fullName(g.selectedPlayer), tabs: null };
+  }
+  if (g.selectedReview !== null) {
+    return { kicker: club.name, title: 'Season Review', tabs: null };
   }
   const section = sectionFor(g.screen);
   return { kicker: club.name, title: section.label, tabs: section.tabs };
