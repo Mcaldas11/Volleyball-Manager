@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld } from '../engine/world/worldGen.ts';
-import { stubManager } from '../engine/world/world.ts';
+import { seasonEndDay, stubManager } from '../engine/world/world.ts';
 import { reviveWorld } from './persistence.ts';
 
 test('world round-trips through structuredClone with prototypes restored', () => {
@@ -58,4 +58,21 @@ test('reviveWorld moves an old-order default lineup into the corrected rotationa
   assert.deepEqual(revived.clubs[0].preferredLineup, [s, oh1, mb1, opp, oh2, mb2]);
   // Already-correct lineups are left alone.
   assert.deepEqual(revived.clubs[1].preferredLineup, world.clubs[1].preferredLineup);
+});
+
+test('reviveWorld moves old contract days to the 30 June of the season they ran out in', () => {
+  const world = generateWorld({ seed: 4, startYear: 2026, scale: 'small', manager: stubManager() });
+  const store = world.players;
+  const [a, b, c] = world.clubs[0].players;
+  // Old saves: a contract ran until the first rollover (season day 350) on or after its day.
+  store.contractUntil[a] = 365; // 1 July 2027 -> ran out at the end of 2027/28
+  store.contractUntil[b] = 350 + 2 * 365; // signed at a rollover for two seasons
+  store.contractUntil[c] = seasonEndDay(3); // already aligned: left alone
+  delete (world as { talksBlockedUntil?: unknown }).talksBlockedUntil;
+
+  const revived = reviveWorld(structuredClone(world));
+  assert.equal(revived.players.contractUntil[a], seasonEndDay(1));
+  assert.equal(revived.players.contractUntil[b], seasonEndDay(2));
+  assert.equal(revived.players.contractUntil[c], seasonEndDay(3));
+  assert.ok(revived.talksBlockedUntil instanceof Map);
 });

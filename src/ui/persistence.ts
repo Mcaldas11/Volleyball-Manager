@@ -18,7 +18,7 @@
 import { Rng } from '../engine/core/rng.ts';
 import { PlayerStore, StringTable } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
-import type { World } from '../engine/world/world.ts';
+import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
 
 export interface SaveMeta {
@@ -141,11 +141,29 @@ export function reviveWorld(raw: World): World {
   raw.ratingForm ??= new Map();
   // Saves from before the season review existed have no transfer log.
   raw.transferLog ??= [];
+  // Saves from before contract negotiations and transfer windows.
+  raw.talksBlockedUntil ??= new Map();
+  migrateContractDays(raw.players);
   for (const club of raw.clubs) {
     club.preferredDefensiveLibero ??= -1;
     migrateLineupOrder(club.preferredLineup, raw.players.position);
   }
   return raw;
+}
+
+/**
+ * Contracts now always end on 30 June — the last day of a season. Older saves
+ * stored any day, and a contract ran until the first season rollover (season
+ * day 350) on or after it; each is moved to the 30 June of that same season,
+ * so nobody's contract gets longer or shorter. Already-aligned days are left
+ * alone, which makes this safe to run on every load.
+ */
+function migrateContractDays(store: PlayerStore): void {
+  for (let i = 0; i < store.count; i++) {
+    const day = store.contractUntil[i];
+    if (day % DAYS_PER_SEASON === DAYS_PER_SEASON - 1) continue;
+    store.contractUntil[i] = seasonEndDay(Math.max(0, Math.ceil((day - 350) / DAYS_PER_SEASON)));
+  }
 }
 
 /**

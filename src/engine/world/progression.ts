@@ -26,7 +26,7 @@ import { StaffRole, staffRating } from '../model/staff.ts';
 import type { SeasonStats } from '../season/seasonEngine.ts';
 import { NATIONS } from './nations.ts';
 import { estimateValue, generatePlayer, rollPotential } from './playerGen.ts';
-import { DAYS_PER_SEASON, type World } from './world.ts';
+import { seasonEndDay, type World } from './world.ts';
 
 /** Injuries a player can pick up, with duration in days and severity. */
 interface InjuryDef {
@@ -376,7 +376,7 @@ export function generateYouthIntake(world: World): number[] {
       });
       store.clubId[idx] = club.id;
       store.setFlag(idx, PlayerFlag.Youth, true);
-      store.contractUntil[idx] = world.day + rng.int(2, 4) * DAYS_PER_SEASON;
+      store.contractUntil[idx] = seasonEndDay(world.season + rng.int(2, 4));
       store.wage[idx] = Math.round(8_000 + (club.reputation / 10000) * 30_000);
       club.youthPlayers.push(idx);
       created.push(idx);

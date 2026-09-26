@@ -26,6 +26,7 @@ import { progressPlayoffs } from './playoffs.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers } from '../world/negotiation.ts';
+import { contractNotices } from '../world/contracts.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
 import { recordFixture } from '../world/records.ts';
 
@@ -334,6 +335,9 @@ export interface AdvanceOptions {
 export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOptions = {}): void {
   const store = world.players;
   const todays = world.fixturesByDay.get(world.day);
+
+  // Transfer windows opening and shutting, contracts running down.
+  contractNotices(world);
 
   if (todays !== undefined) {
     for (const fid of todays) {

@@ -231,7 +231,7 @@ export interface SeasonReview {
 }
 
 /** Which inbox tab a message belongs in. */
-export type MessageCategory = 'news' | 'task' | 'offer' | 'interview';
+export type MessageCategory = 'news' | 'task' | 'offer' | 'interview' | 'contract';
 
 /** A news item for the club's inbox — a scouting report, a season result, etc. */
 export interface GameMessage {
@@ -286,6 +286,58 @@ export function stubManager(nation = 0): ManagerProfile {
 }
 
 export const DAYS_PER_SEASON = 365;
+
+// ---- Contracts and transfer windows -------------------------------------------
+
+/** Contracts always run to 30 June — the last day of a season (the save's
+ *  seasons start on 1 July). */
+export function seasonEndDay(season: number): number {
+  return (season + 1) * DAYS_PER_SEASON - 1;
+}
+
+/** The season a contract ending on `day` runs out at the end of. */
+export function contractEndSeason(day: number): number {
+  return Math.floor(day / DAYS_PER_SEASON);
+}
+
+/** The calendar year a season ends in — the year on a contract's 30 June. */
+export function seasonEndYear(world: Pick<World, 'startYear'>, season: number): number {
+  return world.startYear + season + 1;
+}
+
+/** A transfer window, in days of the season (0 = 1 July), both ends inclusive. */
+export interface TransferWindow {
+  name: 'summer' | 'winter';
+  opens: number;
+  closes: number;
+}
+
+/** The football calendar: summer from 1 July to 1 September, winter through January. */
+export const TRANSFER_WINDOWS: readonly TransferWindow[] = [
+  { name: 'summer', opens: 0, closes: 62 },
+  { name: 'winter', opens: 184, closes: 214 },
+];
+
+/** The window open on an absolute day, if any. */
+export function transferWindowOn(day: number): TransferWindow | null {
+  const d = day % DAYS_PER_SEASON;
+  return TRANSFER_WINDOWS.find((w) => d >= w.opens && d <= w.closes) ?? null;
+}
+
+/** Absolute last day of the window open on `day`, or null when none is. */
+export function windowCloseDay(day: number): number | null {
+  const w = transferWindowOn(day);
+  return w === null ? null : day - (day % DAYS_PER_SEASON) + w.closes;
+}
+
+/** The next window to open after `day`, and the absolute day it opens. */
+export function nextTransferWindow(day: number): { window: TransferWindow; day: number } {
+  const start = day - (day % DAYS_PER_SEASON);
+  for (const w of TRANSFER_WINDOWS) {
+    if (start + w.opens > day) return { window: w, day: start + w.opens };
+  }
+  return { window: TRANSFER_WINDOWS[0], day: start + DAYS_PER_SEASON + TRANSFER_WINDOWS[0].opens };
+}
 
 /** Where in the season a given day falls. Drives what the game does that day. */
 export enum SeasonPhase {
@@ -371,6 +423,9 @@ export interface World {
   ratingForm: Map<number, number[]>;
   /** Moves in and out of the user's club, this season and the last. */
   transferLog: TransferLogEntry[];
+  /** Players who walked out of contract talks with the user, and the day
+   *  they will talk again. */
+  talksBlockedUntil: Map<number, number>;
 }
 
 export function dayOfSeason(world: World): number {
@@ -418,6 +473,7 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     competitionRecords: new Map(),
     ratingForm: new Map(),
     transferLog: [],
+    talksBlockedUntil: new Map(),
   };
 }
 

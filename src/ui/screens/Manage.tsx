@@ -955,8 +955,14 @@ export function ScoutingScreen(): JSX.Element {
                     <Icon name="scouting" size={14} />
                     {pending !== undefined ? 'Scouting in progress…' : 'Scout this player'}
                   </button>
-                  <button className="primary" onClick={() => g.startNegotiation(target)}>
-                    <Icon name="transfers" size={14} /> Negotiate transfer
+                  <button
+                    className="primary"
+                    disabled={!g.canBuy(target)}
+                    title={g.canBuy(target) ? undefined : 'The transfer window is closed'}
+                    onClick={() => g.startNegotiation(target)}
+                  >
+                    <Icon name="transfers" size={14} />
+                    {g.canBuy(target) ? 'Negotiate transfer' : 'Window closed'}
                   </button>
                 </div>
 
@@ -1023,6 +1029,7 @@ export function TransfersScreen(): JSX.Element {
   const wageRoom = club.finances.wageBudget - committed;
   const offers = world.incomingOffers;
   const [sort, onSort] = useSort<TransferSort>('ability');
+  const txWindow = g.transferWindowStatus();
 
   const rows = sortBy(targets, sort, (p, k) => {
     switch (k) {
@@ -1043,6 +1050,14 @@ export function TransfersScreen(): JSX.Element {
         <StatTile label="Wage room" value={money(wageRoom)} tone={wageRoom < 0 ? 'bad' : 'good'} sub={`of ${money(club.finances.wageBudget)}`} />
         <StatTile label="Squad" value={`${club.players.length}/16`} tone={club.players.length >= 16 ? 'warn' : undefined} sub={club.players.length >= 16 ? 'full — release to sign' : 'places available'} />
         <StatTile label="Offers received" value={offers.length} tone={offers.length > 0 ? 'gold' : undefined} sub="awaiting a decision" />
+        <StatTile
+          label="Transfer window"
+          value={txWindow.open ? 'Open' : 'Closed'}
+          sub={txWindow.open
+            ? `${txWindow.label} · until ${g.dateLabelForDay(txWindow.untilDay)}`
+            : `${txWindow.label} opens ${g.dateLabelForDay(txWindow.untilDay)}`}
+          tone={txWindow.open ? 'good' : 'bad'}
+        />
       </div>
 
       {offers.length > 0 && (
@@ -1118,7 +1133,12 @@ export function TransfersScreen(): JSX.Element {
                           {money(store.wage[p])}
                         </td>
                         <td className="num">
-                          <button className="sm primary" onClick={(e) => { e.stopPropagation(); g.startNegotiation(p); }}>
+                          <button
+                            className="sm primary"
+                            disabled={!g.canBuy(p)}
+                            title={g.canBuy(p) ? undefined : 'The transfer window is closed — free agents only'}
+                            onClick={(e) => { e.stopPropagation(); g.startNegotiation(p); }}
+                          >
                             Negotiate
                           </button>
                         </td>

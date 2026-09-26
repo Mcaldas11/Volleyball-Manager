@@ -25,12 +25,14 @@ import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
 import { startSeason } from '../engine/season/seasonEngine.ts';
 import { generateStaff, generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
-  currentPhase, dayOfSeason, DAYS_PER_SEASON, logTransfer, SeasonPhase,
+  currentPhase, dayOfSeason, DAYS_PER_SEASON, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
+  transferWindowOn,
   type Fixture, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import {
-  completeTransfer, evaluateCounterFee, evaluateFeeOffer, evaluatePersonalTerms,
-  resolveIncomingMove, SquadRole,
+  completeTransfer, contractDemands, evaluateCounterFee, evaluateFeeOffer, refusesToRenew,
+  resolveIncomingMove, respondToOffer, SquadRole, TALKS_COOLDOWN_DAYS, TALKS_PATIENCE,
+  type ContractDemands,
 } from '../engine/world/negotiation.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import {
@@ -66,16 +68,28 @@ export interface TrophyCelebration {
 }
 
 export interface Negotiation {
+  /** Signing someone new, or keeping one of your own players. */
+  kind: 'transfer' | 'renewal';
   playerIdx: number;
   stage: 'fee' | 'terms';
-  /** -1 for a free agent. */
+  /** -1 for a free agent, and for a renewal. */
   sellingClubId: number;
   feeOffer: number;
   feeValuation: number | null;
   feeMessage: string | null;
   termsWage: number;
   termsRole: SquadRole;
+  /** Seasons the contract runs, counting this one — it ends on 30 June. */
+  termsYears: number;
+  /** A problem with the offer itself (budget, window), not the player's answer. */
   termsMessage: string | null;
+  /** The player's answer to the last offer he turned down: a near miss he
+   *  countered, or nowhere near. */
+  termsReply: 'close' | 'far' | null;
+  /** What he is asking for — he comes down a little after a near miss. */
+  demands: ContractDemands;
+  /** Rejected offers he will still sit through before walking out. */
+  patience: number;
 }
 
 /** Narrowing controls for the Scouting screen's player pool. `null` on any
@@ -1336,6 +1350,33 @@ class Game {
     this.emit();
   }
 
+  /** Whether a player walked out of talks recently and won't negotiate yet. */
+  talksBlocked(playerIdx: number): boolean {
+    const until = this.world?.talksBlockedUntil.get(playerIdx);
+    return until !== undefined && this.world !== null && until > this.world.day;
+  }
+
+  /** Whether a player can be bought today: players under contract only move
+   *  while a transfer window is open; free agents sign at any time. */
+  canBuy(playerIdx: number): boolean {
+    const world = this.world;
+    if (world === null) return false;
+    return world.players.clubId[playerIdx] < 0 || transferWindowOn(world.day) !== null;
+  }
+
+  /** The window open today, or when the next one opens — for the UI to say so. */
+  transferWindowStatus(): { open: boolean; label: string; untilDay: number } {
+    const world = this.world;
+    if (world === null) return { open: false, label: '', untilDay: 0 };
+    const w = transferWindowOn(world.day);
+    if (w !== null) {
+      const closes = world.day - (world.day % DAYS_PER_SEASON) + w.closes;
+      return { open: true, label: w.name === 'summer' ? 'Summer window' : 'January window', untilDay: closes };
+    }
+    const next = nextTransferWindow(world.day);
+    return { open: false, label: next.window.name === 'summer' ? 'Summer window' : 'January window', untilDay: next.day };
+  }
+
   /** Open a negotiation for a player — a fee stage first if they're contracted. */
   startNegotiation(playerIdx: number): void {
     const world = this.world;
@@ -1347,8 +1388,20 @@ class Game {
       return;
     }
     const store = world.players;
+    if (!this.canBuy(playerIdx)) {
+      this.notice = `The transfer window is closed — it reopens on ${this.dateLabelForDay(nextTransferWindow(world.day).day)}.`;
+      this.emit();
+      return;
+    }
+    if (this.talksBlocked(playerIdx)) {
+      this.notice = `${store.fullName(playerIdx)} is not willing to talk to you right now.`;
+      this.emit();
+      return;
+    }
     const sellingClubId = store.clubId[playerIdx];
+    const demands = contractDemands(world, club, playerIdx, false);
     this.negotiation = {
+      kind: 'transfer',
       playerIdx,
       stage: sellingClubId >= 0 ? 'fee' : 'terms',
       sellingClubId,
@@ -1356,8 +1409,12 @@ class Game {
       feeValuation: null,
       feeMessage: null,
       termsWage: store.wage[playerIdx],
-      termsRole: SquadRole.Rotation,
+      termsRole: demands.role,
+      termsYears: Math.min(demands.maxYears, Math.max(demands.minYears, 3)),
       termsMessage: null,
+      termsReply: null,
+      demands,
+      patience: TALKS_PATIENCE,
     };
     this.selectedPlayer = null;
     this.selectedClub = null;
@@ -1381,6 +1438,63 @@ class Game {
   setTermsRole(role: SquadRole): void {
     if (this.negotiation === null) return;
     this.negotiation.termsRole = role;
+    this.emit();
+  }
+
+  setTermsYears(years: number): void {
+    if (this.negotiation === null) return;
+    this.negotiation.termsYears = years;
+    this.emit();
+  }
+
+  /** Fill the offer in with exactly what the player is asking for. */
+  matchDemands(): void {
+    const n = this.negotiation;
+    if (n === null) return;
+    n.termsWage = n.demands.wage;
+    n.termsRole = n.demands.role;
+    n.termsYears = Math.min(n.demands.maxYears, Math.max(n.demands.minYears, n.termsYears));
+    this.emit();
+  }
+
+  /** Open contract talks with one of the user's own players. */
+  startRenewal(playerIdx: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null || !club.players.includes(playerIdx)) return;
+    const store = world.players;
+    const name = store.fullName(playerIdx);
+    if (this.talksBlocked(playerIdx)) {
+      this.notice = `${name} is not willing to talk about a new contract right now.`;
+      this.emit();
+      return;
+    }
+    if (refusesToRenew(world, club, playerIdx)) {
+      this.notice = `${name} doesn't want to discuss a new contract — he feels he has outgrown the club.`;
+      this.emit();
+      return;
+    }
+    const demands = contractDemands(world, club, playerIdx, true);
+    this.negotiation = {
+      kind: 'renewal',
+      playerIdx,
+      stage: 'terms',
+      sellingClubId: -1,
+      feeOffer: 0,
+      feeValuation: null,
+      feeMessage: null,
+      termsWage: store.wage[playerIdx],
+      termsRole: demands.role,
+      termsYears: demands.minYears,
+      termsMessage: null,
+      termsReply: null,
+      demands,
+      patience: TALKS_PATIENCE,
+    };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedReview = null;
+    this.incomingOffer = null;
     this.emit();
   }
 
@@ -1412,22 +1526,49 @@ class Game {
     const club = this.club;
     if (n === null || world === null || club === null) return;
     const store = world.players;
+    const p = n.playerIdx;
+    const name = store.fullName(p);
 
+    // A renewal's new wage replaces what he earns now.
     let committed = 0;
-    for (const p of club.players) committed += store.wage[p];
+    for (const q of club.players) committed += store.wage[q];
+    if (n.kind === 'renewal') committed -= store.wage[p];
     if (committed + n.termsWage > club.finances.wageBudget) {
       n.termsMessage = 'Not enough room in the wage budget for that contract.';
       this.emit();
       return;
     }
+    if (n.kind === 'transfer' && !this.canBuy(p)) {
+      n.termsMessage = 'The transfer window has closed — the deal cannot go through now.';
+      this.emit();
+      return;
+    }
+    n.termsMessage = null;
 
-    const result = evaluatePersonalTerms(world, club, n.playerIdx, n.termsWage, n.termsRole);
-    n.termsMessage = result.reason;
-    if (result.accepted) {
-      const fee = n.sellingClubId >= 0 ? n.feeOffer : 0;
-      completeTransfer(world, club, n.playerIdx, n.termsWage, fee);
-      this.notice = `${store.fullName(n.playerIdx)} has signed.`;
+    const response = respondToOffer(n.demands, { wage: n.termsWage, role: n.termsRole, years: n.termsYears }, n.patience);
+    const endSeason = world.season + n.termsYears - 1;
+    const endLabel = `30 Jun ${world.startYear + endSeason + 1}`;
+    if (response.outcome === 'accepted') {
+      if (n.kind === 'renewal') {
+        store.wage[p] = n.termsWage;
+        store.contractUntil[p] = seasonEndDay(endSeason);
+        // A new deal is a vote of confidence.
+        store.morale[p] = Math.min(100, store.morale[p] + 6);
+        this.notice = `${name} has signed a new contract until ${endLabel}.`;
+      } else {
+        const fee = n.sellingClubId >= 0 ? n.feeOffer : 0;
+        completeTransfer(world, club, p, n.termsWage, fee, seasonEndDay(endSeason));
+        this.notice = `${name} has signed until ${endLabel}.`;
+      }
       this.negotiation = null;
+    } else if (response.outcome === 'walkout') {
+      world.talksBlockedUntil.set(p, world.day + TALKS_COOLDOWN_DAYS);
+      this.notice = `${name} has broken off talks and won't negotiate again for two weeks.`;
+      this.negotiation = null;
+    } else {
+      n.demands = response.demands;
+      n.patience = response.patience;
+      n.termsReply = response.gap;
     }
     this.emit();
   }
@@ -1515,8 +1656,14 @@ class Game {
     if (buyingClub === undefined) return;
     const store = world.players;
 
-    const result = resolveIncomingMove(world, buyingClub, n.playerIdx);
     world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
+    if (transferWindowOn(world.day) === null) {
+      this.incomingOffer = null;
+      this.notice = 'The transfer window has closed — the offer has lapsed.';
+      this.emit();
+      return;
+    }
+    const result = resolveIncomingMove(world, buyingClub, n.playerIdx);
 
     if (result.accepted) {
       completeTransfer(world, buyingClub, n.playerIdx, result.wage, fee);
@@ -1585,7 +1732,7 @@ class Game {
     club.youthPlayers = club.youthPlayers.filter((p) => p !== playerIdx);
     club.players.push(playerIdx);
     world.players.setFlag(playerIdx, PlayerFlag.Youth, false);
-    world.players.contractUntil[playerIdx] = world.day + 2 * DAYS_PER_SEASON;
+    world.players.contractUntil[playerIdx] = seasonEndDay(world.season + 2);
     this.notice = `${world.players.fullName(playerIdx)} has been promoted to the first team.`;
     this.emit();
   }
@@ -1662,11 +1809,17 @@ class Game {
   private calendarDate(day: number): Date | null {
     const world = this.world;
     if (world === null) return null;
-    // The save begins on 1 July, so season day 0 is calendar day 181.
-    const doy = ((day % DAYS_PER_SEASON) + 181) % 365;
-    const date = new Date(Date.UTC(world.year, 0, 1));
-    date.setUTCDate(date.getUTCDate() + doy);
-    return date;
+    // The save begins on 1 July, so season day 0 is calendar day 181. Each
+    // season spans two calendar years: from 1 January (season day 184) on,
+    // the date is in the year after the one the season started in.
+    const seasonDay = day % DAYS_PER_SEASON;
+    const doy = (seasonDay + 181) % 365;
+    const year = world.startYear + Math.floor(day / DAYS_PER_SEASON) + (seasonDay >= 184 ? 1 : 0);
+    // Seasons are 365 days, so the day and month come from a non-leap year —
+    // otherwise every date after February drifts a day in leap years.
+    const md = new Date(Date.UTC(2001, 0, 1));
+    md.setUTCDate(md.getUTCDate() + doy);
+    return new Date(Date.UTC(year, md.getUTCMonth(), md.getUTCDate()));
   }
 }
 

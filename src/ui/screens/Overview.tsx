@@ -9,7 +9,7 @@ import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
 import { useGame } from '../state.ts';
 
-type MessageTab = 'all' | 'new' | 'task' | 'offer' | 'interview';
+type MessageTab = 'all' | 'new' | 'task' | 'contract' | 'offer' | 'interview';
 
 /** Inbox tabs, in display order, each with the filter it applies. 'new' means
  *  unread rather than a message category — every other tab maps straight onto
@@ -18,6 +18,7 @@ const MESSAGE_TABS: ReadonlyArray<[MessageTab, string]> = [
   ['all', 'All'],
   ['new', 'New'],
   ['task', 'Tasks'],
+  ['contract', 'Contracts'],
   ['offer', 'Offers'],
   ['interview', 'Media'],
 ];
@@ -27,6 +28,7 @@ const CATEGORY_ICON: Readonly<Record<MessageCategory, IconName>> = {
   task: 'scouting',
   offer: 'offer',
   interview: 'press',
+  contract: 'finances',
 };
 
 const CATEGORY_LABEL: Readonly<Record<MessageCategory, string>> = {
@@ -34,6 +36,7 @@ const CATEGORY_LABEL: Readonly<Record<MessageCategory, string>> = {
   task: 'Scouting',
   offer: 'Transfer offer',
   interview: 'Media',
+  contract: 'Contracts',
 };
 
 function ordinal(n: number): string {
@@ -63,6 +66,7 @@ export function OverviewScreen(): JSX.Element {
     all: allMessages.length,
     new: allMessages.filter((m) => m.read !== true).length,
     task: allMessages.filter((m) => messageCategory(m) === 'task').length,
+    contract: allMessages.filter((m) => messageCategory(m) === 'contract').length,
     offer: allMessages.filter((m) => messageCategory(m) === 'offer').length,
     interview: allMessages.filter((m) => messageCategory(m) === 'interview').length,
   };
@@ -154,6 +158,7 @@ function MessageReader({ message: m }: { message: GameMessage }): JSX.Element {
     ? world.pendingInterviews.find((s) => s.fixtureId === m.fixtureId)
     : undefined;
   const player = m.playerIdx;
+  const contractTalk = cat === 'contract' && player !== undefined && world.players.clubId[player] === world.userClubId;
 
   return (
     <div className="reader-inner">
@@ -221,7 +226,12 @@ function MessageReader({ message: m }: { message: GameMessage }): JSX.Element {
               <Icon name="offer" size={15} /> Review offer
             </button>
           )}
-          {!openOffer && player !== undefined && (
+          {contractTalk && (
+            <button className="primary" onClick={() => g.startRenewal(player)}>
+              <Icon name="finances" size={15} /> Open contract talks
+            </button>
+          )}
+          {!openOffer && !contractTalk && player !== undefined && cat !== 'contract' && (
             <button className="primary" onClick={() => g.focusScouting(player)}>
               <Icon name="scouting" size={15} /> Open scouting report
             </button>

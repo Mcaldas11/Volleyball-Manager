@@ -20,7 +20,8 @@ import {
 } from '../world/progression.ts';
 import { selectAllNationalSquads } from '../world/worldGen.ts';
 import {
-  DAYS_PER_SEASON, logTransfer, type HallOfFameEntry, type SeasonAwardLine, type SeasonRecord, type World,
+  logTransfer, seasonEndDay, seasonEndYear,
+  type HallOfFameEntry, type SeasonAwardLine, type SeasonRecord, type World,
 } from '../world/world.ts';
 import { startSeason, type SeasonContext } from './seasonEngine.ts';
 import { pruneCompetitionRecords } from '../world/records.ts';
@@ -288,7 +289,7 @@ function promoteYouth(world: World): void {
         if (worthKeeping) {
           club.players.push(p);
           store.setFlag(p, PlayerFlag.Youth, false);
-          store.contractUntil[p] = world.day + 2 * DAYS_PER_SEASON;
+          store.contractUntil[p] = seasonEndDay(world.season + 2);
         } else {
           store.clubId[p] = -1;
           store.setFlag(p, PlayerFlag.Youth, false);
@@ -345,16 +346,28 @@ function runTransferWindow(world: World): number {
   const store = world.players;
   let moves = 0;
 
-  // Expire contracts.
+  // Expire contracts: every one that runs out on 30 June this season.
   const freeAgents: number[] = [];
+  const userLeavers: number[] = [];
+  const lastDay = seasonEndDay(world.season);
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i) || store.hasFlag(i, PlayerFlag.Youth)) continue;
     if (store.clubId[i] < 0) {
       freeAgents.push(i);
       continue;
     }
-    if (store.contractUntil[i] <= world.day) {
+    if (store.contractUntil[i] <= lastDay) {
       const club = world.clubs[store.clubId[i]];
+      // The user renews their own players by negotiating; anyone left
+      // unsigned walks out on a free.
+      if (club !== undefined && club.id === world.userClubId) {
+        club.players = club.players.filter((p) => p !== i);
+        logTransfer(world, i, club.id, -1, 0);
+        store.clubId[i] = -1;
+        freeAgents.push(i);
+        userLeavers.push(i);
+        continue;
+      }
       const loyalty = store.getAttr(i, 'loyalty') / 20;
       const ambition = store.getAttr(i, 'ambition') / 20;
       // A player at a club well below their level moves on; a loyal one stays.
@@ -369,9 +382,21 @@ function runTransferWindow(world: World): number {
         store.clubId[i] = -1;
         freeAgents.push(i);
       } else {
-        store.contractUntil[i] = world.day + world.rng.int(1, 3) * DAYS_PER_SEASON;
+        store.contractUntil[i] = seasonEndDay(world.season + world.rng.int(1, 3));
       }
     }
+  }
+  if (userLeavers.length > 0) {
+    const names = userLeavers.map((p) => store.fullName(p));
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    world.messages.push({
+      id: world.messages.length,
+      day: world.day,
+      year: world.year,
+      subject: userLeavers.length > 1 ? 'Players leave on free transfers' : 'Player leaves on a free transfer',
+      body: `${list} ${userLeavers.length > 1 ? 'have' : 'has'} left the club: ${userLeavers.length > 1 ? 'their contracts' : 'the contract'} ran out on 30 June ${seasonEndYear(world, world.season)} without being renewed.`,
+      category: 'contract',
+    });
   }
 
   // Clubs shop in order of standing.
@@ -403,7 +428,7 @@ function runTransferWindow(world: World): number {
 
         club.players.push(p);
         store.clubId[p] = club.id;
-        store.contractUntil[p] = world.day + world.rng.int(1, 4) * DAYS_PER_SEASON;
+        store.contractUntil[p] = seasonEndDay(world.season + world.rng.int(1, 4));
         // A summer signing belongs to the season about to start.
         logTransfer(world, p, -1, club.id, 0, world.season + 1);
         available.delete(p);

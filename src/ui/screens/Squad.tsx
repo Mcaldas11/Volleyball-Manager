@@ -9,7 +9,7 @@ import {
 import type { PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
-import type { World } from '../../engine/world/world.ts';
+import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import {
   abilityClass, attrClass, Bar, Card, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
   RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useSort,
@@ -19,7 +19,7 @@ import { useGame } from '../state.ts';
 
 type SquadSort =
   | 'name' | 'pos' | 'age' | 'height' | 'spike' | 'block' | 'ability' | 'potential'
-  | 'condition' | 'morale' | 'wage' | 'apps' | 'rating';
+  | 'condition' | 'morale' | 'wage' | 'contract' | 'apps' | 'rating';
 
 /** "2026/27" for a 0-based season index. */
 export function seasonLabel(world: World, season: number): string {
@@ -54,6 +54,8 @@ export function SquadScreen(): JSX.Element {
   const avgAbility = Math.round(squad.reduce((s, p) => s + store.currentAbility[p], 0) / squad.length);
   const avgAge = squad.reduce((s, p) => s + age(p), 0) / squad.length;
   const injured = squad.filter((p) => store.injuryDaysLeft[p] > 0).length;
+  const endsThisSeason = (p: number): boolean => contractEndSeason(store.contractUntil[p]) <= world.season;
+  const expiring = squad.filter(endsThisSeason).length;
 
   const filtered = posFilter < 0 ? squad : squad.filter((p) => store.position[p] === posFilter);
   const rows = sortBy(filtered, sort, (p, k) => {
@@ -68,6 +70,7 @@ export function SquadScreen(): JSX.Element {
       case 'condition': return store.condition[p];
       case 'morale': return store.morale[p];
       case 'wage': return store.wage[p];
+      case 'contract': return store.contractUntil[p];
       case 'apps': return totals.get(p)!.apps;
       case 'rating': return avgRating(p);
       default: return store.currentAbility[p];
@@ -95,6 +98,12 @@ export function SquadScreen(): JSX.Element {
           value={injured}
           sub={injured === 1 ? 'player injured' : 'players injured'}
           tone={injured > 0 ? 'warn' : 'good'}
+        />
+        <StatTile
+          label="Expiring contracts"
+          value={expiring}
+          sub={`end on 30 Jun ${world.startYear + world.season + 1}`}
+          tone={expiring > 0 ? 'warn' : 'good'}
         />
       </div>
 
@@ -124,6 +133,7 @@ export function SquadScreen(): JSX.Element {
                 <SortTh k="apps" sort={sort} onSort={onSort} num title="Appearances this season">Apps</SortTh>
                 <SortTh k="rating" sort={sort} onSort={onSort} num title="Average match rating this season">Av Rat</SortTh>
                 <SortTh k="wage" sort={sort} onSort={onSort} num>Wage</SortTh>
+                <SortTh k="contract" sort={sort} onSort={onSort} num title="Contract ends on 30 June of">Contract</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -159,10 +169,16 @@ export function SquadScreen(): JSX.Element {
                   <td className="num dim">{totals.get(p)!.apps}</td>
                   <td className="num"><RatingBadge value={avgRating(p)} size="sm" /></td>
                   <td className="num dim">{money(store.wage[p])}</td>
+                  <td
+                    className={`num ${endsThisSeason(p) ? 'warn-text' : 'dim'}`}
+                    title={endsThisSeason(p) ? 'Contract expires this season' : undefined}
+                  >
+                    {world.startYear + contractEndSeason(store.contractUntil[p]) + 1}
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={16}><Empty>No players in this position.</Empty></td></tr>
+                <tr><td colSpan={17}><Empty>No players in this position.</Empty></td></tr>
               )}
             </tbody>
           </table>
@@ -275,6 +291,10 @@ export function PlayerDetail(): JSX.Element | null {
   const isYouth = isOwn && club !== null && club.youthPlayers.includes(p);
   const season = seasonTotals(world, p);
   const form = world.ratingForm.get(p) ?? [];
+  const contractEnds = contractEndSeason(store.contractUntil[p]);
+  const contractLabel = `30 Jun ${world.startYear + contractEnds + 1}`;
+  const seasonsLeft = contractEnds - world.season + 1;
+  const expiring = club !== null && contractEnds <= world.season;
 
   const group = (attrs: readonly AttributeName[], title: string): JSX.Element => (
     <div className="attr-col">
@@ -328,6 +348,11 @@ export function PlayerDetail(): JSX.Element | null {
             </button>
           )}
           {isOwn && !isYouth && (
+            <button className={expiring ? 'primary' : ''} onClick={() => g.startRenewal(p)}>
+              <Icon name="finances" size={14} /> Renew contract
+            </button>
+          )}
+          {isOwn && !isYouth && (
             <button className="danger" onClick={() => { g.releasePlayer(p); g.select(null); }}>
               Release
             </button>
@@ -338,7 +363,12 @@ export function PlayerDetail(): JSX.Element | null {
 
       <div className="tiles">
         <StatTile label="Value" value={money(store.value[p])} />
-        <StatTile label="Wage" value={money(store.wage[p])} sub="per season" />
+        <StatTile
+          label="Wage"
+          value={money(store.wage[p])}
+          sub={club !== null ? `per season · to ${contractLabel}` : 'per season'}
+          tone={expiring ? 'warn' : undefined}
+        />
         <StatTile label="Condition" value={`${store.condition[p]}%`} sub={<Bar value={store.condition[p]} wide />} />
         <StatTile label="Morale" value={<Morale value={store.morale[p]} />} sub={<Bar value={store.morale[p]} wide />} />
         <StatTile label="Status" value={<Status store={store} i={p} />} />
@@ -420,6 +450,11 @@ export function PlayerDetail(): JSX.Element | null {
           </Card>
           <Card title="Contract" icon="finances">
             <KV k="Club">{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</KV>
+            {club !== null && (
+              <KV k="Contract until" cls={expiring ? 'warn-text' : undefined}>
+                {contractLabel} · {seasonsLeft <= 1 ? 'expires this season' : `${seasonsLeft} seasons left`}
+              </KV>
+            )}
             <KV k="Market value">{money(store.value[p])}</KV>
             <KV k="Wage">{money(store.wage[p])}</KV>
             <KV k="Nationality"><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</KV>

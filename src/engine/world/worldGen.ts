@@ -26,7 +26,7 @@ import { bankFor } from './names.ts';
 import { NATIONS, type Confederation } from './nations.ts';
 import { estimateValue, generatePlayer } from './playerGen.ts';
 import {
-  DAYS_PER_SEASON, newWorld, type Competition, type ManagerProfile, type NationalTeam, type World,
+  DAYS_PER_SEASON, newWorld, seasonEndDay, type Competition, type ManagerProfile, type NationalTeam, type World,
 } from './world.ts';
 
 export type WorldScale = 'small' | 'standard' | 'large';
@@ -254,7 +254,7 @@ function buildSquad(world: World, rng: Rng, club: Club): void {
         currentYear: world.year,
       });
       store.clubId[idx] = club.id;
-      store.contractUntil[idx] = world.day + rng.int(1, 4) * DAYS_PER_SEASON;
+      store.contractUntil[idx] = seasonEndDay(world.season + rng.int(0, 3));
       created.push(idx);
     }
   }

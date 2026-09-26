@@ -836,6 +836,7 @@ td.col-sorted { background: rgba(255, 199, 44, 0.05) !important; font-weight: 70
 .bad { color: var(--bad); }
 .elite { color: var(--elite); }
 .gold-text { color: var(--gold); font-weight: 700; }
+.warn-text { color: var(--warn); font-weight: 700; }
 .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
 
 /* Ability bands, so a squad list is scannable at a glance. */
@@ -1127,17 +1128,17 @@ td.col-sorted { background: rgba(255, 199, 44, 0.05) !important; font-weight: 70
 .home-grid > .card, .home-side { min-height: 0; }
 .inbox .card-body, .reader .card-body { display: flex; flex-direction: column; min-height: 0; }
 
-.inbox-tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); flex: none; overflow-x: auto; }
+.inbox-tabs { display: flex; gap: 0; padding: 6px 4px 0; border-bottom: 1px solid var(--line); flex: none; overflow-x: auto; scrollbar-width: none; }
 .inbox-tab {
   position: relative;
-  gap: 5px;
-  padding: 7px 9px 9px;
+  gap: 4px;
+  padding: 7px 6px 9px;
   background: none;
   border: none;
   border-radius: 0;
   color: var(--text-dim);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .inbox-tab:hover:not(:disabled) { background: none; border: none; color: var(--text); }
 .inbox-tab.active { color: #fff; }
@@ -1202,6 +1203,7 @@ td.col-sorted { background: rgba(255, 199, 44, 0.05) !important; font-weight: 70
 .inbox-icon.cat-task { background: var(--good-soft); color: var(--good); }
 .inbox-icon.cat-offer { background: var(--gold-soft); color: var(--gold); }
 .inbox-icon.cat-interview { background: rgba(181, 140, 255, 0.16); color: var(--elite); }
+.inbox-icon.cat-contract { background: var(--warn-soft); color: var(--warn); }
 
 .reader-inner { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .reader-head {
@@ -2610,6 +2612,43 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .contract-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .contract-actions button { min-width: 120px; padding: 9px 16px; }
 
+/* Personal terms: the player and his demands beside your offer. */
+.contract:has(.contract-grid) { max-width: 880px; }
+.contract-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 28px; }
+.contract-col { min-width: 0; }
+.contract-col .section-label { margin: 2px 0 2px; }
+.contract-col .contract-offer { margin-top: 6px; }
+.contract-col .contract-row { min-height: 36px; }
+.contract-demands {
+  margin-top: 12px;
+  padding: 8px 12px 12px;
+  background: linear-gradient(180deg, var(--gold-soft), transparent 75%), var(--surface-2);
+  border: 1px solid rgba(255, 199, 44, 0.35);
+  border-radius: var(--radius);
+}
+.contract-demands-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 2px;
+  font: 700 11px/1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+}
+.contract-demands .contract-row { min-height: 32px; }
+.contract-demands button { margin-top: 8px; }
+.contract-demand-length { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.contract-demand-length .faint { font-size: 11px; font-weight: 500; }
+.contract-patience { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 12.5px; }
+.patience-dots { display: inline-flex; gap: 5px; }
+.patience-dot { width: 22px; height: 7px; border-radius: 4px; background: var(--surface-3); }
+.patience-dot.on { background: var(--good); }
+.patience-dot.on.low { background: var(--bad); }
+.contract-note b { color: #fff; }
+.contract-note.counter { background: var(--gold-soft); border-color: rgba(255, 199, 44, 0.45); color: #ffe39a; }
+.contract-hint b.bad { color: var(--bad); }
+
 /* ============================================================
    Club profile
    ============================================================ */
@@ -3181,6 +3220,17 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 
 /* A short window (a laptop): tighten the match screen's spacing. */
 @media (max-height: 760px) {
+  .content-fill .contract-wrap { padding: 0 0 4px; }
+  .contract-head { padding: 12px 20px; }
+  .contract-title { font-size: 22px; }
+  .contract-body { padding: 12px 20px 14px; }
+  .contract-steps { margin-bottom: 6px; }
+  .contract-col .contract-row { min-height: 31px; padding: 3px 0; }
+  .contract-demands { margin-top: 8px; padding: 6px 12px 10px; }
+  .contract-demands .contract-row { min-height: 29px; }
+  .contract-patience { margin-top: 8px; }
+  .contract-note { margin-top: 8px; padding: 7px 11px; }
+  .contract-actions { margin-top: 12px; padding-top: 10px; }
   .srs { gap: 10px; }
   .srs > .sr-hero { padding: 10px 16px; gap: 12px; }
   .srs .sr-hero-title { font-size: 24px; }
@@ -3271,6 +3321,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .start-panel { width: 100%; }
   .start-hero { display: none; }
   .home-grid, .grid2, .grid3, .form-grid, .scale-options { grid-template-columns: minmax(0, 1fr); }
+  .contract-grid { grid-template-columns: minmax(0, 1fr); }
   /* Too narrow to lay screens out to the window: they stack and scroll. */
   .content-fill { display: block; }
   .content-fill > .view-fade > *,

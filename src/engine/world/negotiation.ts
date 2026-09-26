@@ -1,10 +1,15 @@
 /**
- * Transfer negotiation.
+ * Transfer and contract negotiation.
  *
  * Signing a contracted player is a two-step conversation: first a transfer
- * fee with their club, then personal terms — promised squad role and salary —
- * with the player himself. Either side can refuse. Free agents skip straight
- * to personal terms, since there is no club to pay a fee to.
+ * fee with their club, then personal terms — salary, promised squad role and
+ * how long the contract runs — with the player himself. Free agents skip
+ * straight to personal terms, since there is no club to pay a fee to, and a
+ * renewal is personal terms alone.
+ *
+ * The player comes to the table with demands. An offer close to them draws a
+ * counter-proposal, and he gives a little ground; one far off costs more of
+ * his patience; run out of patience and he walks away from the talks.
  *
  * The promised role is a negotiation input only; it is not stored anywhere
  * once the deal is done. There is no ongoing "did we honour the promise"
@@ -12,7 +17,7 @@
  */
 
 import type { Club } from '../model/club.ts';
-import { DAYS_PER_SEASON, logTransfer, type World } from './world.ts';
+import { contractEndSeason, dayOfYear, logTransfer, seasonEndDay, windowCloseDay, type World } from './world.ts';
 
 export enum SquadRole {
   Star = 0,
@@ -107,13 +112,15 @@ export function evaluatePersonalTerms(
   return { accepted, reason: accepted ? 'Accepts the terms.' : 'Is not convinced by this offer.' };
 }
 
-/** Finalize an agreed transfer: move the player, pay the fee, set the new contract. */
+/** Finalize an agreed transfer: move the player, pay the fee, set the new
+ *  contract — to 30 June of `contractEnd`'s season, two seasons if unsaid. */
 export function completeTransfer(
   world: World,
   buyingClub: Club,
   playerIdx: number,
   wage: number,
   fee: number,
+  contractEnd = seasonEndDay(world.season + 1),
 ): void {
   const store = world.players;
   const oldClubId = store.clubId[playerIdx];
@@ -128,7 +135,147 @@ export function completeTransfer(
   buyingClub.players.push(playerIdx);
   store.clubId[playerIdx] = buyingClub.id;
   store.wage[playerIdx] = wage;
-  store.contractUntil[playerIdx] = world.day + 2 * DAYS_PER_SEASON;
+  store.contractUntil[playerIdx] = contractEnd;
+}
+
+// ---- Contract terms --------------------------------------------------------
+
+/** What a player asks for to sign, or to re-sign: his pay, the role he
+ *  expects, and how long he is willing to commit. */
+export interface ContractDemands {
+  wage: number;
+  role: SquadRole;
+  /** Shortest and longest deal he will sign, in seasons counted from this one. */
+  minYears: number;
+  maxYears: number;
+  /** The least he will come down to, however long the talks go on. */
+  floorWage: number;
+}
+
+export interface ContractOffer {
+  wage: number;
+  role: SquadRole;
+  /** Seasons the contract runs, counting this one — it ends on 30 June. */
+  years: number;
+}
+
+/** Rounds of rejected offers a player sits through before he walks out. */
+export const TALKS_PATIENCE = 4;
+
+/** Days a player refuses to talk again after walking out. */
+export const TALKS_COOLDOWN_DAYS = 14;
+
+/** Longest contract anyone signs, in seasons. */
+export const MAX_CONTRACT_YEARS = 5;
+
+/** The role a player expects at a club: where his ability would rank in its squad. */
+function expectedRole(world: World, club: Club, playerIdx: number): SquadRole {
+  const store = world.players;
+  const ca = store.currentAbility[playerIdx];
+  const better = club.players.filter((p) => p !== playerIdx && store.currentAbility[p] > ca).length;
+  if (better <= 1) return SquadRole.Star;
+  if (better <= 6) return SquadRole.Regular;
+  if (better <= 10) return SquadRole.Rotation;
+  return SquadRole.Backup;
+}
+
+/** Seasons left on a player's current contract, counting this one. */
+export function yearsLeft(world: World, playerIdx: number): number {
+  return Math.max(1, contractEndSeason(world.players.contractUntil[playerIdx]) - world.season + 1);
+}
+
+/**
+ * What a player wants to join `club` — or, for a renewal, to stay. Wages are
+ * anchored on what he earns and what his value says he is worth; ambition
+ * pushes them up, loyalty (to stay) brings them down, and a move down in
+ * club size has to be paid for.
+ */
+export function contractDemands(world: World, club: Club, playerIdx: number, renewal: boolean): ContractDemands {
+  const store = world.players;
+  const ambition = store.getAttr(playerIdx, 'ambition') / 20;
+  const loyalty = store.getAttr(playerIdx, 'loyalty') / 20;
+  const age = store.ageOn(playerIdx, world.year, dayOfYear(world));
+  const marketWage = Math.round(store.value[playerIdx] * 0.22);
+  const current = store.wage[playerIdx];
+  const playerLevel = store.currentAbility[playerIdx] / 2000;
+  const clubLevel = club.reputation / 10000;
+  const unhappy = store.morale[playerIdx] < 40;
+
+  let wage: number;
+  if (renewal) {
+    // Staying put: what he earns, or what he is now worth if he has outgrown
+    // it. A veteran will take a cut to stay.
+    const base = age >= 31 ? Math.max(marketWage, current * 0.85) : Math.max(marketWage, current);
+    wage = base * (1.03 + ambition * 0.1 - loyalty * 0.08 + (unhappy ? 0.1 : 0));
+  } else {
+    const currentClub = store.clubId[playerIdx] >= 0 ? world.clubs[store.clubId[playerIdx]] : undefined;
+    const stepUp = clubLevel - (currentClub !== undefined ? currentClub.reputation / 10000 : clubLevel);
+    // A move to a smaller club needs a real pay rise; a bigger one buys goodwill.
+    wage = Math.max(marketWage, current) * (1 - Math.max(-0.4, Math.min(0.4, stepUp)) * 0.5) * (1.04 + ambition * 0.08);
+  }
+  wage = Math.max(4000, Math.round((wage * world.rng.range(0.96, 1.06)) / 1000) * 1000);
+
+  // Veterans want security; an ambitious youngster at a club beneath him —
+  // or anyone unhappy — won't be tied down for long.
+  let minYears = age >= 29 ? 2 : 1;
+  const restless = (age <= 26 && ambition > 0.6 && playerLevel > clubLevel + 0.05) || (renewal && unhappy);
+  let maxYears = restless ? 2 : MAX_CONTRACT_YEARS;
+  // A new deal has to run past the one he already has.
+  if (renewal) minYears = Math.max(minYears, yearsLeft(world, playerIdx) + 1);
+  maxYears = Math.max(minYears, maxYears);
+
+  return {
+    wage,
+    role: expectedRole(world, club, playerIdx),
+    minYears,
+    maxYears,
+    floorWage: Math.round((wage * 0.9) / 1000) * 1000,
+  };
+}
+
+/** Whether a player will even discuss a new deal — an ambitious one who has
+ *  outgrown the club would rather see out his contract and move on. */
+export function refusesToRenew(world: World, club: Club, playerIdx: number): boolean {
+  const store = world.players;
+  const ambition = store.getAttr(playerIdx, 'ambition') / 20;
+  return ambition >= 0.75 && store.currentAbility[playerIdx] / 2000 > club.reputation / 10000 + 0.22;
+}
+
+export type OfferOutcome = 'accepted' | 'counter' | 'walkout';
+
+export interface OfferResponse {
+  outcome: OfferOutcome;
+  /** How far off a refused offer was: a near miss, or nowhere near. */
+  gap: 'close' | 'far' | null;
+  /** His position after this round — he gives a little ground on a near miss. */
+  demands: ContractDemands;
+  patience: number;
+}
+
+/** The player's answer to an offer of terms. */
+export function respondToOffer(demands: ContractDemands, offer: ContractOffer, patience: number): OfferResponse {
+  const wageGap = offer.wage / demands.wage - 1;
+  // A smaller role than he expects is a real cost; a bigger one than he
+  // expects is worth something, but not as much.
+  const roleGap = ROLE_VALUE[offer.role] - ROLE_VALUE[demands.role];
+  const roleTerm = roleGap > 0 ? roleGap * 0.15 : roleGap * 0.3;
+  const yearsGap = offer.years < demands.minYears
+    ? demands.minYears - offer.years
+    : offer.years > demands.maxYears ? offer.years - demands.maxYears : 0;
+  const score = wageGap + roleTerm - yearsGap * 0.12;
+  if (score >= -0.015) return { outcome: 'accepted', gap: null, demands, patience };
+
+  const far = score < -0.2;
+  const left = patience - (far ? 2 : 1);
+  if (left <= 0) return { outcome: 'walkout', gap: far ? 'far' : 'close', demands, patience: 0 };
+
+  // On a near miss he meets you part of the way on money.
+  const next: ContractDemands = { ...demands };
+  if (!far && offer.wage < demands.wage) {
+    const give = Math.round((demands.wage - (demands.wage - offer.wage) * 0.35) / 1000) * 1000;
+    next.wage = Math.max(demands.floorWage, give);
+  }
+  return { outcome: 'counter', gap: far ? 'far' : 'close', demands: next, patience: left };
 }
 
 // ---- Incoming offers -------------------------------------------------------
@@ -151,6 +298,9 @@ export const MAX_PENDING_OFFERS = 2;
  */
 export function generateIncomingOffers(world: World): void {
   world.incomingOffers = world.incomingOffers.filter((o) => o.expiresOnDay > world.day);
+  // Bids only come in while a transfer window is open, and lapse when it shuts.
+  const windowCloses = windowCloseDay(world.day);
+  if (windowCloses === null) return;
 
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : null;
   if (club === null || club.players.length === 0) return;
@@ -186,7 +336,7 @@ export function generateIncomingOffers(world: World): void {
 
   const id = world.nextOfferId++;
   world.incomingOffers.push({
-    id, playerIdx, buyingClubId: buyingClub.id, fee, expiresOnDay: world.day + 14,
+    id, playerIdx, buyingClubId: buyingClub.id, fee, expiresOnDay: Math.min(world.day + 14, windowCloses + 1),
   });
   world.messages.push({
     id: world.messages.length,
