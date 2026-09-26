@@ -67,15 +67,6 @@ const POSE_LIFT: Readonly<Record<Pose, number>> = {
 const MAX_SPEED = 7.5; // m/s
 const SETTLE = 0.2; // s
 
-/** How tall the canvas should be for a given width, so the court fills it. */
-function courtAspect(): number {
-  const p = buildProjector(1000, 1000);
-  const pts = FIT_PROBES.map(([x, y, z]) => p(x, y, z));
-  const w = Math.max(...pts.map((q) => q.X)) - Math.min(...pts.map((q) => q.X));
-  const h = Math.max(...pts.map((q) => q.Y)) - Math.min(...pts.map((q) => q.Y));
-  return Math.min(0.95, Math.max(0.6, (h / w) * 1.04));
-}
-
 /** What must be in shot: the court and its lines, the posts, a server behind
  *  either baseline, and heads at the far end. The rest of the free zone may
  *  fall off the edges. */
@@ -205,15 +196,17 @@ export function LiveCourt({
     const ctx = canvas.getContext('2d');
     if (ctx === null) return;
 
-    const aspect = courtAspect();
     let project = buildProjector(1, 1);
     let cssW = 0;
     let cssH = 0;
+    // The canvas takes whatever box the layout gives it — the match screen
+    // fits the viewport, so the court shrinks to the space rather than
+    // pushing the page into a scroll. The projector fits the court inside
+    // that box, centred, with the arena filling any spare room either side.
     const resize = (): void => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      cssW = wrap.clientWidth;
-      cssH = Math.round(cssW * aspect);
-      canvas.style.height = `${cssH}px`;
+      cssW = Math.max(1, wrap.clientWidth);
+      cssH = Math.max(1, wrap.clientHeight);
       canvas.width = Math.round(cssW * dpr);
       canvas.height = Math.round(cssH * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

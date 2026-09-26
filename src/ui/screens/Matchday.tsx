@@ -72,6 +72,19 @@ async function animateRally(
   }
 }
 
+/** Whether a CSS media query matches, kept in step as the window resizes. */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = (): void => setMatches(mql.matches);
+    mql.addEventListener('change', onChange);
+    onChange();
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
 export function MatchdayScreen(): JSX.Element | null {
   const g = useGame();
   const md = g.matchday;
@@ -113,7 +126,7 @@ function LineupSetup(): JSX.Element {
     <div className="md-setup">
       <div className="md-banner">
         <div className="md-banner-team">
-          {home !== undefined && <ClubCrest club={home} size={60} />}
+          {home !== undefined && <ClubCrest club={home} size={46} />}
           <div className="md-banner-team-text">
             <span className="md-banner-name">{home?.name ?? '—'}</span>
             <span className="md-banner-tag">Home{md.userIsHome ? ' · Your team' : ''}</span>
@@ -129,27 +142,27 @@ function LineupSetup(): JSX.Element {
             <span className="md-banner-name">{away?.name ?? '—'}</span>
             <span className="md-banner-tag">Away{!md.userIsHome ? ' · Your team' : ''}</span>
           </div>
-          {away !== undefined && <ClubCrest club={away} size={60} />}
+          {away !== undefined && <ClubCrest club={away} size={46} />}
         </div>
-      </div>
-
-      <div className="md-setup-bar">
-        <div className="lineup-bar-rating">
-          <span className="faint">Your starting six</span>
-          <StarMeter value={teamAvg} size={16} />
-          <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
-        </div>
-        {opponent !== undefined && (
-          <div className="lineup-bar-rating">
-            <span className="faint">{opponent.shortName} best six</span>
-            <StarMeter value={oppAvg} size={16} />
-            <strong className={abilityClass(oppAvg)}>{oppAvg}</strong>
+        <div className="md-banner-side">
+          <div className="md-strength">
+            <div className="lineup-bar-rating">
+              <span className="faint">Your starting six</span>
+              <StarMeter value={teamAvg} size={13} />
+              <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
+            </div>
+            {opponent !== undefined && (
+              <div className="lineup-bar-rating">
+                <span className="faint">{opponent.shortName} best six</span>
+                <StarMeter value={oppAvg} size={13} />
+                <strong className={abilityClass(oppAvg)}>{oppAvg}</strong>
+              </div>
+            )}
           </div>
-        )}
-        <span className="flex-spacer" />
-        <button className="primary lg" onClick={() => g.kickOff()}>
-          <Icon name="whistle" size={18} /> Kick off
-        </button>
+          <button className="primary lg" onClick={() => g.kickOff()}>
+            <Icon name="whistle" size={18} /> Kick off
+          </button>
+        </div>
       </div>
 
       <TeamSheet
@@ -186,7 +199,7 @@ function TimeoutPanel({
         <span className="timeout-icon"><Icon name="whistle" size={22} /></span>
         <div className="timeout-title">
           <strong>Timeout{calledBy !== undefined ? ` — ${calledBy}` : ''}</strong>
-          <span className="faint">Adjust your tactics or make substitutions below — changes apply from the next rally.</span>
+          <span className="faint">Adjust your tactics here, or make changes in the Subs tab — they apply from the next rally.</span>
         </div>
         <span className="timeout-countdown">0:{secondsLeft.toString().padStart(2, '0')}</span>
         <button className="primary" onClick={() => g.resumeFromTimeout()}>
@@ -264,6 +277,9 @@ function completedSets(log: readonly MatchdayLogEntry[], currentSet: number, mat
   return out;
 }
 
+/** The tabs of the live side panel; 'stats' only on screens too narrow for the stats column. */
+type LivePanelTab = 'commentary' | 'subs' | 'stats';
+
 const STAT_ROWS: ReadonlyArray<[keyof TeamLiveStats, string]> = [
   ['points', 'Points won'],
   ['kills', 'Kills'],
@@ -283,6 +299,10 @@ function LiveMatchView(): JSX.Element {
   const nearTeam: 0 | 1 = md.userIsHome ? 0 : 1;
   const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, store, nearTeam));
   const [labels, setLabels] = useState<CourtLabels>('ratings');
+  const [panelTab, setPanelTab] = useState<LivePanelTab>('commentary');
+  // On a narrow screen the stats column folds into the side panel as a tab.
+  const compact = useMediaQuery('(max-width: 1100px)');
+  const tab: LivePanelTab = !compact && panelTab === 'stats' ? 'commentary' : panelTab;
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
   const [bigPlay, setBigPlay] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
@@ -388,7 +408,12 @@ function LiveMatchView(): JSX.Element {
 
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);
-  }, [revealed]);
+  }, [revealed, tab]);
+
+  // A timeout is the moment for changes — open the substitutions.
+  useEffect(() => {
+    if (md.timeoutActive !== null) setPanelTab('subs');
+  }, [md.timeoutActive]);
 
   // A substitution or libero change between rallies redraws the set-up.
   useEffect(() => {
@@ -442,16 +467,58 @@ function LiveMatchView(): JSX.Element {
         ? 'Substitution'
         : md.paused ? 'Paused' : 'Live';
 
+  const remaining = g.subsRemaining();
+  const sideCards = (
+    <>
+      <Card title="Match Stats" icon="stats" className="live-stats-card">
+        <div className="cmp-head">
+          <span>{homeClub?.shortName ?? 'Home'}</span>
+          <span>{awayClub?.shortName ?? 'Away'}</span>
+        </div>
+        {STAT_ROWS.map(([key, label]) => {
+          const h = stats[0][key];
+          const a = stats[1][key];
+          const total = h + a;
+          return (
+            <div className="cmp" key={key}>
+              <div className="cmp-row">
+                <span className="cmp-val">{h}</span>
+                <span className="cmp-label">{label}</span>
+                <span className="cmp-val">{a}</span>
+              </div>
+              <div className="cmp-bar">
+                <span className="cmp-home" style={{ width: `${total > 0 ? (h / total) * 100 : 50}%` }} />
+                <span className="cmp-away" style={{ width: `${total > 0 ? (a / total) * 100 : 50}%` }} />
+              </div>
+            </div>
+          );
+        })}
+        <div className="prob-block">
+          <span className="prob-label">Win probability</span>
+          <div className="prob">
+            <span className="prob-val">{(homeProb * 100).toFixed(0)}%</span>
+            <div className="prob-bar">
+              <span className="cmp-home" style={{ width: `${homeProb * 100}%` }} />
+              <span className="cmp-away" style={{ width: `${(1 - homeProb) * 100}%` }} />
+            </div>
+            <span className="prob-val">{((1 - homeProb) * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+      </Card>
+      <LiveRatingsCard ratings={ratings} defaultTeam={userTeamIdx} />
+    </>
+  );
+
   return (
     <div className="live">
       <div className="scoreboard">
         <div className={`sb-team${view.serving === 0 ? ' serving' : ''}`}>
-          {homeClub !== undefined && <ClubCrest club={homeClub} size={54} />}
+          {homeClub !== undefined && <ClubCrest club={homeClub} size={42} />}
           <div className="sb-team-text">
             <span className="sb-name">{homeClub?.name ?? '—'}</span>
             <span className="sb-tag">Home{userTeamIdx === 0 ? ' · You' : ''}</span>
           </div>
-          <span className="sb-serve" title="Serving"><Icon name="ball" size={18} /></span>
+          <span className="sb-serve" title="Serving"><Icon name="ball" size={17} /></span>
         </div>
         <div className="sb-center">
           <div className="sb-sets">
@@ -462,168 +529,161 @@ function LiveMatchView(): JSX.Element {
           <div className="sb-live">
             <span className="sb-set-label">{view.matchOver ? 'Full time' : `Set ${view.set + 1}`}</span>
             <span className="sb-points">{view.homeScore} – {view.awayScore}</span>
+            {setHistory.length > 0 && (
+              <span className="set-chips">
+                {setHistory.map(([h, a], i) => (
+                  <span key={i} className="set-chip">
+                    <span className={h > a ? 'won' : ''}>{h}</span>
+                    <span className={a > h ? 'won' : ''}>{a}</span>
+                  </span>
+                ))}
+              </span>
+            )}
           </div>
-          {setHistory.length > 0 && (
-            <div className="set-chips">
-              {setHistory.map(([h, a], i) => (
-                <span key={i} className="set-chip">
-                  <span className={h > a ? 'won' : ''}>{h}</span>
-                  <span className={a > h ? 'won' : ''}>{a}</span>
-                </span>
-              ))}
-            </div>
-          )}
         </div>
         <div className={`sb-team right${view.serving === 1 ? ' serving' : ''}`}>
-          <span className="sb-serve" title="Serving"><Icon name="ball" size={18} /></span>
+          <span className="sb-serve" title="Serving"><Icon name="ball" size={17} /></span>
           <div className="sb-team-text">
             <span className="sb-name">{awayClub?.name ?? '—'}</span>
             <span className="sb-tag">Away{userTeamIdx === 1 ? ' · You' : ''}</span>
           </div>
-          {awayClub !== undefined && <ClubCrest club={awayClub} size={54} />}
+          {awayClub !== undefined && <ClubCrest club={awayClub} size={42} />}
         </div>
       </div>
 
-      <div className="live-controls">
-        <div className="live-controls-group">
-          <span className="faint">Speed</span>
-          <Segmented
-            size="sm"
-            options={[[0.75, '0.75×'], [1, '1×'], [1.5, '1.5×']] as const}
-            value={md.speed}
-            onChange={(s) => g.setSpeed(s)}
-          />
-        </div>
-        {md.paused
-          ? (
-            <button disabled={md.timeoutActive !== null} onClick={() => g.resume()}>
-              <Icon name="play" size={14} /> Resume
-            </button>
-          )
-          : (
-            <button disabled={md.timeoutActive !== null} onClick={() => g.pause()}>
-              <Icon name="pause" size={14} /> Pause
-            </button>
-          )}
-        <button
-          disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
-          onClick={() => g.callTimeout()}
-        >
-          <Icon name="whistle" size={14} /> Timeout
-          <span className="count-chip">{2 - md.timeoutsUsed[userTeamIdx]} left</span>
-        </button>
-        <span className="flex-spacer" />
-        <span className={`live-status status-${status.toLowerCase().replace(' ', '-')}`}>
-          <span className="live-dot" />{status}
-        </span>
-        <button className="danger" onClick={() => g.finishMatchdayNow()}>
-          <Icon name="fastForward" size={14} /> Finish match
-        </button>
-      </div>
+      <div className={`live-grid${compact ? ' compact' : ''}`}>
+        {!compact && <div className="live-side">{sideCards}</div>}
 
-      {md.timeoutActive !== null && (
-        <TimeoutPanel
-          secondsLeft={timeoutSecondsLeft}
-          calledBy={md.timeoutActive === 0 ? homeClub?.shortName : awayClub?.shortName}
-        />
-      )}
+        <div className="court-col">
+          <div className="card court-panel">
+            <LiveCourt scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels} />
 
-      <div className="live-grid">
-        <div className="live-side">
-          <Card title="Match Stats" icon="stats">
-            <div className="cmp-head">
-              <span>{homeClub?.shortName ?? 'Home'}</span>
-              <span>{awayClub?.shortName ?? 'Away'}</span>
+            {/* Who plays which half — the user's side is always nearest the camera. */}
+            <span className="court-tag far">
+              {farClub !== undefined && <ClubCrest club={farClub} size={16} />}
+              <span className="court-tag-name">{farClub?.shortName ?? '—'}</span>
+              <span className="court-tag-sets">{farSets}</span>
+            </span>
+            <span className="court-tag near">
+              {nearClub !== undefined && <ClubCrest club={nearClub} size={16} />}
+              <span className="court-tag-name">{nearClub?.shortName ?? '—'}</span>
+              <span className="court-tag-sets">{nearSets}</span>
+            </span>
+            <div className="court-labels" title="What to show beside each player">
+              <Segmented<CourtLabels>
+                size="sm"
+                options={[['ratings', 'Ratings'], ['names', 'Names'], ['off', 'Off']]}
+                value={labels}
+                onChange={setLabels}
+              />
             </div>
-            {STAT_ROWS.map(([key, label]) => {
-              const h = stats[0][key];
-              const a = stats[1][key];
-              const total = h + a;
-              return (
-                <div className="cmp" key={key}>
-                  <div className="cmp-row">
-                    <span className="cmp-val">{h}</span>
-                    <span className="cmp-label">{label}</span>
-                    <span className="cmp-val">{a}</span>
-                  </div>
-                  <div className="cmp-bar">
-                    <span className="cmp-home" style={{ width: `${total > 0 ? (h / total) * 100 : 50}%` }} />
-                    <span className="cmp-away" style={{ width: `${total > 0 ? (a / total) * 100 : 50}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </Card>
-          <LiveRatingsCard ratings={ratings} defaultTeam={userTeamIdx} />
-          <Card title="Win Probability" icon="stats">
-            <div className="prob">
-              <span className="prob-val">{(homeProb * 100).toFixed(0)}%</span>
-              <div className="prob-bar">
-                <span className="cmp-home" style={{ width: `${homeProb * 100}%` }} />
-                <span className="cmp-away" style={{ width: `${(1 - homeProb) * 100}%` }} />
+
+            {bigPlay !== null && (
+              <div key={bigPlay.key} className={`big-play ${bigPlay.team === 0 ? 'home' : 'away'}`}>
+                {bigPlay.text}
               </div>
-              <span className="prob-val">{((1 - homeProb) * 100).toFixed(0)}%</span>
-            </div>
-            <div className="cmp-head">
-              <span>{homeClub?.shortName ?? 'Home'}</span>
-              <span>{awayClub?.shortName ?? 'Away'}</span>
-            </div>
-          </Card>
-        </div>
-
-        <div className="card court-panel">
-          {/* The far strip names whoever plays in the far half — the opponent,
-              since the user's side always plays nearest the camera. */}
-          <div className="team-strip">
-            <span className="team-strip-name">
-              {farClub !== undefined && <ClubCrest club={farClub} size={18} />} {farClub?.name ?? '—'}
-            </span>
-            <span className="team-strip-sets">Sets {farSets}</span>
+            )}
+            {subAnnouncement !== null && (
+              <div
+                key={subAnnouncement.key}
+                className={`big-play sub-announcement ${subAnnouncement.team === 0 ? 'home' : 'away'}`}
+              >
+                {subAnnouncement.text}
+              </div>
+            )}
+            {md.timeoutActive !== null && (
+              <TimeoutPanel
+                secondsLeft={timeoutSecondsLeft}
+                calledBy={md.timeoutActive === 0 ? homeClub?.shortName : awayClub?.shortName}
+              />
+            )}
           </div>
 
-          <LiveCourt scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels} />
-          <div className="team-strip">
-            <span className="team-strip-sets">Sets {nearSets}</span>
-            <Segmented<CourtLabels>
+          <div className="match-bar">
+            <span className={`live-status status-${status.toLowerCase().replace(' ', '-')}`}>
+              <span className="live-dot" />{status}
+            </span>
+            <Segmented
               size="sm"
-              options={[['ratings', 'Ratings'], ['names', 'Names'], ['off', 'Off']]}
-              value={labels}
-              onChange={setLabels}
+              options={[[0.75, '0.75×'], [1, '1×'], [1.5, '1.5×']] as const}
+              value={md.speed}
+              onChange={(sp) => g.setSpeed(sp)}
             />
-            <span className="team-strip-name">
-              {nearClub !== undefined && <ClubCrest club={nearClub} size={18} />} {nearClub?.name ?? '—'}
-            </span>
-          </div>
-
-          {bigPlay !== null && (
-            <div key={bigPlay.key} className={`big-play ${bigPlay.team === 0 ? 'home' : 'away'}`}>
-              {bigPlay.text}
-            </div>
-          )}
-          {subAnnouncement !== null && (
-            <div
-              key={subAnnouncement.key}
-              className={`big-play sub-announcement ${subAnnouncement.team === 0 ? 'home' : 'away'}`}
+            {md.paused
+              ? (
+                <button className="sm" disabled={md.timeoutActive !== null} onClick={() => g.resume()} title="Resume">
+                  <Icon name="play" size={14} /><span className="mb-text">Resume</span>
+                </button>
+              )
+              : (
+                <button className="sm" disabled={md.timeoutActive !== null} onClick={() => g.pause()} title="Pause">
+                  <Icon name="pause" size={14} /><span className="mb-text">Pause</span>
+                </button>
+              )}
+            <button
+              className="sm"
+              disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
+              onClick={() => g.callTimeout()}
+              title="Call a timeout"
             >
-              {subAnnouncement.text}
-            </div>
-          )}
+              <Icon name="whistle" size={14} /><span className="mb-text">Timeout</span>
+              <span className="count-chip">{2 - md.timeoutsUsed[userTeamIdx]}</span>
+            </button>
+            <span className="flex-spacer" />
+            <button className="sm danger" onClick={() => g.finishMatchdayNow()} title="Skip to the result">
+              <Icon name="fastForward" size={14} /><span className="mb-text">Finish match</span>
+            </button>
+          </div>
         </div>
 
-        <Card className="ticker-panel" title="Commentary" icon="press" flush>
-          <div className="ticker-scroll" ref={logRef}>
-            <RallyTicker
-              entries={shownLog.map((l) => l.entry)}
-              store={store}
-              homeCode={homeClub?.shortName ?? '—'}
-              awayCode={awayClub?.shortName ?? '—'}
-            />
-            {shownLog.length === 0 && <div className="ticker-entry dim">Kicking off…</div>}
+        <section className="card live-panel">
+          <div className="panel-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === 'commentary'}
+              className={`panel-tab${tab === 'commentary' ? ' active' : ''}`}
+              onClick={() => setPanelTab('commentary')}
+            >
+              <Icon name="press" size={14} /> Commentary
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === 'subs'}
+              className={`panel-tab${tab === 'subs' ? ' active' : ''}`}
+              onClick={() => setPanelTab('subs')}
+            >
+              <Icon name="swap" size={14} /> Subs
+              <span className={`panel-tab-count${remaining <= 0 ? ' bad' : ''}`}>{remaining}</span>
+            </button>
+            {compact && (
+              <button
+                role="tab"
+                aria-selected={tab === 'stats'}
+                className={`panel-tab${tab === 'stats' ? ' active' : ''}`}
+                onClick={() => setPanelTab('stats')}
+              >
+                <Icon name="stats" size={14} /> Stats
+              </button>
+            )}
           </div>
-        </Card>
+          {tab === 'commentary' && (
+            <div className="ticker-scroll" ref={logRef}>
+              {shownLog.length > 0
+                ? (
+                  <RallyTicker
+                    entries={shownLog.map((l) => l.entry)}
+                    store={store}
+                    homeCode={homeClub?.shortName ?? '—'}
+                    awayCode={awayClub?.shortName ?? '—'}
+                  />
+                )
+                : <div className="ticker-entry dim">Kicking off…</div>}
+            </div>
+          )}
+          {tab === 'subs' && <Substitutions teamIdx={userTeamIdx} />}
+          {tab === 'stats' && <div className="live-panel-stats">{sideCards}</div>}
+        </section>
       </div>
-
-      <Substitutions teamIdx={userTeamIdx} />
     </div>
   );
 }
@@ -663,7 +723,7 @@ function SubCard({
       }}
     >
       <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>
-      <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
+      <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={26} />
       <span className="bench-token-name">
         {store.shortName(playerIdx)}
         {rating !== undefined && <RatingBadge value={rating} size="sm" />}
@@ -703,6 +763,7 @@ function LiveRatingsCard({
     <Card
       title="Ratings"
       icon="star"
+      className="live-ratings-card"
       flush
       actions={(
         <Segmented<0 | 1>
@@ -764,7 +825,7 @@ function LiberoSlot({
       </div>
       {playerIdx >= 0 ? (
         <div className="bench-token libero-token" style={{ '--token-accent': 'var(--pos-l)' } as CSSProperties}>
-          <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
+          <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={26} />
           <span className="bench-token-name">
             {store.shortName(playerIdx)}
             {rating !== undefined && <RatingBadge value={rating} size="sm" />}
@@ -835,112 +896,111 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   });
 
   return (
-    <Card
-      className="sub-panel"
-      title="Substitutions"
-      icon="swap"
-      actions={<span className={`count-chip${remaining <= 0 ? ' bad' : ''}`}>{remaining} left this set</span>}
-    >
-      <p className="field-hint">
-        Drag a bench player onto someone on court to bring them on — or pick both and confirm. A player
-        who comes off can only return for whoever replaced them.
-      </p>
+    <div className="subs">
+      <div className="subs-scroll">
+        <div className="subs-top">
+          <span className={`count-chip${remaining <= 0 ? ' bad' : ''}`}>{remaining} left this set</span>
+          <p className="field-hint">
+            Drag a bench player onto someone on court, or pick both and confirm. A player who comes off can
+            only return for whoever replaced them.
+          </p>
+        </div>
 
-      <div className="sub-cols">
-        <div className="sub-col">
-          <div className="section-label">On court — pick who comes off</div>
-          <div className="sub-list">
-            {onCourt.map((p) => (
-              <SubCard
-                key={p}
-                playerIdx={p}
-                store={store}
-                rating={ratings.get(p)}
-                selected={outPlayer === p}
-                onClick={() => setOutPlayer(outPlayer === p ? null : p)}
-                {...dragProps(p)}
-              />
-            ))}
+        <div className="sub-cols">
+          <div className="sub-col">
+            <div className="section-label">On court — pick who comes off</div>
+            <div className="sub-list">
+              {onCourt.map((p) => (
+                <SubCard
+                  key={p}
+                  playerIdx={p}
+                  store={store}
+                  rating={ratings.get(p)}
+                  selected={outPlayer === p}
+                  onClick={() => setOutPlayer(outPlayer === p ? null : p)}
+                  {...dragProps(p)}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="sub-col">
+            <div className="section-label">Bench — pick who comes on</div>
+            <div className="sub-list">
+              {bench.length === 0 && <p className="empty">No fit players available.</p>}
+              {bench.map((p) => (
+                <SubCard
+                  key={p}
+                  playerIdx={p}
+                  store={store}
+                  rating={ratings.get(p)}
+                  selected={inPlayer === p}
+                  onClick={() => setInPlayer(inPlayer === p ? null : p)}
+                  {...dragProps(p)}
+                />
+              ))}
+            </div>
           </div>
         </div>
-        <div className="sub-arrow"><Icon name="swap" size={22} /></div>
-        <div className="sub-col">
-          <div className="section-label">Bench — pick who comes on</div>
-          <div className="sub-list">
-            {bench.length === 0 && <p className="empty">No fit players available.</p>}
-            {bench.map((p) => (
-              <SubCard
-                key={p}
-                playerIdx={p}
-                store={store}
-                rating={ratings.get(p)}
-                selected={inPlayer === p}
-                onClick={() => setInPlayer(inPlayer === p ? null : p)}
-                {...dragProps(p)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
 
-      <div className="libero-panel">
-        <div className="section-label">Liberos — changes are unlimited and never use a substitution</div>
-        <div className="libero-slots">
-          <LiberoSlot
-            label={liberos.defence >= 0 ? 'Reception libero' : 'Libero'}
-            note={liberos.defence >= 0 ? 'on court while you receive' : 'plays every back-row rally'}
-            playerIdx={liberos.reception}
-            rating={ratings.get(liberos.reception)}
-            store={store}
-            isDragOver={liberoDragOver === 'reception'}
-            onDragOver={() => setLiberoDragOver('reception')}
-            onDragLeave={() => setLiberoDragOver((c) => (c === 'reception' ? null : c))}
-            onDropPlayer={(d) => g.changeLibero('reception', d)}
-            action={liberos.defence >= 0 ? (
-              <button className="sm ghost" onClick={() => g.changeLibero('reception', liberos.defence)}>
-                <Icon name="swap" size={13} /> Swap roles
-              </button>
-            ) : undefined}
-          />
-          <LiberoSlot
-            label="Defensive libero"
-            note="on court while you serve"
-            playerIdx={liberos.defence}
-            rating={ratings.get(liberos.defence)}
-            store={store}
-            isDragOver={liberoDragOver === 'defence'}
-            onDragOver={() => setLiberoDragOver('defence')}
-            onDragLeave={() => setLiberoDragOver((c) => (c === 'defence' ? null : c))}
-            onDropPlayer={(d) => g.changeLibero('defence', d)}
-            action={liberos.defence >= 0 ? (
-              <button className="sm ghost" onClick={() => g.changeLibero('defence', -1)}>Remove</button>
-            ) : undefined}
-          />
-        </div>
-        {spareLiberos.length > 0 ? (
-          <div className="libero-spares">
-            {spareLiberos.map((p) => (
-              <div
-                key={p}
-                className="bench-token libero-token draggable"
-                style={{ '--token-accent': 'var(--pos-l)' } as CSSProperties}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p))}
-              >
-                <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>
-                <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={30} />
-                <span className="bench-token-name">{store.shortName(p)}</span>
-                <span className="bench-token-ability">{store.currentAbility[p]}</span>
-                <span className="libero-spare-actions">
-                  <button className="sm" onClick={() => g.changeLibero('reception', p)}>Reception</button>
-                  <button className="sm" onClick={() => g.changeLibero('defence', p)}>Defence</button>
-                </span>
-              </div>
-            ))}
+        <div className="libero-panel">
+          <div className="section-label">Liberos — changes are unlimited and never use a substitution</div>
+          <div className="libero-slots">
+            <LiberoSlot
+              label={liberos.defence >= 0 ? 'Reception libero' : 'Libero'}
+              note={liberos.defence >= 0 ? 'on court while you receive' : 'plays every back-row rally'}
+              playerIdx={liberos.reception}
+              rating={ratings.get(liberos.reception)}
+              store={store}
+              isDragOver={liberoDragOver === 'reception'}
+              onDragOver={() => setLiberoDragOver('reception')}
+              onDragLeave={() => setLiberoDragOver((c) => (c === 'reception' ? null : c))}
+              onDropPlayer={(d) => g.changeLibero('reception', d)}
+              action={liberos.defence >= 0 ? (
+                <button className="sm ghost" onClick={() => g.changeLibero('reception', liberos.defence)}>
+                  <Icon name="swap" size={13} /> Swap roles
+                </button>
+              ) : undefined}
+            />
+            <LiberoSlot
+              label="Defensive libero"
+              note="on court while you serve"
+              playerIdx={liberos.defence}
+              rating={ratings.get(liberos.defence)}
+              store={store}
+              isDragOver={liberoDragOver === 'defence'}
+              onDragOver={() => setLiberoDragOver('defence')}
+              onDragLeave={() => setLiberoDragOver((c) => (c === 'defence' ? null : c))}
+              onDropPlayer={(d) => g.changeLibero('defence', d)}
+              action={liberos.defence >= 0 ? (
+                <button className="sm ghost" onClick={() => g.changeLibero('defence', -1)}>Remove</button>
+              ) : undefined}
+            />
           </div>
-        ) : (
-          <p className="field-hint">No other libero available on the bench.</p>
-        )}
+          {spareLiberos.length > 0 ? (
+            <div className="libero-spares">
+              {spareLiberos.map((p) => (
+                <div
+                  key={p}
+                  className="bench-token libero-token draggable"
+                  style={{ '--token-accent': 'var(--pos-l)' } as CSSProperties}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p))}
+                >
+                  <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>
+                  <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={26} />
+                  <span className="bench-token-name">{store.shortName(p)}</span>
+                  <span className="bench-token-ability">{store.currentAbility[p]}</span>
+                  <span className="libero-spare-actions">
+                    <button className="sm" onClick={() => g.changeLibero('reception', p)}>Reception</button>
+                    <button className="sm" onClick={() => g.changeLibero('defence', p)}>Defence</button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="field-hint">No other libero available on the bench.</p>
+          )}
+        </div>
       </div>
 
       <div className="sub-confirm">
@@ -958,9 +1018,9 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
           disabled={outPlayer === null || inPlayer === null || remaining <= 0}
           onClick={makeSub}
         >
-          Confirm substitution
+          Confirm
         </button>
       </div>
-    </Card>
+    </div>
   );
 }

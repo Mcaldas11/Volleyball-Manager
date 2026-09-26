@@ -37,57 +37,59 @@ export function FixturesScreen(): JSX.Element {
         />
       </div>
 
-      {watched !== null && <MatchScreen />}
+      <div className={`fixtures-layout${watched !== null ? ' with-report' : ''}`}>
+        <Card title="Schedule" icon="schedule" flush>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th className="num">Rd</th>
+                  <th>Competition</th>
+                  <th>Venue</th>
+                  <th>Opponent</th>
+                  <th>Result</th>
+                  <th>Sets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fixtures.map((f, i) => {
+                  const isHome = f.home === world.userClubId;
+                  const opponent = world.clubs[isHome ? f.away : f.home];
+                  const comp = world.competitions[f.competitionId];
+                  const won = f.played && ((isHome && f.homeSets > f.awaySets) || (!isHome && f.awaySets > f.homeSets));
+                  return (
+                    <tr key={f.id} className={i === nextIdx ? 'next-fixture' : ''}>
+                      <td className="dim">
+                        {g.weekdayLabelForDay(f.day)} {g.dateLabelForDay(f.day)}
+                        {i === nextIdx && <span className="next-tag">Next</span>}
+                      </td>
+                      <td className="num faint">{f.round >= 1000 ? 'PO' : f.round + 1}</td>
+                      <td className="faint">{comp?.name ?? ''}</td>
+                      <td><span className={`venue-tag ${isHome ? 'home' : 'away'}`}>{isHome ? 'Home' : 'Away'}</span></td>
+                      <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
+                      <td>
+                        {f.played
+                          ? (
+                            <span className={`result-badge ${won ? 'win' : 'loss'}`}>
+                              {won ? 'W' : 'L'} {isHome ? f.homeSets : f.awaySets}-{isHome ? f.awaySets : f.homeSets}
+                            </span>
+                          )
+                          : <span className="faint">—</span>}
+                      </td>
+                      <td className="faint mono">
+                        {f.setScores.map(([h, a]) => `${isHome ? h : a}-${isHome ? a : h}`).join('  ')}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
-      <Card title="Schedule" icon="schedule" flush>
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th className="num">Rd</th>
-                <th>Competition</th>
-                <th>Venue</th>
-                <th>Opponent</th>
-                <th>Result</th>
-                <th>Sets</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fixtures.map((f, i) => {
-                const isHome = f.home === world.userClubId;
-                const opponent = world.clubs[isHome ? f.away : f.home];
-                const comp = world.competitions[f.competitionId];
-                const won = f.played && ((isHome && f.homeSets > f.awaySets) || (!isHome && f.awaySets > f.homeSets));
-                return (
-                  <tr key={f.id} className={i === nextIdx ? 'next-fixture' : ''}>
-                    <td className="dim">
-                      {g.weekdayLabelForDay(f.day)} {g.dateLabelForDay(f.day)}
-                      {i === nextIdx && <span className="next-tag">Next</span>}
-                    </td>
-                    <td className="num faint">{f.round >= 1000 ? 'PO' : f.round + 1}</td>
-                    <td className="faint">{comp?.name ?? ''}</td>
-                    <td><span className={`venue-tag ${isHome ? 'home' : 'away'}`}>{isHome ? 'Home' : 'Away'}</span></td>
-                    <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
-                    <td>
-                      {f.played
-                        ? (
-                          <span className={`result-badge ${won ? 'win' : 'loss'}`}>
-                            {won ? 'W' : 'L'} {isHome ? f.homeSets : f.awaySets}-{isHome ? f.awaySets : f.homeSets}
-                          </span>
-                        )
-                        : <span className="faint">—</span>}
-                    </td>
-                    <td className="faint mono">
-                      {f.setScores.map(([h, a]) => `${isHome ? h : a}-${isHome ? a : h}`).join('  ')}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+        {watched !== null && <MatchScreen />}
+      </div>
     </>
   );
 }
@@ -159,15 +161,17 @@ export function MatchScreen(): JSX.Element {
         <span className="faint">{result.totalRallies} rallies simulated</span>
       </div>
 
-      {tab === 'log' && (
-        <RallyLog
-          log={result.log ?? []}
-          homeCode={homeClub?.shortName ?? homeName.slice(0, 3).toUpperCase()}
-          awayCode={awayClub?.shortName ?? awayName.slice(0, 3).toUpperCase()}
-        />
-      )}
-      {tab === 'box' && <BoxScore />}
-      {tab === 'rotations' && <RotationAnalysis />}
+      <div className="report-body">
+        {tab === 'log' && (
+          <RallyLog
+            log={result.log ?? []}
+            homeCode={homeClub?.shortName ?? homeName.slice(0, 3).toUpperCase()}
+            awayCode={awayClub?.shortName ?? awayName.slice(0, 3).toUpperCase()}
+          />
+        )}
+        {tab === 'box' && <BoxScore />}
+        {tab === 'rotations' && <RotationAnalysis />}
+      </div>
     </Card>
   );
 }
@@ -316,13 +320,21 @@ function MvpRating(): JSX.Element | null {
   return <RatingBadge value={matchRating(line, store.position[result.mvp] as Position, setsFor, setsAgainst)} />;
 }
 
+/**
+ * Every player's line from the match, one side at a time — the way FM's match
+ * stats switch between the teams — so the table always has the panel's full
+ * width, however narrow the report is.
+ */
 function BoxScore(): JSX.Element {
   const g = useGame();
   const watched = g.reviewLast()!;
-  const store = g.world!.players;
+  const world = g.world!;
+  const store = world.players;
+  const [side, setSide] = useState<0 | 1>(watched.fixture.away === world.userClubId ? 1 : 0);
+  const homeCode = world.clubs[watched.fixture.home]?.shortName ?? watched.homeName;
+  const awayCode = world.clubs[watched.fixture.away]?.shortName ?? watched.awayName;
 
   const table = (
-    label: string,
     teamStats: typeof watched.result.stats.home,
     setsFor: number,
     setsAgainst: number,
@@ -333,8 +345,7 @@ function BoxScore(): JSX.Element {
         (b.attackKills + b.serveAces + b.blockPoints) - (a.attackKills + a.serveAces + a.blockPoints));
     const total = aggregateTeam(teamStats);
     return (
-      <div className="box-score">
-        <h4 className="section-label">{label}</h4>
+      <div className="box-table">
         <table className="data-table">
           <thead>
             <tr>
@@ -358,7 +369,7 @@ function BoxScore(): JSX.Element {
                 ? (s.receptionPerfect + s.receptionPositive) / s.receptionsTotal : 0;
               return (
                 <tr key={s.playerIdx} className="clickable" onClick={() => g.select(s.playerIdx)}>
-                  <td className="strong">{store.fullName(s.playerIdx)}</td>
+                  <td className="strong" title={store.fullName(s.playerIdx)}>{store.shortName(s.playerIdx)}</td>
                   <td className="num">
                     <RatingBadge
                       value={matchRating(s, store.position[s.playerIdx] as Position, setsFor, setsAgainst)}
@@ -407,9 +418,19 @@ function BoxScore(): JSX.Element {
   };
 
   return (
-    <div className="grid2">
-      {table(watched.homeName, watched.result.stats.home, watched.result.homeSets, watched.result.awaySets)}
-      {table(watched.awayName, watched.result.stats.away, watched.result.awaySets, watched.result.homeSets)}
+    <div className="box-score">
+      <div className="toolbar">
+        <Segmented<0 | 1>
+          size="sm"
+          options={[[0, watched.homeName], [1, watched.awayName]]}
+          value={side}
+          onChange={setSide}
+        />
+        <span className="faint">{side === 0 ? homeCode : awayCode} · click a player for their profile</span>
+      </div>
+      {side === 0
+        ? table(watched.result.stats.home, watched.result.homeSets, watched.result.awaySets)
+        : table(watched.result.stats.away, watched.result.awaySets, watched.result.homeSets)}
     </div>
   );
 }
@@ -425,50 +446,52 @@ function RotationAnalysis(): JSX.Element {
   const table = (label: string, stats: typeof watched.result.stats.home): JSX.Element => (
     <div className="box-score">
       <h4 className="section-label">{label}</h4>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Rotation</th>
-            <th className="num" title="Rallies played receiving">Rec</th>
-            <th className="num" title="Side-out percentage">Side-out</th>
-            <th className="num" title="Rallies played serving">Srv</th>
-            <th className="num" title="Break-point percentage">Break</th>
-            <th className="num">Net</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stats.rotations.map((r, i) => {
-            const so = sideOutPct(r);
-            const bp = breakPointPct(r);
-            const net = (r.sideOutsWon + r.servePointsWon) -
-              ((r.receiveRallies - r.sideOutsWon) + (r.serveRallies - r.servePointsWon));
-            return (
-              <tr key={i}>
-                <td className="strong">P{i + 1}</td>
-                <td className="num dim">{r.receiveRallies}</td>
-                <td className={`num ${so > 0.68 ? 'good' : so < 0.55 ? 'bad' : ''}`}>
-                  {r.receiveRallies > 0 ? `${(so * 100).toFixed(0)}%` : '—'}
-                </td>
-                <td className="num dim">{r.serveRallies}</td>
-                <td className={`num ${bp > 0.42 ? 'good' : bp < 0.30 ? 'bad' : ''}`}>
-                  {r.serveRallies > 0 ? `${(bp * 100).toFixed(0)}%` : '—'}
-                </td>
-                <td className="num">
-                  <span className={`net-badge ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`}>
-                    {net > 0 ? `+${net}` : net}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="box-table">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Rotation</th>
+              <th className="num" title="Rallies played receiving">Rec</th>
+              <th className="num" title="Side-out percentage">Side-out</th>
+              <th className="num" title="Rallies played serving">Srv</th>
+              <th className="num" title="Break-point percentage">Break</th>
+              <th className="num">Net</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.rotations.map((r, i) => {
+              const so = sideOutPct(r);
+              const bp = breakPointPct(r);
+              const net = (r.sideOutsWon + r.servePointsWon) -
+                ((r.receiveRallies - r.sideOutsWon) + (r.serveRallies - r.servePointsWon));
+              return (
+                <tr key={i}>
+                  <td className="strong">P{i + 1}</td>
+                  <td className="num dim">{r.receiveRallies}</td>
+                  <td className={`num ${so > 0.68 ? 'good' : so < 0.55 ? 'bad' : ''}`}>
+                    {r.receiveRallies > 0 ? `${(so * 100).toFixed(0)}%` : '—'}
+                  </td>
+                  <td className="num dim">{r.serveRallies}</td>
+                  <td className={`num ${bp > 0.42 ? 'good' : bp < 0.30 ? 'bad' : ''}`}>
+                    {r.serveRallies > 0 ? `${(bp * 100).toFixed(0)}%` : '—'}
+                  </td>
+                  <td className="num">
+                    <span className={`net-badge ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`}>
+                      {net > 0 ? `+${net}` : net}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 
   return (
     <>
-      <div className="grid2">
+      <div className="box-pair">
         {table(watched.homeName, watched.result.stats.home)}
         {table(watched.awayName, watched.result.stats.away)}
       </div>

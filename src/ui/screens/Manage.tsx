@@ -505,30 +505,22 @@ export function FinancesScreen(): JSX.Element {
           {f.prizeMoney > 0 && <KV k="Of which prize money" cls="good">{money(f.prizeMoney)}</KV>}
           <KV k="Per match (full house)" cls="good">{money(f.ticketIncomePerMatch)}</KV>
           <div className="money-total"><span>Income so far</span><strong className="good">{money(totalIncome)}</strong></div>
+          <p className="footnote">
+            Sponsorship and TV rights are locked in for the season; gate receipts and travel costs accrue
+            match by match, so the result moves as the season goes on.
+          </p>
         </Card>
 
         <Card title="Expenditure (annual)" icon="stats">
           {costLines.map(([k, v]) => <MoneyLine key={k} label={k} value={v} max={maxLine} tone="cost" />)}
           <div className="money-total"><span>Costs so far</span><strong className="bad">{money(-totalCosts)}</strong></div>
-        </Card>
-      </div>
-
-      <Card title="Projection" icon="calendar" style={{ marginTop: 16 }}>
-        <div className="projection">
-          <div><span className="faint">Income so far</span><strong className="good">{money(totalIncome)}</strong></div>
-          <span className="projection-op">−</span>
-          <div><span className="faint">Costs so far</span><strong className="bad">{money(totalCosts)}</strong></div>
-          <span className="projection-op">=</span>
-          <div>
-            <span className="faint">Result if the season ended today</span>
+          {/* Income less costs — what the season comes to if it ended today. */}
+          <div className="money-total money-result">
+            <span>Result so far</span>
             <strong className={result < 0 ? 'bad' : 'good'}>{money(result)}</strong>
           </div>
-        </div>
-        <p className="footnote">
-          Sponsorship and TV rights are locked in for the season; gate receipts and travel costs accrue
-          match by match, so this figure moves as the season goes on.
-        </p>
-      </Card>
+        </Card>
+      </div>
     </>
   );
 }

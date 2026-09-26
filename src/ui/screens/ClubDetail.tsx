@@ -81,41 +81,43 @@ export function ClubDetail(): JSX.Element | null {
 
       <div className="club-grid">
         <Card title="Best Players" icon="squad" flush>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th />
-                <th>Name</th>
-                <th>Pos</th>
-                <th>Nat</th>
-                <th className="num">Age</th>
-                <th>Ability</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topPlayers.map((i) => (
-                <tr key={i} className="clickable" onClick={() => g.select(i)}>
-                  <td className="face-cell"><PlayerFace playerId={store.id[i]} name={store.fullName(i)} size={28} /></td>
-                  <td className="strong">{store.fullName(i)}</td>
-                  <td><Pos pos={store.position[i] as Position} /></td>
-                  <td><Flag nation={store.nation[i]} /></td>
-                  <td className="num dim">{store.ageOn(i, world.year, 181)}</td>
-                  <td>
-                    <span className="ability-cell">
-                      <StarMeter value={store.currentAbility[i]} size={11} />
-                      <span className={abilityClass(store.currentAbility[i])}>{store.currentAbility[i]}</span>
-                    </span>
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th />
+                  <th>Name</th>
+                  <th>Pos</th>
+                  <th>Nat</th>
+                  <th className="num">Age</th>
+                  <th>Ability</th>
                 </tr>
-              ))}
-              {topPlayers.length === 0 && (
-                <tr><td colSpan={6}><Empty>No players registered.</Empty></td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {topPlayers.map((i) => (
+                  <tr key={i} className="clickable" onClick={() => g.select(i)}>
+                    <td className="face-cell"><PlayerFace playerId={store.id[i]} name={store.fullName(i)} size={28} /></td>
+                    <td className="strong">{store.fullName(i)}</td>
+                    <td><Pos pos={store.position[i] as Position} /></td>
+                    <td><Flag nation={store.nation[i]} /></td>
+                    <td className="num dim">{store.ageOn(i, world.year, 181)}</td>
+                    <td>
+                      <span className="ability-cell">
+                        <StarMeter value={store.currentAbility[i]} size={11} />
+                        <span className={abilityClass(store.currentAbility[i])}>{store.currentAbility[i]}</span>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {topPlayers.length === 0 && (
+                  <tr><td colSpan={6}><Empty>No players registered.</Empty></td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
-        <div className="stack">
+        <div className="stack club-side">
           <Card title="Club Info" icon="club">
             <KV k="Nation"><Flag nation={club.nation} /> {NATIONS[club.nation]?.name ?? '—'}</KV>
             <KV k="League">{comp !== undefined ? `${comp.name} (Tier ${comp.tier})` : '—'}</KV>

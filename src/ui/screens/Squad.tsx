@@ -14,7 +14,7 @@ import {
   abilityClass, attrClass, Bar, Card, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
   RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useSort,
 } from '../components.tsx';
-import { Icon } from '../icons.tsx';
+import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
 type SquadSort =
@@ -233,6 +233,14 @@ function AttributeRadar({ store, p }: { store: PlayerStore; p: number }): JSX.El
   );
 }
 
+/** The player profile's tabs — one screen each, the way FM splits a profile. */
+type ProfileTab = 'overview' | 'stats' | 'details';
+const PROFILE_TABS: ReadonlyArray<[ProfileTab, string, IconName]> = [
+  ['overview', 'Overview', 'user'],
+  ['stats', 'Statistics', 'stats'],
+  ['details', 'Contract & Career', 'finances'],
+];
+
 /** How comfortable a player is in a role, in the words a coach would use. */
 function familiarity(eff: number): { label: string; cls: string } {
   if (eff >= 0.999) return { label: 'Natural', cls: 'fam-natural' };
@@ -254,6 +262,7 @@ export function PlayerDetail(): JSX.Element | null {
   const world = g.world!;
   const store = world.players;
   const p = g.selectedPlayer;
+  const [tab, setTab] = useState<ProfileTab>('overview');
   if (p === null) return null;
 
   const age = store.ageOn(p, world.year, 181);
@@ -340,66 +349,84 @@ export function PlayerDetail(): JSX.Element | null {
         />
       </div>
 
-      <SeasonStatsCard world={world} p={p} form={form} />
+      <div className="profile-tabs" role="tablist">
+        {PROFILE_TABS.map(([id, label, icon]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            className={`panel-tab${tab === id ? ' active' : ''}`}
+            onClick={() => setTab(id)}
+          >
+            <Icon name={icon} size={14} /> {label}
+          </button>
+        ))}
+      </div>
 
-      <div className="profile-grid">
-        <Card title="Attributes" icon="stats">
-          <div className="attr-cols">
-            {group(TECHNICAL_ATTRS, 'Technical')}
-            {group(MENTAL_ATTRS, 'Mental')}
-            {group(PHYSICAL_ATTRS, 'Physical')}
-          </div>
-          <p className="footnote">
-            Hidden attributes — injury proneness, consistency, big-match performance,
-            loyalty, ambition and the rest — are never shown as numbers. They are
-            inferred from scout reports and from how the player actually behaves.
-          </p>
-        </Card>
+      {tab === 'stats' && <SeasonStatsCard world={world} p={p} form={form} />}
 
-        <div className="stack">
-          <Card title="Attribute Profile" icon="star">
-            <AttributeRadar store={store} p={p} />
+      {tab === 'overview' && (
+        <div className="profile-grid">
+          <Card title="Attributes" icon="stats" className="profile-attrs">
+            <div className="attr-cols">
+              {group(TECHNICAL_ATTRS, 'Technical')}
+              {group(MENTAL_ATTRS, 'Mental')}
+              {group(PHYSICAL_ATTRS, 'Physical')}
+            </div>
+            <p className="footnote">
+              Hidden attributes — injury proneness, consistency, big-match performance,
+              loyalty, ambition and the rest — are never shown as numbers. They are
+              inferred from scout reports and from how the player actually behaves.
+            </p>
           </Card>
-          <Card title="Positions" icon="tactics">
-            {POSITIONS.map((pos) => {
-              const eff = positionalEffectiveness(natural, secondary, pos);
-              const fam = familiarity(eff);
-              return (
-                <div className="fam-row" key={pos}>
-                  <Pos pos={pos} />
-                  <span className="fam-name">{POSITION_NAMES[pos]}</span>
-                  <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${eff * 100}%` }} /></span>
-                  <span className={`fam-label ${fam.cls}`}>{fam.label}</span>
-                </div>
-              );
-            })}
+
+          <div className="stack profile-side">
+            <Card title="Attribute Profile" icon="star">
+              <AttributeRadar store={store} p={p} />
+            </Card>
+            <Card title="Positions" icon="tactics">
+              {POSITIONS.map((pos) => {
+                const eff = positionalEffectiveness(natural, secondary, pos);
+                const fam = familiarity(eff);
+                return (
+                  <div className="fam-row" key={pos}>
+                    <Pos pos={pos} />
+                    <span className="fam-name">{POSITION_NAMES[pos]}</span>
+                    <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${eff * 100}%` }} /></span>
+                    <span className={`fam-label ${fam.cls}`}>{fam.label}</span>
+                  </div>
+                );
+              })}
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {tab === 'details' && (
+        <div className="grid3 profile-details">
+          <Card title="Physical Profile" icon="user">
+            <KV k="Height">{store.heightCm[p]} cm</KV>
+            <KV k="Weight">{store.weightKg[p]} kg</KV>
+            <KV k="Spike reach">{store.spikeReachCm[p]} cm</KV>
+            <KV k="Block reach">{store.blockReachCm[p]} cm</KV>
+          </Card>
+          <Card title="Career" icon="trophy">
+            <KV k="Matches">{store.careerMatches[p].toLocaleString()}</KV>
+            <KV k="Points">{store.careerPoints[p].toLocaleString()}</KV>
+            <KV k="Aces">{store.careerAces[p].toLocaleString()}</KV>
+            <KV k="Blocks">{store.careerBlocks[p].toLocaleString()}</KV>
+            <KV k="Titles">{store.careerTitles[p]}</KV>
+            <KV k="International caps">{store.nationalCaps[p]}</KV>
+          </Card>
+          <Card title="Contract" icon="finances">
+            <KV k="Club">{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</KV>
+            <KV k="Market value">{money(store.value[p])}</KV>
+            <KV k="Wage">{money(store.wage[p])}</KV>
+            <KV k="Nationality"><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</KV>
+            {store.fivbId[p] > 0 && <KV k="FIVB ID" cls="mono faint">{store.fivbId[p]}</KV>}
           </Card>
         </div>
-      </div>
-
-      <div className="grid3">
-        <Card title="Physical Profile" icon="user">
-          <KV k="Height">{store.heightCm[p]} cm</KV>
-          <KV k="Weight">{store.weightKg[p]} kg</KV>
-          <KV k="Spike reach">{store.spikeReachCm[p]} cm</KV>
-          <KV k="Block reach">{store.blockReachCm[p]} cm</KV>
-        </Card>
-        <Card title="Career" icon="trophy">
-          <KV k="Matches">{store.careerMatches[p].toLocaleString()}</KV>
-          <KV k="Points">{store.careerPoints[p].toLocaleString()}</KV>
-          <KV k="Aces">{store.careerAces[p].toLocaleString()}</KV>
-          <KV k="Blocks">{store.careerBlocks[p].toLocaleString()}</KV>
-          <KV k="Titles">{store.careerTitles[p]}</KV>
-          <KV k="International caps">{store.nationalCaps[p]}</KV>
-        </Card>
-        <Card title="Contract" icon="finances">
-          <KV k="Club">{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</KV>
-          <KV k="Market value">{money(store.value[p])}</KV>
-          <KV k="Wage">{money(store.wage[p])}</KV>
-          <KV k="Nationality"><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</KV>
-          {store.fivbId[p] > 0 && <KV k="FIVB ID" cls="mono faint">{store.fivbId[p]}</KV>}
-        </Card>
-      </div>
+      )}
     </div>
   );
 }
@@ -430,7 +457,7 @@ function SeasonStatsCard({ world, p, form }: { world: World; p: number; form: nu
       title="Statistics"
       icon="stats"
       flush
-      style={{ marginBottom: 16 }}
+      className="profile-stats"
       actions={(
         <>
           {form.length > 0 && (

@@ -115,16 +115,18 @@ function GameShell(): JSX.Element {
   };
 
   const key = viewKey(g);
-  // The inbox claims the whole content height so only its message list
-  // scrolls; every other view grows with its content and scrolls the page.
-  const fill = key === 'screen-overview';
+  // Match day — team selection and the live match — is laid out to the
+  // window, like the inbox, and takes the sidebar's width too: nothing in it
+  // can be used until the match is over anyway.
+  const live = g.matchday !== null;
+  const contentClass = live ? ' content-live' : ' content-fill';
 
   return (
-    <div className={`app${collapsed ? ' sidebar-collapsed' : ''}`} style={clubThemeStyle(club)}>
-      <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
+    <div className={`app${collapsed || live ? ' sidebar-collapsed' : ''}`} style={clubThemeStyle(club)}>
+      <Sidebar collapsed={collapsed || live} locked={live} onToggle={toggleCollapsed} />
       <div className="main-col">
         <Header />
-        <main className={`content${fill ? ' content-fill' : ''}`}>
+        <main className={`content${contentClass}`}>
           <div key={key} className="view-fade">
             {g.matchday !== null
               ? <MatchdayScreen />
@@ -188,7 +190,14 @@ function inTakeover(g: ReturnType<typeof useGame>): boolean {
   return g.matchday !== null || g.activeInterviewFixtureId !== null;
 }
 
-function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }): JSX.Element {
+function Sidebar({
+  collapsed, locked, onToggle,
+}: {
+  collapsed: boolean;
+  /** Held collapsed for now (during a live match) — the toggle waits. */
+  locked: boolean;
+  onToggle: () => void;
+}): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const club = g.club!;
@@ -247,7 +256,12 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
         ))}
       </nav>
 
-      <button className="side-collapse" onClick={onToggle} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+      <button
+        className="side-collapse"
+        onClick={onToggle}
+        disabled={locked}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
         <Icon name={collapsed ? 'expand' : 'collapse'} size={18} />
         <span className="side-item-label">Collapse</span>
       </button>
