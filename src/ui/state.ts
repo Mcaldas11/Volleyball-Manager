@@ -154,6 +154,9 @@ export interface MatchdayLogEntry {
   awayCourt: number[];
   homeLibero: number;
   awayLibero: number;
+  /** Sets won by each side before this rally — so a viewer still showing the
+   *  rally can show the scoreboard as it stood. */
+  setsBefore: [number, number];
 }
 
 export interface MatchdayState {
@@ -933,18 +936,25 @@ class Game {
     const logEntry: MatchdayLogEntry = {
       entry, homeCourt: preSnap.homeCourt, awayCourt: preSnap.awayCourt,
       homeLibero: preSnap.homeLibero, awayLibero: preSnap.awayLibero,
+      setsBefore: [preSnap.homeSets, preSnap.awaySets],
     };
     md.log.push(logEntry);
     md.snapshot = sim.snapshot();
     // Fresh timeout allowance each set, same as the engine's own substitution limit.
     if (md.snapshot.set !== preSnap.set) md.timeoutsUsed = [0, 0];
-    if (md.snapshot.matchOver) {
-      this.finalizeMatchday();
-    } else {
-      this.maybeAIAct();
-      this.emit();
-    }
+    // The final point is left for the viewer to play out; it calls
+    // completeMatchday() once it has been shown.
+    if (!md.snapshot.matchOver) this.maybeAIAct();
+    this.emit();
     return logEntry;
+  }
+
+  /** Close a match whose last point has been played and shown — commits the
+   *  result and moves on to the report. A no-op until the match is over. */
+  completeMatchday(): void {
+    const md = this.matchday;
+    if (md === null || this.liveSim === null || md.snapshot?.matchOver !== true) return;
+    this.finalizeMatchday();
   }
 
   /** Skip straight to the result without watching the rest of the match. */

@@ -1970,6 +1970,8 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .status-live .live-dot { background: var(--bad); animation: live-blink 1.2s ease-in-out infinite; }
 .status-timeout, .status-substitution { color: var(--gold); }
 .status-timeout .live-dot, .status-substitution .live-dot { background: var(--gold); }
+.status-full-time { color: var(--good); }
+.status-full-time .live-dot { background: var(--good); }
 @keyframes live-blink { 50% { opacity: 0.3; } }
 
 .live-grid { display: grid; grid-template-columns: minmax(230px, 270px) minmax(380px, 1fr) minmax(290px, 360px); gap: 14px; align-items: start; }

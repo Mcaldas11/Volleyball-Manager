@@ -59,8 +59,7 @@ async function animateRally(
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, store.position, seed, nearTeam);
-  for (const beat of beats) {
+  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, store.position, seed, nearTeam);  for (const beat of beats) {
     if (cancelled.current) return;
     // Beat timings are tuned for 1x — slower speeds stretch them, faster squeeze.
     const ms = (beat.ms * 1.15) / speed;
@@ -289,7 +288,9 @@ function LiveMatchView(): JSX.Element {
   const [bigPlay, setBigPlay] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
   const [subAnnouncement, setSubAnnouncement] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
   const [timeoutSecondsLeft, setTimeoutSecondsLeft] = useState(TIMEOUT_SECONDS);
-  const cancelledRef = useRef(false);
+  /** Rallies whose animation has finished — the scoreboard, commentary and
+   *  stats only count these, so they change as the ball lands, not before. */
+  const [revealed, setRevealed] = useState(md.log.length);
   const bigPlayTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const subAnnounceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -336,9 +337,16 @@ function LiveMatchView(): JSX.Element {
   // Drives the match forward itself: play a rally, animate it, repeat.
   // No timer in state.ts — pacing is entirely a presentation concern here.
   useEffect(() => {
-    cancelledRef.current = false;
+    // Each mount runs its own loop with its own stop flag. React's development
+    // StrictMode mounts the view twice; a flag shared between mounts let the
+    // discarded first loop run on beside the real one, two rallies animating
+    // over each other on the one court.
+    const cancelled = { current: false };
     const run = async (): Promise<void> => {
-      while (!cancelledRef.current) {
+      // A moment before the first serve — which also stops a throwaway mount
+      // before it has played a single rally.
+      await sleep(350);
+      while (!cancelled.current) {
         const current = g.matchday;
         if (current === null) break;
         if (current.paused) {
@@ -355,9 +363,16 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = true;
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
-        await animateRally(logEntry, store, nearTeam, current.speed, cancelledRef, setScene, triggerBigPlay);
+        await animateRally(logEntry, store, nearTeam, current.speed, cancelled, setScene, triggerBigPlay);
         animatingRef.current = false;
-        if (cancelledRef.current) break;
+        if (cancelled.current) break;
+        setRevealed(g.matchday?.log.length ?? 0);
+        if (g.matchday?.snapshot?.matchOver === true) {
+          // Full time: let the last point sink in, then on to the report.
+          await sleep(2200 / current.speed);
+          if (!cancelled.current) g.completeMatchday();
+          break;
+        }
         // Everyone walks into position for the next serve — rotating on a side-out.
         setScene(sceneFor(g.matchday?.snapshot ?? null, store, nearTeam));
         await sleep(900 / current.speed);
@@ -365,7 +380,7 @@ function LiveMatchView(): JSX.Element {
     };
     void run();
     return () => {
-      cancelledRef.current = true;
+      cancelled.current = true;
       clearTimeout(bigPlayTimer.current);
       clearTimeout(subAnnounceTimer.current);
     };
@@ -373,7 +388,7 @@ function LiveMatchView(): JSX.Element {
 
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);
-  }, [md.log.length]);
+  }, [revealed]);
 
   // A substitution or libero change between rallies redraws the set-up.
   useEffect(() => {
@@ -390,22 +405,47 @@ function LiveMatchView(): JSX.Element {
   const teamOf = (p: number): 0 | 1 => (store.clubId[p] === md.fixture.home ? 0 : 1);
   const farClub = nearTeam === 0 ? awayClub : homeClub;
   const nearClub = nearTeam === 0 ? homeClub : awayClub;
-  const farSets = (nearTeam === 0 ? snap?.awaySets : snap?.homeSets) ?? 0;
-  const nearSets = (nearTeam === 0 ? snap?.homeSets : snap?.awaySets) ?? 0;
-  const stats = liveStats(md.log);
+  // What the scoreboard shows: the state before the rally still being
+  // animated, or the live snapshot once every rally has been shown.
+  const pending = revealed < md.log.length ? md.log[revealed] : null;
+  const shownLog = pending === null ? md.log : md.log.slice(0, revealed);
+  const view = pending !== null
+    ? {
+      homeScore: pending.entry.scoreBefore[0],
+      awayScore: pending.entry.scoreBefore[1],
+      homeSets: pending.setsBefore[0],
+      awaySets: pending.setsBefore[1],
+      set: pending.entry.set,
+      serving: pending.entry.serveTeam,
+      matchOver: false,
+    }
+    : {
+      homeScore: snap?.homeScore ?? 0,
+      awayScore: snap?.awayScore ?? 0,
+      homeSets: snap?.homeSets ?? 0,
+      awaySets: snap?.awaySets ?? 0,
+      set: snap?.set ?? 0,
+      serving: snap?.serving ?? 0,
+      matchOver: snap?.matchOver ?? false,
+    };
+  const farSets = nearTeam === 0 ? view.awaySets : view.homeSets;
+  const nearSets = nearTeam === 0 ? view.homeSets : view.awaySets;
+  const stats = liveStats(shownLog);
   const ratings = g.liveRatings();
-  const setHistory = completedSets(md.log, snap?.set ?? 0, snap?.matchOver ?? false);
-  const homeProb = md.log.length > 0 ? md.log[md.log.length - 1].entry.homeWinProb : 0.5;
-  const status = md.timeoutActive !== null
-    ? 'Timeout'
-    : md.paused && md.pauseUntil !== null
-      ? 'Substitution'
-      : md.paused ? 'Paused' : 'Live';
+  const setHistory = completedSets(shownLog, view.set, view.matchOver);
+  const homeProb = shownLog.length > 0 ? shownLog[shownLog.length - 1].entry.homeWinProb : 0.5;
+  const status = view.matchOver
+    ? 'Full time'
+    : md.timeoutActive !== null
+      ? 'Timeout'
+      : md.paused && md.pauseUntil !== null
+        ? 'Substitution'
+        : md.paused ? 'Paused' : 'Live';
 
   return (
     <div className="live">
       <div className="scoreboard">
-        <div className={`sb-team${snap?.serving === 0 ? ' serving' : ''}`}>
+        <div className={`sb-team${view.serving === 0 ? ' serving' : ''}`}>
           {homeClub !== undefined && <ClubCrest club={homeClub} size={54} />}
           <div className="sb-team-text">
             <span className="sb-name">{homeClub?.name ?? '—'}</span>
@@ -415,13 +455,13 @@ function LiveMatchView(): JSX.Element {
         </div>
         <div className="sb-center">
           <div className="sb-sets">
-            <span>{snap?.homeSets ?? 0}</span>
+            <span>{view.homeSets}</span>
             <span className="sb-colon">:</span>
-            <span>{snap?.awaySets ?? 0}</span>
+            <span>{view.awaySets}</span>
           </div>
           <div className="sb-live">
-            <span className="sb-set-label">Set {(snap?.set ?? 0) + 1}</span>
-            <span className="sb-points">{snap?.homeScore ?? 0} – {snap?.awayScore ?? 0}</span>
+            <span className="sb-set-label">{view.matchOver ? 'Full time' : `Set ${view.set + 1}`}</span>
+            <span className="sb-points">{view.homeScore} – {view.awayScore}</span>
           </div>
           {setHistory.length > 0 && (
             <div className="set-chips">
@@ -434,7 +474,7 @@ function LiveMatchView(): JSX.Element {
             </div>
           )}
         </div>
-        <div className={`sb-team right${snap?.serving === 1 ? ' serving' : ''}`}>
+        <div className={`sb-team right${view.serving === 1 ? ' serving' : ''}`}>
           <span className="sb-serve" title="Serving"><Icon name="ball" size={18} /></span>
           <div className="sb-team-text">
             <span className="sb-name">{awayClub?.name ?? '—'}</span>
@@ -473,7 +513,7 @@ function LiveMatchView(): JSX.Element {
           <span className="count-chip">{2 - md.timeoutsUsed[userTeamIdx]} left</span>
         </button>
         <span className="flex-spacer" />
-        <span className={`live-status status-${status.toLowerCase()}`}>
+        <span className={`live-status status-${status.toLowerCase().replace(' ', '-')}`}>
           <span className="live-dot" />{status}
         </span>
         <button className="danger" onClick={() => g.finishMatchdayNow()}>
@@ -573,12 +613,12 @@ function LiveMatchView(): JSX.Element {
         <Card className="ticker-panel" title="Commentary" icon="press" flush>
           <div className="ticker-scroll" ref={logRef}>
             <RallyTicker
-              entries={md.log.map((l) => l.entry)}
+              entries={shownLog.map((l) => l.entry)}
               store={store}
               homeCode={homeClub?.shortName ?? '—'}
               awayCode={awayClub?.shortName ?? '—'}
             />
-            {md.log.length === 0 && <div className="ticker-entry dim">Kicking off…</div>}
+            {shownLog.length === 0 && <div className="ticker-entry dim">Kicking off…</div>}
           </div>
         </Card>
       </div>

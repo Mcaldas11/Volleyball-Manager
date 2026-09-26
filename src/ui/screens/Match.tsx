@@ -223,7 +223,10 @@ export function RallyTicker({
         const isHome = r.winner === 0;
         return (
           <div key={i} className={`ticker-entry ${isHome ? 'home-point' : 'away-point'}`}>
-            <span className="ticker-score mono">{r.scoreBefore[0]}-{r.scoreBefore[1]}</span>
+            {/* The score after the point, as the scoreboard shows it. */}
+            <span className="ticker-score mono">
+              {r.scoreBefore[0] + (isHome ? 1 : 0)}-{r.scoreBefore[1] + (isHome ? 0 : 1)}
+            </span>
             <span className={`ticker-pill ${isHome ? 'home' : 'away'}`}>{isHome ? homeCode : awayCode}</span>
             <span className="ticker-text">
               {before}
