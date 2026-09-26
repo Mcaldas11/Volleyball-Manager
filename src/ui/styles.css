@@ -1997,79 +1997,18 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .team-strip-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .team-strip-sets { padding: 1px 8px; border-radius: 4px; background: var(--bg-deep); border: 1px solid var(--line); font-size: 11.5px; font-weight: 700; color: var(--text-dim); }
 
-.court2d {
+/* The live court is a canvas drawn in perspective (see LiveCourt.tsx); this
+   only frames it — a dark arena behind the lit floor. */
+.live-court {
   position: relative;
   width: 100%;
-  max-width: 400px;
-  aspect-ratio: 3 / 4;
-  /* The tilt below pushes the far edge back and down, which would leave a
-     band of empty space above the court — pull it back up to meet the strip. */
-  margin: -64px auto 24px;
-  border: 3px solid rgba(255, 255, 255, 0.85);
-  border-radius: 3px;
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 25%, transparent 75%, rgba(0, 0, 0, 0.12)),
-    radial-gradient(ellipse at 50% 50%, #c8743f, #a4582b 80%);
-  box-shadow: 0 0 0 14px #1f4f86, 0 0 0 16px rgba(0, 0, 0, 0.3), 0 26px 30px -14px rgba(0, 0, 0, 0.7);
-  /* Faces the user but tips back slightly, like a broadcast court camera
-     rather than a flat top-down map. */
-  transform: perspective(1000px) rotateX(18deg);
-  transform-origin: center bottom;
-}
-.court2d-net {
-  position: absolute;
-  left: -18px;
-  right: -18px;
-  top: 50%;
-  height: 0;
-  border-top: 4px solid #f4f6fa;
-  transform: translateY(-50%);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.35);
-}
-.court2d-net::before, .court2d-net::after {
-  content: '';
-  position: absolute;
-  top: -14px;
-  width: 4px;
-  height: 26px;
-  background: repeating-linear-gradient(180deg, var(--bad) 0 5px, #fff 5px 10px);
-  border-radius: 2px;
-}
-.court2d-net::before { left: 16px; }
-.court2d-net::after { right: 16px; }
-.court2d-attack-line { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid rgba(255, 255, 255, 0.7); }
-.court2d-attack-line.away { top: 33.3%; }
-.court2d-attack-line.home { top: 66.6%; }
-
-.player-marker {
-  position: absolute;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  transform: translate(-50%, -50%);
-  transition: left 0.45s cubic-bezier(0.4, 0.1, 0.3, 1), top 0.45s cubic-bezier(0.4, 0.1, 0.3, 1), transform 0.2s ease;
-}
-.player-marker .player-face { width: 38px; height: 38px; }
-.player-marker.is-active { z-index: 2; transform: translate(-50%, -50%) scale(1.18); }
-.player-marker.is-active .player-face { box-shadow: 0 0 0 2px #fff, 0 0 12px rgba(255, 255, 255, 0.75); }
-.player-marker-ring { position: absolute; top: 0; width: 38px; height: 38px; border-radius: 50%; pointer-events: none; }
-.player-marker-label {
-  max-width: 78px;
+  margin: 4px 0;
+  border-radius: var(--radius);
   overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.62);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
+  background: radial-gradient(ellipse 80% 70% at 50% 58%, #18222f 0%, #0d1219 70%);
+  border: 1px solid var(--line);
 }
-
-.player-marker-rating { position: absolute; top: -6px; right: -18px; z-index: 2; }
-.player-marker-rating .rating-badge { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.live-court-canvas { display: block; width: 100%; }
 
 .live-ratings { display: flex; flex-direction: column; padding: 4px 0; max-height: 360px; overflow-y: auto; }
 .live-ratings .empty { padding: 12px 14px; }
@@ -2119,44 +2058,17 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .libero-spare-actions { display: inline-flex; gap: 6px; }
 .bench-token-name .rating-badge { margin-left: 6px; }
 
-/* The ball marker itself sits inside .court2d (position: relative there). The
-   outer element travels between contacts; the core carries the look and, for
-   a high ball, the swell of its arc. */
-.ball {
-  position: absolute;
-  width: 11px;
-  height: 11px;
-  transform: translate(-50%, -50%);
-  transition: left 0.3s cubic-bezier(0.35, 0.1, 0.35, 1), top 0.3s cubic-bezier(0.35, 0.1, 0.35, 1);
-  pointer-events: none;
-  z-index: 3;
-}
-.ball-core {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: conic-gradient(from -45deg, var(--gold) 0deg 130deg, var(--accent) 130deg 180deg, var(--gold) 180deg 310deg, var(--accent) 310deg 360deg);
-  box-shadow: 0 0 7px rgba(255, 199, 44, 0.8);
-}
-.ball-core.arc { animation: ball-arc ease-in-out both; }
-@keyframes ball-arc {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.9); box-shadow: 0 0 12px rgba(255, 199, 44, 0.9), 0 16px 12px -6px rgba(0, 0, 0, 0.45); }
-  100% { transform: scale(1); }
-}
-
 .big-play {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 17%;
   z-index: 4;
-  padding: 10px 22px;
-  border-radius: 8px;
+  padding: 5px 14px;
+  border-radius: 6px;
   border: 2px solid var(--gold);
-  background: rgba(8, 10, 14, 0.7);
+  background: rgba(8, 10, 14, 0.62);
   color: #fff;
-  font: italic 800 26px/1.1 var(--font-display);
+  font: italic 800 19px/1.1 var(--font-display);
   letter-spacing: 0.03em;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   white-space: nowrap;
@@ -2881,7 +2793,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 ::-webkit-scrollbar-corner { background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast, .view-fade, .spinner, .ball, .ball-core, .player-marker, .big-play, .ticker-entry, .hero-volleyball,
+  .toast, .view-fade, .spinner, .big-play, .ticker-entry, .hero-volleyball,
   .sb-serve, .live-dot, .search-pop, .menu-pop, .timeout-panel,
   .trophy-overlay, .trophy-card, .trophy-icon, .trophy-glow, .confetti-piece { animation: none !important; }
   * { transition-duration: 0.001ms !important; }

@@ -3,11 +3,12 @@ import { Position } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact } from '../../engine/match/engine.ts';
 import {
-  abilityClass, Bar, Card, ChoiceField, ClubCrest, PlayerFace, Pos, POSITION_ACCENT, RatingBadge, Segmented,
-  StarMeter,
+  abilityClass, Bar, Card, ChoiceField, ClubCrest, clubHue, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
+  Segmented, StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
-import { rallyBeats, setupScene, type Pt, type Scene } from '../matchCourt.ts';
+import { kitsFor, LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
+import { rallyBeats, setupScene, type Scene } from '../matchCourt.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
 import { RallyTicker } from './Match.tsx';
@@ -36,9 +37,9 @@ function pickBigPlay(kind: RallyContact['kind']): string | null {
 }
 
 /** Both sides set up for the next serve, from the live snapshot. */
-function sceneFor(snap: MatchdaySnapshot | null, store: PlayerStore): Scene {
-  if (snap === null) return { positions: new Map(), ball: null, high: false, actor: null, ms: 400 };
-  return setupScene(snap, snap.serving, store.position);
+function sceneFor(snap: MatchdaySnapshot | null, store: PlayerStore, nearTeam: 0 | 1): Scene {
+  if (snap === null) return { positions: new Map(), poses: new Map(), ball: null, arc: 0, actor: null, ms: 400 };
+  return setupScene(snap, snap.serving, store.position, nearTeam);
 }
 
 /**
@@ -50,6 +51,7 @@ function sceneFor(snap: MatchdaySnapshot | null, store: PlayerStore): Scene {
 async function animateRally(
   logEntry: MatchdayLogEntry,
   store: PlayerStore,
+  nearTeam: 0 | 1,
   speed: number,
   cancelled: { current: boolean },
   setScene: (scene: Scene) => void,
@@ -57,7 +59,7 @@ async function animateRally(
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, store.position, seed);
+  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, store.position, seed, nearTeam);
   for (const beat of beats) {
     if (cancelled.current) return;
     // Beat timings are tuned for 1x — slower speeds stretch them, faster squeeze.
@@ -69,85 +71,6 @@ async function animateRally(
     }
     await sleep(ms);
   }
-}
-
-/** A player's dot on the 2D court: their photo, ringed in their role's colour. */
-function PlayerMarker({
-  playerIdx, at, store, isActor, moveMs, rating,
-}: {
-  playerIdx: number;
-  at: Pt;
-  store: PlayerStore;
-  isActor: boolean;
-  moveMs: number;
-  /** Live match rating, once the player has one. */
-  rating?: number;
-}): JSX.Element {
-  const pos = store.position[playerIdx] as Position;
-  return (
-    <div
-      className={`player-marker${isActor ? ' is-active' : ''}`}
-      style={{ left: `${at.x}%`, top: `${at.y}%`, transitionDuration: `${Math.round(Math.min(700, moveMs))}ms` }}
-      title={store.fullName(playerIdx)}
-    >
-      <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={38} />
-      <span className="player-marker-ring" style={{ boxShadow: `0 0 0 2px ${POSITION_ACCENT[pos]}` }} />
-      <span className="player-marker-label">{store.shortName(playerIdx)}</span>
-      {rating !== undefined && (
-        <span className="player-marker-rating"><RatingBadge value={rating} size="sm" /></span>
-      )}
-    </div>
-  );
-}
-
-/**
- * The court itself. Markers are keyed by player rather than by zone, so when
- * a side rotates or switches everyone visibly walks to their new spot instead
- * of swapping faces in place.
- */
-function Court2D({
-  scene, store, ratings,
-}: {
-  scene: Scene;
-  store: PlayerStore;
-  ratings: Map<number, number>;
-}): JSX.Element {
-  return (
-    <div className="court2d">
-      <div className="court2d-attack-line away" />
-      <div className="court2d-net" />
-      <div className="court2d-attack-line home" />
-      {[...scene.positions.entries()].map(([p, at]) => (
-        <PlayerMarker
-          key={p}
-          playerIdx={p}
-          at={at}
-          store={store}
-          isActor={scene.actor === p}
-          moveMs={scene.ms}
-          rating={ratings.get(p)}
-        />
-      ))}
-      {scene.ball !== null && (
-        <span
-          className="ball"
-          style={{
-            left: `${scene.ball.x}%`,
-            top: `${scene.ball.y}%`,
-            transitionDuration: `${Math.round(scene.ms * 0.85)}ms`,
-          }}
-        >
-          {/* A high ball — a serve or a set — swells as it rises and shrinks as
-              it drops, so it reads as an arc rather than a slide. */}
-          <span
-            key={scene.seq ?? 0}
-            className={`ball-core${scene.high ? ' arc' : ''}`}
-            style={{ animationDuration: `${Math.round(scene.ms * 0.85)}ms` }}
-          />
-        </span>
-      )}
-    </div>
-  );
 }
 
 export function MatchdayScreen(): JSX.Element | null {
@@ -357,7 +280,10 @@ function LiveMatchView(): JSX.Element {
   const store = world.players;
   const snap = md.snapshot;
   const logRef = useRef<HTMLDivElement>(null);
-  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, store));
+  // The user's side plays in the half nearest the camera.
+  const nearTeam: 0 | 1 = md.userIsHome ? 0 : 1;
+  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, store, nearTeam));
+  const [labels, setLabels] = useState<CourtLabels>('ratings');
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
   const [bigPlay, setBigPlay] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
@@ -429,11 +355,11 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = true;
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
-        await animateRally(logEntry, store, current.speed, cancelledRef, setScene, triggerBigPlay);
+        await animateRally(logEntry, store, nearTeam, current.speed, cancelledRef, setScene, triggerBigPlay);
         animatingRef.current = false;
         if (cancelledRef.current) break;
         // Everyone walks into position for the next serve — rotating on a side-out.
-        setScene(sceneFor(g.matchday?.snapshot ?? null, store));
+        setScene(sceneFor(g.matchday?.snapshot ?? null, store, nearTeam));
         await sleep(900 / current.speed);
       }
     };
@@ -451,12 +377,21 @@ function LiveMatchView(): JSX.Element {
 
   // A substitution or libero change between rallies redraws the set-up.
   useEffect(() => {
-    if (!animatingRef.current) setScene(sceneFor(md.snapshot, store));
+    if (!animatingRef.current) setScene(sceneFor(md.snapshot, store, nearTeam));
   }, [md.snapshot]);
 
   const homeClub = world.clubs[md.fixture.home];
   const awayClub = world.clubs[md.fixture.away];
   const userTeamIdx: 0 | 1 = md.userIsHome ? 0 : 1;
+  const kits = kitsFor(
+    homeClub !== undefined ? clubHue(homeClub) : 210,
+    awayClub !== undefined ? clubHue(awayClub) : 30,
+  );
+  const teamOf = (p: number): 0 | 1 => (store.clubId[p] === md.fixture.home ? 0 : 1);
+  const farClub = nearTeam === 0 ? awayClub : homeClub;
+  const nearClub = nearTeam === 0 ? homeClub : awayClub;
+  const farSets = (nearTeam === 0 ? snap?.awaySets : snap?.homeSets) ?? 0;
+  const nearSets = (nearTeam === 0 ? snap?.homeSets : snap?.awaySets) ?? 0;
   const stats = liveStats(md.log);
   const ratings = g.liveRatings();
   const setHistory = completedSets(md.log, snap?.set ?? 0, snap?.matchOver ?? false);
@@ -597,21 +532,26 @@ function LiveMatchView(): JSX.Element {
         </div>
 
         <div className="card court-panel">
-          {/* Court2D always draws the fixture's home club in the top half and
-              away in the bottom half (see zonePercent) — these strips must
-              match that or a team's label ends up over the other team's players. */}
+          {/* The far strip names whoever plays in the far half — the opponent,
+              since the user's side always plays nearest the camera. */}
           <div className="team-strip">
             <span className="team-strip-name">
-              {homeClub !== undefined && <ClubCrest club={homeClub} size={18} />} {homeClub?.name ?? '—'}
+              {farClub !== undefined && <ClubCrest club={farClub} size={18} />} {farClub?.name ?? '—'}
             </span>
-            <span className="team-strip-sets">Sets {snap?.homeSets ?? 0}</span>
+            <span className="team-strip-sets">Sets {farSets}</span>
           </div>
 
-          <Court2D scene={scene} store={store} ratings={ratings} />
+          <LiveCourt scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels} />
           <div className="team-strip">
-            <span className="team-strip-sets">Sets {snap?.awaySets ?? 0}</span>
+            <span className="team-strip-sets">Sets {nearSets}</span>
+            <Segmented<CourtLabels>
+              size="sm"
+              options={[['ratings', 'Ratings'], ['names', 'Names'], ['off', 'Off']]}
+              value={labels}
+              onChange={setLabels}
+            />
             <span className="team-strip-name">
-              {awayClub !== undefined && <ClubCrest club={awayClub} size={18} />} {awayClub?.name ?? '—'}
+              {nearClub !== undefined && <ClubCrest club={nearClub} size={18} />} {nearClub?.name ?? '—'}
             </span>
           </div>
 
