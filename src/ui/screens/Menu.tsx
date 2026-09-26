@@ -1,7 +1,7 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import type { Position } from '../../engine/model/positions.ts';
-import type { ManagerProfile } from '../../engine/world/world.ts';
-import { NATIONS } from '../../engine/world/nations.ts';
+import type { Competition, ManagerProfile } from '../../engine/world/world.ts';
+import { NATIONS, nationsIn, type Confederation } from '../../engine/world/nations.ts';
 import {
   abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, StarMeter,
 } from '../components.tsx';
@@ -362,24 +362,88 @@ export function WorldSetup(): JSX.Element {
   );
 }
 
+/** Continents as a manager would name them — each maps onto one of the
+ *  volleyball confederations every nation already belongs to. */
+const CONTINENTS: ReadonlyArray<readonly [Confederation, string]> = [
+  ['CEV', 'Europe'],
+  ['CSV', 'South America'],
+  ['NORCECA', 'North & Central America'],
+  ['AVC', 'Asia & Oceania'],
+  ['CAVB', 'Africa'],
+];
+
+/** A league's name without its nation prefix — "Superliga", not "Portugal Superliga". */
+function divisionName(comp: Competition): string {
+  const prefix = `${NATIONS[comp.nation]?.name ?? ''} `;
+  return comp.name.startsWith(prefix) ? comp.name.slice(prefix.length) : comp.name;
+}
+
+/**
+ * Where the career begins. Narrowed the way every management sim does it —
+ * continent, then country, then division — down to a wall of crests to pick
+ * from, so any club in any league in the world can be taken over, not just
+ * the famous ones.
+ */
 export function ClubSelect(): JSX.Element {
   const g = useGame();
-  const clubs = g.selectableClubs(80);
-  const store = g.world!.players;
-  const [query, setQuery] = useState('');
-  const [nationFilter, setNationFilter] = useState(-1);
-  const [picked, setPicked] = useState<number | null>(clubs[0]?.id ?? null);
+  const world = g.world!;
+  const store = world.players;
 
-  const nations = [...new Set(clubs.map((c) => c.nation))]
+  // Every nation's domestic leagues, top flight first.
+  const leaguesByNation = new Map<number, Competition[]>();
+  for (const comp of world.competitions) {
+    if (comp.kind !== 'league' || comp.participants.length === 0) continue;
+    const list = leaguesByNation.get(comp.nation) ?? [];
+    list.push(comp);
+    leaguesByNation.set(comp.nation, list);
+  }
+  for (const list of leaguesByNation.values()) {
+    list.sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
+  }
+
+  const nationsOf = (conf: Confederation): number[] => nationsIn(conf)
+    .filter((n) => leaguesByNation.has(n))
     .sort((a, b) => NATIONS[a].name.localeCompare(NATIONS[b].name));
+  const topLeagueOf = (nation: number): number => leaguesByNation.get(nation)?.[0]?.id ?? -1;
+
+  // Open on the manager's own country when it has a league, like a real career start.
+  const homeNation = leaguesByNation.has(world.manager.nation)
+    ? world.manager.nation
+    : nationsOf('CEV')[0] ?? 0;
+  const [conf, setConf] = useState<Confederation>(NATIONS[homeNation].confederation);
+  const [nation, setNation] = useState(homeNation);
+  const [leagueId, setLeagueId] = useState(() => topLeagueOf(homeNation));
+  const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState<number | null>(null);
+
+  const chooseNation = (n: number): void => {
+    setNation(n);
+    setLeagueId(topLeagueOf(n));
+  };
+  const chooseConf = (c: Confederation): void => {
+    setConf(c);
+    const first = nationsOf(c)[0];
+    if (first !== undefined) chooseNation(first);
+  };
+
   const q = query.trim().toLowerCase();
-  const shown = clubs.filter((c) =>
-    (nationFilter < 0 || c.nation === nationFilter) &&
-    (q === '' || c.name.toLowerCase().includes(q)));
+  const searching = q.length >= 2;
+  const league = world.competitions[leagueId];
+  const shown = searching
+    ? world.clubs
+      .filter((c) => c.name.toLowerCase().includes(q))
+      .sort((a, b) => b.reputation - a.reputation)
+      .slice(0, 60)
+    : (league?.participants ?? [])
+      .map((id) => world.clubs[id])
+      .filter((c) => c !== undefined)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
   const avgOf = (players: readonly number[]): number => (players.length > 0
     ? players.reduce((s, p) => s + store.currentAbility[p], 0) / players.length
     : 0);
-  const club = picked !== null ? g.world!.clubs[picked] : undefined;
+  const club = picked !== null ? world.clubs[picked] : undefined;
+  const clubLeague = club !== undefined ? world.competitions[club.leagueId] : undefined;
   const bestPlayers = club !== undefined
     ? [...club.players].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 5)
     : [];
@@ -389,72 +453,104 @@ export function ClubSelect(): JSX.Element {
       step={2}
       wide
       title="Choose a club"
-      subtitle="You are the head coach, general manager and sporting director. Starting at a smaller club is harder and more interesting."
+      subtitle="You are the head coach, general manager and sporting director. Pick a continent, a country and a division — starting at a smaller club is harder and more interesting."
     >
       <div className="club-select">
-        <Card
-          title="Clubs"
-          icon="club"
-          flush
-          actions={(
-            <div className="toolbar-inline">
+        <section className="card club-browser">
+          <div className="club-filters">
+            <label className="pick-field">
+              <span className="pick-label">Continent</span>
+              <span className="pick-control">
+                <span className="pick-icon"><Icon name="world" size={15} /></span>
+                <select value={conf} onChange={(e) => chooseConf(e.target.value as Confederation)}>
+                  {CONTINENTS.filter(([c]) => nationsOf(c).length > 0).map(([c, label]) => (
+                    <option key={c} value={c}>{label}</option>
+                  ))}
+                </select>
+              </span>
+            </label>
+            <label className="pick-field">
+              <span className="pick-label">Country</span>
+              <span className="pick-control">
+                <span className="pick-icon"><Flag nation={nation} /></span>
+                <select value={nation} onChange={(e) => chooseNation(Number(e.target.value))}>
+                  {nationsOf(conf).map((n) => <option key={n} value={n}>{NATIONS[n].name}</option>)}
+                </select>
+              </span>
+            </label>
+            <label className="pick-field pick-field-wide">
+              <span className="pick-label">Division</span>
+              <span className="pick-control">
+                <span className="pick-icon"><Icon name="trophy" size={15} /></span>
+                <select value={leagueId} onChange={(e) => setLeagueId(Number(e.target.value))}>
+                  {(leaguesByNation.get(nation) ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>Tier {c.tier} · {divisionName(c)}</option>
+                  ))}
+                </select>
+              </span>
+            </label>
+            <span className="flex-spacer" />
+            <label className="pick-field">
+              <span className="pick-label">Search all clubs</span>
               <span className="search-mini">
                 <Icon name="search" size={14} />
-                <input placeholder="Search clubs" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <input placeholder="Club name" value={query} onChange={(e) => setQuery(e.target.value)} />
               </span>
-              <select value={nationFilter} onChange={(e) => setNationFilter(Number(e.target.value))}>
-                <option value={-1}>All nations</option>
-                {nations.map((n) => <option key={n} value={n}>{NATIONS[n].name}</option>)}
-              </select>
-            </div>
-          )}
-        >
-          <div className="table-wrap club-select-table">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Club</th>
-                  <th>Nation</th>
-                  <th className="num">Tier</th>
-                  <th>Reputation</th>
-                  <th className="num">Arena</th>
-                  <th className="num">Wage budget</th>
-                  <th className="num">Avg ability</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((c) => {
-                  const avg = avgOf(c.players);
-                  return (
-                    <tr
-                      key={c.id}
-                      className={`clickable${picked === c.id ? ' selected' : ''}`}
-                      onClick={() => setPicked(c.id)}
-                      onDoubleClick={() => g.takeCharge(c.id)}
-                    >
-                      <td className="strong"><ClubCrest club={c} size={20} /> {c.name}</td>
-                      <td className="dim"><Flag nation={c.nation} /> {NATIONS[c.nation].name}</td>
-                      <td className="num">{c.tier}</td>
-                      <td><StarMeter value={c.reputation} max={10000} size={11} /></td>
-                      <td className="num dim">{c.arenaCapacity.toLocaleString()}</td>
-                      <td className="num">{money(c.finances.wageBudget)}</td>
-                      <td className={`num ${abilityClass(avg)}`}>{avg.toFixed(0)}</td>
-                      <td className="num">
-                        <button className="sm" onClick={(e) => { e.stopPropagation(); g.takeCharge(c.id); }}>
-                          Take charge
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {shown.length === 0 && (
-                  <tr><td colSpan={8}><p className="empty">No clubs match.</p></td></tr>
-                )}
-              </tbody>
-            </table>
+            </label>
           </div>
-        </Card>
+
+          <div className="club-browser-head">
+            {searching ? (
+              <span><strong>{shown.length}</strong> <span className="dim">clubs match “{query.trim()}”</span></span>
+            ) : (
+              <span className="club-browser-title">
+                <Flag nation={nation} /> <strong>{league?.name ?? '—'}</strong>
+                <span className="dim"> · {shown.length} clubs</span>
+              </span>
+            )}
+            <span className="faint">Click to preview · double-click to take charge</span>
+          </div>
+
+          <div className="club-tiles">
+            {shown.map((c) => (
+              <button
+                key={c.id}
+                className={`club-tile${picked === c.id ? ' active' : ''}`}
+                title={c.name}
+                onClick={() => setPicked(c.id)}
+                onDoubleClick={() => g.takeCharge(c.id)}
+              >
+                <ClubCrest club={c} size={54} />
+                <span className="club-tile-name">{c.name}</span>
+                {searching && (
+                  <span className="club-tile-meta"><Flag nation={c.nation} /> Tier {c.tier}</span>
+                )}
+              </button>
+            ))}
+            {shown.length === 0 && <p className="empty">No clubs match.</p>}
+          </div>
+
+          <div className="club-browser-foot">
+            {club === undefined
+              ? <span className="faint">Select a club to continue.</span>
+              : (
+                <span className="club-browser-picked">
+                  <ClubCrest club={club} size={28} />
+                  <span>
+                    <strong>{club.name}</strong>
+                    <span className="faint"> · {clubLeague?.name ?? `Tier ${club.tier}`}</span>
+                  </span>
+                </span>
+              )}
+            <button
+              className="primary lg"
+              disabled={club === undefined}
+              onClick={() => { if (club !== undefined) g.takeCharge(club.id); }}
+            >
+              Take charge <Icon name="forward" size={16} />
+            </button>
+          </div>
+        </section>
 
         <Card title="Club Overview" icon="club" className="club-preview">
           {club === undefined ? <p className="empty">Select a club to see its details.</p> : (
@@ -466,6 +562,7 @@ export function ClubSelect(): JSX.Element {
                   <span className="faint"><Flag nation={club.nation} /> {NATIONS[club.nation].name} · Tier {club.tier}</span>
                 </div>
               </div>
+              <KV k="League">{clubLeague !== undefined ? divisionName(clubLeague) : '—'}</KV>
               <KV k="Reputation"><StarMeter value={club.reputation} max={10000} size={13} /></KV>
               <KV k="Arena">{club.arenaName} ({club.arenaCapacity.toLocaleString()})</KV>
               <KV k="Balance" cls={club.finances.balance < 0 ? 'bad' : ''}>{money(club.finances.balance)}</KV>
@@ -483,9 +580,7 @@ export function ClubSelect(): JSX.Element {
                   <span className={abilityClass(store.currentAbility[p])}>{store.currentAbility[p]}</span>
                 </div>
               ))}
-              <button className="primary block lg" onClick={() => g.takeCharge(club.id)}>
-                Take charge of {club.shortName} <Icon name="forward" size={16} />
-              </button>
+              {bestPlayers.length === 0 && <p className="empty">No players registered.</p>}
             </div>
           )}
         </Card>

@@ -362,14 +362,6 @@ class Game {
     await this.refreshSaves();
   }
 
-  /** Clubs the user may take over, best first. */
-  selectableClubs(limit = 60): Club[] {
-    if (this.world === null) return [];
-    return [...this.world.clubs]
-      .sort((a, b) => b.reputation - a.reputation)
-      .slice(0, limit);
-  }
-
   takeCharge(clubId: number): void {
     if (this.world === null) return;
     this.world.userClubId = clubId;
