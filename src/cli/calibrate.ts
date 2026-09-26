@@ -69,8 +69,8 @@ export function buildSquad(
   // Rotational order: setter and opposite diagonal, the two outsides diagonal,
   // the two middles diagonal.
   const lineup = [
-    setters[0], middles[0], outsides[0],
-    opposites[0], middles[1], outsides[1],
+    setters[0], outsides[0], middles[0],
+    opposites[0], outsides[1], middles[1],
   ];
   const bench = [
     setters[1], opposites[1], outsides[2], outsides[3],

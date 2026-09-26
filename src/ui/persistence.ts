@@ -17,6 +17,7 @@
 
 import { Rng } from '../engine/core/rng.ts';
 import { PlayerStore, StringTable } from '../engine/model/players.ts';
+import { Position } from '../engine/model/positions.ts';
 import type { World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
 
@@ -138,6 +139,30 @@ export function reviveWorld(raw: World): World {
   // Saves from before match ratings and the second libero existed.
   raw.competitionRecords ??= new Map();
   raw.ratingForm ??= new Map();
-  for (const club of raw.clubs) club.preferredDefensiveLibero ??= -1;
+  for (const club of raw.clubs) {
+    club.preferredDefensiveLibero ??= -1;
+    migrateLineupOrder(club.preferredLineup, raw.players.position);
+  }
   return raw;
+}
+
+/**
+ * Saves from before the rotational order was corrected stored the default
+ * lineup as S-MB-OH-OPP-MB-OH; slots are now S-OH-MB-OPP-OH-MB (see
+ * LINEUP_SLOT_POSITIONS). An old-order lineup is recognised by a middle in
+ * slot 1 or 4, or an outside in slot 2 or 5 — impossible in the new order —
+ * and has those pairs swapped back into place, so nobody's chosen six is lost.
+ */
+function migrateLineupOrder(lineup: number[], positions: ArrayLike<number>): void {
+  const at = (slot: number): number => {
+    const p = lineup[slot];
+    return p !== undefined && p >= 0 ? positions[p] : -1;
+  };
+  const oldOrder =
+    at(1) === Position.MiddleBlocker || at(2) === Position.OutsideHitter ||
+    at(4) === Position.MiddleBlocker || at(5) === Position.OutsideHitter;
+  if (!oldOrder) return;
+  while (lineup.length < 6) lineup.push(-1);
+  [lineup[1], lineup[2]] = [lineup[2], lineup[1]];
+  [lineup[4], lineup[5]] = [lineup[5], lineup[4]];
 }

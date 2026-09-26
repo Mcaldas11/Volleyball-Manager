@@ -46,3 +46,16 @@ test('reviveWorld backfills fields added after a save was written', () => {
   assert.ok(Array.isArray(revived.pendingInterviews));
   assert.ok(revived.interviewedFixtures instanceof Set);
 });
+
+test('reviveWorld moves an old-order default lineup into the corrected rotational order', () => {
+  const world = generateWorld({ seed: 3, startYear: 2026, scale: 'small', manager: stubManager() });
+  const club = world.clubs[0];
+  const [s, oh1, mb1, opp, oh2, mb2] = club.preferredLineup;
+  // How a save written before the fix stored it: S-MB-OH-OPP-MB-OH.
+  club.preferredLineup = [s, mb1, oh1, opp, mb2, oh2];
+
+  const revived = reviveWorld(structuredClone(world));
+  assert.deepEqual(revived.clubs[0].preferredLineup, [s, oh1, mb1, opp, oh2, mb2]);
+  // Already-correct lineups are left alone.
+  assert.deepEqual(revived.clubs[1].preferredLineup, world.clubs[1].preferredLineup);
+});

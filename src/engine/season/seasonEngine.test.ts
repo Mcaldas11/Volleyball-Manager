@@ -31,11 +31,12 @@ test('pickLineup honours a saved preferred lineup and libero', () => {
   const [mb1, mb2] = byPos(Position.MiddleBlocker);
   const [libero1] = byPos(Position.Libero);
 
-  club.preferredLineup = [setter, mb1, oh1, opp, mb2, oh2];
+  // Rotation P1: setter 1, outsides 2 and 5, middles 3 and 6, opposite 4.
+  club.preferredLineup = [setter, oh1, mb1, opp, oh2, mb2];
   club.preferredLibero = libero1;
 
   const { lineup, libero } = pickLineup(store, club);
-  assert.deepEqual(lineup, [setter, mb1, oh1, opp, mb2, oh2]);
+  assert.deepEqual(lineup, [setter, oh1, mb1, opp, oh2, mb2]);
   assert.equal(libero, libero1);
 });
 
@@ -54,7 +55,7 @@ test('pickLineup falls back to the next best player for a slot whose preferred s
   const [mb1, mb2] = byPos(Position.MiddleBlocker);
   const [libero1] = byPos(Position.Libero);
 
-  club.preferredLineup = [setter, mb1, outsides[0], opp, mb2, outsides[1]];
+  club.preferredLineup = [setter, outsides[0], mb1, opp, outsides[1], mb2];
   club.preferredLibero = libero1;
 
   // Injure the preferred first-choice outside hitter — they should drop out
@@ -64,13 +65,13 @@ test('pickLineup falls back to the next best player for a slot whose preferred s
 
   const { lineup } = pickLineup(store, club);
   assert.ok(!lineup.includes(outsides[0]), 'the injured preferred starter should not be picked');
-  assert.equal(lineup[1], mb1);
+  assert.equal(lineup[2], mb1);
   assert.equal(lineup[3], opp);
-  assert.equal(lineup[4], mb2);
-  assert.equal(lineup[5], outsides[1]);
-  // The vacated slot 2 should be filled by the best fit outside hitter left.
+  assert.equal(lineup[4], outsides[1]);
+  assert.equal(lineup[5], mb2);
+  // The vacated slot 1 should be filled by the best fit outside hitter left.
   const remaining = outsides.filter((p) => p !== outsides[0] && p !== outsides[1]);
-  if (remaining.length > 0) assert.equal(lineup[2], remaining[0]);
+  if (remaining.length > 0) assert.equal(lineup[1], remaining[0]);
 });
 
 test('pickLineup uses a named defensive libero, and never auto-picks one', () => {

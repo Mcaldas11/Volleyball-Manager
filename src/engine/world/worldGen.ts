@@ -275,7 +275,7 @@ function buildSquad(world: World, rng: Rng, club: Club): void {
   const mb = best(Position.MiddleBlocker);
   const li = best(Position.Libero);
 
-  club.preferredLineup = [s[0], mb[0], oh[0], o[0], mb[1], oh[1]];
+  club.preferredLineup = [s[0], oh[0], mb[0], o[0], oh[1], mb[1]];
   club.preferredLibero = li[0];
 
   // Wages are re-derived from ability so the wage bill is consistent with the

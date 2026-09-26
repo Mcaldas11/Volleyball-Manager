@@ -432,7 +432,7 @@ export function refreshPreferredLineup(world: World, club: Club): void {
   const li = best(Position.Libero);
 
   if (s.length && o.length && oh.length >= 2 && mb.length >= 2) {
-    club.preferredLineup = [s[0], mb[0], oh[0], o[0], mb[1], oh[1]];
+    club.preferredLineup = [s[0], oh[0], mb[0], o[0], oh[1], mb[1]];
   }
   if (li.length) club.preferredLibero = li[0];
 }

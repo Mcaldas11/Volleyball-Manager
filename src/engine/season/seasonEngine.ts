@@ -46,11 +46,13 @@ export function newSeasonContext(): SeasonContext {
 }
 
 /** Slot order used by `club.preferredLineup`, `pickLineup`'s result, and the
- *  team-sheet UI alike: setter and opposite diagonal, the two outsides
- *  diagonal, the two middles diagonal. */
+ *  team-sheet UI alike — slot `i` starts the set in zone `i + 1`, so this is
+ *  the standard 5-1 in rotation P1: setter in 1, outsides in 2 and 5, middles
+ *  in 3 and 6, opposite in 4. Setter and opposite sit diagonal, as do the two
+ *  outsides and the two middles, and every other rotation follows from it. */
 export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
-  Position.Setter, Position.MiddleBlocker, Position.OutsideHitter,
-  Position.Opposite, Position.MiddleBlocker, Position.OutsideHitter,
+  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
+  Position.Opposite, Position.OutsideHitter, Position.MiddleBlocker,
 ];
 
 /**
