@@ -8,16 +8,24 @@ import {
 } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
+import type { World } from '../../engine/world/world.ts';
 import {
   abilityClass, attrClass, Bar, Card, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
-  Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useSort,
+  RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useSort,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
 type SquadSort =
   | 'name' | 'pos' | 'age' | 'height' | 'spike' | 'block' | 'ability' | 'potential'
-  | 'condition' | 'morale' | 'wage';
+  | 'condition' | 'morale' | 'wage' | 'apps' | 'rating';
+
+/** "2026/27" for a 0-based season index. */
+export function seasonLabel(world: World, season: number): string {
+  const y = world.startYear + season;
+  return `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
+}
 
 const POSITION_FILTERS: ReadonlyArray<readonly [number, string]> = [
   [-1, 'All'],
@@ -33,6 +41,9 @@ export function SquadScreen(): JSX.Element {
   const selection = g.lineup();
   const starters = new Set(selection?.lineup ?? []);
   const libero = selection?.libero ?? -1;
+  const defensiveLibero = selection?.defensiveLibero ?? -1;
+  const totals = new Map(squad.map((p) => [p, seasonTotals(world, p)]));
+  const avgRating = (p: number): number => averageRating(totals.get(p)!);
   const [posFilter, setPosFilter] = useState(-1);
   const [sort, onSort] = useSort<SquadSort>('ability');
 
@@ -57,6 +68,8 @@ export function SquadScreen(): JSX.Element {
       case 'condition': return store.condition[p];
       case 'morale': return store.morale[p];
       case 'wage': return store.wage[p];
+      case 'apps': return totals.get(p)!.apps;
+      case 'rating': return avgRating(p);
       default: return store.currentAbility[p];
     }
   });
@@ -108,6 +121,8 @@ export function SquadScreen(): JSX.Element {
                 <SortTh k="condition" sort={sort} onSort={onSort}>Condition</SortTh>
                 <SortTh k="morale" sort={sort} onSort={onSort}>Morale</SortTh>
                 <th>Status</th>
+                <SortTh k="apps" sort={sort} onSort={onSort} num title="Appearances this season">Apps</SortTh>
+                <SortTh k="rating" sort={sort} onSort={onSort} num title="Average match rating this season">Av Rat</SortTh>
                 <SortTh k="wage" sort={sort} onSort={onSort} num>Wage</SortTh>
               </tr>
             </thead>
@@ -119,7 +134,10 @@ export function SquadScreen(): JSX.Element {
                     <span className="name-cell">
                       <span className="strong">{store.fullName(p)}</span>
                       {starters.has(p) && <span className="role-tag starter" title="In the starting six">XI</span>}
-                      {p === libero && <span className="role-tag libero" title="Starting libero">L</span>}
+                      {p === libero && (
+                        <span className="role-tag libero" title={defensiveLibero >= 0 ? 'Reception libero' : 'Starting libero'}>L</span>
+                      )}
+                      {p === defensiveLibero && <span className="role-tag libero" title="Defensive libero">DL</span>}
                     </span>
                   </td>
                   <td><Pos pos={store.position[p] as Position} /></td>
@@ -138,11 +156,13 @@ export function SquadScreen(): JSX.Element {
                   <td><span className="cond-cell"><Bar value={store.condition[p]} /><span className="dim">{store.condition[p]}%</span></span></td>
                   <td><Morale value={store.morale[p]} /></td>
                   <td><Status store={store} i={p} /></td>
+                  <td className="num dim">{totals.get(p)!.apps}</td>
+                  <td className="num"><RatingBadge value={avgRating(p)} size="sm" /></td>
                   <td className="num dim">{money(store.wage[p])}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={14}><Empty>No players in this position.</Empty></td></tr>
+                <tr><td colSpan={16}><Empty>No players in this position.</Empty></td></tr>
               )}
             </tbody>
           </table>
@@ -151,6 +171,7 @@ export function SquadScreen(): JSX.Element {
       <p className="legend">
         <span className="role-tag starter">XI</span> starting six
         <span className="role-tag libero">L</span> starting libero
+        <span className="role-tag libero">DL</span> defensive libero
         <span className="faint">· Click a column heading to sort, a player to open their profile.</span>
       </p>
     </>
@@ -243,6 +264,8 @@ export function PlayerDetail(): JSX.Element | null {
   const pa = store.potentialAbility[p];
   const isOwn = club?.id === world.userClubId;
   const isYouth = isOwn && club !== null && club.youthPlayers.includes(p);
+  const season = seasonTotals(world, p);
+  const form = world.ratingForm.get(p) ?? [];
 
   const group = (attrs: readonly AttributeName[], title: string): JSX.Element => (
     <div className="attr-col">
@@ -310,7 +333,14 @@ export function PlayerDetail(): JSX.Element | null {
         <StatTile label="Condition" value={`${store.condition[p]}%`} sub={<Bar value={store.condition[p]} wide />} />
         <StatTile label="Morale" value={<Morale value={store.morale[p]} />} sub={<Bar value={store.morale[p]} wide />} />
         <StatTile label="Status" value={<Status store={store} i={p} />} />
+        <StatTile
+          label="Average rating"
+          value={<RatingBadge value={averageRating(season)} size="lg" />}
+          sub={`${season.apps} app${season.apps === 1 ? '' : 's'} this season`}
+        />
       </div>
+
+      <SeasonStatsCard world={world} p={p} form={form} />
 
       <div className="profile-grid">
         <Card title="Attributes" icon="stats">
@@ -371,6 +401,103 @@ export function PlayerDetail(): JSX.Element | null {
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * A player's season, split by competition — appearances, points, and the
+ * average match rating in each — with last season one click away.
+ */
+function SeasonStatsCard({ world, p, form }: { world: World; p: number; form: number[] }): JSX.Element {
+  const [which, setWhich] = useState(world.season);
+  const lines = seasonRecords(world, p, which);
+  const hasLast = world.season > 0 && seasonRecords(world, p, world.season - 1).length > 0;
+  const total = lines.reduce(
+    (acc, l) => ({
+      apps: acc.apps + l.apps,
+      ratingSum: acc.ratingSum + l.ratingSum,
+      points: acc.points + l.points,
+      aces: acc.aces + l.aces,
+      blocks: acc.blocks + l.blocks,
+      mvps: acc.mvps + l.mvps,
+      best: Math.max(acc.best, l.best),
+    }),
+    { apps: 0, ratingSum: 0, points: 0, aces: 0, blocks: 0, mvps: 0, best: 0 },
+  );
+
+  return (
+    <Card
+      title="Statistics"
+      icon="stats"
+      flush
+      style={{ marginBottom: 16 }}
+      actions={(
+        <>
+          {form.length > 0 && (
+            <span className="rating-form" title="Last match ratings, oldest first">
+              <span className="faint">Form</span>
+              {form.map((r, i) => <RatingBadge key={i} value={r} size="sm" />)}
+            </span>
+          )}
+          {hasLast && (
+            <Segmented
+              size="sm"
+              options={[
+                [world.season, seasonLabel(world, world.season)],
+                [world.season - 1, seasonLabel(world, world.season - 1)],
+              ]}
+              value={which}
+              onChange={setWhich}
+            />
+          )}
+        </>
+      )}
+    >
+      {lines.length === 0 ? (
+        <Empty>No competitive matches played in {seasonLabel(world, which)} yet.</Empty>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Competition</th>
+              <th className="num">Apps</th>
+              <th className="num" title="Points (kills + aces + blocks)">Pts</th>
+              <th className="num">Aces</th>
+              <th className="num">Blocks</th>
+              <th className="num" title="Player of the match">PoM</th>
+              <th className="num" title="Best single-match rating">Best</th>
+              <th className="num" title="Average match rating">Av Rat</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.competitionId}>
+                <td className="strong">{world.competitions[l.competitionId]?.name ?? 'Competition'}</td>
+                <td className="num">{l.apps}</td>
+                <td className="num">{l.points}</td>
+                <td className="num dim">{l.aces}</td>
+                <td className="num dim">{l.blocks}</td>
+                <td className="num">{l.mvps > 0 ? <span className="gold-text">{l.mvps}</span> : <span className="faint">0</span>}</td>
+                <td className="num"><RatingBadge value={l.best} size="sm" /></td>
+                <td className="num"><RatingBadge value={averageRating(l)} /></td>
+              </tr>
+            ))}
+            {lines.length > 1 && (
+              <tr className="total-row">
+                <td>Total</td>
+                <td className="num">{total.apps}</td>
+                <td className="num">{total.points}</td>
+                <td className="num">{total.aces}</td>
+                <td className="num">{total.blocks}</td>
+                <td className="num">{total.mvps}</td>
+                <td className="num"><RatingBadge value={total.best} size="sm" /></td>
+                <td className="num"><RatingBadge value={averageRating(total)} /></td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </Card>
   );
 }
 

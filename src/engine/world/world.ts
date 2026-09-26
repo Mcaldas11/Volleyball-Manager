@@ -15,6 +15,7 @@ import { MatchFormat } from '../match/engine.ts';
 import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 import type { IncomingOffer } from './negotiation.ts';
 import type { InterviewSession } from './interviews.ts';
+import type { CompetitionRecord } from './records.ts';
 
 export type CompetitionKind = 'league' | 'cup' | 'continental' | 'international';
 
@@ -280,6 +281,12 @@ export interface World {
   pendingInterviews: InterviewSession[];
   /** Fixture ids already offered a press conference, so the same match is never asked twice. */
   interviewedFixtures: Set<number>;
+
+  /** Appearances and match ratings per player, per competition, for this
+   *  season and the last — see records.ts. Keyed by player index. */
+  competitionRecords: Map<number, CompetitionRecord[]>;
+  /** Each player's most recent match ratings, oldest first. */
+  ratingForm: Map<number, number[]>;
 }
 
 export function dayOfSeason(world: World): number {
@@ -324,6 +331,8 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     nextOfferId: 0,
     pendingInterviews: [],
     interviewedFixtures: new Set(),
+    competitionRecords: new Map(),
+    ratingForm: new Map(),
   };
 }
 

@@ -4,7 +4,8 @@ import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact } from '../../engine/match/engine.ts';
 import { effectivePlayerAt } from '../../engine/match/court.ts';
 import {
-  abilityClass, Bar, Card, ChoiceField, ClubCrest, PlayerFace, Pos, POSITION_ACCENT, Segmented, StarMeter,
+  abilityClass, Bar, Card, ChoiceField, ClubCrest, PlayerFace, Pos, POSITION_ACCENT, RatingBadge, Segmented,
+  StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { TeamSheet, ZONE_LABELS, ZONE_ORDER } from '../teamSheet.tsx';
@@ -206,7 +207,7 @@ async function animateRally(
 
 /** A player's dot on the 2D court: their photo, ringed in their role's colour. */
 function PlayerMarker({
-  playerIdx, zone, side, store, active, homeCourt, awayCourt, homeLibero, awayLibero,
+  playerIdx, zone, side, store, active, homeCourt, awayCourt, homeLibero, awayLibero, rating,
 }: {
   playerIdx: number;
   zone: number;
@@ -217,6 +218,8 @@ function PlayerMarker({
   awayCourt: number[];
   homeLibero: number;
   awayLibero: number;
+  /** Live match rating, once the player has one. */
+  rating?: number;
 }): JSX.Element {
   const { x, y } = formationPosition(
     zone, side, playerIdx, store, active, homeCourt, awayCourt, homeLibero, awayLibero,
@@ -232,13 +235,16 @@ function PlayerMarker({
       <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={38} />
       <span className="player-marker-ring" style={{ boxShadow: `0 0 0 2px ${POSITION_ACCENT[pos]}` }} />
       <span className="player-marker-label">{store.shortName(playerIdx)}</span>
+      {rating !== undefined && (
+        <span className="player-marker-rating"><RatingBadge value={rating} size="sm" /></span>
+      )}
     </div>
   );
 }
 
 /** The court itself: a two-team pitch with every starter's photo in their zone. */
 function Court2D({
-  homeCourt, awayCourt, homeLibero, awayLibero, store, ball, active,
+  homeCourt, awayCourt, homeLibero, awayLibero, store, ball, active, ratings,
 }: {
   homeCourt: number[];
   awayCourt: number[];
@@ -247,6 +253,7 @@ function Court2D({
   store: PlayerStore;
   ball: BallPos | null;
   active: ActiveContact | null;
+  ratings: Map<number, number>;
 }): JSX.Element {
   return (
     <div className="court2d">
@@ -262,7 +269,7 @@ function Court2D({
           <PlayerMarker
             key={`h${z}`} playerIdx={p} zone={z} side="home" store={store}
             active={active} homeCourt={homeCourt} awayCourt={awayCourt}
-            homeLibero={homeLibero} awayLibero={awayLibero}
+            homeLibero={homeLibero} awayLibero={awayLibero} rating={ratings.get(p)}
           />
         );
       })}
@@ -272,7 +279,7 @@ function Court2D({
           <PlayerMarker
             key={`a${z}`} playerIdx={p} zone={z} side="away" store={store}
             active={active} homeCourt={homeCourt} awayCourt={awayCourt}
-            homeLibero={homeLibero} awayLibero={awayLibero}
+            homeLibero={homeLibero} awayLibero={awayLibero} rating={ratings.get(p)}
           />
         );
       })}
@@ -311,7 +318,8 @@ function LineupSetup(): JSX.Element {
   const away = world.clubs[md.fixture.away];
   const comp = world.competitions[md.fixture.competitionId];
   const available = club.players.filter((p) => store.isAvailable(p));
-  const bench = available.filter((p) => !md.homeLineup.includes(p) && p !== md.homeLibero);
+  const bench = available.filter((p) =>
+    !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
 
   const starters = md.homeLineup.filter((p): p is number => p !== undefined);
   const teamAvg = starters.length > 0
@@ -365,11 +373,13 @@ function LineupSetup(): JSX.Element {
       <TeamSheet
         lineup={md.homeLineup}
         libero={md.homeLibero}
+        defensiveLibero={md.homeDefensiveLibero}
         bench={bench}
         store={store}
         onSetPlayer={(slot, p) => g.setMatchdayPlayer(slot, p)}
         onSwapPlayers={(a, b) => g.swapMatchdayPlayers(a, b)}
         onSetLibero={(p) => g.setMatchdayLibero(p)}
+        onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
       />
     </div>
   );
@@ -528,7 +538,9 @@ function LiveMatchView(): JSX.Element {
     if (sub === null) return;
     const teamName = (sub.team === 0 ? world.clubs[md.fixture.home] : world.clubs[md.fixture.away])
       ?.shortName ?? '';
-    const text = `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}`;
+    const text = sub.libero !== undefined
+      ? `${teamName}: ${store.shortName(sub.inPlayerIdx)} in as ${sub.libero === 'reception' ? 'reception' : 'defensive'} libero`
+      : `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}`;
     setSubAnnouncement({ text, team: sub.team, key: sub.seq });
     if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
@@ -577,6 +589,7 @@ function LiveMatchView(): JSX.Element {
   const awayClub = world.clubs[md.fixture.away];
   const userTeamIdx: 0 | 1 = md.userIsHome ? 0 : 1;
   const stats = liveStats(md.log);
+  const ratings = g.liveRatings();
   const setHistory = completedSets(md.log, snap?.set ?? 0, snap?.matchOver ?? false);
   const homeProb = md.log.length > 0 ? md.log[md.log.length - 1].entry.homeWinProb : 0.5;
   const status = md.timeoutActive !== null
@@ -697,6 +710,7 @@ function LiveMatchView(): JSX.Element {
               );
             })}
           </Card>
+          <LiveRatingsCard ratings={ratings} defaultTeam={userTeamIdx} />
           <Card title="Win Probability" icon="stats">
             <div className="prob">
               <span className="prob-val">{(homeProb * 100).toFixed(0)}%</span>
@@ -732,6 +746,7 @@ function LiveMatchView(): JSX.Element {
             store={store}
             ball={ball}
             active={active}
+            ratings={ratings}
           />
           <div className="team-strip">
             <span className="team-strip-sets">Sets {snap?.awaySets ?? 0}</span>
@@ -777,10 +792,12 @@ function LiveMatchView(): JSX.Element {
  *  onto another (in either direction — bench-to-court or court-to-bench) subs
  *  them in one motion; clicking both, then confirming, does the same thing. */
 function SubCard({
-  playerIdx, store, selected, isDragOver, onClick, onDropPlayer, onDragOverCard, onDragLeaveCard,
+  playerIdx, store, rating, selected, isDragOver, onClick, onDropPlayer, onDragOverCard, onDragLeaveCard,
 }: {
   playerIdx: number;
   store: PlayerStore;
+  /** Live match rating, if the player has played yet. */
+  rating?: number;
   selected: boolean;
   isDragOver: boolean;
   onClick: () => void;
@@ -807,10 +824,118 @@ function SubCard({
     >
       <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>
       <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
-      <span className="bench-token-name">{store.shortName(playerIdx)}</span>
+      <span className="bench-token-name">
+        {store.shortName(playerIdx)}
+        {rating !== undefined && <RatingBadge value={rating} size="sm" />}
+      </span>
       <Pos pos={pos} />
       <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
       <Bar value={store.condition[playerIdx]} />
+    </div>
+  );
+}
+
+/**
+ * Every player's live rating, one side at a time, best first. Players still
+ * on court are marked; substitutes appear once they have played a rally.
+ */
+function LiveRatingsCard({
+  ratings, defaultTeam,
+}: {
+  ratings: Map<number, number>;
+  defaultTeam: 0 | 1;
+}): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const md = g.matchday!;
+  const store = world.players;
+  const [team, setTeam] = useState<0 | 1>(defaultTeam);
+  const clubId = team === 0 ? md.fixture.home : md.fixture.away;
+  const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
+  const libero = (team === 0 ? md.snapshot?.homeLibero : md.snapshot?.awayLibero) ?? -1;
+  const rows = [...ratings.entries()]
+    .filter(([p]) => store.clubId[p] === clubId)
+    .sort((a, b) => b[1] - a[1]);
+  const homeName = world.clubs[md.fixture.home]?.shortName ?? 'Home';
+  const awayName = world.clubs[md.fixture.away]?.shortName ?? 'Away';
+
+  return (
+    <Card
+      title="Ratings"
+      icon="star"
+      flush
+      actions={(
+        <Segmented<0 | 1>
+          size="sm"
+          options={[[0, homeName], [1, awayName]]}
+          value={team}
+          onChange={setTeam}
+        />
+      )}
+    >
+      <div className="live-ratings">
+        {rows.length === 0 && <p className="empty">Ratings appear after the first rally.</p>}
+        {rows.map(([p, r]) => {
+          const onCourt = court.includes(p) || p === libero;
+          return (
+            <div className={`live-rating-row${onCourt ? '' : ' off'}`} key={p} title={store.fullName(p)}>
+              <Pos pos={store.position[p] as Position} />
+              <span className="live-rating-name">{store.shortName(p)}</span>
+              <RatingBadge value={r} size="sm" />
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/** One libero role in the substitutions panel: whoever holds it, as a drop target. */
+function LiberoSlot({
+  label, note, playerIdx, rating, store, isDragOver, onDropPlayer, onDragOver, onDragLeave, action,
+}: {
+  label: string;
+  note: string;
+  playerIdx: number;
+  rating?: number;
+  store: PlayerStore;
+  isDragOver: boolean;
+  onDropPlayer: (dragged: number) => void;
+  onDragOver: () => void;
+  onDragLeave: () => void;
+  action?: JSX.Element;
+}): JSX.Element {
+  return (
+    <div
+      className={`libero-slot${isDragOver ? ' drag-over' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDragLeave();
+        const dragged = Number(e.dataTransfer.getData('text/plain'));
+        if (!Number.isNaN(dragged)) onDropPlayer(dragged);
+      }}
+    >
+      <div className="libero-slot-head">
+        <span className="libero-slot-label">{label}</span>
+        <span className="faint">{note}</span>
+        {action}
+      </div>
+      {playerIdx >= 0 ? (
+        <div className="bench-token libero-token" style={{ '--token-accent': 'var(--pos-l)' } as CSSProperties}>
+          <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
+          <span className="bench-token-name">
+            {store.shortName(playerIdx)}
+            {rating !== undefined && <RatingBadge value={rating} size="sm" />}
+          </span>
+          <Pos pos={store.position[playerIdx] as Position} />
+          <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
+          <Bar value={store.condition[playerIdx]} />
+        </div>
+      ) : (
+        <div className="libero-slot-empty">Drop a libero here</div>
+      )}
     </div>
   );
 }
@@ -826,7 +951,16 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   const [dragOverPlayer, setDragOverPlayer] = useState<number | null>(null);
 
   const onCourt = (teamIdx === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
-  const bench = club.players.filter((p) => !onCourt.includes(p) && store.isAvailable(p));
+  // Liberos are changed in their own section below — they can never take an
+  // ordinary rotation spot, so they never appear on this bench.
+  const bench = club.players.filter((p) =>
+    !onCourt.includes(p) && store.isAvailable(p) && store.position[p] !== Position.Libero);
+  const ratings = g.liveRatings();
+  const liberos = g.liveLiberos();
+  const spareLiberos = club.players.filter((p) =>
+    store.position[p] === Position.Libero && store.isAvailable(p) && !onCourt.includes(p)
+    && p !== liberos.reception && p !== liberos.defence);
+  const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
   // Reads the engine's own per-set counter — it resets every set, unlike a
   // UI-tracked total would (that used to be the bug here: it never reset).
   const remaining = g.subsRemaining();
@@ -881,6 +1015,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
                 key={p}
                 playerIdx={p}
                 store={store}
+                rating={ratings.get(p)}
                 selected={outPlayer === p}
                 onClick={() => setOutPlayer(outPlayer === p ? null : p)}
                 {...dragProps(p)}
@@ -898,6 +1033,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
                 key={p}
                 playerIdx={p}
                 store={store}
+                rating={ratings.get(p)}
                 selected={inPlayer === p}
                 onClick={() => setInPlayer(inPlayer === p ? null : p)}
                 {...dragProps(p)}
@@ -905,6 +1041,66 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="libero-panel">
+        <div className="section-label">Liberos — changes are unlimited and never use a substitution</div>
+        <div className="libero-slots">
+          <LiberoSlot
+            label={liberos.defence >= 0 ? 'Reception libero' : 'Libero'}
+            note={liberos.defence >= 0 ? 'on court while you receive' : 'plays every back-row rally'}
+            playerIdx={liberos.reception}
+            rating={ratings.get(liberos.reception)}
+            store={store}
+            isDragOver={liberoDragOver === 'reception'}
+            onDragOver={() => setLiberoDragOver('reception')}
+            onDragLeave={() => setLiberoDragOver((c) => (c === 'reception' ? null : c))}
+            onDropPlayer={(d) => g.changeLibero('reception', d)}
+            action={liberos.defence >= 0 ? (
+              <button className="sm ghost" onClick={() => g.changeLibero('reception', liberos.defence)}>
+                <Icon name="swap" size={13} /> Swap roles
+              </button>
+            ) : undefined}
+          />
+          <LiberoSlot
+            label="Defensive libero"
+            note="on court while you serve"
+            playerIdx={liberos.defence}
+            rating={ratings.get(liberos.defence)}
+            store={store}
+            isDragOver={liberoDragOver === 'defence'}
+            onDragOver={() => setLiberoDragOver('defence')}
+            onDragLeave={() => setLiberoDragOver((c) => (c === 'defence' ? null : c))}
+            onDropPlayer={(d) => g.changeLibero('defence', d)}
+            action={liberos.defence >= 0 ? (
+              <button className="sm ghost" onClick={() => g.changeLibero('defence', -1)}>Remove</button>
+            ) : undefined}
+          />
+        </div>
+        {spareLiberos.length > 0 ? (
+          <div className="libero-spares">
+            {spareLiberos.map((p) => (
+              <div
+                key={p}
+                className="bench-token libero-token draggable"
+                style={{ '--token-accent': 'var(--pos-l)' } as CSSProperties}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p))}
+              >
+                <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>
+                <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={30} />
+                <span className="bench-token-name">{store.shortName(p)}</span>
+                <span className="bench-token-ability">{store.currentAbility[p]}</span>
+                <span className="libero-spare-actions">
+                  <button className="sm" onClick={() => g.changeLibero('reception', p)}>Reception</button>
+                  <button className="sm" onClick={() => g.changeLibero('defence', p)}>Defence</button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="field-hint">No other libero available on the bench.</p>
+        )}
       </div>
 
       <div className="sub-confirm">

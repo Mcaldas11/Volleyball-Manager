@@ -23,6 +23,7 @@ import {
   DAYS_PER_SEASON, type HallOfFameEntry, type SeasonAwardLine, type SeasonRecord, type World,
 } from '../world/world.ts';
 import { startSeason, type SeasonContext } from './seasonEngine.ts';
+import { pruneCompetitionRecords } from '../world/records.ts';
 
 export interface RolloverReport {
   season: number;
@@ -90,6 +91,7 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
 
   // Reset for the new season.
   world.season++;
+  pruneCompetitionRecords(world);
   ctx.stats.clear();
   ctx.detailedResults.clear();
   startSeason(world, ctx);

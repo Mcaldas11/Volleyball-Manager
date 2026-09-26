@@ -37,6 +37,7 @@ To run without the browser:
 npm run vm demo      # play one match through the full engine and print the report
 npm run vm calibrate # check the engine against real volleyball statistics
 npm run vm career 30 # simulate 30 seasons and check the world for drift
+npm run vm ratings   # check the 0-10 player ratings are centred for every position
 npm test              # unit tests
 ```
 

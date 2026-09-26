@@ -146,13 +146,18 @@ export function BenchCard({
 export interface TeamSheetProps {
   /** Six starting player indices, in zone order 0-5. */
   lineup: number[];
+  /** The reception libero — or the only libero when no defensive one is named. */
   libero: number;
-  /** Everyone else available — neither in `lineup` nor the libero. */
+  /** The second libero, on court whenever the team serves; -1 for none. */
+  defensiveLibero: number;
+  /** Everyone else available — neither in `lineup` nor either libero role. */
   bench: number[];
   store: PlayerStore;
   onSetPlayer: (slot: number, playerIdx: number) => void;
   onSwapPlayers: (slotA: number, slotB: number) => void;
   onSetLibero: (playerIdx: number) => void;
+  /** Name a defensive libero, or -1 to go back to one libero throughout. */
+  onSetDefensiveLibero: (playerIdx: number) => void;
   /** Only offer same-position bench players as a zone's swap-in options.
    *  The one-off pre-match sheet leaves this off — an emergency reshuffle is
    *  exactly when playing someone out of position can be worth it, and it
@@ -163,21 +168,23 @@ export interface TeamSheetProps {
 }
 
 /**
- * The court with the six starting zones, the libero's own slot beside it,
- * and the bench list alongside.
+ * The court with the six starting zones, the libero slots beside it, and the
+ * bench list alongside.
  *
- * The libero gets a dedicated slot rather than sitting in the bench list: it
- * can never actually take one of the six rotation zones (it may not serve or
+ * The liberos get dedicated slots rather than sitting in the bench list: a
+ * libero can never take one of the six rotation zones (it may not serve or
  * play front row), so grouping it with players who *can* be dragged into
- * any of those zones was always a little misleading. Its swap list is
- * likewise restricted to other libero-registered players on the bench.
+ * any of those zones would be misleading. There are two slots, as a real team
+ * sheet allows: the reception libero passes serve, and an optional defensive
+ * libero replaces them whenever the team is serving. Both swap lists are
+ * restricted to libero-registered players.
  */
 export function TeamSheet({
-  lineup, libero, bench, store, onSetPlayer, onSwapPlayers, onSetLibero,
-  restrictSwapsByPosition = false,
+  lineup, libero, defensiveLibero, bench, store, onSetPlayer, onSwapPlayers, onSetLibero,
+  onSetDefensiveLibero, restrictSwapsByPosition = false,
 }: TeamSheetProps): JSX.Element {
   const [dragOverZone, setDragOverZone] = useState<number | null>(null);
-  const [liberoDragOver, setLiberoDragOver] = useState(false);
+  const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
 
   const dropOnZone = (targetZone: number, draggedPlayerIdx: number): void => {
     if (draggedPlayerIdx === lineup[targetZone]) return;
@@ -226,9 +233,20 @@ export function TeamSheet({
     );
   };
 
-  const liberoOptions = bench.filter((p) => store.position[p] === Position.Libero);
+  const benchLiberos = bench.filter((p) => store.position[p] === Position.Libero);
+  const isLibero = (p: number): boolean => store.position[p] === Position.Libero;
   const frontZones = ZONE_ORDER.slice(0, 3);
   const backZones = ZONE_ORDER.slice(3);
+  const liberoDrop = (role: 'reception' | 'defence') => ({
+    isDragOver: liberoDragOver === role,
+    onDragOverZone: () => setLiberoDragOver(role),
+    onDragLeaveZone: () => setLiberoDragOver((cur) => (cur === role ? null : cur)),
+    onDropPlayer: (dragged: number) => {
+      if (!isLibero(dragged)) return;
+      if (role === 'reception') onSetLibero(dragged);
+      else onSetDefensiveLibero(dragged);
+    },
+  });
 
   return (
     <div className="ts">
@@ -242,23 +260,65 @@ export function TeamSheet({
           <div className="ts-row">{backZones.map(renderZone)}</div>
         </div>
         {libero >= 0 && (
-          <div className="ts-libero">
-            <span className="ts-libero-label">Libero</span>
-            <LineupCard
-              label="Libero"
-              playerIdx={libero}
-              store={store}
-              swapOptions={liberoOptions}
-              isDragOver={liberoDragOver}
-              draggable={false}
-              onSelectChange={onSetLibero}
-              onDropPlayer={(dragged) => {
-                if (store.position[dragged] === Position.Libero) onSetLibero(dragged);
-              }}
-              onDragOverZone={() => setLiberoDragOver(true)}
-              onDragLeaveZone={() => setLiberoDragOver(false)}
-            />
-            <span className="ts-libero-note">Replaces the back-row middle</span>
+          <div className="ts-liberos">
+            <div className="ts-libero">
+              <span className="ts-libero-label">{defensiveLibero >= 0 ? 'Reception libero' : 'Libero'}</span>
+              <LineupCard
+                label="Reception"
+                playerIdx={libero}
+                store={store}
+                swapOptions={defensiveLibero >= 0 ? [...benchLiberos, defensiveLibero] : benchLiberos}
+                draggable={false}
+                onSelectChange={onSetLibero}
+                {...liberoDrop('reception')}
+              />
+              <span className="ts-libero-note">
+                {defensiveLibero >= 0 ? 'On court while you receive serve' : 'Replaces the back-row middle'}
+              </span>
+            </div>
+
+            <div className="ts-libero ts-libero-defence">
+              <span className="ts-libero-label">Defensive libero</span>
+              {defensiveLibero >= 0 ? (
+                <>
+                  <LineupCard
+                    label="Defence"
+                    playerIdx={defensiveLibero}
+                    store={store}
+                    swapOptions={[...benchLiberos, libero]}
+                    draggable={false}
+                    onSelectChange={onSetDefensiveLibero}
+                    {...liberoDrop('defence')}
+                  />
+                  <button className="sm ghost" onClick={() => onSetDefensiveLibero(-1)}>Remove</button>
+                </>
+              ) : (
+                <div
+                  className={`lineup-card-empty ts-libero-empty${liberoDragOver === 'defence' ? ' drag-over' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setLiberoDragOver('defence'); }}
+                  onDragLeave={() => setLiberoDragOver((cur) => (cur === 'defence' ? null : cur))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setLiberoDragOver(null);
+                    const dragged = Number(e.dataTransfer.getData('text/plain'));
+                    if (!Number.isNaN(dragged) && isLibero(dragged)) onSetDefensiveLibero(dragged);
+                  }}
+                >
+                  <span className="ts-libero-plus">+</span>
+                  {benchLiberos.length > 0 ? (
+                    <select value={-1} onChange={(e) => onSetDefensiveLibero(Number(e.target.value))}>
+                      <option value={-1}>Add libero</option>
+                      {benchLiberos.map((p) => <option key={p} value={p}>{store.shortName(p)}</option>)}
+                    </select>
+                  ) : (
+                    <span className="ts-libero-none">No second libero available</span>
+                  )}
+                </div>
+              )}
+              <span className="ts-libero-note">
+                {defensiveLibero >= 0 ? 'On court while you serve' : 'Optional — digs while you serve'}
+              </span>
+            </div>
           </div>
         )}
       </div>

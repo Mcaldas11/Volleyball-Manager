@@ -56,6 +56,34 @@ export function StarMeter({ value, max = 2000, size = 14 }: { value: number; max
   );
 }
 
+/** Colour band for a 0-10 match rating, from a poor night to a standout one. */
+export function ratingClass(r: number): string {
+  if (r >= 8.0) return 'rt-star';
+  if (r >= 7.2) return 'rt-great';
+  if (r >= 6.7) return 'rt-good';
+  if (r >= 6.2) return 'rt-ok';
+  if (r >= 5.6) return 'rt-poor';
+  return 'rt-bad';
+}
+
+/** A match (or average) rating as a coloured chip — "—" when there is none yet. */
+export function RatingBadge({
+  value, size = 'md', title,
+}: {
+  value: number | null | undefined;
+  size?: 'sm' | 'md' | 'lg';
+  title?: string;
+}): JSX.Element {
+  if (value === null || value === undefined || value <= 0) {
+    return <span className={`rating-badge rating-${size} rt-none`} title={title}>—</span>;
+  }
+  return (
+    <span className={`rating-badge rating-${size} ${ratingClass(value)}`} title={title}>
+      {value.toFixed(value >= 10 ? 0 : 1)}
+    </span>
+  );
+}
+
 /** Colour band for a 1-20 attribute, low to high — the same ramp on every screen. */
 export function attrClass(v: number): string {
   if (v >= 16) return 'attr-v5';

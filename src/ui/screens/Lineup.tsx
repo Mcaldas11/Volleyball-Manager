@@ -21,11 +21,12 @@ export function LineupScreen(): JSX.Element {
   if (club.players.length === 0) return <Empty>No players under contract.</Empty>;
   if (picked === null) return <Empty>No players under contract.</Empty>;
 
-  const { lineup, libero, bench } = picked;
+  const { lineup, libero, defensiveLibero, bench } = picked;
   const teamAvg = lineup.length > 0
     ? Math.round(lineup.reduce((s, p) => s + store.currentAbility[p], 0) / lineup.length)
     : 0;
-  const hasPreference = club.preferredLineup.some((p) => p >= 0) || club.preferredLibero >= 0;
+  const hasPreference = club.preferredLineup.some((p) => p >= 0) || club.preferredLibero >= 0
+    || club.preferredDefensiveLibero >= 0;
 
   return (
     <div className="lineup-page">
@@ -50,11 +51,13 @@ export function LineupScreen(): JSX.Element {
       <TeamSheet
         lineup={lineup}
         libero={libero}
+        defensiveLibero={defensiveLibero}
         bench={bench}
         store={store}
         onSetPlayer={(slot, p) => g.setPreferredLineupSlot(slot, p)}
         onSwapPlayers={(a, b) => g.swapPreferredLineupSlots(a, b)}
         onSetLibero={(p) => g.setPreferredLibero(p)}
+        onSetDefensiveLibero={(p) => g.setPreferredDefensiveLibero(p)}
         restrictSwapsByPosition
       />
     </div>

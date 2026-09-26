@@ -14,6 +14,7 @@ import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
 import { runCareer } from './career.ts';
 import { runDemo } from './demo.ts';
+import { printRatingReport, runRatingReport } from './ratings.ts';
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
@@ -211,7 +212,14 @@ ${BOLD}Volleyball Manager${RESET} — simulation CLI
   ${BOLD}world${RESET} [small|standard|large]  Generate a world and report its shape
   ${BOLD}career${RESET} [seasons] [scale]    Simulate a long career and check the world for drift
   ${BOLD}demo${RESET}                        Play one match through the full engine and print the report
+  ${BOLD}ratings${RESET} [matches]           Check the 0-10 player ratings are centred for every position
 `);
+}
+
+function cmdRatings(args: string[]): void {
+  const matches = Number(args[0] ?? 300);
+  console.log(`\n${BOLD}Player rating calibration${RESET} ${DIM}(${matches} fixtures per path)${RESET}`);
+  printRatingReport(runRatingReport(matches));
 }
 
 const [, , command, ...rest] = process.argv;
@@ -227,6 +235,9 @@ switch (command) {
     break;
   case 'demo':
     runDemo();
+    break;
+  case 'ratings':
+    cmdRatings(rest);
     break;
   default:
     usage();

@@ -72,3 +72,28 @@ test('pickLineup falls back to the next best player for a slot whose preferred s
   const remaining = outsides.filter((p) => p !== outsides[0] && p !== outsides[1]);
   if (remaining.length > 0) assert.equal(lineup[2], remaining[0]);
 });
+
+test('pickLineup uses a named defensive libero, and never auto-picks one', () => {
+  const world = generateWorld({ seed: 5, startYear: 2026, scale: 'small', manager: stubManager() });
+  const store = world.players;
+  const club = world.clubs.find((c) => c.players.filter((p) => store.position[p] === Position.Libero).length >= 2)!;
+  const [l1, l2] = club.players.filter((p) => store.position[p] === Position.Libero);
+
+  club.preferredLibero = l1;
+  club.preferredDefensiveLibero = -1;
+  const single = pickLineup(store, club);
+  assert.equal(single.defensiveLibero, -1);
+  assert.ok(single.bench.includes(l2), 'the unused libero stays on the bench');
+
+  club.preferredDefensiveLibero = l2;
+  const pair = pickLineup(store, club);
+  assert.equal(pair.libero, l1);
+  assert.equal(pair.defensiveLibero, l2);
+  assert.ok(!pair.bench.includes(l1) && !pair.bench.includes(l2));
+
+  // With the reception libero hurt, the other libero covers alone.
+  store.injuryDaysLeft[l1] = 10;
+  const cover = pickLineup(store, club);
+  assert.equal(cover.libero, l2);
+  assert.equal(cover.defensiveLibero, -1);
+});

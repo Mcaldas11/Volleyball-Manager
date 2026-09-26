@@ -1,11 +1,13 @@
 import { useState, type JSX } from 'react';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { RallyContact, RallyLogEntry } from '../../engine/match/engine.ts';
+import { matchRating } from '../../engine/match/playerRating.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
+import type { Position } from '../../engine/model/positions.ts';
 import { playoffBandSizes } from '../../engine/season/playoffs.ts';
 import type { Competition, PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
 import {
-  Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerLink, Segmented, StatTile,
+  Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerLink, RatingBadge, Segmented, StatTile,
 } from '../components.tsx';
 import { useGame } from '../state.ts';
 
@@ -153,6 +155,7 @@ export function MatchScreen(): JSX.Element {
       <div className="report-meta">
         {result.mvp >= 0 && <span className="mvp-tag">MVP</span>}
         {result.mvp >= 0 && <PlayerLink idx={result.mvp} />}
+        {result.mvp >= 0 && <MvpRating />}
         <span className="faint">{result.totalRallies} rallies simulated</span>
       </div>
 
@@ -294,12 +297,33 @@ export function describeRallyHighlight(
   return { before: template[0], player: store.shortName(last.player), after: template[1] };
 }
 
+/** The match MVP's rating, read off the same stat line as the box score. */
+function MvpRating(): JSX.Element | null {
+  const g = useGame();
+  const watched = g.reviewLast();
+  if (watched === null) return null;
+  const { result } = watched;
+  const store = g.world!.players;
+  const homeLine = result.stats.home.players.get(result.mvp);
+  const line = homeLine ?? result.stats.away.players.get(result.mvp);
+  if (line === undefined) return null;
+  const [setsFor, setsAgainst] = homeLine !== undefined
+    ? [result.homeSets, result.awaySets]
+    : [result.awaySets, result.homeSets];
+  return <RatingBadge value={matchRating(line, store.position[result.mvp] as Position, setsFor, setsAgainst)} />;
+}
+
 function BoxScore(): JSX.Element {
   const g = useGame();
   const watched = g.reviewLast()!;
   const store = g.world!.players;
 
-  const table = (label: string, teamStats: typeof watched.result.stats.home): JSX.Element => {
+  const table = (
+    label: string,
+    teamStats: typeof watched.result.stats.home,
+    setsFor: number,
+    setsAgainst: number,
+  ): JSX.Element => {
     const rows = [...teamStats.players.values()]
       .filter((s) => s.attacksTotal > 0 || s.servesTotal > 0 || s.receptionsTotal > 0)
       .sort((a, b) =>
@@ -312,6 +336,7 @@ function BoxScore(): JSX.Element {
           <thead>
             <tr>
               <th>Player</th>
+              <th className="num" title="Match rating">Rat</th>
               <th className="num" title="Total points">Pts</th>
               <th className="num" title="Kills / attempts">K/Att</th>
               <th className="num" title="Attack efficiency">Eff</th>
@@ -331,6 +356,12 @@ function BoxScore(): JSX.Element {
               return (
                 <tr key={s.playerIdx} className="clickable" onClick={() => g.select(s.playerIdx)}>
                   <td className="strong">{store.fullName(s.playerIdx)}</td>
+                  <td className="num">
+                    <RatingBadge
+                      value={matchRating(s, store.position[s.playerIdx] as Position, setsFor, setsAgainst)}
+                      size="sm"
+                    />
+                  </td>
                   <td className="num"><strong>{s.attackKills + s.serveAces + s.blockPoints}</strong></td>
                   <td className="num dim">{s.attackKills}/{s.attacksTotal}</td>
                   <td className={`num ${eff > 0.3 ? 'good' : eff < 0.1 ? 'bad' : ''}`}>
@@ -348,6 +379,7 @@ function BoxScore(): JSX.Element {
             })}
             <tr className="total-row">
               <td>Team</td>
+              <td />
               <td className="num">{total.attackKills + total.serveAces + total.blockPoints}</td>
               <td className="num dim">{total.attackKills}/{total.attacksTotal}</td>
               <td className="num">
@@ -373,8 +405,8 @@ function BoxScore(): JSX.Element {
 
   return (
     <div className="grid2">
-      {table(watched.homeName, watched.result.stats.home)}
-      {table(watched.awayName, watched.result.stats.away)}
+      {table(watched.homeName, watched.result.stats.home, watched.result.homeSets, watched.result.awaySets)}
+      {table(watched.awayName, watched.result.stats.away, watched.result.awaySets, watched.result.homeSets)}
     </div>
   );
 }

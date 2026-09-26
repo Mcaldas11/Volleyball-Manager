@@ -4,6 +4,7 @@ import { generateWorld } from '../world/worldGen.ts';
 import { stubManager } from '../world/world.ts';
 import { toTeamSetup } from '../season/seasonEngine.ts';
 import type { PlayerStore } from '../model/players.ts';
+import { Position } from '../model/positions.ts';
 import { MatchFormat, MatchSimulator, type MatchSetup } from './engine.ts';
 
 function buildMatch(worldSeed: number, matchSeed: number): { store: PlayerStore; setup: MatchSetup } {
@@ -119,4 +120,74 @@ test('substitute() only lets a substituted starter return for the player who rep
   assert.equal(sim.substitute(0, starter, sub2).ok, false);
   // ...only sub1 can replace the starter again.
   assert.equal(sim.substitute(0, starter, sub1).ok, true);
+});
+
+/** A match whose home side registers a second, defensive libero from its bench. */
+function buildTwoLiberoMatch(worldSeed: number, matchSeed: number): { store: PlayerStore; setup: MatchSetup; reception: number; defence: number } {
+  const { store, setup } = buildMatch(worldSeed, matchSeed);
+  const defence = setup.home.bench.find((p) => store.position[p] === Position.Libero);
+  assert.ok(defence !== undefined, 'this test needs a second libero on the bench');
+  setup.home.bench = setup.home.bench.filter((p) => p !== defence);
+  setup.home.defensiveLibero = defence;
+  return { store, setup, reception: setup.home.libero, defence };
+}
+
+test('a single libero plays exactly as before when no defensive libero is named', () => {
+  const a = buildMatch(7, 777);
+  const b = buildMatch(7, 777);
+  b.setup.home.defensiveLibero = -1;
+  const ra = new MatchSimulator(a.store, a.setup).run();
+  const rb = new MatchSimulator(b.store, b.setup).run();
+  assert.deepEqual(ra.setScores, rb.setScores);
+});
+
+test('the reception libero passes when receiving and the defensive libero digs when serving', () => {
+  const { store, setup, reception, defence } = buildTwoLiberoMatch(8, 888);
+  const sim = new MatchSimulator(store, setup);
+  let receptionTouches = 0;
+  let defenceTouches = 0;
+  for (let entry = sim.step(); entry !== null; entry = sim.step()) {
+    for (const c of entry.contacts) {
+      if (c.team !== 0 || (c.player !== reception && c.player !== defence)) continue;
+      // Home receiving serve means the away side served this rally.
+      if (entry.serveTeam === 1) {
+        assert.equal(c.player, reception, 'only the reception libero may touch the ball while receiving');
+        receptionTouches++;
+      } else {
+        assert.equal(c.player, defence, 'only the defensive libero may touch the ball while serving');
+        defenceTouches++;
+      }
+    }
+  }
+  assert.ok(receptionTouches > 0 && defenceTouches > 0, 'both liberos should have played');
+});
+
+test('snapshot() names the libero for whichever side of the ball the team is on next', () => {
+  const { store, setup, reception, defence } = buildTwoLiberoMatch(9, 999);
+  const sim = new MatchSimulator(store, setup);
+  for (let i = 0; i < 40; i++) {
+    const snap = sim.snapshot();
+    assert.equal(snap.homeLibero, snap.serving === 0 ? defence : reception);
+    if (sim.step() === null) break;
+  }
+});
+
+test('setLibero() swaps liberos freely but only ever to a registered libero', () => {
+  const { store, setup, reception, defence } = buildTwoLiberoMatch(10, 1010);
+  const sim = new MatchSimulator(store, setup);
+  sim.step();
+
+  const outfield = setup.home.bench.find((p) => store.position[p] !== Position.Libero);
+  assert.ok(outfield !== undefined);
+  assert.equal(sim.setLibero(0, 'reception', outfield).ok, false);
+
+  // Naming the defensive libero for reception swaps the two roles over.
+  assert.equal(sim.setLibero(0, 'reception', defence).ok, true);
+  assert.deepEqual(sim.liberos(0), { reception: defence, defence: reception });
+
+  // Dropping the defensive role leaves one libero playing throughout, and it
+  // never used up a substitution.
+  assert.equal(sim.setLibero(0, 'defence', -1).ok, true);
+  assert.deepEqual(sim.liberos(0), { reception: defence, defence: -1 });
+  assert.equal(sim.subsRemaining(0), 5);
 });

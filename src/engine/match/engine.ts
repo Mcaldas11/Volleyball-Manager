@@ -57,8 +57,16 @@ export interface TeamSetup {
   name: string;
   /** Six starters in rotational order; index 0 starts in zone 1. */
   lineup: number[];
-  /** Libero player index, or -1. */
+  /** Libero player index, or -1. With a second libero this is the reception
+   *  libero: the one on court whenever the team is receiving serve. */
   libero: number;
+  /**
+   * Optional second libero, on court whenever the team is serving — the
+   * defensive specialist. Teams that register two liberos swap them freely
+   * between rallies, so one can be picked for passing and one for digging.
+   * Omitted or -1: the one libero plays throughout.
+   */
+  defensiveLibero?: number;
   bench: number[];
   tactics: TeamTactics;
   /** Rotation the team starts each set in, 0-5. */
@@ -147,7 +155,10 @@ class TeamRuntime {
   readonly ratings = new Map<number, PlayerMatchRatings>();
   readonly stats: TeamMatchStats = newTeamStats();
   setterIdx = -1;
+  /** The libero on court for the rally being played — one of the two below. */
   liberoIdx = -1;
+  receptionLibero = -1;
+  defensiveLibero = -1;
   score = 0;
   setsWon = 0;
   momentum = 0;
@@ -162,10 +173,13 @@ class TeamRuntime {
     this.startLineup = setup.lineup.slice();
     this.startRotation = setup.startingRotation ?? 0;
     this.liberoIdx = setup.libero;
+    this.receptionLibero = setup.libero;
+    this.defensiveLibero = setup.defensiveLibero ?? -1;
 
     // Ratings for everyone who might take the floor.
     const all = [...setup.lineup, ...setup.bench];
     if (setup.libero >= 0) all.push(setup.libero);
+    if (this.defensiveLibero >= 0) all.push(this.defensiveLibero);
     for (const p of all) {
       if (p < 0) continue;
       const role = store.position[p] as Position;
@@ -409,13 +423,81 @@ export class MatchSimulator {
     return 5 - this.subsUsedThisSet[team];
   }
 
+  /**
+   * The libero who takes the court for the next rally: the reception libero
+   * while the team is receiving serve, the defensive libero (if one is
+   * registered) while it is serving.
+   */
+  private activeLibero(team: 0 | 1): number {
+    const t = this.teams[team];
+    return team === this.serving && t.defensiveLibero >= 0 ? t.defensiveLibero : t.receptionLibero;
+  }
+
+  /** Both of a team's libero roles. `defence` is -1 when only one libero is used. */
+  liberos(team: 0 | 1): { reception: number; defence: number } {
+    const t = this.teams[team];
+    return { reception: t.receptionLibero, defence: t.defensiveLibero };
+  }
+
+  /**
+   * Change who plays libero, between rallies. Libero replacements are
+   * unlimited and never count against the substitution allowance, but only a
+   * registered libero from the matchday squad may take the role. Naming the
+   * player who currently holds the other role swaps the two roles over;
+   * passing -1 for the defensive role goes back to a single libero.
+   */
+  setLibero(
+    team: 0 | 1,
+    role: 'reception' | 'defence',
+    playerIdx: number,
+  ): { ok: boolean; reason?: string } {
+    const t = this.teams[team];
+    if (role === 'defence' && playerIdx === -1) {
+      t.defensiveLibero = -1;
+      return { ok: true };
+    }
+    if (!t.ratings.has(playerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
+    if (this.store.position[playerIdx] !== Position.Libero) {
+      return { ok: false, reason: 'Only a registered libero can play libero.' };
+    }
+    if (t.court.includes(playerIdx)) return { ok: false, reason: 'That player is already on court.' };
+
+    if (role === 'reception') {
+      if (playerIdx === t.defensiveLibero) t.defensiveLibero = t.receptionLibero;
+      t.receptionLibero = playerIdx;
+    } else {
+      if (playerIdx === t.receptionLibero) {
+        if (t.defensiveLibero < 0) return { ok: false, reason: 'Name another libero for reception first.' };
+        t.receptionLibero = t.defensiveLibero;
+      }
+      t.defensiveLibero = playerIdx;
+    }
+    return { ok: true };
+  }
+
+  /** Running box-score state for a live viewer, e.g. to rate players mid-match. */
+  liveStats(): { home: TeamMatchStats; away: TeamMatchStats; homeSets: number; awaySets: number } {
+    return {
+      home: this.teams[0].stats,
+      away: this.teams[1].stats,
+      homeSets: this.teams[0].setsWon,
+      awaySets: this.teams[1].setsWon,
+    };
+  }
+
   /** The matchday squad's bench for this team — not currently on court. */
   benchFor(team: 0 | 1): number[] {
     const t = this.teams[team];
     return t.setup.bench.filter((p) => !t.court.includes(p));
   }
 
-  /** Read-only snapshot for a live viewer to render after each step(). */
+  /**
+   * Read-only snapshot for a live viewer to render after each step(). The
+   * libero fields name whoever takes the court for the *next* rally, which is
+   * what the viewer is about to animate. Taking the first snapshot also makes
+   * the coin toss, so it already knows who serves first — the random draws
+   * happen in exactly the same order either way.
+   */
   snapshot(): {
     homeCourt: number[];
     awayCourt: number[];
@@ -429,11 +511,12 @@ export class MatchSimulator {
     serving: 0 | 1;
     matchOver: boolean;
   } {
+    this.startIfNeeded();
     return {
       homeCourt: Array.from(this.teams[0].court),
       awayCourt: Array.from(this.teams[1].court),
-      homeLibero: this.teams[0].liberoIdx,
-      awayLibero: this.teams[1].liberoIdx,
+      homeLibero: this.activeLibero(0),
+      awayLibero: this.activeLibero(1),
       homeScore: this.teams[0].score,
       awayScore: this.teams[1].score,
       homeSets: this.teams[0].setsWon,
@@ -452,6 +535,10 @@ export class MatchSimulator {
     const rcv = this.teams[receiving];
 
     this.contacts = [];
+    // Two-libero teams send the reception specialist on to pass and the
+    // defensive one on to dig; with a single libero both calls return it.
+    srv.liberoIdx = this.activeLibero(serving);
+    rcv.liberoIdx = this.activeLibero(receiving);
     const scoreBefore: [number, number] = [this.teams[0].score, this.teams[1].score];
     const srvRot = srv.rotation();
     const rcvRot = rcv.rotation();

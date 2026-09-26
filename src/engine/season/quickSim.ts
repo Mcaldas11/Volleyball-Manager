@@ -145,8 +145,8 @@ export function quickSimulate(
   const homePoints = setScores.reduce((s, [h]) => s + h, 0);
   const awayPoints = setScores.reduce((s, [, a]) => s + a, 0);
 
-  const homeStats = allocateStats(store, home.lineup, home.libero, homePoints, totalRallies, rng);
-  const awayStats = allocateStats(store, away.lineup, away.libero, awayPoints, totalRallies, rng);
+  const homeStats = allocateStats(store, home.lineup, home.libero, homePoints, totalRallies, sh, rng);
+  const awayStats = allocateStats(store, away.lineup, away.libero, awayPoints, totalRallies, sa, rng);
 
   return {
     homeSets,
@@ -158,14 +158,52 @@ export function quickSimulate(
   };
 }
 
+/** Share of a team's attack swings, digs and receptions each role takes in the
+ *  full engine — measured, not assumed, so a background box score has the
+ *  same shape as one the user watched (see `npm run vm ratings`). */
+const KILL_SHARE: Readonly<Record<Position, number>> = {
+  [Position.OutsideHitter]: 1.0,
+  [Position.Opposite]: 0.7,
+  [Position.MiddleBlocker]: 0.4,
+  [Position.Setter]: 0,
+  [Position.Libero]: 0,
+};
+const BLOCK_SHARE: Readonly<Record<Position, number>> = {
+  [Position.MiddleBlocker]: 1.3,
+  [Position.Opposite]: 1.2,
+  [Position.OutsideHitter]: 1.0,
+  [Position.Setter]: 0.9,
+  [Position.Libero]: 0,
+};
+const RECEPTION_SHARE: Readonly<Record<Position, number>> = {
+  [Position.OutsideHitter]: 0.33,
+  [Position.Libero]: 0.22,
+  [Position.MiddleBlocker]: 0.035,
+  [Position.Opposite]: 0.02,
+  [Position.Setter]: 0.015,
+};
+const DIG_SHARE: Readonly<Record<Position, number>> = {
+  [Position.Libero]: 0.40,
+  [Position.Setter]: 0.14,
+  [Position.OutsideHitter]: 0.13,
+  [Position.Opposite]: 0.125,
+  [Position.MiddleBlocker]: 0.047,
+};
+
+/** A count drawn around `mean`, spread roughly the way small match samples are. */
+function jitter(mean: number, rng: Rng, spread = 0.5): number {
+  return Math.max(0, Math.round(mean * rng.range(1 - spread, 1 + spread)));
+}
+
 /**
  * Spread a team's points across its players.
  *
- * Without this, background matches would leave season statistics empty and the
- * scoring charts would only ever show the user's own league. The split follows
- * the real shape of a box score: opposites and outsides take most of the
- * swings, middles score fewer but block more, and roughly a fifth of a team's
- * points come from opponent errors and belong to nobody.
+ * Without this, background matches would leave season statistics empty, the
+ * scoring charts would only ever show the user's own league, and players
+ * outside it could never earn a match rating. Rates and volumes follow what
+ * the full rally engine produces for a side of the same strength: stronger
+ * squads kill more of their swings and pass better, liberos and middles share
+ * the back row, and only the six rotating players serve.
  */
 function allocateStats(
   store: PlayerStore,
@@ -173,74 +211,93 @@ function allocateStats(
   libero: number,
   teamPoints: number,
   rallies: number,
+  strength: number,
   rng: Rng,
 ): Map<number, PlayerMatchStats> {
   const out = new Map<number, PlayerMatchStats>();
   const players = [...lineup.filter((p) => p >= 0)];
   if (libero >= 0) players.push(libero);
   if (players.length === 0) return out;
+  const servers = players.filter((p) => store.position[p] !== Position.Libero);
+  const posOf = (p: number): Position => store.position[p] as Position;
 
   for (const p of players) out.set(p, newPlayerStats(p));
 
+  // 0 for a weak lower-division side, 1 for an elite one.
+  const level = clamp((strength - 750) / 750, 0, 1);
+  const killRate = 0.30 + 0.20 * level;
+  const attackErrorRate = 0.14 - 0.05 * level;
+  const blockedRate = 0.078 - 0.02 * level;
+  const perfectShare = 0.31 + 0.14 * level;
+  const positiveShare = 0.28 - 0.05 * level;
+  const receptionErrorShare = 0.068;
+
   // Points that came from the opponent making a mistake are not credited.
-  const earned = Math.round(teamPoints * rng.range(0.76, 0.86));
-  const aces = Math.round(earned * rng.range(0.06, 0.11));
-  const blocks = Math.round(earned * rng.range(0.10, 0.16));
+  const earned = Math.round(teamPoints * (rng.range(0.55, 0.65) + 0.08 * level));
+  const aces = Math.round(earned * rng.range(0.07, 0.11));
+  const blocks = Math.round(earned * rng.range(0.12, 0.17));
   const kills = Math.max(0, earned - aces - blocks);
 
-  // Attack share by position and ability.
-  const attackWeight = (p: number): number => {
-    const pos = store.position[p] as Position;
-    const base =
-      pos === Position.Opposite ? 1.5 :
-      pos === Position.OutsideHitter ? 1.35 :
-      pos === Position.MiddleBlocker ? 0.75 :
-      pos === Position.Setter ? 0.12 : 0.02;
-    return base * (store.currentAbility[p] / 1000);
-  };
-  const blockWeight = (p: number): number => {
-    const pos = store.position[p] as Position;
-    const base =
-      pos === Position.MiddleBlocker ? 2.0 :
-      pos === Position.Opposite ? 1.0 :
-      pos === Position.OutsideHitter ? 0.8 :
-      pos === Position.Setter ? 0.5 : 0.0;
-    return base * (store.currentAbility[p] / 1000);
-  };
-
-  distribute(players, kills, attackWeight, rng, (p, n) => {
+  const ability = (p: number): number => store.currentAbility[p] / 1000;
+  // How a player measures up against their own side: the team's star hits
+  // cleaner and passes better than its weakest link, as on court.
+  const relative = (p: number): number => clamp(store.currentAbility[p] / Math.max(1, strength), 0.75, 1.25);
+  distribute(players, kills, (p) => KILL_SHARE[posOf(p)] * ability(p), rng, (p, n) => {
     const s = out.get(p)!;
+    const rel = relative(p);
     s.attackKills += n;
-    // Back out a plausible attempt count from the calibrated kill rate.
-    s.attacksTotal += Math.round(n / 0.51);
-    s.attackErrors += Math.round(s.attacksTotal * 0.10);
-    s.attackBlocked += Math.round(s.attacksTotal * 0.074);
+    // Back out an attempt count from the side's kill rate; individual
+    // efficiency varies match to match exactly as it does on court.
+    s.attacksTotal += Math.round(n / (killRate * rel ** 1.5 * rng.range(0.78, 1.22)));
+    s.attackErrors += jitter((s.attacksTotal * attackErrorRate) / rel ** 2, rng, 0.6);
+    s.attackBlocked += jitter((s.attacksTotal * blockedRate) / rel, rng, 0.6);
   });
-  distribute(players, blocks, blockWeight, rng, (p, n) => {
+  distribute(players, blocks, (p) => BLOCK_SHARE[posOf(p)] * ability(p), rng, (p, n) => {
     out.get(p)!.blockPoints += n;
   });
-  distribute(players, aces, () => 1, rng, (p, n) => {
+  // Only the six rotating players ever serve — never the libero.
+  const teamServes = Math.round(rallies * 0.5);
+  for (const p of servers) {
     const s = out.get(p)!;
-    s.serveAces += n;
-    s.servesTotal += Math.round(n / 0.063);
-    s.serveErrors += Math.round(s.servesTotal * 0.108);
+    s.servesTotal = jitter(teamServes / servers.length, rng, 0.2);
+    s.serveErrors = jitter(s.servesTotal * 0.12, rng, 0.7);
+  }
+  distribute(servers, aces, ability, rng, (p, n) => {
+    out.get(p)!.serveAces += n;
   });
 
-  // Reception and digs, so passing statistics are not blank either.
+  const receptions = rallies * 0.44;
+  const digs = rallies * (0.335 - 0.04 * level);
+  const touches = rallies * 0.09;
   for (const p of players) {
-    const pos = store.position[p] as Position;
+    const pos = posOf(p);
     const s = out.get(p)!;
-    s.ralliesPlayed = rallies;
-    if (pos === Position.Libero || pos === Position.OutsideHitter) {
-      s.receptionsTotal = Math.round((rallies / 3) * rng.range(0.8, 1.2));
-      s.receptionPerfect = Math.round(s.receptionsTotal * 0.427);
-      s.receptionPositive = Math.round(s.receptionsTotal * 0.238);
-      s.receptionPoor = Math.round(s.receptionsTotal * 0.29);
-      s.receptionErrors = s.receptionsTotal - s.receptionPerfect - s.receptionPositive - s.receptionPoor;
+    // Middles and the libero split the back row between them.
+    s.ralliesPlayed = pos === Position.Libero || pos === Position.MiddleBlocker
+      ? Math.round(rallies * 0.67)
+      : rallies;
+
+    s.receptionsTotal = jitter(receptions * RECEPTION_SHARE[pos], rng, 0.25);
+    const passer = relative(p);
+    s.receptionErrors = Math.min(s.receptionsTotal, jitter(s.receptionsTotal * receptionErrorShare / passer, rng, 0.8));
+    s.receptionPerfect = Math.min(
+      s.receptionsTotal - s.receptionErrors,
+      jitter(s.receptionsTotal * perfectShare * passer, rng, 0.3),
+    );
+    s.receptionPositive = Math.min(
+      s.receptionsTotal - s.receptionErrors - s.receptionPerfect,
+      jitter(s.receptionsTotal * positiveShare, rng, 0.3),
+    );
+    s.receptionPoor = s.receptionsTotal - s.receptionErrors - s.receptionPerfect - s.receptionPositive;
+
+    s.digsTotal = jitter(digs * DIG_SHARE[pos], rng, 0.35);
+    if (pos !== Position.Libero) s.blockTouches = jitter(touches / 6, rng, 0.6);
+    if (pos === Position.Setter) {
+      // Every kill is assisted in the engine too.
+      s.setAssists = kills;
+      s.setsMade = Math.round(kills / killRate);
+      s.setErrors = jitter(rallies * 0.015, rng, 0.8);
     }
-    if (pos === Position.Libero) s.digsTotal = Math.round(rallies * rng.range(0.20, 0.32));
-    else if (pos !== Position.MiddleBlocker) s.digsTotal = Math.round(rallies * rng.range(0.05, 0.14));
-    if (pos === Position.Setter) s.setAssists = Math.round(teamPoints * 0.5);
   }
 
   // Career totals must be updated here too, or a player's record would depend
@@ -265,9 +322,14 @@ function distribute(
   const weights = players.map(weightOf);
   const sum = weights.reduce((a, b) => a + b, 0);
   if (sum <= 0) return;
+  // The remainder goes to the last player who can take a share at all — a
+  // zero-weight player (a libero, for kills) must never absorb the leftovers.
+  let last = weights.length - 1;
+  while (last > 0 && weights[last] <= 0) last--;
   let remaining = total;
-  for (let i = 0; i < players.length && remaining > 0; i++) {
-    const share = i === players.length - 1
+  for (let i = 0; i <= last && remaining > 0; i++) {
+    if (weights[i] <= 0) continue;
+    const share = i === last
       ? remaining
       : Math.min(remaining, Math.round((weights[i] / sum) * total * rng.range(0.85, 1.15)));
     if (share > 0) apply(players[i], share);

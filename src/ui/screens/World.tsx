@@ -2,15 +2,20 @@ import { useState, type JSX } from 'react';
 import { attackEfficiency, receptionPositivity } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { averageRating, seasonTotals } from '../../engine/world/records.ts';
 import {
-  abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, Segmented, StarMeter,
+  abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, RatingBadge, Segmented, StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
-type StatKey = 'points' | 'kills' | 'efficiency' | 'aces' | 'blocks' | 'digs' | 'reception';
+type StatKey = 'rating' | 'points' | 'kills' | 'efficiency' | 'aces' | 'blocks' | 'digs' | 'reception';
+
+/** Appearances needed before an average rating can top the chart. */
+const MIN_RATED_APPS = 5;
 
 const STAT_COLUMNS: ReadonlyArray<readonly [StatKey, string]> = [
+  ['rating', 'Av rating'],
   ['points', 'Points'],
   ['kills', 'Kills'],
   ['efficiency', 'Attack efficiency'],
@@ -45,14 +50,22 @@ export function StatsScreen(): JSX.Element {
   const rows = [...g.ctx.stats.values()]
     .filter((s) => s.matches >= 3)
     .filter((s) => !ownLeagueOnly || leagueClubs.has(store.clubId[s.playerIdx]))
-    .map((s) => ({
-      s,
-      points: s.attackKills + s.serveAces + s.blockPoints,
-      efficiency: attackEfficiency(s),
-      reception: receptionPositivity(s),
-    }))
+    .map((s) => {
+      const season = seasonTotals(world, s.playerIdx);
+      return {
+        s,
+        points: s.attackKills + s.serveAces + s.blockPoints,
+        efficiency: attackEfficiency(s),
+        reception: receptionPositivity(s),
+        rating: averageRating(season),
+        rated: season.apps >= MIN_RATED_APPS,
+      };
+    })
     .sort((a, b) => {
       switch (sort) {
+        case 'rating':
+          if (a.rated !== b.rated) return a.rated ? -1 : 1;
+          return b.rating - a.rating;
         case 'kills': return b.s.attackKills - a.s.attackKills;
         case 'efficiency':
           // Require a real sample before an efficiency rate can top the chart.
@@ -104,6 +117,7 @@ export function StatsScreen(): JSX.Element {
                     <th />
                     <th>Player</th><th>Pos</th><th>Club</th>
                     <th className="num">M</th>
+                    <th className={col('rating', sort)} title="Average match rating this season">Av Rat</th>
                     <th className={col('points', sort)}>Pts</th>
                     <th className={col('kills', sort)}>Kills</th>
                     <th className={col('efficiency', sort)}>Eff</th>
@@ -134,6 +148,7 @@ export function StatsScreen(): JSX.Element {
                           : '—'}
                       </td>
                       <td className="num dim">{r.s.matches}</td>
+                      <td className={col('rating', sort)}><RatingBadge value={r.rating} size="sm" /></td>
                       <td className={col('points', sort)}><strong>{r.points}</strong></td>
                       <td className={col('kills', sort)}>{r.s.attackKills}</td>
                       <td className={col('efficiency', sort, r.efficiency > 0.35 ? 'good' : '')}>

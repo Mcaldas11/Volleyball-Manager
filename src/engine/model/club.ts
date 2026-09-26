@@ -73,7 +73,11 @@ export interface Club {
   tactics: TeamTactics;
   /** Preferred starting six, as player indices in rotational order. */
   preferredLineup: number[];
+  /** The libero — with a second one named below, the reception libero. */
   preferredLibero: number;
+  /** Optional second libero who replaces the first whenever the team serves,
+   *  to dig rather than pass. -1 to play one libero throughout. */
+  preferredDefensiveLibero: number;
 
   /** History. */
   titlesWon: number;
@@ -180,6 +184,7 @@ export function newClub(id: number, name: string, nation: number, tier: number):
     tactics: defaultTactics(),
     preferredLineup: [],
     preferredLibero: -1,
+    preferredDefensiveLibero: -1,
     titlesWon: 0,
     seasonsInTopFlight: 0,
     boardExpectation: 8,

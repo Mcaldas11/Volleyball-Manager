@@ -27,6 +27,7 @@ import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers } from '../world/negotiation.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
+import { recordFixture } from '../world/records.ts';
 
 /** Season-long statistics, keyed by player index. */
 export type SeasonStats = Map<number, SeasonStatLine>;
@@ -55,12 +56,13 @@ export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
 /**
  * Choose a starting seven, respecting the coach's preferred lineup but
  * replacing anyone injured, sold or otherwise unavailable with the best fit
- * alternative.
+ * alternative. A second, defensive libero is only ever used when the coach
+ * has named one — nobody is auto-picked for that role.
  */
 export function pickLineup(
   store: PlayerStore,
   club: Club,
-): { lineup: number[]; libero: number; bench: number[] } {
+): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[] } {
   const available = club.players.filter((p) => store.isAvailable(p));
   const availableSet = new Set(available);
   const byPos = (pos: Position): number[] =>
@@ -123,18 +125,29 @@ export function pickLineup(
       : pools[Position.Libero]?.find((p) => !used.has(p)) ?? -1;
   if (libero !== -1) used.add(libero);
 
+  // If the reception libero was unavailable the defensive one may already have
+  // been promoted into that role above; then one libero plays throughout.
+  const preferredDefensive = club.preferredDefensiveLibero ?? -1;
+  const defensiveLibero =
+    libero !== -1 && preferredDefensive >= 0 && availableSet.has(preferredDefensive)
+    && store.position[preferredDefensive] === Position.Libero && !used.has(preferredDefensive)
+      ? preferredDefensive
+      : -1;
+  if (defensiveLibero !== -1) used.add(defensiveLibero);
+
   const finalLineup = lineup.filter((p) => p !== -1);
   const bench = available.filter((p) => !used.has(p));
-  return { lineup: finalLineup, libero, bench };
+  return { lineup: finalLineup, libero, defensiveLibero, bench };
 }
 
 export function toTeamSetup(store: PlayerStore, club: Club): TeamSetup {
-  const { lineup, libero, bench } = pickLineup(store, club);
+  const { lineup, libero, defensiveLibero, bench } = pickLineup(store, club);
   return {
     clubId: club.id,
     name: club.name,
     lineup,
     libero,
+    defensiveLibero,
     bench,
     tactics: club.tactics,
   };
@@ -184,6 +197,7 @@ export function playFixture(
 
   accumulate(ctx.stats, result.homeStats, result.setScores.length);
   accumulate(ctx.stats, result.awayStats, result.setScores.length);
+  recordFixture(world, fixture, result.homeStats, result.awayStats);
   applyMatchLoad(store, result.homeStats, world.rng);
   applyMatchLoad(store, result.awayStats, world.rng);
 
@@ -213,6 +227,7 @@ export function applyMatchResult(
   const awayStats = result.stats.away.players;
   accumulate(ctx.stats, homeStats, result.setScores.length);
   accumulate(ctx.stats, awayStats, result.setScores.length);
+  recordFixture(world, fixture, homeStats, awayStats);
   applyMatchLoad(world.players, homeStats, world.rng);
   applyMatchLoad(world.players, awayStats, world.rng);
 

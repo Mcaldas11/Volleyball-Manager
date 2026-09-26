@@ -13,6 +13,7 @@ import {
   MatchSimulator, type MatchResult, type RallyLogEntry, type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
+import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
 import { NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { type Position } from '../engine/model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
@@ -161,7 +162,10 @@ export interface MatchdayState {
   userIsHome: boolean;
   /** The user's side; edited pre-kickoff, regardless of home/away. */
   homeLineup: number[];
+  /** The reception libero — the only libero, unless a defensive one is named. */
   homeLibero: number;
+  /** Second libero who plays whenever the team serves, or -1. */
+  homeDefensiveLibero: number;
   homeBench: number[];
   speed: 0.75 | 1 | 1.5;
   paused: boolean;
@@ -175,8 +179,15 @@ export interface MatchdayState {
   timeoutsUsed: [number, number];
   /** Which team's timeout is currently open (pausing play for tactics/subs), or null. */
   timeoutActive: 0 | 1 | null;
-  /** The most recent substitution, either side — drives the live "X off, Y on" banner. */
-  lastSubstitution: { team: 0 | 1; outPlayerIdx: number; inPlayerIdx: number; seq: number } | null;
+  /** The most recent substitution, either side — drives the live "X off, Y on" banner.
+   *  `libero` marks a libero change rather than a regular substitution. */
+  lastSubstitution: {
+    team: 0 | 1;
+    outPlayerIdx: number;
+    inPlayerIdx: number;
+    seq: number;
+    libero?: 'reception' | 'defence';
+  } | null;
 }
 
 class Game {
@@ -714,13 +725,14 @@ class Game {
       advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
     }
 
-    const { lineup, libero, bench } = pickLineup(world.players, club);
+    const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, club);
     this.matchday = {
       fixture: next,
       stage: 'lineup',
       userIsHome: next.home === club.id,
       homeLineup: lineup,
       homeLibero: libero,
+      homeDefensiveLibero: defensiveLibero,
       homeBench: bench,
       speed: 1,
       paused: false,
@@ -756,11 +768,25 @@ class Game {
     this.emit();
   }
 
-  /** Change the libero on the pre-match lineup screen. */
+  /** Change the (reception) libero on the pre-match lineup screen. Naming the
+   *  defensive libero swaps the two roles over. */
   setMatchdayLibero(playerIdx: number): void {
     const md = this.matchday;
     if (md === null || md.stage !== 'lineup') return;
+    if (playerIdx === md.homeDefensiveLibero) md.homeDefensiveLibero = md.homeLibero;
     md.homeLibero = playerIdx;
+    this.emit();
+  }
+
+  /** Name (or with -1, drop) the second libero who plays whenever the team serves. */
+  setMatchdayDefensiveLibero(playerIdx: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup') return;
+    if (playerIdx >= 0 && playerIdx === md.homeLibero) {
+      if (md.homeDefensiveLibero < 0) return;
+      md.homeLibero = md.homeDefensiveLibero;
+    }
+    md.homeDefensiveLibero = playerIdx;
     this.emit();
   }
 
@@ -789,10 +815,26 @@ class Game {
     this.emit();
   }
 
+  /** Set the default (reception) libero; naming the defensive one swaps the roles. */
   setPreferredLibero(playerIdx: number): void {
     const club = this.club;
-    if (club === null) return;
+    const picked = this.lineup();
+    if (club === null || picked === null) return;
+    if (playerIdx === picked.defensiveLibero) club.preferredDefensiveLibero = picked.libero;
     club.preferredLibero = playerIdx;
+    this.emit();
+  }
+
+  /** Name the default defensive libero, or -1 to play one libero throughout. */
+  setPreferredDefensiveLibero(playerIdx: number): void {
+    const club = this.club;
+    const picked = this.lineup();
+    if (club === null || picked === null) return;
+    if (playerIdx >= 0 && playerIdx === picked.libero) {
+      if (picked.defensiveLibero < 0) return;
+      club.preferredLibero = picked.defensiveLibero;
+    }
+    club.preferredDefensiveLibero = playerIdx;
     this.emit();
   }
 
@@ -802,6 +844,7 @@ class Game {
     if (club === null) return;
     club.preferredLineup = [];
     club.preferredLibero = -1;
+    club.preferredDefensiveLibero = -1;
     this.emit();
   }
 
@@ -815,11 +858,18 @@ class Game {
     const awayClub = world.clubs[md.fixture.away];
     if (homeClub === undefined || awayClub === undefined) return;
 
+    // The bench is rebuilt from the final team sheet: anyone swapped out of
+    // the six (or out of a libero role) on the lineup screen must still be
+    // available to come on, and anyone swapped in must not be listed twice.
+    const liberos = new Set([md.homeLibero, md.homeDefensiveLibero].filter((p) => p >= 0));
+    md.homeBench = club.players.filter((p) =>
+      world.players.isAvailable(p) && !md.homeLineup.includes(p) && !liberos.has(p));
     const userSetup: TeamSetup = {
       clubId: club.id,
       name: club.name,
       lineup: md.homeLineup,
       libero: md.homeLibero,
+      defensiveLibero: md.homeDefensiveLibero,
       bench: md.homeBench,
       tactics: club.tactics,
     };
@@ -936,6 +986,64 @@ class Game {
     const result = this.performSubstitution(teamIdx, outPlayerIdx, inPlayerIdx);
     if (!result.ok) this.notice = result.reason ?? 'That substitution is not allowed.';
     this.emit();
+  }
+
+  /**
+   * Change one of the user's liberos mid-match. Libero changes are unlimited
+   * and never use up a substitution, so play carries straight on — only the
+   * announcement banner marks it.
+   */
+  changeLibero(role: 'reception' | 'defence', playerIdx: number): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.stage !== 'live') return;
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const before = sim.liberos(team);
+    const result = sim.setLibero(team, role, playerIdx);
+    if (!result.ok) {
+      this.notice = result.reason ?? 'That libero change is not allowed.';
+      this.emit();
+      return;
+    }
+    md.snapshot = sim.snapshot();
+    if (playerIdx >= 0) {
+      md.lastSubstitution = {
+        team,
+        outPlayerIdx: role === 'reception' ? before.reception : before.defence,
+        inPlayerIdx: playerIdx,
+        seq: ++this.subSeq,
+        libero: role,
+      };
+    }
+    this.emit();
+  }
+
+  /** The user's two libero roles in the live match; `defence` is -1 with one libero. */
+  liveLiberos(): { reception: number; defence: number } {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return { reception: -1, defence: -1 };
+    return sim.liberos(md.userIsHome ? 0 : 1);
+  }
+
+  /** Every player's match rating so far, both sides — recomputed after each rally. */
+  liveRatings(): Map<number, number> {
+    const out = new Map<number, number>();
+    const sim = this.liveSim;
+    const world = this.world;
+    if (sim === null || world === null) return out;
+    const live = sim.liveStats();
+    const sides = [
+      [live.home, live.homeSets, live.awaySets],
+      [live.away, live.awaySets, live.homeSets],
+    ] as const;
+    for (const [team, setsFor, setsAgainst] of sides) {
+      for (const [p, st] of team.players) {
+        if (!playedInMatch(st)) continue;
+        out.set(p, matchRating(st, world.players.position[p] as Position, setsFor, setsAgainst));
+      }
+    }
+    return out;
   }
 
   /** Substitutions left this set for the user's own side — the engine resets this every set. */
@@ -1069,7 +1177,7 @@ class Game {
 
   // ---- Squad ------------------------------------------------------------
 
-  lineup(): { lineup: number[]; libero: number; bench: number[] } | null {
+  lineup(): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[] } | null {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return null;

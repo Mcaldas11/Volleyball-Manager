@@ -135,5 +135,9 @@ export function reviveWorld(raw: World): World {
   // Saves from before pre-match interviews existed have neither field.
   raw.pendingInterviews ??= [];
   raw.interviewedFixtures ??= new Set();
+  // Saves from before match ratings and the second libero existed.
+  raw.competitionRecords ??= new Map();
+  raw.ratingForm ??= new Map();
+  for (const club of raw.clubs) club.preferredDefensiveLibero ??= -1;
   return raw;
 }
