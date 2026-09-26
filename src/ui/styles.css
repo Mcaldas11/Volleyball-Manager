@@ -2049,7 +2049,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   align-items: center;
   gap: 2px;
   transform: translate(-50%, -50%);
-  transition: left 0.4s ease, top 0.4s ease;
+  transition: left 0.45s cubic-bezier(0.4, 0.1, 0.3, 1), top 0.45s cubic-bezier(0.4, 0.1, 0.3, 1), transform 0.2s ease;
 }
 .player-marker .player-face { width: 38px; height: 38px; }
 .player-marker.is-active { z-index: 2; transform: translate(-50%, -50%) scale(1.18); }
@@ -2119,18 +2119,31 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .libero-spare-actions { display: inline-flex; gap: 6px; }
 .bench-token-name .rating-badge { margin-left: 6px; }
 
-/* The ball marker itself sits inside .court2d (position: relative there). */
+/* The ball marker itself sits inside .court2d (position: relative there). The
+   outer element travels between contacts; the core carries the look and, for
+   a high ball, the swell of its arc. */
 .ball {
   position: absolute;
   width: 11px;
   height: 11px;
-  border-radius: 50%;
-  background: conic-gradient(from -45deg, var(--gold) 0deg 130deg, var(--accent) 130deg 180deg, var(--gold) 180deg 310deg, var(--accent) 310deg 360deg);
-  box-shadow: 0 0 8px rgba(255, 199, 44, 0.85);
   transform: translate(-50%, -50%);
-  transition: left 0.22s linear, top 0.22s linear;
+  transition: left 0.3s cubic-bezier(0.35, 0.1, 0.35, 1), top 0.3s cubic-bezier(0.35, 0.1, 0.35, 1);
   pointer-events: none;
   z-index: 3;
+}
+.ball-core {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(from -45deg, var(--gold) 0deg 130deg, var(--accent) 130deg 180deg, var(--gold) 180deg 310deg, var(--accent) 310deg 360deg);
+  box-shadow: 0 0 7px rgba(255, 199, 44, 0.8);
+}
+.ball-core.arc { animation: ball-arc ease-in-out both; }
+@keyframes ball-arc {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.9); box-shadow: 0 0 12px rgba(255, 199, 44, 0.9), 0 16px 12px -6px rgba(0, 0, 0, 0.45); }
+  100% { transform: scale(1); }
 }
 
 .big-play {
@@ -2868,7 +2881,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 ::-webkit-scrollbar-corner { background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast, .view-fade, .spinner, .ball, .player-marker, .big-play, .ticker-entry, .hero-volleyball,
+  .toast, .view-fade, .spinner, .ball, .ball-core, .player-marker, .big-play, .ticker-entry, .hero-volleyball,
   .sb-serve, .live-dot, .search-pop, .menu-pop, .timeout-panel,
   .trophy-overlay, .trophy-card, .trophy-icon, .trophy-glow, .confetti-piece { animation: none !important; }
   * { transition-duration: 0.001ms !important; }
