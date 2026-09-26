@@ -295,6 +295,7 @@ export function PlayerDetail(): JSX.Element | null {
   const contractLabel = `30 Jun ${world.startYear + contractEnds + 1}`;
   const seasonsLeft = contractEnds - world.season + 1;
   const expiring = club !== null && contractEnds <= world.season;
+  const renewalTalks = g.talksWith(p, 'renewal');
 
   const group = (attrs: readonly AttributeName[], title: string): JSX.Element => (
     <div className="attr-col">
@@ -349,7 +350,8 @@ export function PlayerDetail(): JSX.Element | null {
           )}
           {isOwn && !isYouth && (
             <button className={expiring ? 'primary' : ''} onClick={() => g.startRenewal(p)}>
-              <Icon name="finances" size={14} /> Renew contract
+              <Icon name="finances" size={14} />
+              {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
             </button>
           )}
           {isOwn && !isYouth && (

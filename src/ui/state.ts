@@ -29,11 +29,10 @@ import {
   transferWindowOn,
   type Fixture, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
+import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
 import {
-  completeTransfer, contractDemands, evaluateCounterFee, evaluateFeeOffer, refusesToRenew,
-  resolveIncomingMove, respondToOffer, SquadRole, TALKS_COOLDOWN_DAYS, TALKS_PATIENCE,
-  type ContractDemands,
-} from '../engine/world/negotiation.ts';
+  acceptIncomingOffer, closeTalks, counterIncomingOffer, openTalks, submitOffer, type Talks,
+} from '../engine/world/deals.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
@@ -67,29 +66,18 @@ export interface TrophyCelebration {
   competitionName: string;
 }
 
+/** The talks screen: a view onto one of `world.talks`, with the offer being
+ *  drafted. The talks themselves — stage, demands, patience, any offer out
+ *  for an answer — live in the world, and carry on while the screen is shut. */
 export interface Negotiation {
-  /** Signing someone new, or keeping one of your own players. */
-  kind: 'transfer' | 'renewal';
-  playerIdx: number;
-  stage: 'fee' | 'terms';
-  /** -1 for a free agent, and for a renewal. */
-  sellingClubId: number;
+  talksId: number;
   feeOffer: number;
-  feeValuation: number | null;
-  feeMessage: string | null;
   termsWage: number;
   termsRole: SquadRole;
   /** Seasons the contract runs, counting this one — it ends on 30 June. */
   termsYears: number;
-  /** A problem with the offer itself (budget, window), not the player's answer. */
-  termsMessage: string | null;
-  /** The player's answer to the last offer he turned down: a near miss he
-   *  countered, or nowhere near. */
-  termsReply: 'close' | 'far' | null;
-  /** What he is asking for — he comes down a little after a near miss. */
-  demands: ContractDemands;
-  /** Rejected offers he will still sit through before walking out. */
-  patience: number;
+  /** A problem with the offer itself (budget, window) before it is sent. */
+  message: string | null;
 }
 
 /** Narrowing controls for the Scouting screen's player pool. `null` on any
@@ -1377,11 +1365,51 @@ class Game {
     return { open: false, label: next.window.name === 'summer' ? 'Summer window' : 'January window', untilDay: next.day };
   }
 
-  /** Open a negotiation for a player — a fee stage first if they're contracted. */
+  /** The talks the open screen is showing, if any. */
+  currentTalks(): Talks | null {
+    const n = this.negotiation;
+    if (n === null || this.world === null) return null;
+    return this.world.talks.find((t) => t.id === n.talksId) ?? null;
+  }
+
+  /** Talks in progress with a player, of either kind. */
+  talksWith(playerIdx: number, kind?: Talks['kind']): Talks | null {
+    return this.world?.talks.find((t) => t.playerIdx === playerIdx && (kind === undefined || t.kind === kind)) ?? null;
+  }
+
+  /** Open the screen onto talks already in progress. */
+  openTalksView(talksId: number): void {
+    const t = this.world?.talks.find((x) => x.id === talksId);
+    if (t === undefined) {
+      this.notice = 'Those talks are over.';
+      this.emit();
+      return;
+    }
+    this.negotiation = {
+      talksId,
+      feeOffer: t.lastOffer.fee,
+      termsWage: t.lastOffer.wage,
+      termsRole: t.lastOffer.role,
+      termsYears: t.lastOffer.years,
+      message: null,
+    };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedReview = null;
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /** Open talks to sign a player — a fee with his club first if he's contracted. */
   startNegotiation(playerIdx: number): void {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return;
+    const existing = this.talksWith(playerIdx, 'transfer');
+    if (existing !== null) {
+      this.openTalksView(existing.id);
+      return;
+    }
     if (club.players.length >= 16) {
       this.notice = 'The squad is full — release a player first.';
       this.emit();
@@ -1398,29 +1426,32 @@ class Game {
       this.emit();
       return;
     }
-    const sellingClubId = store.clubId[playerIdx];
-    const demands = contractDemands(world, club, playerIdx, false);
-    this.negotiation = {
-      kind: 'transfer',
-      playerIdx,
-      stage: sellingClubId >= 0 ? 'fee' : 'terms',
-      sellingClubId,
-      feeOffer: store.value[playerIdx],
-      feeValuation: null,
-      feeMessage: null,
-      termsWage: store.wage[playerIdx],
-      termsRole: demands.role,
-      termsYears: Math.min(demands.maxYears, Math.max(demands.minYears, 3)),
-      termsMessage: null,
-      termsReply: null,
-      demands,
-      patience: TALKS_PATIENCE,
-    };
-    this.selectedPlayer = null;
-    this.selectedClub = null;
-    this.selectedReview = null;
-    this.incomingOffer = null;
-    this.emit();
+    this.openTalksView(openTalks(world, club, playerIdx, 'transfer').id);
+  }
+
+  /** Open contract talks with one of the user's own players. */
+  startRenewal(playerIdx: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null || !club.players.includes(playerIdx)) return;
+    const existing = this.talksWith(playerIdx, 'renewal');
+    if (existing !== null) {
+      this.openTalksView(existing.id);
+      return;
+    }
+    const store = world.players;
+    const name = store.fullName(playerIdx);
+    if (this.talksBlocked(playerIdx)) {
+      this.notice = `${name} is not willing to talk about a new contract right now.`;
+      this.emit();
+      return;
+    }
+    if (refusesToRenew(world, club, playerIdx)) {
+      this.notice = `${name} doesn't want to discuss a new contract — he feels he has outgrown the club.`;
+      this.emit();
+      return;
+    }
+    this.openTalksView(openTalks(world, club, playerIdx, 'renewal').id);
   }
 
   setFeeOffer(amount: number): void {
@@ -1450,146 +1481,101 @@ class Game {
   /** Fill the offer in with exactly what the player is asking for. */
   matchDemands(): void {
     const n = this.negotiation;
-    if (n === null) return;
-    n.termsWage = n.demands.wage;
-    n.termsRole = n.demands.role;
-    n.termsYears = Math.min(n.demands.maxYears, Math.max(n.demands.minYears, n.termsYears));
+    const t = this.currentTalks();
+    if (n === null || t === null) return;
+    n.termsWage = t.demands.wage;
+    n.termsRole = t.demands.role;
+    n.termsYears = Math.min(t.demands.maxYears, Math.max(t.demands.minYears, n.termsYears));
     this.emit();
   }
 
-  /** Open contract talks with one of the user's own players. */
-  startRenewal(playerIdx: number): void {
-    const world = this.world;
-    const club = this.club;
-    if (world === null || club === null || !club.players.includes(playerIdx)) return;
-    const store = world.players;
-    const name = store.fullName(playerIdx);
-    if (this.talksBlocked(playerIdx)) {
-      this.notice = `${name} is not willing to talk about a new contract right now.`;
-      this.emit();
-      return;
-    }
-    if (refusesToRenew(world, club, playerIdx)) {
-      this.notice = `${name} doesn't want to discuss a new contract — he feels he has outgrown the club.`;
-      this.emit();
-      return;
-    }
-    const demands = contractDemands(world, club, playerIdx, true);
-    this.negotiation = {
-      kind: 'renewal',
-      playerIdx,
-      stage: 'terms',
-      sellingClubId: -1,
-      feeOffer: 0,
-      feeValuation: null,
-      feeMessage: null,
-      termsWage: store.wage[playerIdx],
-      termsRole: demands.role,
-      termsYears: demands.minYears,
-      termsMessage: null,
-      termsReply: null,
-      demands,
-      patience: TALKS_PATIENCE,
-    };
-    this.selectedPlayer = null;
-    this.selectedClub = null;
-    this.selectedReview = null;
-    this.incomingOffer = null;
-    this.emit();
-  }
-
+  /** Send the bid to the selling club. Their answer comes back in a few days. */
   submitFeeOffer(): void {
     const n = this.negotiation;
+    const t = this.currentTalks();
     const world = this.world;
     const club = this.club;
-    if (n === null || world === null || club === null || n.sellingClubId < 0) return;
-    const sellingClub = world.clubs[n.sellingClubId];
-    if (sellingClub === undefined) return;
-
-    const ceiling = Math.min(club.finances.transferBudget, club.finances.balance);
-    if (n.feeOffer > ceiling) {
-      n.feeMessage = 'That exceeds your transfer budget.';
+    if (n === null || t === null || world === null || club === null || t.stage !== 'fee' || t.pending !== null) return;
+    const seller = world.clubs[t.sellingClubId];
+    if (seller === undefined) return;
+    if (n.feeOffer > Math.min(club.finances.transferBudget, club.finances.balance)) {
+      n.message = 'That exceeds your transfer budget.';
       this.emit();
       return;
     }
-
-    const result = evaluateFeeOffer(world, sellingClub, n.playerIdx, n.feeOffer);
-    n.feeValuation = result.valuation;
-    n.feeMessage = result.reason;
-    if (result.accepted) n.stage = 'terms';
+    const due = submitOffer(world, t, {
+      fee: n.feeOffer, wage: n.termsWage, role: n.termsRole, years: n.termsYears,
+    });
+    this.notice = `Bid sent to ${seller.name} — they will reply by ${this.dateLabelForDay(due)}.`;
+    this.negotiation = null;
     this.emit();
   }
 
+  /** Send the terms to the player. His answer — weighed against any rival
+   *  offers — comes back in a few days; a renewal takes two at least. */
   submitTermsOffer(): void {
     const n = this.negotiation;
+    const t = this.currentTalks();
     const world = this.world;
     const club = this.club;
-    if (n === null || world === null || club === null) return;
+    if (n === null || t === null || world === null || club === null || t.stage !== 'terms' || t.pending !== null) return;
     const store = world.players;
-    const p = n.playerIdx;
-    const name = store.fullName(p);
+    const p = t.playerIdx;
 
     // A renewal's new wage replaces what he earns now.
     let committed = 0;
     for (const q of club.players) committed += store.wage[q];
-    if (n.kind === 'renewal') committed -= store.wage[p];
+    if (t.kind === 'renewal') committed -= store.wage[p];
     if (committed + n.termsWage > club.finances.wageBudget) {
-      n.termsMessage = 'Not enough room in the wage budget for that contract.';
+      n.message = 'Not enough room in the wage budget for that contract.';
       this.emit();
       return;
     }
-    if (n.kind === 'transfer' && !this.canBuy(p)) {
-      n.termsMessage = 'The transfer window has closed — the deal cannot go through now.';
-      this.emit();
-      return;
-    }
-    n.termsMessage = null;
-
-    const response = respondToOffer(n.demands, { wage: n.termsWage, role: n.termsRole, years: n.termsYears }, n.patience);
-    const endSeason = world.season + n.termsYears - 1;
-    const endLabel = `30 Jun ${world.startYear + endSeason + 1}`;
-    if (response.outcome === 'accepted') {
-      if (n.kind === 'renewal') {
-        store.wage[p] = n.termsWage;
-        store.contractUntil[p] = seasonEndDay(endSeason);
-        // A new deal is a vote of confidence.
-        store.morale[p] = Math.min(100, store.morale[p] + 6);
-        this.notice = `${name} has signed a new contract until ${endLabel}.`;
-      } else {
-        const fee = n.sellingClubId >= 0 ? n.feeOffer : 0;
-        completeTransfer(world, club, p, n.termsWage, fee, seasonEndDay(endSeason));
-        this.notice = `${name} has signed until ${endLabel}.`;
-      }
-      this.negotiation = null;
-    } else if (response.outcome === 'walkout') {
-      world.talksBlockedUntil.set(p, world.day + TALKS_COOLDOWN_DAYS);
-      this.notice = `${name} has broken off talks and won't negotiate again for two weeks.`;
-      this.negotiation = null;
-    } else {
-      n.demands = response.demands;
-      n.patience = response.patience;
-      n.termsReply = response.gap;
-    }
+    const due = submitOffer(world, t, {
+      fee: t.agreedFee, wage: n.termsWage, role: n.termsRole, years: n.termsYears,
+    });
+    const name = store.fullName(p);
+    this.notice = t.kind === 'renewal'
+      ? `Offer made to ${name} — he will give his answer by ${this.dateLabelForDay(due)}.`
+      : `Terms sent to ${name}'s agent — expect a reply by ${this.dateLabelForDay(due)}.`;
+    this.negotiation = null;
     this.emit();
   }
 
+  /** Close the talks screen — the talks themselves carry on. */
   cancelNegotiation(): void {
     this.negotiation = null;
     this.emit();
   }
 
-  /** Open a pending incoming offer for review. */
+  /** Walk away from the talks for good. */
+  withdrawTalks(): void {
+    const t = this.currentTalks();
+    const world = this.world;
+    if (t !== null && world !== null) {
+      closeTalks(world, t);
+      this.notice = `You have ended talks with ${world.players.fullName(t.playerIdx)}.`;
+    }
+    this.negotiation = null;
+    this.emit();
+  }
+
+  /** Open a bid for one of your players. */
   openOffer(offerId: number): void {
     const world = this.world;
     if (world === null) return;
     const offer = world.incomingOffers.find((o) => o.id === offerId);
-    if (offer === undefined) return;
+    if (offer === undefined) {
+      this.notice = 'That offer is no longer on the table.';
+      this.emit();
+      return;
+    }
     this.incomingOffer = {
       offerId,
       playerIdx: offer.playerIdx,
       buyingClubId: offer.buyingClubId,
       fee: offer.fee,
-      counterFee: offer.fee,
+      counterFee: offer.counterFee ?? offer.fee,
       message: null,
       expiresOnDay: offer.expiresOnDay,
     };
@@ -1606,28 +1592,47 @@ class Game {
     this.emit();
   }
 
-  /** Agree to the fee as offered; the player then decides for himself. */
-  acceptOffer(): void {
+  private reviewedOffer(): IncomingOffer | null {
     const n = this.incomingOffer;
-    if (n === null) return;
-    this.resolveIncomingOffer(n.fee);
+    return n === null ? null : this.world?.incomingOffers.find((o) => o.id === n.offerId) ?? null;
   }
 
-  /** Ask for more; the buying club can accept, refuse (retry), or hold firm. */
+  /** Agree to the fee as offered; the player then takes a few days to decide. */
+  acceptOffer(): void {
+    const world = this.world;
+    const offer = this.reviewedOffer();
+    if (world === null || offer === null || (offer.status ?? 'open') !== 'open') return;
+    if (transferWindowOn(world.day) === null) {
+      world.incomingOffers = world.incomingOffers.filter((o) => o.id !== offer.id);
+      this.incomingOffer = null;
+      this.notice = 'The transfer window has closed — the offer has lapsed.';
+      this.emit();
+      return;
+    }
+    const due = acceptIncomingOffer(world, offer);
+    const buyer = world.clubs[offer.buyingClubId];
+    this.notice = `${world.players.fullName(offer.playerIdx)} is talking terms with ${buyer?.name ?? 'them'} — ` +
+      `he will decide by ${this.dateLabelForDay(due)}.`;
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /** Ask for more; the buying club answers in a day or two. */
   counterOffer(): void {
     const n = this.incomingOffer;
     const world = this.world;
-    if (n === null || world === null) return;
-    const buyingClub = world.clubs[n.buyingClubId];
-    if (buyingClub === undefined) return;
-
-    const result = evaluateCounterFee(world, buyingClub, n.playerIdx, n.fee, n.counterFee);
-    if (result.accepted) {
-      this.resolveIncomingOffer(n.counterFee);
-    } else {
-      n.message = result.reason;
+    const offer = this.reviewedOffer();
+    if (n === null || world === null || offer === null || (offer.status ?? 'open') !== 'open') return;
+    if (n.counterFee <= offer.fee) {
+      n.message = 'Ask for more than they have offered — or simply accept.';
       this.emit();
+      return;
     }
+    const due = counterIncomingOffer(world, offer, n.counterFee);
+    const buyer = world.clubs[offer.buyingClubId];
+    this.notice = `Asking price sent to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
+    this.incomingOffer = null;
+    this.emit();
   }
 
   /** Reject the offer outright — the buying club walks away for good. */
@@ -1643,48 +1648,6 @@ class Game {
 
   /** Close the offer sheet without deciding — it stays pending and can be reopened later. */
   closeOfferView(): void {
-    this.incomingOffer = null;
-    this.emit();
-  }
-
-  /** Once a fee is agreed (accept or successful counter), the player decides. */
-  private resolveIncomingOffer(fee: number): void {
-    const n = this.incomingOffer;
-    const world = this.world;
-    if (n === null || world === null) return;
-    const buyingClub = world.clubs[n.buyingClubId];
-    if (buyingClub === undefined) return;
-    const store = world.players;
-
-    world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
-    if (transferWindowOn(world.day) === null) {
-      this.incomingOffer = null;
-      this.notice = 'The transfer window has closed — the offer has lapsed.';
-      this.emit();
-      return;
-    }
-    const result = resolveIncomingMove(world, buyingClub, n.playerIdx);
-
-    if (result.accepted) {
-      completeTransfer(world, buyingClub, n.playerIdx, result.wage, fee);
-      world.messages.push({
-        id: world.messages.length,
-        day: world.day,
-        year: world.year,
-        subject: 'Transfer completed',
-        body: `${store.fullName(n.playerIdx)} has accepted the move to ${buyingClub.name}.`,
-      });
-      this.notice = `${store.fullName(n.playerIdx)} has completed a move to ${buyingClub.name}.`;
-    } else {
-      world.messages.push({
-        id: world.messages.length,
-        day: world.day,
-        year: world.year,
-        subject: 'Transfer rejected by player',
-        body: `${store.fullName(n.playerIdx)} turned down the move to ${buyingClub.name} — he is staying.`,
-      });
-      this.notice = `${store.fullName(n.playerIdx)} turned down the move.`;
-    }
     this.incomingOffer = null;
     this.emit();
   }

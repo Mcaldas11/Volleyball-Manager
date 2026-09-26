@@ -16,26 +16,28 @@ const ROLE_OPTIONS = (Object.values(SquadRole) as Array<SquadRole | string>)
  * Contract talks. Signing a player under contract is two steps: a transfer
  * fee with his club, then personal terms with him (free agents skip the fee);
  * keeping one of your own is personal terms alone. The player states his
- * demands up front — wage, role, how long he will sign for — and answers
- * every offer: a near miss draws a counter where he gives a little ground,
- * one far off costs more of his patience, and out of patience he walks out.
+ * demands up front. Every offer goes off for an answer that comes back days
+ * later in the inbox — while other clubs chasing him make their own offers.
  */
 export function NegotiationScreen(): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
   const club = g.club!;
   const n = g.negotiation;
-  if (n === null) return null;
+  const t = g.currentTalks();
+  if (n === null || t === null) return null;
 
   const store = world.players;
-  const player = n.playerIdx;
-  const renewal = n.kind === 'renewal';
-  const sellingClub = n.sellingClubId >= 0 ? world.clubs[n.sellingClubId] : null;
+  const player = t.playerIdx;
+  const renewal = t.kind === 'renewal';
+  const sellingClub = !renewal && t.sellingClubId >= 0 ? world.clubs[t.sellingClubId] ?? null : null;
   const ceiling = Math.min(club.finances.transferBudget, club.finances.balance);
   const steps = sellingClub !== null ? ['Transfer fee', 'Personal terms'] : [renewal ? 'New contract' : 'Personal terms'];
-  const currentStep = n.stage === 'fee' && sellingClub !== null ? 0 : steps.length - 1;
+  const currentStep = t.stage === 'fee' && sellingClub !== null ? 0 : steps.length - 1;
   const endsLabel = (season: number): string => `30 Jun ${world.startYear + season + 1}`;
   const txWindow = g.transferWindowStatus();
+  const pending = t.pending;
+  const rivals = t.rivals.map((r) => r.clubId).filter((id) => world.clubs[id] !== undefined);
 
   const stepper = (
     <div className="contract-steps">
@@ -48,7 +50,36 @@ export function NegotiationScreen(): JSX.Element | null {
     </div>
   );
 
-  if (n.stage === 'fee' && sellingClub !== null) {
+  const rivalsRow = rivals.length > 0 && (
+    <p className="contract-rivals">
+      <Icon name="alert" size={14} /> Also after him:
+      {rivals.map((id) => <ClubLink key={id} id={id} short />)}
+    </p>
+  );
+
+  const awaiting = pending !== null && (
+    <div className="contract-awaiting">
+      <Icon name="clock" size={18} />
+      <span>
+        <b>Awaiting reply</b> — due {g.dateLabelForDay(pending.resolvesOn)}.
+        {' '}{t.stage === 'fee'
+          ? `${sellingClub?.name ?? 'The club'} are considering your bid of ${money(pending.offer.fee)}.`
+          : `${renewal ? 'He is' : 'He and his agent are'} considering ${money(pending.offer.wage)} a season until ${endsLabel(world.season + pending.offer.years - 1)}.`}
+        {' '}Keep playing — the answer will come to your inbox.
+      </span>
+    </div>
+  );
+
+  const actions = (primary: JSX.Element): JSX.Element => (
+    <div className="contract-actions">
+      <button className="danger" onClick={() => g.withdrawTalks()}>{renewal ? 'End talks' : 'Withdraw'}</button>
+      <span className="flex-spacer" />
+      <button onClick={() => g.cancelNegotiation()}>Close</button>
+      {pending === null && primary}
+    </div>
+  );
+
+  if (t.stage === 'fee' && sellingClub !== null) {
     return (
       <ContractPaper
         kicker="Transfer negotiation"
@@ -62,25 +93,32 @@ export function NegotiationScreen(): JSX.Element | null {
         <ContractRow label="Contract until">{endsLabel(contractEndSeason(store.contractUntil[player]))}</ContractRow>
         <ContractRow label="Current wage">{money(store.wage[player])}</ContractRow>
         <ContractRow label="Market value">{money(store.value[player])}</ContractRow>
+        {rivalsRow}
 
-        <div className="contract-offer">
-          <ContractRow label="Your offer">
-            <MoneyInput value={n.feeOffer} onChange={(v) => g.setFeeOffer(v)} />
-          </ContractRow>
-          <p className="contract-hint">
-            Transfer budget: {money(ceiling)}
-            {n.feeValuation !== null && <> · valued around {money(n.feeValuation)}</>}
-            {txWindow.open && <> · window closes {g.dateLabelForDay(txWindow.untilDay)}</>}
+        {awaiting}
+        {pending === null && (
+          <div className="contract-offer">
+            <ContractRow label="Your bid">
+              <MoneyInput value={n.feeOffer} onChange={(v) => g.setFeeOffer(v)} />
+            </ContractRow>
+            <p className="contract-hint">
+              Transfer budget: {money(ceiling)}
+              {t.valuation !== null && <> · valued around {money(t.valuation)}</>}
+              {txWindow.open && <> · window closes {g.dateLabelForDay(txWindow.untilDay)}</>}
+            </p>
+          </div>
+        )}
+        {pending === null && n.message !== null && (
+          <p className="contract-note"><Icon name="alert" size={15} /> {n.message}</p>
+        )}
+        {pending === null && n.message === null && t.reply === 'feeRejected' && (
+          <p className="contract-note">
+            <Icon name="alert" size={15} />
+            <span>They turned down {money(t.lastOffer.fee)}{t.valuation !== null && <> — they value him at around <b>{money(t.valuation)}</b></>}.</span>
           </p>
-        </div>
-        {n.feeMessage !== null && (
-          <p className="contract-note"><Icon name="alert" size={15} /> {n.feeMessage}</p>
         )}
 
-        <div className="contract-actions">
-          <button className="danger" onClick={() => g.cancelNegotiation()}>Withdraw</button>
-          <button className="primary" onClick={() => g.submitFeeOffer()}>Make offer</button>
-        </div>
+        {actions(<button className="primary" onClick={() => g.submitFeeOffer()}>Make bid</button>)}
       </ContractPaper>
     );
   }
@@ -89,7 +127,7 @@ export function NegotiationScreen(): JSX.Element | null {
   const minOption = renewal ? yearsLeft(world, player) + 1 : 1;
   const yearOptions: number[] = [];
   for (let y = minOption; y <= Math.max(minOption, MAX_CONTRACT_YEARS); y++) yearOptions.push(y);
-  const d = n.demands;
+  const d = t.demands;
   const demandYears = d.minYears === d.maxYears ? `${d.minYears}` : `${d.minYears}–${d.maxYears}`;
   const demandDates = d.minYears === d.maxYears
     ? endsLabel(world.season + d.minYears - 1)
@@ -117,7 +155,9 @@ export function NegotiationScreen(): JSX.Element | null {
           {(renewal || store.clubId[player] >= 0) && (
             <ContractRow label="Contract until">{endsLabel(contractEndSeason(store.contractUntil[player]))}</ContractRow>
           )}
-          <ContractRow label="Market value">{money(store.value[player])}</ContractRow>
+          {sellingClub !== null
+            ? <ContractRow label="Agreed fee"><span className="gold-text">{money(t.agreedFee)}</span></ContractRow>
+            : <ContractRow label="Market value">{money(store.value[player])}</ContractRow>}
 
           <div className="contract-demands">
             <span className="contract-demands-title"><Icon name="user" size={13} /> His demands</span>
@@ -129,53 +169,58 @@ export function NegotiationScreen(): JSX.Element | null {
                 <span className="faint">{demandDates}</span>
               </span>
             </ContractRow>
-            <button className="sm" onClick={() => g.matchDemands()}>
-              <Icon name="check" size={13} /> Match his demands
-            </button>
+            {pending === null && (
+              <button className="sm" onClick={() => g.matchDemands()}>
+                <Icon name="check" size={13} /> Match his demands
+              </button>
+            )}
           </div>
         </div>
 
         <div className="contract-col">
           <h4 className="section-label">Your offer</h4>
-          <div className="contract-offer">
-            <ContractRow label="Annual wage">
-              <MoneyInput value={n.termsWage} onChange={(v) => g.setTermsWage(v)} />
-            </ContractRow>
-            <ContractRow label="Promised role">
-              <select
-                value={n.termsRole}
-                onChange={(e) => g.setTermsRole(Number(e.target.value) as SquadRole)}
-              >
-                {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{SQUAD_ROLE_NAMES[r]}</option>)}
-              </select>
-            </ContractRow>
-            <ContractRow label="Contract until">
-              <select value={n.termsYears} onChange={(e) => g.setTermsYears(Number(e.target.value))}>
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {endsLabel(world.season + y - 1)} · {y} season{y === 1 ? '' : 's'}
-                  </option>
-                ))}
-              </select>
-            </ContractRow>
-          </div>
-          <p className="contract-hint">
-            Room in the wage budget: <b className={wageRoom < n.termsWage ? 'bad' : ''}>{money(wageRoom)}</b>
-          </p>
+          {awaiting}
+          {pending === null && (
+            <>
+              <div className="contract-offer">
+                <ContractRow label="Annual wage">
+                  <MoneyInput value={n.termsWage} onChange={(v) => g.setTermsWage(v)} />
+                </ContractRow>
+                <ContractRow label="Promised role">
+                  <select value={n.termsRole} onChange={(e) => g.setTermsRole(Number(e.target.value) as SquadRole)}>
+                    {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{SQUAD_ROLE_NAMES[r]}</option>)}
+                  </select>
+                </ContractRow>
+                <ContractRow label="Contract until">
+                  <select value={n.termsYears} onChange={(e) => g.setTermsYears(Number(e.target.value))}>
+                    {yearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {endsLabel(world.season + y - 1)} · {y} season{y === 1 ? '' : 's'}
+                      </option>
+                    ))}
+                  </select>
+                </ContractRow>
+              </div>
+              <p className="contract-hint">
+                Room in the wage budget: <b className={wageRoom < n.termsWage ? 'bad' : ''}>{money(wageRoom)}</b>
+              </p>
+            </>
+          )}
 
           <div className="contract-patience" title="Rejected offers he will still sit through before walking out">
             <span className="faint">His patience</span>
             <span className="patience-dots">
               {Array.from({ length: TALKS_PATIENCE }, (_, i) => (
-                <span key={i} className={`patience-dot${i < n.patience ? ' on' : ''}${n.patience <= 1 ? ' low' : ''}`} />
+                <span key={i} className={`patience-dot${i < t.patience ? ' on' : ''}${t.patience <= 1 ? ' low' : ''}`} />
               ))}
             </span>
           </div>
+          {rivalsRow}
 
-          {n.termsMessage !== null && (
-            <p className="contract-note"><Icon name="alert" size={15} /> {n.termsMessage}</p>
+          {pending === null && n.message !== null && (
+            <p className="contract-note"><Icon name="alert" size={15} /> {n.message}</p>
           )}
-          {n.termsMessage === null && n.termsReply === 'close' && (
+          {pending === null && n.message === null && t.reply === 'close' && (
             <p className="contract-note counter">
               <Icon name="press" size={15} />
               <span>
@@ -184,19 +229,16 @@ export function NegotiationScreen(): JSX.Element | null {
               </span>
             </p>
           )}
-          {n.termsMessage === null && n.termsReply === 'far' && (
+          {pending === null && n.message === null && t.reply === 'far' && (
             <p className="contract-note">
               <Icon name="alert" size={15} />
-              <span>That is nowhere near what he wants. He is asking for <b>{money(d.wage)}</b> a season.</span>
+              <span>That was nowhere near what he wants. He is asking for <b>{money(d.wage)}</b> a season.</span>
             </p>
           )}
         </div>
       </div>
 
-      <div className="contract-actions">
-        <button className="danger" onClick={() => g.cancelNegotiation()}>{renewal ? 'End talks' : 'Withdraw'}</button>
-        <button className="primary" onClick={() => g.submitTermsOffer()}>Offer contract</button>
-      </div>
+      {actions(<button className="primary" onClick={() => g.submitTermsOffer()}>Offer contract</button>)}
     </ContractPaper>
   );
 }

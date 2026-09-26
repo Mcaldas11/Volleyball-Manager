@@ -143,6 +143,8 @@ export function reviveWorld(raw: World): World {
   raw.transferLog ??= [];
   // Saves from before contract negotiations and transfer windows.
   raw.talksBlockedUntil ??= new Map();
+  raw.talks ??= [];
+  raw.nextTalksId ??= 0;
   migrateContractDays(raw.players);
   for (const club of raw.clubs) {
     club.preferredDefensiveLibero ??= -1;

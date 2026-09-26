@@ -957,12 +957,14 @@ export function ScoutingScreen(): JSX.Element {
                   </button>
                   <button
                     className="primary"
-                    disabled={!g.canBuy(target)}
+                    disabled={!g.canBuy(target) && g.talksWith(target, 'transfer') === null}
                     title={g.canBuy(target) ? undefined : 'The transfer window is closed'}
                     onClick={() => g.startNegotiation(target)}
                   >
                     <Icon name="transfers" size={14} />
-                    {g.canBuy(target) ? 'Negotiate transfer' : 'Window closed'}
+                    {g.talksWith(target, 'transfer') !== null
+                      ? 'View talks'
+                      : g.canBuy(target) ? 'Negotiate transfer' : 'Window closed'}
                   </button>
                 </div>
 
@@ -1060,27 +1062,68 @@ export function TransfersScreen(): JSX.Element {
         />
       </div>
 
+      {world.talks.length > 0 && (
+        <Card title="Negotiations" icon="transfers" flush style={{ marginBottom: 16 }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Player</th><th>Pos</th><th>Talks</th><th>Status</th><th>Rivals</th><th />
+              </tr>
+            </thead>
+            <tbody>
+              {world.talks.map((t) => (
+                <tr key={t.id} className="clickable" onClick={() => g.openTalksView(t.id)}>
+                  <td className="strong">{store.fullName(t.playerIdx)}</td>
+                  <td><Pos pos={store.position[t.playerIdx] as Position} /></td>
+                  <td className="dim">
+                    {t.kind === 'renewal'
+                      ? 'Contract renewal'
+                      : t.stage === 'fee'
+                        ? <>Fee with <ClubLink id={t.sellingClubId} short /></>
+                        : t.sellingClubId >= 0 ? 'Personal terms' : 'Free agent terms'}
+                  </td>
+                  <td>
+                    {t.pending !== null
+                      ? <span className="warn-text">Reply due {g.dateLabelForDay(t.pending.resolvesOn)}</span>
+                      : <span className="good">Your move</span>}
+                  </td>
+                  <td className="dim">{t.rivals.length > 0 ? t.rivals.length : '—'}</td>
+                  <td className="num"><button className="sm primary">Open</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
       {offers.length > 0 && (
         <Card title="Offers Received" icon="offer" flush style={{ marginBottom: 16 }}>
           <table className="data-table">
             <thead>
               <tr>
                 <th>Player</th><th>Pos</th><th>Bidding club</th>
-                <th className="num">Offer</th><th className="num">Value</th><th>Expires</th><th />
+                <th className="num">Offer</th><th className="num">Value</th><th>Status</th><th />
               </tr>
             </thead>
             <tbody>
-              {offers.map((o) => (
-                <tr key={o.id}>
-                  <td className="strong">{store.fullName(o.playerIdx)}</td>
-                  <td><Pos pos={store.position[o.playerIdx] as Position} /></td>
-                  <td><ClubLink id={o.buyingClubId} /></td>
-                  <td className="num gold-text">{money(o.fee)}</td>
-                  <td className="num dim">{money(store.value[o.playerIdx])}</td>
-                  <td className="dim">{g.dateLabelForDay(o.expiresOnDay)}</td>
-                  <td className="num"><button className="sm primary" onClick={() => g.openOffer(o.id)}>Review</button></td>
-                </tr>
-              ))}
+              {offers.map((o) => {
+                const status = o.status ?? 'open';
+                return (
+                  <tr key={o.id}>
+                    <td className="strong">{store.fullName(o.playerIdx)}</td>
+                    <td><Pos pos={store.position[o.playerIdx] as Position} /></td>
+                    <td><ClubLink id={o.buyingClubId} /></td>
+                    <td className="num gold-text">{money(o.fee)}</td>
+                    <td className="num dim">{money(store.value[o.playerIdx])}</td>
+                    <td className="dim">
+                      {status === 'open' && <>Expires {g.dateLabelForDay(o.expiresOnDay)}</>}
+                      {status === 'countered' && <span className="warn-text">Answer due {g.dateLabelForDay(o.resolvesOn ?? world.day)}</span>}
+                      {status === 'accepted' && <span className="warn-text">Player decides by {g.dateLabelForDay(o.resolvesOn ?? world.day)}</span>}
+                    </td>
+                    <td className="num"><button className="sm primary" onClick={() => g.openOffer(o.id)}>Review</button></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </Card>

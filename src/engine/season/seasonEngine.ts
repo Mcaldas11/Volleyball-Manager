@@ -27,6 +27,7 @@ import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers } from '../world/negotiation.ts';
 import { contractNotices } from '../world/contracts.ts';
+import { processDeals } from '../world/deals.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
 import { recordFixture } from '../world/records.ts';
 
@@ -336,8 +337,10 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   const store = world.players;
   const todays = world.fixturesByDay.get(world.day);
 
-  // Transfer windows opening and shutting, contracts running down.
+  // Transfer windows opening and shutting, contracts running down — and the
+  // answers to every offer that is due today.
   contractNotices(world);
+  processDeals(world);
 
   if (todays !== undefined) {
     for (const fid of todays) {

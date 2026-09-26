@@ -33,7 +33,7 @@ export const SQUAD_ROLE_NAMES: Record<SquadRole, string> = {
   [SquadRole.Backup]: 'Squad backup',
 };
 
-const ROLE_VALUE: Record<SquadRole, number> = {
+export const ROLE_VALUE: Record<SquadRole, number> = {
   [SquadRole.Star]: 1.0,
   [SquadRole.Regular]: 0.7,
   [SquadRole.Rotation]: 0.45,
@@ -288,6 +288,13 @@ export interface IncomingOffer {
   fee: number;
   /** Absolute world.day this offer expires if never acted on. */
   expiresOnDay: number;
+  /** Where the deal stands: an open bid; your asking price awaiting their
+   *  answer; or agreed, with the player deciding. Absent on older saves = open. */
+  status?: 'open' | 'countered' | 'accepted';
+  /** Your asking price, while it is with them. */
+  counterFee?: number;
+  /** The day the pending answer comes back. */
+  resolvesOn?: number;
 }
 
 export const MAX_PENDING_OFFERS = 2;
@@ -297,7 +304,8 @@ export const MAX_PENDING_OFFERS = 2;
  * Called weekly; does nothing most weeks.
  */
 export function generateIncomingOffers(world: World): void {
-  world.incomingOffers = world.incomingOffers.filter((o) => o.expiresOnDay > world.day);
+  // Bids never acted on lapse; ones already in motion are seen through.
+  world.incomingOffers = world.incomingOffers.filter((o) => (o.status ?? 'open') !== 'open' || o.expiresOnDay > world.day);
   // Bids only come in while a transfer window is open, and lapse when it shuts.
   const windowCloses = windowCloseDay(world.day);
   if (windowCloses === null) return;
@@ -336,7 +344,7 @@ export function generateIncomingOffers(world: World): void {
 
   const id = world.nextOfferId++;
   world.incomingOffers.push({
-    id, playerIdx, buyingClubId: buyingClub.id, fee, expiresOnDay: Math.min(world.day + 14, windowCloses + 1),
+    id, playerIdx, buyingClubId: buyingClub.id, fee, expiresOnDay: Math.min(world.day + 14, windowCloses + 1), status: 'open',
   });
   world.messages.push({
     id: world.messages.length,

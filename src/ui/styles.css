@@ -2648,6 +2648,23 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .contract-note b { color: #fff; }
 .contract-note.counter { background: var(--gold-soft); border-color: rgba(255, 199, 44, 0.45); color: #ffe39a; }
 .contract-hint b.bad { color: var(--bad); }
+.contract-awaiting {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  border: 1px solid rgba(76, 125, 255, 0.45);
+  color: var(--text);
+  line-height: 1.45;
+}
+.contract-awaiting > svg { flex: none; margin-top: 1px; color: var(--accent-bright); }
+.contract-rivals { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 0; font-size: 12.5px; color: var(--warn); }
+.contract-rivals .club-link { color: var(--text); font-weight: 600; }
+.contract-rival-bid { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
+.contract-actions .flex-spacer { flex: 1; }
 
 /* ============================================================
    Club profile

@@ -14,6 +14,7 @@ import type { Staff } from '../model/staff.ts';
 import { MatchFormat } from '../match/engine.ts';
 import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 import type { IncomingOffer } from './negotiation.ts';
+import type { Talks } from './deals.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 
@@ -248,6 +249,8 @@ export interface GameMessage {
   seasonAwards?: SeasonAwardLine[];
   /** The club's end-of-season review, rendered as a full report in the inbox. */
   seasonReview?: SeasonReview;
+  /** Talks this message is an answer in — the inbox offers a way back into them. */
+  talksId?: number;
   /** Fixture a pre-match interview request concerns — looked up against
    *  `World.pendingInterviews` to render the question and answer options. */
   fixtureId?: number;
@@ -426,6 +429,10 @@ export interface World {
   /** Players who walked out of contract talks with the user, and the day
    *  they will talk again. */
   talksBlockedUntil: Map<number, number>;
+  /** The user's negotiations in progress — signings and renewals. */
+  talks: Talks[];
+  /** Monotonic id source for talks. */
+  nextTalksId: number;
 }
 
 export function dayOfSeason(world: World): number {
@@ -474,6 +481,8 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     ratingForm: new Map(),
     transferLog: [],
     talksBlockedUntil: new Map(),
+    talks: [],
+    nextTalksId: 0,
   };
 }
 

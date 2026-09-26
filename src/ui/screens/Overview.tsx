@@ -1,7 +1,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import { compareTableRows } from '../../engine/model/club.ts';
 import type { Position } from '../../engine/model/positions.ts';
-import { messageCategory, type GameMessage, type MessageCategory } from '../../engine/world/world.ts';
+import { contractEndSeason, messageCategory, type GameMessage, type MessageCategory } from '../../engine/world/world.ts';
 import {
   Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerFace, Pos,
 } from '../components.tsx';
@@ -158,7 +158,11 @@ function MessageReader({ message: m }: { message: GameMessage }): JSX.Element {
     ? world.pendingInterviews.find((s) => s.fixtureId === m.fixtureId)
     : undefined;
   const player = m.playerIdx;
-  const contractTalk = cat === 'contract' && player !== undefined && world.players.clubId[player] === world.userClubId;
+  const talks = m.talksId !== undefined ? world.talks.find((t) => t.id === m.talksId) : undefined;
+  // Only while his contract is still running out — not after he has re-signed.
+  const contractTalk = cat === 'contract' && player !== undefined && world.players.clubId[player] === world.userClubId &&
+    contractEndSeason(world.players.contractUntil[player]) <= world.season;
+  const showScouting = !openOffer && !contractTalk && talks === undefined && player !== undefined && cat === 'task';
 
   return (
     <div className="reader-inner">
@@ -205,7 +209,7 @@ function MessageReader({ message: m }: { message: GameMessage }): JSX.Element {
         )}
       </div>
 
-      {(session !== undefined || openOffer || player !== undefined) && (
+      {(session !== undefined || openOffer || talks !== undefined || contractTalk || showScouting) && (
         <div className="reader-actions">
           {session !== undefined && (
             session.currentIndex === 0 && !session.finished ? (
@@ -226,12 +230,17 @@ function MessageReader({ message: m }: { message: GameMessage }): JSX.Element {
               <Icon name="offer" size={15} /> Review offer
             </button>
           )}
-          {contractTalk && (
+          {talks !== undefined && (
+            <button className="primary" onClick={() => g.openTalksView(talks.id)}>
+              <Icon name="transfers" size={15} /> {talks.pending !== null ? 'View talks' : 'Continue talks'}
+            </button>
+          )}
+          {contractTalk && talks === undefined && (
             <button className="primary" onClick={() => g.startRenewal(player)}>
               <Icon name="finances" size={15} /> Open contract talks
             </button>
           )}
-          {!openOffer && !contractTalk && player !== undefined && cat !== 'contract' && (
+          {showScouting && player !== undefined && (
             <button className="primary" onClick={() => g.focusScouting(player)}>
               <Icon name="scouting" size={15} /> Open scouting report
             </button>
