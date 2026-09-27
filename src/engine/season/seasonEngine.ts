@@ -29,6 +29,7 @@ import { generateIncomingOffers } from '../world/negotiation.ts';
 import { contractNotices } from '../world/contracts.ts';
 import { processDeals } from '../world/deals.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
+import { monthlyStatement, recoveryNotice, roundupNotices } from '../world/inbox.ts';
 import { recordFixture } from '../world/records.ts';
 
 /** Season-long statistics, keyed by player index. */
@@ -337,8 +338,9 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   const store = world.players;
   const todays = world.fixturesByDay.get(world.day);
 
-  // Transfer windows opening and shutting, contracts running down — and the
-  // answers to every offer that is due today.
+  // The month's books, transfer windows opening and shutting, contracts
+  // running down — and the answers to every offer that is due today.
+  monthlyStatement(world);
   contractNotices(world);
   processDeals(world);
 
@@ -353,6 +355,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
         ((opts.detailTopFlight ?? false) && comp !== undefined && comp.tier === 1);
       playFixture(world, ctx, f, detailed);
     }
+    // Including a match of the user's already played live earlier today.
+    roundupNotices(world, todays);
   }
 
   // Any press conference for a match just played goes stale unfinished; line
@@ -401,6 +405,7 @@ function dailyRecovery(world: World, store: PlayerStore): void {
         store.setFlag(i, PlayerFlag.Injured, false);
         // Players come back short of match fitness.
         store.condition[i] = Math.min(store.condition[i], 65);
+        if (store.clubId[i] === world.userClubId && world.userClubId >= 0) recoveryNotice(world, i);
       }
       continue;
     }

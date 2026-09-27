@@ -12,7 +12,8 @@ export type IconName =
   | 'back' | 'forward' | 'search' | 'menu' | 'chevronDown' | 'chevronRight'
   | 'play' | 'pause' | 'save' | 'exit' | 'close' | 'news' | 'task' | 'offer'
   | 'press' | 'whistle' | 'clock' | 'star' | 'ball' | 'alert' | 'collapse'
-  | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check';
+  | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check'
+  | 'inbox' | 'archive' | 'medical' | 'coin' | 'contract' | 'board' | 'playOutline' | 'chevronLeft' | 'arrowRight';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   home: <><path d="M3.5 10.5 12 4l8.5 6.5" /><path d="M5.5 9v10.5h13V9" /><path d="M10 19.5v-5h4v5" /></>,
@@ -56,6 +57,15 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   expand: <><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M9 4.5v15" /><path d="m13 9.5 2.5 2.5-2.5 2.5" /></>,
   user: <><circle cx="12" cy="8.5" r="3.8" /><path d="M4.5 20c.9-4 3.8-6.2 7.5-6.2s6.6 2.2 7.5 6.2" /></>,
   stats: <><path d="M4 20h16" /><path d="M7 16.5v-5M12 16.5V6.5M17 16.5v-8" /></>,
+  inbox: <><path d="M4 13.5 6.5 5h11l2.5 8.5v5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-5Z" /><path d="M4 13.5h4.5l1.5 2.5h4l1.5-2.5H20" /></>,
+  archive: <><rect x="3.5" y="4.5" width="17" height="4.5" rx="1" /><path d="M5 9v9.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V9" /><path d="M10 13h4" /></>,
+  medical: <><rect x="4" y="4" width="16" height="16" rx="3.5" /><path d="M12 8v8M8 12h8" /></>,
+  coin: <><circle cx="12" cy="12" r="8.5" /><path d="M14.8 9.2c-.5-.9-1.5-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2 0 2.8 5.8 1.6 5.8 4.4 0 1.2-1.2 2-2.9 2-1.4 0-2.5-.6-3-1.6" /><path d="M12 6.3v1.5M12 16.2v1.5" /></>,
+  contract: <><path d="M6 3.5h8.5L19 8v12.5H6V3.5Z" /><path d="M14 3.5V8.5h5" /><path d="M9 12.5h6.5M9 16h4" /></>,
+  board: <><rect x="3.5" y="9" width="17" height="11" rx="1.5" /><path d="M8 9V6.5A1.5 1.5 0 0 1 9.5 5h5A1.5 1.5 0 0 1 16 6.5V9" /><path d="M3.5 13.5h17" /></>,
+  playOutline: <path d="M7.5 5.2v13.6L18.5 12 7.5 5.2Z" />,
+  chevronLeft: <path d="m14.5 6-6 6 6 6" />,
+  arrowRight: <><path d="M4.5 12h14" /><path d="m13.5 7 5 5-5 5" /></>,
 };
 
 export function Icon({

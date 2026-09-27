@@ -309,6 +309,10 @@ export class PlayerStore {
     return `${f.charAt(0)}. ${this.names.get(this.lastName[i])}`;
   }
 
+  surname(i: number): string {
+    return this.names.get(this.lastName[i]);
+  }
+
   ageOn(i: number, year: number, dayOfYear: number): number {
     const a = year - this.birthYear[i];
     return dayOfYear >= this.birthDay[i] ? a : a - 1;

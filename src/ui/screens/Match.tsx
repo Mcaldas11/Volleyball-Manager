@@ -325,7 +325,7 @@ function MvpRating(): JSX.Element | null {
  * stats switch between the teams — so the table always has the panel's full
  * width, however narrow the report is.
  */
-function BoxScore(): JSX.Element {
+export function BoxScore(): JSX.Element {
   const g = useGame();
   const watched = g.reviewLast()!;
   const world = g.world!;

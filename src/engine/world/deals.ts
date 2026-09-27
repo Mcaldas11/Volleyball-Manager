@@ -18,7 +18,9 @@ import {
   respondToOffer, ROLE_VALUE, SQUAD_ROLE_NAMES, TALKS_COOLDOWN_DAYS, TALKS_PATIENCE,
   type ContractDemands, type IncomingOffer, type SquadRole,
 } from './negotiation.ts';
-import { seasonEndDay, seasonEndYear, transferWindowOn, windowCloseDay, type GameMessage, type World } from './world.ts';
+import {
+  euros, seasonEndDay, seasonEndYear, transferWindowOn, windowCloseDay, type GameMessage, type World,
+} from './world.ts';
 
 export interface TalksOffer {
   /** Transfer fee — only while talking to the selling club. */
@@ -83,15 +85,6 @@ const RIVAL_SIGNS_CHANCE = 0.03;
 const RIVAL_BID_CHANCE = 0.05;
 /** Most bids one of your players can have on the table at once. */
 const MAX_BIDS_PER_PLAYER = 3;
-
-/** "€1.2M", "€340k" — the same shorthand the screens use. */
-export function euros(v: number): string {
-  const abs = Math.abs(v);
-  const sign = v < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sign}€${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
-  if (abs >= 1_000) return `${sign}€${Math.round(abs / 1_000)}k`;
-  return `${sign}€${Math.round(abs)}`;
-}
 
 function say(world: World, msg: Omit<GameMessage, 'id' | 'day' | 'year'>): void {
   world.messages.push({ id: world.messages.length, day: world.day, year: world.year, ...msg });
@@ -210,6 +203,7 @@ function signForRival(world: World, t: Talks, rival: RivalSuitor): void {
     body: `${store.fullName(t.playerIdx)} has signed for ${club.name} instead — ` +
       `they moved faster, offering ${euros(rival.wage)} a season. Your talks with him are over.`,
     playerIdx: t.playerIdx,
+    clubId: club.id,
     category: 'offer',
   });
   closeTalks(world, t);
@@ -246,6 +240,9 @@ function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
       body: `${seller.name} have accepted your offer of ${euros(offer.fee)} for ${name}. ` +
         `You can now talk personal terms with the player.${hurry}`,
       talksId: t.id,
+      playerIdx: t.playerIdx,
+      from: seller.name,
+      clubId: seller.id,
       category: 'offer',
     });
   } else {
@@ -255,6 +252,9 @@ function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
       body: `${seller.name} have turned down your offer of ${euros(offer.fee)} for ${name}. ${result.reason} ` +
         `They value him at around ${euros(result.valuation)}.${hurry}`,
       talksId: t.id,
+      playerIdx: t.playerIdx,
+      from: seller.name,
+      clubId: seller.id,
       category: 'offer',
     });
   }
@@ -347,6 +347,8 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
   const years = d.minYears === d.maxYears ? `${d.minYears}` : `${d.minYears}–${d.maxYears}`;
   say(world, {
     subject: renewal ? `Contract talks: ${name}` : `Reply from ${name}'s agent`,
+    from: renewal ? name : `${name}'s agent`,
+    playerIdx: p,
     body: response.gap === 'far'
       ? `That offer is nowhere near what ${name} wants. He is asking for ${euros(d.wage)} a season.`
       : `${name} is close to agreeing. He would sign for ${euros(d.wage)} a season as a ` +
@@ -437,6 +439,9 @@ function processSales(world: World): void {
           body: `${buyer.name} have agreed to pay ${euros(o.fee)} for ${name}. He is now talking terms with them ` +
             'and will decide in the next few days.',
           offerId: o.id,
+          playerIdx: o.playerIdx,
+          from: buyer.name,
+          clubId: buyer.id,
           category: 'offer',
         });
       } else {
@@ -447,6 +452,9 @@ function processSales(world: World): void {
           body: `${buyer.name} won't go to ${euros(o.counterFee ?? o.fee)} for ${name}. ${result.reason} ` +
             `Their offer of ${euros(o.fee)} still stands.`,
           offerId: o.id,
+          playerIdx: o.playerIdx,
+          from: buyer.name,
+          clubId: buyer.id,
           category: 'offer',
         });
       }
@@ -462,6 +470,7 @@ function processSales(world: World): void {
       say(world, {
         subject: `${name} leaves for ${buyer.name}`,
         body: `${name} has agreed terms with ${buyer.name} and leaves the club. ${euros(o.fee)} has been received.`,
+        clubId: buyer.id,
         category: 'offer',
       });
     } else {
@@ -470,6 +479,7 @@ function processSales(world: World): void {
         subject: `${name} rejects ${buyer.name}`,
         body: `${name} has turned down the move to ${buyer.name} — he is staying.`,
         playerIdx: o.playerIdx,
+        from: name,
         category: 'offer',
       });
     }
@@ -500,6 +510,9 @@ function processSales(world: World): void {
       body: `${club.name} have joined the race for ${store.fullName(p)} with a bid of ${euros(fee)}, ` +
         `topping the ${euros(top)} already on the table.`,
       offerId: id,
+      playerIdx: p,
+      from: club.name,
+      clubId: club.id,
       category: 'offer',
     });
   }

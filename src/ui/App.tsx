@@ -2,19 +2,22 @@ import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
 import {
-  ClubCrest, clubThemeStyle, managerPhotoUrl, money, PersonFace, PlayerFace, Pos,
+  ClubCrest, clubThemeStyle, managerPhotoUrl, PersonFace, PlayerFace, Pos,
 } from './components.tsx';
 import { Icon, type IconName } from './icons.tsx';
 import { PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
 } from './screens/Menu.tsx';
+import { CalendarScreen } from './screens/Calendar.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
+import { HomeScreen } from './screens/Home.tsx';
+import { InboxScreen } from './screens/Inbox.tsx';
 import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
 import { InterviewScreen } from './screens/Interview.tsx';
 import { MatchdayScreen } from './screens/Matchday.tsx';
+import { MatchResultScreen } from './screens/MatchResult.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
-import { OverviewScreen } from './screens/Overview.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
@@ -28,6 +31,7 @@ import { SeasonReviewScreen } from './seasonReview.tsx';
 /** Identifies the current main-content view, so it can be keyed to replay the fade-in on change. */
 function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.matchday !== null) return 'matchday';
+  if (g.postMatch !== null) return `result-${g.postMatch}`;
   if (g.negotiation !== null) return 'negotiation';
   if (g.incomingOffer !== null) return 'offer';
   if (g.activeInterviewFixtureId !== null) return `interview-${g.activeInterviewFixtureId}`;
@@ -45,40 +49,65 @@ interface Section {
   tabs: Array<[ScreenId, string]>;
 }
 
-/** The sidebar, in groups — a thin rule separates each group, the way the
- *  real thing keeps day-to-day club work apart from the wider world. */
-const SECTION_GROUPS: Section[][] = [
-  [
-    { id: 'home', label: 'Home', icon: 'home', tabs: [['overview', 'Inbox']] },
-  ],
-  [
-    { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Players'], ['youth', 'Youth Academy']] },
-    {
-      id: 'tactics',
-      label: 'Tactics',
-      icon: 'tactics',
-      tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
-    },
-    { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Development']] },
-  ],
-  [
-    { id: 'schedule', label: 'Schedule', icon: 'schedule', tabs: [['fixtures', 'Fixtures & Results']] },
-    { id: 'competitions', label: 'Competitions', icon: 'trophy', tabs: [['table', 'Standings'], ['stats', 'Player Stats']] },
-  ],
-  [
-    { id: 'scouting', label: 'Scouting', icon: 'scouting', tabs: [['scouting', 'Player Search']] },
-    { id: 'transfers', label: 'Transfers', icon: 'transfers', tabs: [['transfers', 'Transfer Centre']] },
-  ],
-  [
-    { id: 'staff', label: 'Staff', icon: 'staff', tabs: [['staff', 'Overview']] },
-    { id: 'finances', label: 'Finances', icon: 'finances', tabs: [['finances', 'Summary']] },
-  ],
-  [
-    { id: 'world', label: 'World', icon: 'world', tabs: [['rankings', 'World Rankings'], ['halloffame', 'Hall of Fame']] },
-  ],
+/** The sidebar, in labelled groups: the day-to-day desk, the team, recruitment,
+ *  the club behind it, and the wider volleyball world. */
+const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
+  {
+    label: 'Overview',
+    sections: [
+      { id: 'home', label: 'Home', icon: 'home', tabs: [['home', 'Home']] },
+      { id: 'inbox', label: 'Inbox', icon: 'inbox', tabs: [['inbox', 'Inbox']] },
+    ],
+  },
+  {
+    label: 'Team',
+    sections: [
+      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Players']] },
+      {
+        id: 'lineup',
+        label: 'Lineup',
+        icon: 'tactics',
+        tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
+      },
+      { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Development']] },
+      { id: 'academy', label: 'Academy', icon: 'youth', tabs: [['youth', 'Youth Academy']] },
+    ],
+  },
+  {
+    label: 'Recruitment',
+    sections: [
+      { id: 'scouting', label: 'Scouting', icon: 'scouting', tabs: [['scouting', 'Player Search']] },
+      { id: 'transfers', label: 'Transfers', icon: 'transfers', tabs: [['transfers', 'Transfer Centre']] },
+    ],
+  },
+  {
+    label: 'Club',
+    sections: [
+      { id: 'staff', label: 'Staff', icon: 'staff', tabs: [['staff', 'Staff']] },
+      { id: 'finances', label: 'Finances', icon: 'finances', tabs: [['finances', 'Finances']] },
+    ],
+  },
+  {
+    label: 'World',
+    sections: [
+      {
+        id: 'calendar',
+        label: 'Calendar',
+        icon: 'calendar',
+        tabs: [['calendar', 'Calendar'], ['fixtures', 'Fixtures & Results']],
+      },
+      { id: 'competitions', label: 'Competitions', icon: 'trophy', tabs: [['table', 'Standings']] },
+      {
+        id: 'stats',
+        label: 'Stats',
+        icon: 'stats',
+        tabs: [['stats', 'Player Stats'], ['rankings', 'World Rankings'], ['halloffame', 'Hall of Fame']],
+      },
+    ],
+  },
 ];
 
-const ALL_SECTIONS = SECTION_GROUPS.flat();
+const ALL_SECTIONS = SECTION_GROUPS.flatMap((grp) => grp.sections);
 
 function sectionFor(screen: ScreenId): Section {
   return ALL_SECTIONS.find((s) => s.tabs.some(([id]) => id === screen)) ?? ALL_SECTIONS[0];
@@ -118,8 +147,8 @@ function GameShell(): JSX.Element {
 
   const key = viewKey(g);
   // Match day — team selection and the live match — is laid out to the
-  // window, like the inbox, and takes the sidebar's width too: nothing in it
-  // can be used until the match is over anyway.
+  // window and takes the sidebar's width too: nothing in it can be used
+  // until the match is over anyway.
   const live = g.matchday !== null;
   const contentClass = live ? ' content-live' : ' content-fill';
 
@@ -132,19 +161,21 @@ function GameShell(): JSX.Element {
           <div key={key} className="view-fade">
             {g.matchday !== null
               ? <MatchdayScreen />
-              : g.negotiation !== null
-                ? <NegotiationScreen />
-                : g.incomingOffer !== null
-                  ? <IncomingOfferScreen />
-                  : g.activeInterviewFixtureId !== null
-                    ? <InterviewScreen />
-                    : g.selectedClub !== null
-                      ? <ClubDetail />
-                      : g.selectedPlayer !== null
-                        ? <PlayerDetail />
-                        : g.selectedReview !== null
-                          ? <SeasonReviewScreen />
-                          : <Screen />}
+              : g.postMatch !== null
+                ? <MatchResultScreen />
+                : g.negotiation !== null
+                  ? <NegotiationScreen />
+                  : g.incomingOffer !== null
+                    ? <IncomingOfferScreen />
+                    : g.activeInterviewFixtureId !== null
+                      ? <InterviewScreen />
+                      : g.selectedClub !== null
+                        ? <ClubDetail />
+                        : g.selectedPlayer !== null
+                          ? <PlayerDetail />
+                          : g.selectedReview !== null
+                            ? <SeasonReviewScreen />
+                            : <Screen />}
           </div>
         </main>
       </div>
@@ -168,7 +199,9 @@ function MenuScreen(): JSX.Element {
 function Screen(): JSX.Element {
   const g = useGame();
   switch (g.screen) {
-    case 'overview': return <OverviewScreen />;
+    case 'home': return <HomeScreen />;
+    case 'inbox': return <InboxScreen />;
+    case 'calendar': return <CalendarScreen />;
     case 'squad': return <SquadScreen />;
     case 'lineup': return <LineupScreen />;
     case 'tactics': return <TacticsScreen />;
@@ -184,14 +217,14 @@ function Screen(): JSX.Element {
     case 'finances': return <FinancesScreen />;
     case 'rankings': return <RankingsScreen />;
     case 'halloffame': return <HallOfFameScreen />;
-    default: return <SquadScreen />;
+    default: return <HomeScreen />;
   }
 }
 
-/** True while a full-screen flow (a match, a press conference) owns the
- *  content area — sidebar navigation would only change what's underneath. */
+/** True while a full-screen flow (a match, its result, a press conference)
+ *  owns the content area — sidebar navigation would only change what's underneath. */
 function inTakeover(g: ReturnType<typeof useGame>): boolean {
-  return g.matchday !== null || g.activeInterviewFixtureId !== null;
+  return g.matchday !== null || g.activeInterviewFixtureId !== null || g.postMatch !== null;
 }
 
 function Sidebar({
@@ -205,13 +238,12 @@ function Sidebar({
   const g = useGame();
   const world = g.world!;
   const club = g.club!;
-  const manager = world.manager;
-  const unread = world.messages.filter((m) => m.read !== true).length;
+  const unread = g.unreadMessages().length;
   const takeover = inTakeover(g);
-  const onProfile = g.selectedClub !== null || g.selectedPlayer !== null || g.selectedReview !== null ||
+  const clubInfoActive = g.selectedClub === club.id;
+  const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null ||
     g.negotiation !== null || g.incomingOffer !== null;
   const activeSection = onProfile ? null : sectionFor(g.screen).id;
-  const clubInfoActive = g.selectedClub === club.id;
 
   const item = (
     key: string, label: string, icon: IconName, active: boolean, onClick: () => void, badge?: number,
@@ -223,7 +255,7 @@ function Sidebar({
       disabled={takeover}
       title={collapsed ? label : undefined}
     >
-      <Icon name={icon} size={19} />
+      <Icon name={icon} size={18} />
       <span className="side-item-label">{label}</span>
       {badge !== undefined && badge > 0 && <span className="side-badge">{badge > 99 ? '99+' : badge}</span>}
     </button>
@@ -233,77 +265,97 @@ function Sidebar({
     <aside className="sidebar">
       <div className="side-brand">
         <span className="brand-badge">VM</span>
-        <span className="side-brand-text">
-          <strong>Volleyball</strong>
-          <span>Manager</span>
-        </span>
+        <span className="side-brand-text">Volleyball<small>Manager</small></span>
+        <button
+          className="side-collapse"
+          onClick={onToggle}
+          disabled={locked}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <Icon name={collapsed ? 'expand' : 'collapse'} size={17} />
+        </button>
       </div>
 
-      <div className="side-manager" title={`${manager.firstName} ${manager.lastName}`}>
-        <PersonFace photoUrl={managerPhotoUrl(manager)} name={`${manager.firstName} ${manager.lastName}`} size={34} />
-        <span className="side-manager-text">
-          <strong>{manager.firstName} {manager.lastName}</strong>
-          <span>Manager · {club.shortName}</span>
-        </span>
+      <div className="side-history">
+        <button className="side-arrow" title="Back" disabled={takeover || !g.canGoBack()} onClick={() => g.back()}>
+          <Icon name="back" size={17} />
+        </button>
+        <button
+          className="side-arrow"
+          title="Forward"
+          disabled={takeover || !g.canGoForward()}
+          onClick={() => g.forward()}
+        >
+          <Icon name="forward" size={17} />
+        </button>
       </div>
 
       <nav className="side-nav">
-        {SECTION_GROUPS.map((group, gi) => (
-          <div className="side-group" key={gi}>
-            {group.map((s) => item(
+        {SECTION_GROUPS.map((grp) => (
+          <div className="side-group" key={grp.label}>
+            <div className="side-group-label">{grp.label}</div>
+            {grp.sections.map((s) => item(
               s.id, s.label, s.icon, activeSection === s.id,
               () => g.go(s.tabs[0][0]),
-              s.id === 'home' ? unread : undefined,
+              s.id === 'inbox' ? unread : undefined,
             ))}
-            {gi === 4 && item('clubinfo', 'Club Info', 'club', clubInfoActive, () => g.selectClub(club.id))}
+            {grp.label === 'Club' && item('clubinfo', 'Club Info', 'club', clubInfoActive, () => g.selectClub(club.id))}
           </div>
         ))}
       </nav>
 
-      <button
-        className="side-collapse"
-        onClick={onToggle}
-        disabled={locked}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      >
-        <Icon name={collapsed ? 'expand' : 'collapse'} size={18} />
-        <span className="side-item-label">Collapse</span>
-      </button>
+      <ManagerMenu name={`${world.manager.firstName} ${world.manager.lastName}`} photo={managerPhotoUrl(world.manager)} />
     </aside>
+  );
+}
+
+/** The manager at the foot of the sidebar — and behind him the game's
+ *  system menu: save, or save and leave. */
+function ManagerMenu({ name, photo }: { name: string; photo: string }): JSX.Element {
+  const g = useGame();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    <div className="side-manager" ref={ref}>
+      <button className="side-manager-btn" onClick={() => setOpen((o) => !o)} title={name}>
+        <PersonFace photoUrl={photo} name={name} size={28} />
+        <span className="side-item-label">{name}</span>
+        <Icon name="chevronDown" size={14} className="side-manager-caret" />
+      </button>
+      {open && (
+        <div className="menu-pop menu-pop-up">
+          <button disabled={g.busy} onClick={() => { void g.saveCurrentGame(); setOpen(false); }}>
+            <Icon name="save" size={16} /> {g.busy ? 'Saving…' : 'Save game'}
+          </button>
+          <button disabled={g.busy} onClick={() => { setOpen(false); void g.exitToMenu(); }}>
+            <Icon name="exit" size={16} /> Save &amp; exit to menu
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
 /** What the header names the current view, and which tabs sit beneath it. */
 function headerInfo(g: ReturnType<typeof useGame>): {
-  kicker: string;
   title: string;
   tabs: Array<[ScreenId, string]> | null;
 } {
   const world = g.world!;
-  const club = g.club!;
   if (g.matchday !== null) {
-    const comp = world.competitions[g.matchday.fixture.competitionId];
-    return {
-      kicker: comp?.name ?? 'Match day',
-      title: g.matchday.stage === 'lineup' ? 'Team Selection' : 'Live Match',
-      tabs: null,
-    };
+    return { title: g.matchday.stage === 'lineup' ? 'Team Selection' : 'Live Match', tabs: null };
   }
-  if (g.negotiation !== null) return { kicker: 'Transfers', title: 'Contract Negotiation', tabs: null };
-  if (g.incomingOffer !== null) return { kicker: 'Transfers', title: 'Transfer Offer', tabs: null };
-  if (g.activeInterviewFixtureId !== null) return { kicker: 'Media', title: 'Press Conference', tabs: null };
+  if (g.postMatch !== null) return { title: 'Full Time', tabs: null };
+  if (g.negotiation !== null) return { title: 'Contract Negotiation', tabs: null };
+  if (g.incomingOffer !== null) return { title: 'Transfer Offer', tabs: null };
+  if (g.activeInterviewFixtureId !== null) return { title: 'Press Conference', tabs: null };
   if (g.selectedClub !== null) {
-    const c = world.clubs[g.selectedClub];
-    return { kicker: 'Club Profile', title: c?.name ?? 'Club', tabs: null };
+    return { title: g.selectedClub === world.userClubId ? 'Club Info' : 'Club', tabs: null };
   }
-  if (g.selectedPlayer !== null) {
-    return { kicker: 'Player Profile', title: world.players.fullName(g.selectedPlayer), tabs: null };
-  }
-  if (g.selectedReview !== null) {
-    return { kicker: club.name, title: 'Season Review', tabs: null };
-  }
+  if (g.selectedPlayer !== null) return { title: 'Player', tabs: null };
+  if (g.selectedReview !== null) return { title: 'Season Review', tabs: null };
   const section = sectionFor(g.screen);
-  return { kicker: club.name, title: section.label, tabs: section.tabs };
+  return { title: section.label, tabs: section.tabs.length > 1 ? section.tabs : null };
 }
 
 function Header(): JSX.Element {
@@ -312,53 +364,31 @@ function Header(): JSX.Element {
   const club = g.club!;
   const info = headerInfo(g);
   const takeover = inTakeover(g);
+  const league = world.competitions[club.leagueId];
 
   return (
     <header className="hdr">
       <div className="hdr-top">
-        <div className="hdr-nav">
-          <button
-            className="icon-btn hdr-icon-btn"
-            title="Back"
-            disabled={takeover || !g.canGoBack()}
-            onClick={() => g.back()}
-          >
-            <Icon name="back" size={18} />
-          </button>
-          <button
-            className="icon-btn hdr-icon-btn"
-            title="Forward"
-            disabled={takeover || !g.canGoForward()}
-            onClick={() => g.forward()}
-          >
-            <Icon name="forward" size={18} />
-          </button>
-        </div>
-
-        <div className="hdr-title">
-          <ClubCrest club={club} size={38} />
-          <div className="hdr-title-text">
-            <span className="hdr-kicker">{info.kicker}</span>
-            <h1 className="hdr-h1">{info.title}</h1>
-          </div>
-        </div>
+        <button className="hdr-club" onClick={() => g.selectClub(club.id)} disabled={takeover} title="Club info">
+          <ClubCrest club={club} size={36} />
+          <span className="hdr-club-text">
+            <strong>{club.name}</strong>
+            <span>{league?.name ?? ''}<span className="hdr-role">Head coach</span></span>
+          </span>
+        </button>
+        <span className="hdr-divider" />
+        <h1 className="hdr-h1">{info.title}</h1>
 
         <span className="hdr-spacer" />
-
         <GlobalSearch disabled={takeover} />
+        <span className="hdr-spacer" />
 
-        <div className="hdr-date" title={PHASE_NAMES[g.phase()]}>
-          <span className="hdr-date-day">{g.weekdayLabelForDay(world.day)}</span>
-          <span className="hdr-date-main">{g.dateLabel()}</span>
-          <span className="hdr-date-phase">{PHASE_NAMES[g.phase()]}</span>
+        <div className="hdr-date">
+          <span className="hdr-date-main">{g.longDateLabel(world.day)}</span>
+          <span className="hdr-date-sub">Season {world.season + 1}</span>
+          <span className="hdr-date-sub">{PHASE_NAMES[g.phase()]}</span>
         </div>
 
-        <div className={`hdr-balance${club.finances.balance < 0 ? ' negative' : ''}`} title="Club balance">
-          <span>Balance</span>
-          <strong>{money(club.finances.balance)}</strong>
-        </div>
-
-        <GameMenu />
         <ContinueButton />
       </div>
 
@@ -401,10 +431,11 @@ function useDismiss(open: boolean, close: () => void): React.RefObject<HTMLDivEl
 }
 
 /**
- * The big button in the corner: moves the calendar on. On the day of one of
- * the user's own fixtures it becomes the way into the match instead, since
- * time never skips past a fixture. The chevron beside it offers the longer
- * jumps — a week, or straight to the next match.
+ * The big button in the corner, and the one way time moves on. It reads what
+ * the day needs: the next unread message while you are working through the
+ * inbox, the match on a match day, the aftermath once a match is over — and
+ * otherwise Continue, which runs the calendar on until something happens.
+ * The chevron beside it keeps the finer controls.
  */
 function ContinueButton(): JSX.Element {
   const g = useGame();
@@ -412,49 +443,62 @@ function ContinueButton(): JSX.Element {
   const next = g.nextFixture();
   const [open, setOpen] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
-  const matchToday = next !== null && next.day === world.day;
+  const unread = g.unreadMessages().length;
+  const matchToday = g.ownFixtureToday() !== null;
   const inMatch = g.matchday !== null;
-  const blocked = inMatch || g.activeInterviewFixtureId !== null;
+  const blocked = inMatch || g.activeInterviewFixtureId !== null || g.processing;
+  const inInbox = g.screen === 'inbox' && g.selectedPlayer === null && g.selectedClub === null &&
+    g.selectedReview === null && g.negotiation === null && g.incomingOffer === null;
 
   const opponentId = next === null ? -1 : next.home === world.userClubId ? next.away : next.home;
   const opponent = world.clubs[opponentId];
 
-  const primary = (): void => {
-    if (matchToday) g.openMatchday();
-    else g.advance(1);
-  };
+  let label = 'Continue';
+  let icon: IconName = 'playOutline';
+  let action = (): void => { void g.continueGame(); };
+  if (g.processing) {
+    label = 'Processing';
+  } else if (inMatch) {
+    label = g.matchday?.stage === 'lineup' ? 'Team selection' : 'Match in progress';
+  } else if (g.postMatch !== null) {
+    action = () => g.finishPostMatch();
+  } else if (inInbox && unread > 0) {
+    label = 'Next unread';
+    icon = 'inbox';
+    action = () => g.nextUnread();
+  } else if (matchToday) {
+    label = 'Play match';
+    icon = 'ball';
+    action = () => g.openMatchday();
+  }
 
   return (
     <div className="continue" ref={ref}>
-      <button className="continue-main" disabled={blocked} onClick={primary}>
-        <span className="continue-label">
-          {inMatch
-            ? (g.matchday?.stage === 'lineup' ? 'Team selection' : 'Match in progress')
-            : matchToday ? 'Match Day' : 'Continue'}
-        </span>
-        <Icon name={matchToday && !inMatch ? 'ball' : 'play'} size={16} />
+      <button className={`continue-main${g.processing ? ' busy' : ''}`} disabled={blocked} onClick={action}>
+        {g.processing ? <span className="spinner" /> : <Icon name={icon} size={16} />}
+        <span className="continue-label">{label}</span>
       </button>
       <button
         className="continue-more"
-        disabled={blocked}
+        disabled={blocked || g.postMatch !== null}
         onClick={() => setOpen((o) => !o)}
         title="More options"
       >
-        <Icon name="chevronDown" size={16} />
+        <Icon name="chevronDown" size={15} />
       </button>
       {open && (
         <div className="menu-pop menu-pop-right">
-          <button disabled={matchToday} onClick={() => { g.advance(1); setOpen(false); }}>
-            <Icon name="forward" size={16} /> Advance one day
+          <button disabled={matchToday} onClick={() => { setOpen(false); void g.continueGame(); }}>
+            <Icon name="playOutline" size={15} /> Continue
+            {unread > 0 && <span className="menu-pop-note">{unread} unread</span>}
           </button>
-          <button disabled={matchToday} onClick={() => { g.advance(7); setOpen(false); }}>
-            <Icon name="fastForward" size={16} /> Advance one week
+          <button disabled={matchToday} onClick={() => { setOpen(false); void g.continueGame(1); }}>
+            <Icon name="forward" size={15} /> Advance one day
           </button>
-          <div className="menu-sep" />
           <button disabled={next === null} onClick={() => { g.openMatchday(); setOpen(false); }}>
-            <Icon name="ball" size={16} />
+            <Icon name="fastForward" size={15} />
             <span className="menu-pop-stack">
-              <span>{next === null ? 'No fixture scheduled' : 'Go to next match'}</span>
+              <span>{next === null ? 'No fixture scheduled' : matchToday ? 'Play match' : 'Skip to next match'}</span>
               {next !== null && opponent !== undefined && (
                 <span className="faint">
                   {next.home === world.userClubId ? 'vs' : 'at'} {opponent.shortName} · {g.dateLabelForDay(next.day)}
@@ -462,29 +506,17 @@ function ContinueButton(): JSX.Element {
               )}
             </span>
           </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Save / exit, tucked behind one button like a game's system menu. */
-function GameMenu(): JSX.Element {
-  const g = useGame();
-  const [open, setOpen] = useState(false);
-  const ref = useDismiss(open, () => setOpen(false));
-  return (
-    <div className="game-menu" ref={ref}>
-      <button className="icon-btn hdr-icon-btn" title="Game menu" onClick={() => setOpen((o) => !o)}>
-        <Icon name="menu" size={18} />
-      </button>
-      {open && (
-        <div className="menu-pop menu-pop-right">
-          <button disabled={g.busy} onClick={() => { void g.saveCurrentGame(); setOpen(false); }}>
-            <Icon name="save" size={16} /> {g.busy ? 'Saving…' : 'Save game'}
+          {matchToday && (
+            <button onClick={() => { g.instantResult(); setOpen(false); }}>
+              <Icon name="whistle" size={15} /> Instant result
+            </button>
+          )}
+          <div className="menu-sep" />
+          <button disabled={unread === 0} onClick={() => { g.nextUnread(); setOpen(false); }}>
+            <Icon name="inbox" size={15} /> Next unread
           </button>
-          <button disabled={g.busy} onClick={() => { setOpen(false); void g.exitToMenu(); }}>
-            <Icon name="exit" size={16} /> Save &amp; exit to menu
+          <button disabled={unread === 0} onClick={() => { g.markAllRead(); setOpen(false); }}>
+            <Icon name="check" size={15} /> Mark all as read
           </button>
         </div>
       )}
@@ -511,7 +543,20 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const ref = useDismiss(open, () => setOpen(false));
+  const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
+
+  // Ctrl/Cmd + K jumps to the search box from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim().toLowerCase()), 140);
@@ -550,6 +595,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
     <div className="search" ref={ref}>
       <Icon name="search" size={16} className="search-icon" />
       <input
+        ref={inputRef}
         className="search-input"
         placeholder="Search players & clubs"
         value={query}
@@ -563,6 +609,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
           if (e.key === 'Enter' && results[highlight] !== undefined) openResult(results[highlight]);
         }}
       />
+      <span className="search-kbd">Ctrl/Cmd + K</span>
       {open && debounced.length >= 2 && (
         <div className="search-pop" id={listId} role="listbox">
           {results.length === 0 && <div className="search-empty">No players or clubs match “{query.trim()}”.</div>}

@@ -17,7 +17,9 @@
  */
 
 import type { Club } from '../model/club.ts';
-import { contractEndSeason, dayOfYear, logTransfer, seasonEndDay, windowCloseDay, type World } from './world.ts';
+import {
+  contractEndSeason, dayOfYear, euros, logTransfer, seasonEndDay, windowCloseDay, type World,
+} from './world.ts';
 
 export enum SquadRole {
   Star = 0,
@@ -350,9 +352,13 @@ export function generateIncomingOffers(world: World): void {
     id: world.messages.length,
     day: world.day,
     year: world.year,
-    subject: 'Transfer offer received',
-    body: `${buyingClub.name} have made an offer for ${store.fullName(playerIdx)}.`,
+    subject: `Transfer offer: ${euros(fee)} for ${store.fullName(playerIdx)}`,
+    body: `${buyingClub.name} have tabled a formal offer of ${euros(fee)} for ${store.fullName(playerIdx)}. ` +
+      'Accept it, ask for more, or turn it down.',
     offerId: id,
+    playerIdx,
+    from: buyingClub.name,
+    clubId: buyingClub.id,
     category: 'offer',
   });
 }

@@ -85,6 +85,8 @@ export function postSeasonReview(world: World, review: SeasonReview): void {
     subject: `${y}/${String((y + 1) % 100).padStart(2, '0')} season review`,
     body: headline(world, review, club),
     seasonReview: review,
+    from: 'Board of Directors',
+    clubId: club.id,
     category: 'news',
   });
 }

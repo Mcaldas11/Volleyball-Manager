@@ -114,6 +114,21 @@ Before submitting a change:
       up for them across sessions
 - [x] A proper main menu: continue your most recent career at a glance, or
       start a new one, without hunting through a save list first
+- [x] One button moves time on: Continue runs the calendar day by day until
+      something happens — news in the inbox or a match day — and becomes
+      Next unread or Play match when that is what the day needs. Play a match
+      live or take an instant result; either way a full-time screen shows the
+      score, player of the match and box score before the rest of the
+      matchday comes in
+- [x] An inbox laid out like a mail client: folders by department (transfers,
+      contracts, scouting, medical, matchday, media, board, finance), an
+      "action needed" filter, starring and archiving, and every message from
+      someone — the medical room on injuries and recoveries, the league office
+      with a round-up after every matchday, the finance office's monthly
+      statement, rival clubs and agents
+- [x] A club dashboard (next fixture, table, one to watch, form, top scorer,
+      the board's mood, the money) and a month-by-month calendar of results,
+      fixtures and transfer deadlines
 
 ### PLANNED FEATURES
 

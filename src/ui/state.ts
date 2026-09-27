@@ -18,7 +18,7 @@ import { NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { type Position } from '../engine/model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
-  advanceDay, applyMatchResult, newSeasonContext, pickLineup, toTeamSetup,
+  advanceDay, applyMatchResult, newSeasonContext, pickLineup, playFixture, toTeamSetup,
   type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
@@ -27,13 +27,14 @@ import { generateStaff, generateWorld, type WorldScale } from '../engine/world/w
 import {
   currentPhase, dayOfSeason, DAYS_PER_SEASON, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
   transferWindowOn,
-  type Fixture, type ManagerProfile, type World,
+  type Fixture, type GameMessage, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
 import {
   acceptIncomingOffer, closeTalks, counterIncomingOffer, openTalks, submitOffer, type Talks,
 } from '../engine/world/deals.ts';
 import { NATIONS } from '../engine/world/nations.ts';
+import { welcomeMessages } from '../engine/world/inbox.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
@@ -46,7 +47,7 @@ import {
 } from './persistence.ts';
 
 export type ScreenId =
-  | 'overview' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
+  | 'home' | 'inbox' | 'calendar' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame';
 
@@ -135,6 +136,18 @@ function sameNav(a: NavEntry, b: NavEntry): boolean {
 /** How many steps back the header's back button remembers. */
 const NAV_HISTORY_LIMIT = 50;
 
+/** How long each day stays on screen while Continue runs the calendar on —
+ *  long enough to watch the date tick over, short enough that a quiet month
+ *  passes in a second or two. */
+const DAY_TICK_MS = 45;
+
+/** The furthest a single Continue runs without anything happening. */
+const MAX_CONTINUE_DAYS = 62;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export interface MatchdaySnapshot {
   homeCourt: number[];
   awayCourt: number[];
@@ -201,7 +214,14 @@ export interface MatchdayState {
 class Game {
   world: World | null = null;
   ctx: SeasonContext = newSeasonContext();
-  screen: ScreenId = 'overview';
+  screen: ScreenId = 'home';
+  /** The message open in the Inbox's reading pane. */
+  inboxSelected: number | null = null;
+  /** True while Continue is running the calendar on, day by day. */
+  processing = false;
+  /** The user's match that has just finished: its result stays on screen
+   *  until they continue, which brings in the rest of the matchday. */
+  postMatch: number | null = null;
   selectedPlayer: number | null = null;
   selectedClub: number | null = null;
   /** Id of the inbox message whose season review is open full-screen, if any. */
@@ -266,7 +286,10 @@ class Game {
     this.lastRollover = null;
     this.trophyCelebration = null;
     this.notice = '';
-    this.screen = 'overview';
+    this.screen = 'home';
+    this.inboxSelected = null;
+    this.postMatch = null;
+    this.processing = false;
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
@@ -315,7 +338,10 @@ class Game {
       this.lastRollover = null;
       this.trophyCelebration = null;
       this.notice = '';
-      this.screen = 'overview';
+      this.screen = 'home';
+      this.inboxSelected = null;
+      this.postMatch = null;
+      this.processing = false;
       this.selectedPlayer = null;
       this.selectedClub = null;
       this.selectedReview = null;
@@ -388,7 +414,8 @@ class Game {
   takeCharge(clubId: number): void {
     if (this.world === null) return;
     this.world.userClubId = clubId;
-    this.screen = 'overview';
+    welcomeMessages(this.world);
+    this.screen = 'home';
     this.resetHistory();
     this.emit();
   }
@@ -549,6 +576,68 @@ class Game {
     this.emit();
   }
 
+  // ---- Inbox ------------------------------------------------------------
+
+  /** Open a message in the Inbox, from anywhere — it counts as read. */
+  openMessage(messageId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const m = world.messages.find((x) => x.id === messageId);
+    if (m === undefined) return;
+    this.pushHistory({ screen: 'inbox', selectedPlayer: null, selectedClub: null, selectedReview: null });
+    this.screen = 'inbox';
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedReview = null;
+    this.negotiation = null;
+    this.incomingOffer = null;
+    this.inboxSelected = messageId;
+    m.read = true;
+    this.emit();
+  }
+
+  /** Show a message in the reading pane (or clear it) without leaving the Inbox. */
+  selectMessage(messageId: number | null): void {
+    this.inboxSelected = messageId;
+    if (messageId !== null) {
+      const m = this.world?.messages.find((x) => x.id === messageId);
+      if (m !== undefined) m.read = true;
+    }
+    this.emit();
+  }
+
+  /** Unread messages still in the inbox, oldest first — the order they are worked through. */
+  unreadMessages(): GameMessage[] {
+    return this.world?.messages.filter((m) => m.read !== true && m.archived !== true) ?? [];
+  }
+
+  /** Open the oldest unread message — what the big button does while the inbox has any. */
+  nextUnread(): void {
+    const next = this.unreadMessages()[0];
+    if (next !== undefined) this.openMessage(next.id);
+  }
+
+  markAllRead(): void {
+    for (const m of this.world?.messages ?? []) m.read = true;
+    this.emit();
+  }
+
+  toggleStar(messageId: number): void {
+    const m = this.world?.messages.find((x) => x.id === messageId);
+    if (m === undefined) return;
+    m.starred = m.starred !== true;
+    this.emit();
+  }
+
+  /** Move a message to the Archive folder, or back into the inbox. */
+  toggleArchive(messageId: number): void {
+    const m = this.world?.messages.find((x) => x.id === messageId);
+    if (m === undefined) return;
+    m.archived = m.archived !== true;
+    m.read = true;
+    this.emit();
+  }
+
   /** Open the full-screen press conference for a fixture the user chose to
    *  attend — a no-op if there's no open session for it. */
   openInterview(fixtureId: number): void {
@@ -623,52 +712,111 @@ class Game {
   // ---- Time -------------------------------------------------------------
 
   /**
-   * Advance the world, stopping early if one of the user's own matches comes
-   * up — the user should never skip past their own fixture by accident.
+   * The big button: run the calendar on, a day at a time, until something
+   * happens — news in the inbox, or one of the user's own matches (time never
+   * skips past a fixture). New post opens in the Inbox, the way a manager's
+   * day starts with the desk. `maxDays` caps a single run.
    */
-  advance(days: number, stopAtOwnMatch = true): void {
+  async continueGame(maxDays = MAX_CONTINUE_DAYS): Promise<void> {
     const world = this.world;
-    if (world === null) return;
-    const clubId = world.userClubId;
-    const messagesBefore = world.messages.length;
-
-    for (let d = 0; d < days; d++) {
-      if (dayOfSeason(world) >= 350) {
-        this.rollover();
-        continue;
-      }
-      // `d > 0` used to gate this, which meant a match scheduled for *today*
-      // (the very first day of this call) got simulated headlessly instead of
-      // stopping for the interactive Matchday screen — exactly the accident
-      // this check exists to prevent. Must apply from the first day too.
-      if (stopAtOwnMatch && clubId >= 0 && this.fixtureOn(world.day) !== null) break;
-
-      // The user's own matches always run through the full rally engine.
-      advanceDay(world, this.ctx, {
-        detailedClubs: clubId >= 0 ? new Set([clubId]) : undefined,
-      });
-
-      // Keep the most recent of the user's matches available to review.
-      const played = this.fixtureOn(world.day - 1);
-      if (played !== null && played.played) this.captureWatched(played);
+    if (world === null || this.processing || this.matchday !== null || this.activeInterviewFixtureId !== null) return;
+    if (this.postMatch !== null) {
+      this.finishPostMatch();
+      return;
     }
-    if (world.messages.length > messagesBefore && this.notice === '') {
-      this.notice = 'You have new messages.';
+    if (this.ownFixtureToday() !== null) {
+      this.openMatchday();
+      return;
+    }
+
+    this.processing = true;
+    this.emit();
+    const before = world.messages.length;
+    for (let d = 0; d < maxDays; d++) {
+      this.stepDay();
+      this.emit();
+      if (this.world !== world) break;
+      if (world.messages.length > before || this.ownFixtureToday() !== null || this.trophyCelebration !== null) break;
+      await sleep(DAY_TICK_MS);
+      if (this.world !== world) break;
+    }
+    this.processing = false;
+
+    // A season review opened by the rollover keeps the screen; otherwise the
+    // first of the new post is waiting in the inbox.
+    if (this.world === world && world.messages.length > before && this.selectedReview === null) {
+      this.openMessage(world.messages[before].id);
     }
     this.emit();
   }
 
-  /** Advance to the user's next fixture and play it. */
-  advanceToNextMatch(): void {
+  /** One day of the world — or, once the season is over, the rollover into the next. */
+  private stepDay(): void {
     const world = this.world;
-    if (world === null || world.userClubId < 0) return;
-    const next = this.nextFixture();
-    if (next === null) {
-      this.advance(7);
+    if (world === null) return;
+    if (dayOfSeason(world) >= 350) {
+      this.rollover();
       return;
     }
-    const gap = Math.max(1, next.day - world.day + 1);
-    this.advance(gap, false);
+    const clubId = world.userClubId;
+    // The user's own matches always run through the full rally engine.
+    advanceDay(world, this.ctx, {
+      detailedClubs: clubId >= 0 ? new Set([clubId]) : undefined,
+    });
+    // Keep the most recent of the user's matches available to review.
+    const played = this.fixtureOn(world.day - 1);
+    if (played !== null && played.played) this.captureWatched(played);
+  }
+
+  /** The user's match today, if it is still to be played. */
+  ownFixtureToday(): Fixture | null {
+    const world = this.world;
+    if (world === null) return null;
+    const f = this.fixtureOn(world.day);
+    return f !== null && !f.played ? f : null;
+  }
+
+  /**
+   * Play today's match without watching it — the full rally engine, straight
+   * to the result screen.
+   */
+  instantResult(): void {
+    const world = this.world;
+    const f = this.ownFixtureToday();
+    if (world === null || f === null || this.processing) return;
+    playFixture(world, this.ctx, f, true);
+    this.captureWatched(f);
+    this.checkChampionshipWin(world, f);
+    this.showPostMatch(f);
+  }
+
+  private showPostMatch(f: Fixture): void {
+    this.postMatch = f.id;
+    this.matchday = null;
+    this.liveSim = null;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedReview = null;
+    this.negotiation = null;
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /**
+   * Leave the result screen: the rest of the matchday is played, the day
+   * rolls over, and the league's round-up — or whatever else came in — opens
+   * in the inbox.
+   */
+  finishPostMatch(): void {
+    const world = this.world;
+    if (world === null || this.postMatch === null) return;
+    this.postMatch = null;
+    const before = world.messages.length;
+    advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
+    const fresh = world.messages.slice(before);
+    const first = fresh.find((m) => m.roundup !== undefined) ?? fresh[0];
+    if (first !== undefined) this.openMessage(first.id);
+    else this.go('home');
   }
 
   private rollover(): void {
@@ -1213,10 +1361,7 @@ class Game {
       awayName: world.clubs[md.fixture.away]?.name ?? '?',
     };
     this.checkChampionshipWin(world, md.fixture);
-    this.liveSim = null;
-    this.matchday = null;
-    advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
-    this.go('fixtures');
+    this.showPostMatch(md.fixture);
   }
 
   /**
@@ -1769,13 +1914,23 @@ class Game {
     return date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
   }
 
-  private calendarDate(day: number): Date | null {
+  /** "Mon, 11 January 2027" — the header's full date. */
+  longDateLabel(day: number): string {
+    const date = this.calendarDate(day);
+    if (date === null) return '';
+    const weekday = date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+    const month = date.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+    return `${weekday}, ${String(date.getUTCDate()).padStart(2, '0')} ${month} ${date.getUTCFullYear()}`;
+  }
+
+  /** The calendar date (UTC) an absolute world day falls on. */
+  calendarDate(day: number): Date | null {
     const world = this.world;
     if (world === null) return null;
     // The save begins on 1 July, so season day 0 is calendar day 181. Each
     // season spans two calendar years: from 1 January (season day 184) on,
     // the date is in the year after the one the season started in.
-    const seasonDay = day % DAYS_PER_SEASON;
+    const seasonDay = ((day % DAYS_PER_SEASON) + DAYS_PER_SEASON) % DAYS_PER_SEASON;
     const doy = (seasonDay + 181) % 365;
     const year = world.startYear + Math.floor(day / DAYS_PER_SEASON) + (seasonDay >= 184 ? 1 : 0);
     // Seasons are 365 days, so the day and month come from a non-leap year —

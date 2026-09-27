@@ -231,8 +231,32 @@ export interface SeasonReview {
   closingBalance: number;
 }
 
-/** Which inbox tab a message belongs in. */
-export type MessageCategory = 'news' | 'task' | 'offer' | 'interview' | 'contract';
+/** Which inbox folder a message belongs in: club & season news, scouting,
+ *  transfers, media, contracts, the medical room, the league's matchday
+ *  round-ups, the finance office and the board. */
+export type MessageCategory =
+  | 'news' | 'task' | 'offer' | 'interview' | 'contract'
+  | 'medical' | 'matchday' | 'finance' | 'board';
+
+/** The finance office's month-end snapshot of the club's books. */
+export interface FinanceStatement {
+  /** "December 2026". */
+  month: string;
+  /** Balance at the close of the month. */
+  balance: number;
+  /** Balance at the previous statement, or null for the first one. */
+  opening: number | null;
+  transferBudget: number;
+  wageBudget: number;
+  /** Committed player wages, per season. */
+  wageBill: number;
+  /** Gate receipts and travel so far this season. */
+  gateReceipts: number;
+  travel: number;
+}
+
+/** The league table as a matchday left it: club, played, won, lost, points. */
+export type RoundupTableRow = [clubId: number, played: number, won: number, lost: number, points: number];
 
 /** A news item for the club's inbox — a scouting report, a season result, etc. */
 export interface GameMessage {
@@ -241,6 +265,22 @@ export interface GameMessage {
   year: number;
   subject: string;
   body: string;
+  /** Who sent it — "Medical Department", a rival club, an agent. Absent on
+   *  older saves; {@link messageSender} falls back to the category's office. */
+  from?: string;
+  /** The club the message comes from or is about — its crest stands in for
+   *  the sender's avatar. */
+  clubId?: number;
+  /** Flagged by the manager to keep in the Starred folder. */
+  starred?: boolean;
+  /** Moved out of the inbox into the Archive folder. */
+  archived?: boolean;
+  /** An injury: its type and expected length, for the medical report. */
+  injury?: { type: number; days: number };
+  /** A month-end finance statement. */
+  statement?: FinanceStatement;
+  /** A league matchday round-up: which round, and the table it left behind. */
+  roundup?: { competitionId: number; round: number; table: RoundupTableRow[] };
   /** Player this message concerns, if any — lets the UI jump straight to them. */
   playerIdx?: number;
   /** Pending incoming offer this message concerns, if any. */
@@ -289,6 +329,15 @@ export function stubManager(nation = 0): ManagerProfile {
 }
 
 export const DAYS_PER_SEASON = 365;
+
+/** "€1.2M", "€340k" — the same shorthand the screens use. */
+export function euros(v: number): string {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1_000_000) return `${sign}€${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  if (abs >= 1_000) return `${sign}€${Math.round(abs / 1_000)}k`;
+  return `${sign}€${Math.round(abs)}`;
+}
 
 // ---- Contracts and transfer windows -------------------------------------------
 
