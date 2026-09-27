@@ -23,6 +23,7 @@ import { DAYS_PER_SEASON, currentPhase, dayOfSeason, SeasonPhase, type Fixture, 
 import { PLAYOFF_ROUND_BASE, scheduleLeagueSeason } from './schedule.ts';
 import { quickSimulate } from './quickSim.ts';
 import { progressPlayoffs } from './playoffs.ts';
+import { progressCups, scheduleCupSeason } from './cups.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers } from '../world/negotiation.ts';
@@ -366,6 +367,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
 
   dailyRecovery(world, store);
   progressPlayoffs(world);
+  progressCups(world);
 
   // Training and injury rolls happen on a weekly cadence rather than daily, so
   // their cost does not scale with how many matches were played.
@@ -428,6 +430,8 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
     if (comp.kind !== 'league') continue;
     scheduleLeagueSeason(world, comp, seasonStart, world.rng);
   }
+  // Cups and continental competitions fit around the league calendar.
+  scheduleCupSeason(world);
 
   if (ctx !== undefined) {
     const store = world.players;

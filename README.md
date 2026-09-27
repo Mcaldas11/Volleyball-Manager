@@ -92,6 +92,15 @@ Before submitting a change:
       coaches, each with their own regional knowledge and specialisms
 - [x] League tables, promotion and relegation, season-long statistics leaders,
       world rankings, and a strict Hall of Fame
+- [x] Cups alongside the league: every nation's cup (a knockout for its top
+      two divisions) and super cup (league champions against cup winners);
+      Europe's Champions League (four groups, then a knockout with a
+      neutral-venue final) and CEV Cup; a club championship for every other
+      confederation; and a Club World Championship in December for the
+      continental champions, open to clubs from anywhere. Places are earned
+      from the season before, every match is fitted around the leagues so no
+      club plays two days running, and prize money, trophies and the season
+      review all count them
 - [x] Import real players from the official FIVB VIS database, for anyone
       with their own FIVB credentials — see [FIVB Data](#fivb-data)
 - [x] Database of 100,000+ fictitious players, generated with realistic
@@ -135,8 +144,6 @@ Before submitting a change:
 - [ ] National team management: squad selection already exists, but the VNL,
       World Championship and Olympic tournaments are not yet scheduled, and
       you cannot be offered a national job
-- [ ] Cup and continental club competitions (the structures are generated;
-      their fixtures are not yet scheduled)
 - [ ] Press conferences and a media system
 - [ ] In-match timeouts (substitutions already exist — see Interface above)
 - [ ] Full multi-round playoffs (currently only the first round is scheduled)

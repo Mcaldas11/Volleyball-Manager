@@ -20,6 +20,7 @@ import { PlayerStore, StringTable } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
 import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
+import { ensureCupCompetitions } from '../engine/season/cups.ts';
 
 export interface SaveMeta {
   id: string;
@@ -146,6 +147,9 @@ export function reviveWorld(raw: World): World {
   raw.talks ??= [];
   raw.nextTalksId ??= 0;
   migrateContractDays(raw.players);
+  // Saves from before the cups were played: national cups, super cups and the
+  // Club World Championship are added; all of them start with the next season.
+  ensureCupCompetitions(raw);
   for (const club of raw.clubs) {
     club.preferredDefensiveLibero ??= -1;
     migrateLineupOrder(club.preferredLineup, raw.players.position);

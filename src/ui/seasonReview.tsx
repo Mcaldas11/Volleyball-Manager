@@ -183,23 +183,34 @@ function Figure({
   );
 }
 
+/** "QF", "SF", "R16"… — a cup run in the space of a finishing position. */
+function stageShort(stage: string): string {
+  const known: Record<string, string> = {
+    Final: 'F', 'Runners-up': 'RU', 'Semi-final': 'SF', 'Quarter-final': 'QF', 'Round of 16': 'R16', 'Round of 32': 'R32', 'Group stage': 'GS',
+  };
+  return known[stage] ?? stage.split(' ').map((w) => w[0]).join('').toUpperCase();
+}
+
 function Competitions({ review }: { review: SeasonReview }): JSX.Element {
   const world = useGame().world!;
   return (
     <div className="sr-comps">
       {review.standings.map((s) => (
         <div className={`sr-comp${s.champion ? ' champion' : ''}`} key={s.competitionId}>
-          <span className="sr-comp-pos">{s.champion ? <Icon name="trophy" size={18} /> : ordinal(s.position)}</span>
+          <span className="sr-comp-pos">
+            {s.champion ? <Icon name="trophy" size={18} /> : s.stage !== undefined ? stageShort(s.stage) : ordinal(s.position)}
+          </span>
           <span className="sr-comp-main">
             <strong>{world.competitions[s.competitionId]?.name ?? 'Competition'}</strong>
             <span className="faint">
-              {s.champion ? 'Winners' : `${ordinal(s.position)} of ${s.teams}`}
-              {s.tablePosition !== s.position && ` · ${ordinal(s.tablePosition)} after the regular season`}
+              {s.champion ? 'Winners' : s.stage === 'Runners-up' ? 'Beaten in the final'
+                : s.stage !== undefined ? `Out in the ${s.stage.toLowerCase()}` : `${ordinal(s.position)} of ${s.teams}`}
+              {s.stage === undefined && s.tablePosition !== s.position && ` · ${ordinal(s.tablePosition)} after the regular season`}
             </span>
           </span>
           <span className="sr-comp-stats">
             <span><b>{s.won}</b>–<b>{s.lost}</b></span>
-            <span className="faint">{s.points} pts · sets {s.setsFor}–{s.setsAgainst}</span>
+            <span className="faint">{s.stage === undefined ? `${s.points} pts · ` : ''}sets {s.setsFor}–{s.setsAgainst}</span>
           </span>
         </div>
       ))}

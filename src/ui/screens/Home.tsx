@@ -3,7 +3,7 @@ import { ATTR_LABELS, type AttributeName } from '../../engine/model/attributes.t
 import { compareTableRows } from '../../engine/model/club.ts';
 import { Position, POSITION_NAMES } from '../../engine/model/positions.ts';
 import { matchRating } from '../../engine/match/playerRating.ts';
-import { PLAYOFF_ROUND_BASE } from '../../engine/season/schedule.ts';
+import { stageLabel } from '../../engine/season/cups.ts';
 import { seasonTotals } from '../../engine/world/records.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import {
@@ -50,11 +50,6 @@ export function HomeScreen(): JSX.Element {
   );
 }
 
-/** Round label for the kicker: "Matchday 20", or the playoffs. */
-function roundLabel(round: number): string {
-  return round >= PLAYOFF_ROUND_BASE ? 'Playoffs' : `Matchday ${round + 1}`;
-}
-
 function NowManaging(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -96,7 +91,7 @@ function NowManaging(): JSX.Element {
     <section className="hm-banner">
       <div className="hm-banner-main">
         <div className="hm-kicker">
-          Now managing · {roundLabel(next.round)} · {shortDate} · {comp?.name ?? ''} · <span>{manager}</span>
+          Now managing · {stageLabel(world, next)} · {shortDate} · {comp?.name ?? ''} · <span>{manager}</span>
         </div>
         <div className="hm-teams">
           <ClubCrest club={club} size={54} />
@@ -113,7 +108,9 @@ function NowManaging(): JSX.Element {
       </div>
       <div className="hm-banner-side">
         <div className="hm-side-line">
-          <span className={`hm-venue${isHome ? ' is-home' : ''}`}>{isHome ? 'Home' : 'Away'}</span>
+          <span className={`hm-venue${isHome && !next.neutralVenue ? ' is-home' : ''}`}>
+            {next.neutralVenue ? 'Neutral' : isHome ? 'Home' : 'Away'}
+          </span>
           <button className="hm-link" onClick={() => g.go('calendar')}>Calendar <Icon name="arrowRight" size={14} /></button>
         </div>
         <span className="hm-chip">Transfer budget <b>{money(club.finances.transferBudget)}</b></span>
@@ -269,7 +266,7 @@ function LastMatch({ fixtureId }: { fixtureId: number }): JSX.Element {
   return (
     <div className="hm-last">
       <div className="hm-label">Last match</div>
-      <div className="hm-last-round">{roundLabel(f.round)}</div>
+      <div className="hm-last-round">{world.competitions[f.competitionId]?.name} · {stageLabel(world, f)}</div>
       <div className="hm-last-score">
         {([[home, f.homeSets, f.homeSets > f.awaySets], [away, f.awaySets, f.awaySets > f.homeSets]] as const).map(([c, sets, won], i) => (
           <div key={i} className={`hm-last-team${won ? ' won' : ''}${c?.id === world.userClubId ? ' mine' : ''}`}>

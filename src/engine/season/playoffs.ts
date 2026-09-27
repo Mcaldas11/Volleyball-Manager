@@ -89,7 +89,7 @@ function seedOrder(size: number): number[] {
 
 /** First round of a bracket for `seedCount` entrants: padded with byes (up
  *  to the next power of two) awarded to the top seeds. */
-function buildFirstRound(seedCount: number): PlayoffTie[] {
+export function buildFirstRound(seedCount: number): PlayoffTie[] {
   let size = 1;
   while (size < seedCount) size *= 2;
   const slots = seedOrder(size).map((rank) => (rank < seedCount ? rank : -1));
@@ -109,7 +109,7 @@ function buildFirstRound(seedCount: number): PlayoffTie[] {
 }
 
 /** Pair up the previous round's winners for the next round. */
-function buildNextRound(prevRound: PlayoffTie[]): PlayoffTie[] {
+export function buildNextRound(prevRound: PlayoffTie[]): PlayoffTie[] {
   const ties: PlayoffTie[] = [];
   for (let i = 0; i < prevRound.length; i += 2) {
     ties.push({
@@ -125,7 +125,7 @@ function buildNextRound(prevRound: PlayoffTie[]): PlayoffTie[] {
 /** Finishing order from a resolved bracket: champion, runner-up, then each
  *  earlier round's losers (better seed first) — the standard placement
  *  convention for a bracket with no third-place playoff. */
-function computeFinalOrder(group: PlayoffGroup): number[] {
+export function computeFinalOrder(group: PlayoffGroup): number[] {
   const rounds = group.rounds;
   const final = rounds[rounds.length - 1][0];
   const runnerUpSeed = final.winnerSeed === final.homeSeed ? final.awaySeed : final.homeSeed;

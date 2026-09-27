@@ -25,6 +25,7 @@ import { cityBankFor } from './cities.ts';
 import { bankFor } from './names.ts';
 import { NATIONS, type Confederation } from './nations.ts';
 import { estimateValue, generatePlayer } from './playerGen.ts';
+import { ensureCupCompetitions } from '../season/cups.ts';
 import {
   DAYS_PER_SEASON, newWorld, seasonEndDay, type Competition, type ManagerProfile, type NationalTeam, type World,
 } from './world.ts';
@@ -103,7 +104,7 @@ export function generateWorld(opts: WorldGenOptions): World {
   }
 
   createNationalTeams(world);
-  createContinentalCups(world);
+  ensureCupCompetitions(world);
 
   return world;
 }
@@ -482,45 +483,4 @@ export function pickBalancedSquad(
     out.push(...candidates.slice(0, shape[pos]));
   }
   return out;
-}
-
-// ---- Continental club competitions ---------------------------------------
-
-function createContinentalCups(world: World): void {
-  const confs: Confederation[] = ['CEV', 'CSV', 'NORCECA', 'AVC', 'CAVB'];
-  const names: Record<Confederation, string> = {
-    CEV: 'Champions League',
-    CSV: 'South American Club Championship',
-    NORCECA: 'NORCECA Club Championship',
-    AVC: 'Asian Club Championship',
-    CAVB: 'African Club Championship',
-  };
-
-  for (const conf of confs) {
-    const eligible = world.clubs
-      .filter((c) => c.tier === 1 && NATIONS[c.nation].confederation === conf)
-      .sort((a, b) => b.reputation - a.reputation)
-      .slice(0, conf === 'CEV' ? 20 : 12);
-    if (eligible.length < 4) continue;
-
-    const comp: Competition = {
-      id: world.competitions.length,
-      name: names[conf],
-      kind: 'continental',
-      nation: -1,
-      tier: 0,
-      participants: eligible.map((c) => c.id),
-      table: eligible.map((c) => newTableRow(c.id)),
-      fixtureIds: [],
-      reputation: 9500,
-      promotionSlots: 0,
-      relegationSlots: 0,
-      hasPlayoffs: true,
-      playoffTeams: 8,
-      champion: -1,
-      prizePool: conf === 'CEV' ? 2_500_000 : 600_000,
-      playoffGroups: [],
-    };
-    world.competitions.push(comp);
-  }
 }

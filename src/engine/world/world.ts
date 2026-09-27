@@ -18,12 +18,53 @@ import type { Talks } from './deals.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 
-export type CompetitionKind = 'league' | 'cup' | 'continental' | 'international';
+/**
+ * What a competition is: a domestic league; a national cup, or the super cup
+ * its league and cup winners open the season with; a continental club
+ * competition (Europe's Champions League and CEV Cup, each other
+ * confederation's club championship); the Club World Championship, open to
+ * clubs from anywhere; or a national-team tournament.
+ */
+export type CompetitionKind = 'league' | 'cup' | 'supercup' | 'continental' | 'clubworld' | 'international';
+
+/** One group of a cup competition's group stage. */
+export interface CupGroup {
+  /** "A", "B"… */
+  name: string;
+  clubIds: number[];
+  fixtureIds: number[];
+}
+
+/**
+ * A cup competition's season: a group stage when the format has one, then a
+ * knockout — the same single-elimination bracket the league playoffs use.
+ */
+export interface CupState {
+  season: number;
+  /** The clubs drawn this season, best seed first. */
+  entrants: number[];
+  groups: CupGroup[];
+  /** How many clubs from each group go through to the knockout. */
+  advancePerGroup: number;
+  /** The knockout, once drawn. */
+  bracket: PlayoffGroup | null;
+  /** Target day (absolute) of each knockout round, the first to the final. */
+  roundDays: number[];
+  /** Which knockout matches are at a neutral venue. */
+  neutral: 'none' | 'final' | 'all';
+}
 
 export interface Competition {
   id: number;
   name: string;
   kind: CompetitionKind;
+  /** Stable identity for cup competitions ("cup:ITA", "cont:CEV:1", "clubworld"),
+   *  so a save can tell which ones it already has. Absent on leagues. */
+  key?: string;
+  /** Who runs it — a national federation, a confederation, FIVB. */
+  organizer?: string;
+  /** This season's groups and bracket, for a cup competition. */
+  cup?: CupState;
   /** Nation index for domestic competitions, -1 otherwise. */
   nation: number;
   tier: number;
@@ -179,6 +220,8 @@ export interface SeasonReviewStanding {
   setsFor: number;
   setsAgainst: number;
   champion: boolean;
+  /** For a cup: how far the club got — "Winners", "Semi-final", "Group stage". */
+  stage?: string;
 }
 
 /** One of the club's own end-of-season awards. */

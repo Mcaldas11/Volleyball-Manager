@@ -35,6 +35,7 @@ import {
 } from '../engine/world/deals.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import { welcomeMessages } from '../engine/world/inbox.ts';
+import { entryNotices, isCupFinal } from '../engine/season/cups.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
@@ -47,7 +48,7 @@ import {
 } from './persistence.ts';
 
 export type ScreenId =
-  | 'home' | 'inbox' | 'calendar' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
+  | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame';
 
@@ -126,11 +127,14 @@ interface NavEntry {
   selectedClub: number | null;
   /** Inbox message whose season review is open full-screen. */
   selectedReview: number | null;
+  /** Competition whose page is open. */
+  selectedCompetition: number | null;
 }
 
 function sameNav(a: NavEntry, b: NavEntry): boolean {
   return a.screen === b.screen && a.selectedPlayer === b.selectedPlayer &&
-    a.selectedClub === b.selectedClub && a.selectedReview === b.selectedReview;
+    a.selectedClub === b.selectedClub && a.selectedReview === b.selectedReview &&
+    a.selectedCompetition === b.selectedCompetition;
 }
 
 /** How many steps back the header's back button remembers. */
@@ -226,6 +230,8 @@ class Game {
   selectedClub: number | null = null;
   /** Id of the inbox message whose season review is open full-screen, if any. */
   selectedReview: number | null = null;
+  /** Competition whose page is open over the current screen, if any. */
+  selectedCompetition: number | null = null;
   /** Player the Scouting screen should jump to next time it opens; consumed once. */
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
@@ -293,6 +299,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.matchday = null;
@@ -345,6 +352,7 @@ class Game {
       this.selectedPlayer = null;
       this.selectedClub = null;
       this.selectedReview = null;
+      this.selectedCompetition = null;
       this.negotiation = null;
       this.incomingOffer = null;
       this.matchday = null;
@@ -415,6 +423,7 @@ class Game {
     if (this.world === null) return;
     this.world.userClubId = clubId;
     welcomeMessages(this.world);
+    entryNotices(this.world);
     this.screen = 'home';
     this.resetHistory();
     this.emit();
@@ -433,6 +442,7 @@ class Game {
       selectedPlayer: this.selectedPlayer,
       selectedClub: this.selectedClub,
       selectedReview: this.selectedReview,
+      selectedCompetition: this.selectedCompetition,
     };
   }
 
@@ -456,6 +466,7 @@ class Game {
     this.selectedPlayer = entry.selectedPlayer;
     this.selectedClub = entry.selectedClub;
     this.selectedReview = entry.selectedReview;
+    this.selectedCompetition = entry.selectedCompetition;
     this.negotiation = null;
     this.incomingOffer = null;
     this.emit();
@@ -496,11 +507,12 @@ class Game {
   }
 
   go(screen: ScreenId): void {
-    this.pushHistory({ screen, selectedPlayer: null, selectedClub: null, selectedReview: null });
+    this.pushHistory({ screen, selectedPlayer: null, selectedClub: null, selectedReview: null, selectedCompetition: null });
     this.screen = screen;
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     // Navigating away must always work, even mid-negotiation — the deal
     // itself is untouched (it lives in world.incomingOffers), only the
     // full-screen prompt for it closes.
@@ -511,12 +523,13 @@ class Game {
 
   select(playerIdx: number | null): void {
     if (playerIdx !== null) {
-      this.pushHistory({ screen: this.screen, selectedPlayer: playerIdx, selectedClub: null, selectedReview: null });
+      this.pushHistory({ screen: this.screen, selectedPlayer: playerIdx, selectedClub: null, selectedReview: null, selectedCompetition: null });
     }
     this.selectedPlayer = playerIdx;
     if (playerIdx !== null) {
       this.selectedClub = null;
       this.selectedReview = null;
+      this.selectedCompetition = null;
       this.incomingOffer = null;
     }
     this.emit();
@@ -524,14 +537,29 @@ class Game {
 
   selectClub(clubId: number | null): void {
     if (clubId !== null) {
-      this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: clubId, selectedReview: null });
+      this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: clubId, selectedReview: null, selectedCompetition: null });
     }
     this.selectedClub = clubId;
     if (clubId !== null) {
       this.selectedPlayer = null;
       this.selectedReview = null;
+      this.selectedCompetition = null;
       this.incomingOffer = null;
     }
+    this.emit();
+  }
+
+  /** Open a competition's page: its groups, bracket and results. */
+  openCompetition(compId: number): void {
+    this.pushHistory({
+      screen: this.screen, selectedPlayer: null, selectedClub: null, selectedReview: null, selectedCompetition: compId,
+    });
+    this.selectedCompetition = compId;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedReview = null;
+    this.negotiation = null;
+    this.incomingOffer = null;
     this.emit();
   }
 
@@ -552,7 +580,7 @@ class Game {
     const msg = world.messages.find((m) => m.id === messageId);
     if (msg?.seasonReview === undefined) return;
     msg.read = true;
-    this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: null, selectedReview: messageId });
+    this.pushHistory({ screen: this.screen, selectedPlayer: null, selectedClub: null, selectedReview: messageId, selectedCompetition: null });
     this.selectedReview = messageId;
     this.selectedPlayer = null;
     this.selectedClub = null;
@@ -564,6 +592,7 @@ class Game {
   /** Close the full-screen season review — like closing a profile, not a step in the history. */
   closeSeasonReview(): void {
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.emit();
   }
 
@@ -584,11 +613,12 @@ class Game {
     if (world === null) return;
     const m = world.messages.find((x) => x.id === messageId);
     if (m === undefined) return;
-    this.pushHistory({ screen: 'inbox', selectedPlayer: null, selectedClub: null, selectedReview: null });
+    this.pushHistory({ screen: 'inbox', selectedPlayer: null, selectedClub: null, selectedReview: null, selectedCompetition: null });
     this.screen = 'inbox';
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.inboxSelected = messageId;
@@ -650,6 +680,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.incomingOffer = null;
     this.emit();
   }
@@ -694,12 +725,13 @@ class Game {
 
   /** Jump to the Scouting screen with a specific player already selected. */
   focusScouting(playerIdx: number): void {
-    this.pushHistory({ screen: 'scouting', selectedPlayer: null, selectedClub: null, selectedReview: null });
+    this.pushHistory({ screen: 'scouting', selectedPlayer: null, selectedClub: null, selectedReview: null, selectedCompetition: null });
     this.scoutingFocus = playerIdx;
     this.screen = 'scouting';
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.incomingOffer = null;
     this.emit();
   }
@@ -797,6 +829,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.emit();
@@ -842,7 +875,7 @@ class Game {
     const title = record?.champions.find((c) => {
       if (c.winner !== world.userClubId) return false;
       const comp = world.competitions[c.competitionId];
-      return comp === undefined || !comp.hasPlayoffs;
+      return comp !== undefined && comp.kind === 'league' && !comp.hasPlayoffs;
     });
     if (title !== undefined) {
       const comp = world.competitions[title.competitionId];
@@ -950,6 +983,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.emit();
@@ -1373,6 +1407,12 @@ class Game {
   private checkChampionshipWin(world: World, fixture: Fixture): void {
     if (fixture.home !== world.userClubId && fixture.away !== world.userClubId) return;
     const comp = world.competitions[fixture.competitionId];
+    // A cup final — national, continental or the world championship.
+    if (comp !== undefined && isCupFinal(world, fixture)) {
+      const winner = fixture.homeSets > fixture.awaySets ? fixture.home : fixture.away;
+      if (winner === world.userClubId) this.trophyCelebration = { clubId: world.userClubId, competitionName: comp.name };
+      return;
+    }
     const champGroup = comp?.playoffGroups.find((g) => g.id === 'championship');
     if (champGroup === undefined) return;
     const finalRound = champGroup.rounds[champGroup.rounds.length - 1];
@@ -1541,6 +1581,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.incomingOffer = null;
     this.emit();
   }
@@ -1727,6 +1768,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedReview = null;
+    this.selectedCompetition = null;
     this.negotiation = null;
     this.emit();
   }

@@ -16,6 +16,7 @@ import {
 } from '../world/world.ts';
 import { clubBooks } from './books.ts';
 import { finalStandingsOrder } from './playoffs.ts';
+import { cupProgress, isCupCompetition } from './cups.ts';
 import type { SeasonContext } from './seasonEngine.ts';
 
 /** Fewest appearances, as a share of the club's matches, for a form award to count. */
@@ -118,8 +119,30 @@ function standings(world: World, club: Club): SeasonReviewStanding[] {
       champion: settled && order[0] === club.id,
     });
   }
-  // The league first, then continental competition.
-  const rank = (s: SeasonReviewStanding): number => (world.competitions[s.competitionId].kind === 'league' ? 0 : 1);
+  // Cups: how far the club got, and its record in them.
+  for (const comp of world.competitions) {
+    if (!isCupCompetition(comp) || comp.cup?.season !== world.season) continue;
+    const progress = cupProgress(comp, club.id);
+    if (progress === null) continue;
+    const s: SeasonReviewStanding = {
+      competitionId: comp.id, position: progress.champion ? 1 : 0, tablePosition: 0, teams: comp.participants.length,
+      won: 0, lost: 0, points: 0, setsFor: 0, setsAgainst: 0, champion: progress.champion, stage: progress.stage,
+    };
+    for (const id of comp.fixtureIds) {
+      const f = world.fixtures[id];
+      if (!f.played || (f.home !== club.id && f.away !== club.id)) continue;
+      const home = f.home === club.id;
+      const forSets = home ? f.homeSets : f.awaySets;
+      const againstSets = home ? f.awaySets : f.homeSets;
+      s.setsFor += forSets;
+      s.setsAgainst += againstSets;
+      if (forSets > againstSets) s.won++; else s.lost++;
+    }
+    if (s.won + s.lost > 0) out.push(s);
+  }
+  // The league first, then the cups at home, then abroad.
+  const order = ['league', 'supercup', 'cup', 'continental', 'clubworld'];
+  const rank = (s: SeasonReviewStanding): number => order.indexOf(world.competitions[s.competitionId].kind);
   return out.sort((a, b) => rank(a) - rank(b));
 }
 

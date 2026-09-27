@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react';
-import { PLAYOFF_ROUND_BASE } from '../../engine/season/schedule.ts';
-import { DAYS_PER_SEASON, TRANSFER_WINDOWS, type Fixture } from '../../engine/world/world.ts';
+import { stageLabel } from '../../engine/season/cups.ts';
+import { DAYS_PER_SEASON, TRANSFER_WINDOWS, type Competition, type Fixture } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -137,8 +137,7 @@ export function CalendarScreen(): JSX.Element {
                     {opp?.name ?? '—'} ({isHome ? 'H' : 'A'})
                   </strong>
                   <span>
-                    {date?.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })} · {comp?.name ?? ''}
-                    {f.round < PLAYOFF_ROUND_BASE ? ` · MD${f.round + 1}` : ' · Playoffs'}
+                    {comp?.name ?? ''} · {stageLabel(world, f)}
                   </span>
                 </span>
                 {f === next && <span className="cal-up-next">Next</span>}
@@ -150,13 +149,26 @@ export function CalendarScreen(): JSX.Element {
         <section className="cal-card cal-legend">
           <span className="cal-card-title">Legend</span>
           <span><b className="lg-league">League</b>: domestic match</span>
-          <span><b className="lg-cup">Cup / Europe</b>: other competitions</span>
+          <span><b className="lg-cup">Cup</b>: national cup and super cup</span>
+          <span><b className="lg-continental">Continental</b>: Champions League and the like</span>
+          <span><b className="lg-world">World</b>: Club World Championship</span>
           <span><b className="lg-deadline">Deadline</b>: transfer window closes</span>
           <span><b className="lg-result">W / L</b>: final result</span>
         </section>
       </aside>
     </div>
   );
+}
+
+/** A short tag for a chip — empty for the league, whose matches are most of the calendar. */
+function shortCompName(comp: Competition | undefined): string {
+  if (comp === undefined || comp.kind === 'league') return '';
+  if (comp.key === 'cont:CEV:1') return 'CL';
+  if (comp.key === 'cont:CEV:2') return 'CEV Cup';
+  if (comp.kind === 'clubworld') return 'CWC';
+  if (comp.kind === 'supercup') return 'Super Cup';
+  if (comp.kind === 'cup') return 'Cup';
+  return comp.organizer ?? 'Cont.';
 }
 
 function FixtureChip({ fixture: f }: { fixture: Fixture }): JSX.Element {
@@ -166,20 +178,22 @@ function FixtureChip({ fixture: f }: { fixture: Fixture }): JSX.Element {
   const isHome = f.home === club.id;
   const opp = world.clubs[isHome ? f.away : f.home];
   const comp = world.competitions[f.competitionId];
-  const kind = comp?.kind === 'league' ? 'league' : 'cup';
-  const name = `${opp?.name ?? '—'} (${isHome ? 'H' : 'A'})`;
+  const kind = comp?.kind === 'league' ? 'league'
+    : comp?.kind === 'continental' ? 'continental' : comp?.kind === 'clubworld' ? 'world' : 'cup';
+  const tag = shortCompName(comp);
+  const name = `${tag !== '' ? `${tag} · ` : ''}${opp?.name ?? '—'} (${f.neutralVenue ? 'N' : isHome ? 'H' : 'A'})`;
   if (f.played) {
     const us = isHome ? f.homeSets : f.awaySets;
     const them = isHome ? f.awaySets : f.homeSets;
     const won = us > them;
     return (
-      <span className={`cal-chip result ${won ? 'win' : 'loss'}`} title={`${opp?.name ?? ''} ${us}-${them}`}>
+      <span className={`cal-chip result ${won ? 'win' : 'loss'}`} title={`${comp?.name ?? ''}: ${opp?.name ?? ''} ${us}-${them}`}>
         {won ? 'W' : 'L'} {us}-{them} · {name}
       </span>
     );
   }
   return (
-    <button className={`cal-chip ${kind}`} title={opp?.name} onClick={() => opp !== undefined && g.selectClub(opp.id)}>
+    <button className={`cal-chip ${kind}`} title={`${comp?.name ?? ''}: ${opp?.name ?? ''}`} onClick={() => opp !== undefined && g.selectClub(opp.id)}>
       {name}
     </button>
   );

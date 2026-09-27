@@ -3,7 +3,7 @@ import { matchRating } from '../../engine/match/playerRating.ts';
 import { aggregateTeam, type PlayerMatchStats } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
 import { POSITION_SHORT } from '../../engine/model/positions.ts';
-import { PLAYOFF_ROUND_BASE } from '../../engine/season/schedule.ts';
+import { stageLabel } from '../../engine/season/cups.ts';
 import { ClubCrest, PlayerFace, RatingBadge } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -65,7 +65,7 @@ export function MatchResultScreen(): JSX.Element | null {
 
   const homeSide = fixture.home === me ? 'mine' : 'theirs';
   const awaySide = fixture.away === me ? 'mine' : 'theirs';
-  const round = fixture.round >= PLAYOFF_ROUND_BASE ? 'Playoffs' : `Round ${fixture.round + 1}`;
+  const round = stageLabel(world, fixture);
 
   const teamRow = (clubId: number, sets: number, won: boolean, side: 0 | 1): JSX.Element => {
     const c = world.clubs[clubId];

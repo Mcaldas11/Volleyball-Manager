@@ -15,6 +15,7 @@ import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, SQUAD_TARGET } from '../model/positions.ts';
 import { finalStandingsOrder } from './playoffs.ts';
+import { isCupCompetition, qualifyForCups } from './cups.ts';
 import {
   applyAgeing, generateYouthIntake, processRetirements, revalueSquads, revisePotential,
 } from '../world/progression.ts';
@@ -70,6 +71,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   awardTitles(world, report, record);
   // The user's season review reads the tables and books before they are settled.
   const review = beginSeasonReview(world, ctx);
+  // Next season's continental places and super cups go on this season's results.
+  qualifyForCups(world);
   settleFinances(world, report, record);
   applyPromotionRelegation(world, report);
 
@@ -139,10 +142,27 @@ function awardTitles(world: World, report: RolloverReport, record: SeasonRecord)
       const c = world.clubs[clubId];
       if (c === undefined) return;
       const share = comp.prizePool * Math.pow(0.82, i);
-      c.finances.prizeMoney = Math.round(share);
+      c.finances.prizeMoney += Math.round(share);
       c.finances.balance += Math.round(share);
       c.finances.seasonIncome += Math.round(share);
     });
+  }
+
+  // Cup winners were crowned — and paid — the day of their final; the season
+  // record and the trophy cabinets catch up here.
+  for (const comp of world.competitions) {
+    const bracket = comp.cup?.bracket;
+    if (!isCupCompetition(comp) || comp.cup?.season !== world.season || bracket == null || !bracket.resolved) continue;
+    const winner = bracket.finalOrder[0];
+    record.champions.push({ competitionId: comp.id, winner });
+    const club = world.clubs[winner];
+    if (club === undefined) continue;
+    // Into the club's trophy cabinet — but not a player's career titles,
+    // which are league titles (the Hall of Fame is calibrated on those).
+    club.titlesWon++;
+    if (comp.kind === 'continental' || comp.kind === 'clubworld') {
+      report.champions.push({ competition: comp.name, winner: club.name });
+    }
   }
 }
 

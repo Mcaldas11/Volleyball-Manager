@@ -89,7 +89,22 @@ export function monthLabel(world: Pick<World, 'startYear'>, season: number, dayO
   return `${MONTH_NAMES[m]} ${year}`;
 }
 
-function ordinal(n: number): string {
+const WEEKDAY_NAMES: readonly string[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Sat 3 Oct" for an absolute day — the same calendar the interface shows. */
+export function formatDay(world: Pick<World, 'startYear'>, day: number): string {
+  const season = Math.floor(day / DAYS_PER_SEASON);
+  const d = ((day % DAYS_PER_SEASON) + DAYS_PER_SEASON) % DAYS_PER_SEASON;
+  let m = 0;
+  while (m + 1 < MONTH_STARTS.length && MONTH_STARTS[m + 1] <= d) m++;
+  const year = world.startYear + season + (m >= 6 ? 1 : 0);
+  const date = d - MONTH_STARTS[m] + 1;
+  // Season month 0 is July — month 6 of the calendar year.
+  const weekday = new Date(Date.UTC(year, (m + 6) % 12, date)).getUTCDay();
+  return `${WEEKDAY_NAMES[weekday]} ${date} ${MONTH_NAMES[m].slice(0, 3)}`;
+}
+
+export function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;

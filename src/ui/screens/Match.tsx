@@ -5,6 +5,7 @@ import { matchRating } from '../../engine/match/playerRating.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
 import { playoffBandSizes } from '../../engine/season/playoffs.ts';
+import { knockoutRoundName, knockoutRounds, stageLabel } from '../../engine/season/cups.ts';
 import type { Competition, PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
 import {
   Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerLink, RatingBadge, Segmented, StatTile,
@@ -44,8 +45,8 @@ export function FixturesScreen(): JSX.Element {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th className="num">Rd</th>
                   <th>Competition</th>
+                  <th>Stage</th>
                   <th>Venue</th>
                   <th>Opponent</th>
                   <th>Result</th>
@@ -64,8 +65,8 @@ export function FixturesScreen(): JSX.Element {
                         {g.weekdayLabelForDay(f.day)} {g.dateLabelForDay(f.day)}
                         {i === nextIdx && <span className="next-tag">Next</span>}
                       </td>
-                      <td className="num faint">{f.round >= 1000 ? 'PO' : f.round + 1}</td>
-                      <td className="faint">{comp?.name ?? ''}</td>
+                      <td className={comp?.kind === 'league' ? 'faint' : 'strong'}>{comp?.name ?? ''}</td>
+                      <td className="faint">{stageLabel(world, f)}</td>
                       <td><span className={`venue-tag ${isHome ? 'home' : 'away'}`}>{isHome ? 'Home' : 'Away'}</span></td>
                       <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
                       <td>
@@ -611,27 +612,12 @@ export function TableScreen(): JSX.Element {
   );
 }
 
-/** How many rounds a bracket of `seedCount` entrants eventually needs. */
-function totalPlayoffRounds(seedCount: number): number {
-  let size = 1;
-  let rounds = 0;
-  while (size < seedCount) { size *= 2; rounds++; }
-  return rounds;
-}
-
-function roundLabel(index: number, total: number): string {
-  const fromEnd = total - index;
-  if (fromEnd === 1) return 'Final';
-  if (fromEnd === 2) return 'Semifinals';
-  if (fromEnd === 3) return 'Quarterfinals';
-  return `Round ${index + 1}`;
-}
 
 /** A single-elimination bracket: one column per round, filled in as results
  *  come in. Rounds not yet reached show as empty "TBD" placeholders so the
  *  whole shape of the playoff is visible from the day it is drawn. */
-function BracketView({ group, world }: { group: PlayoffGroup; world: World }): JSX.Element {
-  const totalRounds = totalPlayoffRounds(group.seeds.length);
+export function BracketView({ group, world }: { group: PlayoffGroup; world: World }): JSX.Element {
+  const totalRounds = knockoutRounds(group.seeds.length);
 
   return (
     <div className="bracket">
@@ -640,7 +626,7 @@ function BracketView({ group, world }: { group: PlayoffGroup; world: World }): J
         const tieCount = 2 ** (totalRounds - ri - 1);
         return (
           <div className="bracket-round" key={ri}>
-            <div className="bracket-round-label">{roundLabel(ri, totalRounds)}</div>
+            <div className="bracket-round-label">{knockoutRoundName(ri, totalRounds)}</div>
             <div className="bracket-ties">
               {round !== undefined
                 ? round.map((tie, ti) => (

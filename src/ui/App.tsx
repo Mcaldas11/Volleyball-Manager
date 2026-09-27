@@ -11,6 +11,7 @@ import {
 } from './screens/Menu.tsx';
 import { CalendarScreen } from './screens/Calendar.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
+import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { HomeScreen } from './screens/Home.tsx';
 import { InboxScreen } from './screens/Inbox.tsx';
 import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
@@ -38,6 +39,7 @@ function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.selectedClub !== null) return `club-${g.selectedClub}`;
   if (g.selectedPlayer !== null) return `player-${g.selectedPlayer}`;
   if (g.selectedReview !== null) return `review-${g.selectedReview}`;
+  if (g.selectedCompetition !== null) return `competition-${g.selectedCompetition}`;
   return `screen-${g.screen}`;
 }
 
@@ -96,7 +98,12 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         icon: 'calendar',
         tabs: [['calendar', 'Calendar'], ['fixtures', 'Fixtures & Results']],
       },
-      { id: 'competitions', label: 'Competitions', icon: 'trophy', tabs: [['table', 'Standings']] },
+      {
+        id: 'competitions',
+        label: 'Competitions',
+        icon: 'trophy',
+        tabs: [['competitions', 'Overview'], ['table', 'League Table']],
+      },
       {
         id: 'stats',
         label: 'Stats',
@@ -175,7 +182,9 @@ function GameShell(): JSX.Element {
                           ? <PlayerDetail />
                           : g.selectedReview !== null
                             ? <SeasonReviewScreen />
-                            : <Screen />}
+                            : g.selectedCompetition !== null
+                              ? <CompetitionDetail />
+                              : <Screen />}
           </div>
         </main>
       </div>
@@ -202,6 +211,7 @@ function Screen(): JSX.Element {
     case 'home': return <HomeScreen />;
     case 'inbox': return <InboxScreen />;
     case 'calendar': return <CalendarScreen />;
+    case 'competitions': return <CompetitionsScreen />;
     case 'squad': return <SquadScreen />;
     case 'lineup': return <LineupScreen />;
     case 'tactics': return <TacticsScreen />;
@@ -243,7 +253,7 @@ function Sidebar({
   const clubInfoActive = g.selectedClub === club.id;
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null ||
     g.negotiation !== null || g.incomingOffer !== null;
-  const activeSection = onProfile ? null : sectionFor(g.screen).id;
+  const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
 
   const item = (
     key: string, label: string, icon: IconName, active: boolean, onClick: () => void, badge?: number,
@@ -354,6 +364,7 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   }
   if (g.selectedPlayer !== null) return { title: 'Player', tabs: null };
   if (g.selectedReview !== null) return { title: 'Season Review', tabs: null };
+  if (g.selectedCompetition !== null) return { title: 'Competition', tabs: null };
   const section = sectionFor(g.screen);
   return { title: section.label, tabs: section.tabs.length > 1 ? section.tabs : null };
 }
@@ -397,7 +408,7 @@ function Header(): JSX.Element {
           {info.tabs.map(([id, label]) => (
             <button
               key={id}
-              className={`hdr-tab${g.screen === id && g.selectedClub === null && g.selectedPlayer === null ? ' active' : ''}`}
+              className={`hdr-tab${g.screen === id && g.selectedClub === null && g.selectedPlayer === null && g.selectedCompetition === null ? ' active' : ''}`}
               onClick={() => g.go(id)}
             >
               {label}
