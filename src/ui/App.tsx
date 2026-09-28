@@ -11,6 +11,7 @@ import {
 } from './screens/Menu.tsx';
 import { CalendarScreen } from './screens/Calendar.tsx';
 import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
+import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { HomeScreen } from './screens/Home.tsx';
@@ -36,6 +37,7 @@ function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.postMatch !== null) return `result-${g.postMatch}`;
   if (g.negotiation !== null) return 'negotiation';
   if (g.incomingOffer !== null) return 'offer';
+  if (g.coachTalk !== null) return 'coach-talk';
   if (g.activeInterviewFixtureId !== null) return `interview-${g.activeInterviewFixtureId}`;
   if (g.selectedClub !== null) return `club-${g.selectedClub}`;
   if (g.selectedPlayer !== null) return `player-${g.selectedPlayer}`;
@@ -183,6 +185,8 @@ function GameShell(): JSX.Element {
                   ? <NegotiationScreen />
                   : g.incomingOffer !== null
                     ? <IncomingOfferScreen />
+                    : g.coachTalk !== null
+                    ? <CoachTalkScreen />
                     : g.activeInterviewFixtureId !== null
                       ? <InterviewScreen />
                       : g.selectedClub !== null
@@ -266,7 +270,7 @@ function Sidebar({
   const clubInfoActive = club !== null && g.selectedClub === club.id;
   const offers = world.career.offers.length;
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null ||
-    g.negotiation !== null || g.incomingOffer !== null;
+    g.negotiation !== null || g.incomingOffer !== null || g.coachTalk !== null;
   const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
 
   const item = (
@@ -383,6 +387,7 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   if (g.postMatch !== null) return { title: 'Full Time', tabs: null };
   if (g.negotiation !== null) return { title: 'Contract Negotiation', tabs: null };
   if (g.incomingOffer !== null) return { title: 'Transfer Offer', tabs: null };
+  if (g.coachTalk !== null) return { title: 'Talk to the Coach', tabs: null };
   if (g.activeInterviewFixtureId !== null) return { title: 'Press Conference', tabs: null };
   if (g.selectedClub !== null) {
     return { title: g.selectedClub === world.userClubId ? 'Club Info' : 'Club', tabs: null };

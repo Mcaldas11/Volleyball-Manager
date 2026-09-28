@@ -8,7 +8,7 @@ import {
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { canRecall, PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
+import { canRecall, coachTalkBlock, PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import {
@@ -508,6 +508,15 @@ export function PlayerDetail(): JSX.Element | null {
           {lentOut && (
             <button onClick={() => g.compileLoanMatches(p)}>
               <Icon name="stats" size={14} /> Compile matches
+            </button>
+          )}
+          {lentOut && (
+            <button
+              disabled={coachTalkBlock(world, p) !== null}
+              title={coachTalkBlock(world, p) ?? 'Ask his loan club\'s coach to play him more'}
+              onClick={() => g.openCoachTalk(p)}
+            >
+              <Icon name="press" size={14} /> Talk to the coach
             </button>
           )}
           {lentOut && canRecall(world, p) && (

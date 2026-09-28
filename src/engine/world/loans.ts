@@ -21,6 +21,7 @@ import { matchRating, playedInMatch } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, POSITION_NAMES } from '../model/positions.ts';
+import { StaffRole, type Staff } from '../model/staff.ts';
 import { arrivalsFor, moveDay, pendingMoveOf, pendingWages, seasonOfDay } from './moves.ts';
 import type { IncomingOffer } from './negotiation.ts';
 import { euros, seasonEndDay, type Fixture, type GameMessage, type World } from './world.ts';
@@ -141,6 +142,8 @@ export interface Loan {
   /** The record and his ability as the last monthly update left them. */
   monthStats?: LoanStats;
   monthAbility?: number;
+  /** Day the user last spoke to the loan club's coach about him. */
+  coachTalkOn?: number;
 }
 
 /** A snapshot of a loan, compiled into a report for the inbox. */
@@ -805,4 +808,154 @@ export function recallFromLoan(world: World, playerIdx: number): boolean {
     category: 'offer',
   });
   return true;
+}
+// ---- Talking to the loan club's coach --------------------------------------------------
+
+/** Days between two conversations with a loanee's coach. */
+const COACH_TALK_GAP_DAYS = 21;
+/** Fit matches before there is anything to talk about. */
+const COACH_TALK_MIN_MATCHES = 3;
+
+/** The loan club's head coach, if it has one. */
+function loanCoach(world: World, loan: Loan): Staff | undefined {
+  const club = world.clubs[loan.loanClubId];
+  for (const id of club?.staff ?? []) {
+    const s = world.staff[id];
+    if (s !== undefined && s.role === StaffRole.HeadCoach) return s;
+  }
+  return undefined;
+}
+
+/** The loan club's coach, as the user would name him. */
+export function loanCoachName(world: World, loan: Loan): string {
+  const coach = loanCoach(world, loan);
+  return coach !== undefined
+    ? `${coach.firstName} ${coach.lastName}`
+    : `${world.clubs[loan.loanClubId]?.name ?? 'His club'}'s interim coach`;
+}
+
+/** Playing little: short of the games agreed, or of half the play when little was. */
+function playingLittle(loan: Loan): boolean {
+  const target = loan.playingTime !== undefined ? PLAYING_TIME_SHARE[loan.playingTime] : 0;
+  return promiseShare(loan.stats) < Math.max(0.5, target - 0.1);
+}
+
+/** Why the user can't raise a loanee's playing time with his coach right now, or null if he can. */
+export function coachTalkBlock(world: World, playerIdx: number): string | null {
+  const loan = loanOf(world, playerIdx);
+  if (loan === undefined || loan.parentClubId !== world.userClubId) return 'He is not out on loan from your club.';
+  const fit = fitMatches(loan.stats);
+  if (fit < COACH_TALK_MIN_MATCHES) {
+    return `Give it a few matches first — he has only been fit for ${fit} of their matches so far.`;
+  }
+  if (loan.coachTalkOn !== undefined && world.day - loan.coachTalkOn < COACH_TALK_GAP_DAYS) {
+    return `You spoke to ${loanCoachName(world, loan)} only recently — give it a few weeks.`;
+  }
+  if (!playingLittle(loan)) return 'He is getting his games — there is nothing to raise.';
+  return null;
+}
+
+/**
+ * What the user can ask a loanee's coach for: the playing time already agreed,
+ * when the club is falling short of it, and any step up from it.
+ */
+export function coachRequests(world: World, playerIdx: number): LoanPlayingTime[] {
+  const loan = loanOf(world, playerIdx);
+  if (loan === undefined) return [];
+  const current = loan.playingTime;
+  const share = promiseShare(loan.stats);
+  const out: LoanPlayingTime[] = [];
+  if (current !== undefined && share < PLAYING_TIME_SHARE[current] - 0.1) out.push(current);
+  for (const t of LOAN_PLAYING_TIMES) {
+    const more = current === undefined ? PLAYING_TIME_SHARE[t] > share : playingTimeRank(t) > playingTimeRank(current);
+    if (more) out.push(t);
+  }
+  return out;
+}
+
+export interface CoachTalkResult {
+  agreed: boolean;
+  /** What the coach said, in his own words. */
+  reply: string;
+}
+
+/**
+ * The user raises one of his loanees' playing time with the coach playing him:
+ * asking him to keep to the games agreed, or for more — diplomatically or
+ * firmly. A coach keeps to a deal he is breaking more readily than he hands out
+ * a new place, and gives nobody more than his squad allows; a loanee playing
+ * well helps the case, and being told how to pick his team does not — a firm
+ * word refused leaves him less inclined to keep his word. The conversation goes
+ * on the record in the inbox. Returns null if there is nothing to raise.
+ */
+export function talkToLoanCoach(
+  world: World, playerIdx: number, request: LoanPlayingTime, firm: boolean,
+): CoachTalkResult | null {
+  if (coachTalkBlock(world, playerIdx) !== null || !coachRequests(world, playerIdx).includes(request)) return null;
+  const loan = loanOf(world, playerIdx)!;
+  const club = world.clubs[loan.loanClubId];
+  if (club === undefined) return null;
+  const store = world.players;
+  const st = loan.stats ?? newLoanStats();
+  const coach = loanCoachName(world, loan);
+  const surname = store.surname(playerIdx);
+  loan.coachTalkOn = world.day;
+
+  const keepingToDeal = request === loan.playingTime;
+  const merit = playingTimeOnOffer(world, club, playerIdx);
+  const beyondMerit = playingTimeRank(request) > playingTimeRank(merit);
+  const avg = st.apps > 0 ? st.ratingSum / st.apps : 6.6;
+  const handling = loanCoach(world, loan)?.attributes.manManagement ?? 10;
+
+  let chance = keepingToDeal ? 0.6 + (firm ? 0.15 : 0)
+    : beyondMerit ? 0.06
+      : 0.5 + (firm ? -0.15 : 0);
+  chance += Math.max(-0.15, Math.min(0.15, (avg - 6.6) * 0.25));
+  chance += (handling - 10) * 0.01;
+  const agreed = world.rng.chance(Math.max(0.03, Math.min(0.95, chance)));
+
+  let reply: string;
+  if (agreed && keepingToDeal) {
+    loan.honour = 1;
+    reply = `You're right — we agreed on it. ${surname} will get his games from the next match.`;
+  } else if (agreed) {
+    loan.playingTime = request;
+    reply = `He has done enough to earn it. From now on he is a ${PLAYING_TIME_NAMES[request].toLowerCase()} here.`;
+  } else if (firm && (!keepingToDeal || world.rng.chance(0.5))) {
+    // Told how to pick his team, he digs in.
+    if (loan.playingTime !== undefined) loan.honour = (loan.honour ?? 1) * 0.85;
+    reply = `I don't appreciate being told how to pick my team. ${surname} plays when he earns it.`;
+  } else if (beyondMerit) {
+    const pos = store.position[playerIdx];
+    const ahead = club.players
+      .filter((q) => q !== playerIdx && store.position[q] === pos && store.currentAbility[q] > store.currentAbility[playerIdx])
+      .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
+      .slice(0, 2)
+      .map((q) => store.surname(q));
+    reply = `Be realistic — ${ahead.join(' and ')} ${ahead.length === 1 ? 'is' : 'are'} ahead of him in his position. ` +
+      'I can\'t give him more than that.';
+  } else if (st.apps >= 2 && avg < 6.3) {
+    reply = 'His performances haven\'t earned it yet. Let him show me more and we\'ll talk again.';
+  } else if (keepingToDeal) {
+    reply = 'I pick the team on what I see in training, and right now others are ahead of him. That won\'t change for now.';
+  } else {
+    reply = 'Not right now. Let\'s see how the next few weeks go.';
+  }
+
+  const name = store.fullName(playerIdx);
+  say(world, {
+    subject: agreed ? `${coach} agrees to play ${name} more` : `${coach} won't give ${name} more games`,
+    body: `You spoke to ${coach}, the ${club.name} coach, about ${name}'s playing time, ` +
+      (keepingToDeal
+        ? `asking him to keep to the playing time agreed — ${PLAYING_TIME_NAMES[request].toLowerCase()}.`
+        : `asking for playing time as a ${PLAYING_TIME_NAMES[request].toLowerCase()}.`) +
+      ` "${reply}"`,
+    from: coach,
+    playerIdx,
+    clubId: club.id,
+    loanOut: true,
+    loanRecall: promiseBroken(loan) ? true : undefined,
+    category: 'offer',
+  });
+  return { agreed, reply };
 }

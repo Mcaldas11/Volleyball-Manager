@@ -6,7 +6,8 @@ import {
   contractEndSeason, messageCategory, type GameMessage, type MessageCategory,
 } from '../../engine/world/world.ts';
 import {
-  canRecall, fitMatches, promiseShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport, type LoanStats,
+  canRecall, coachTalkBlock, fitMatches, promiseShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport,
+  type LoanStats,
 } from '../../engine/world/loans.ts';
 import {
   ClubCrest, initials, money, PlayerFace, RatingBadge, StarMeter,
@@ -710,6 +711,15 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     out.push(
       <button key="compile" className="paper-btn primary-dark" onClick={() => g.compileLoanMatches(p)}>
         <Icon name="stats" size={15} /> {m.loanReport !== undefined ? 'Compile again' : 'Compile matches'}
+      </button>,
+    );
+  }
+  // Playing too little: have a word with his coach.
+  if ((m.loanOut === true || m.loanReport !== undefined) && lentOut !== undefined && p !== undefined &&
+    coachTalkBlock(world, p) === null) {
+    out.push(
+      <button key="coach" className="paper-btn" onClick={() => g.openCoachTalk(p)}>
+        <Icon name="press" size={15} /> Talk to the coach
       </button>,
     );
   }

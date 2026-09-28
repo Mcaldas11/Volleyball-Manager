@@ -35,9 +35,9 @@ import {
   acceptIncomingOffer, closeTalks, counterIncomingOffer, counterLoanOffer, openTalks, submitOffer, type Talks,
 } from '../engine/world/deals.ts';
 import {
-  loanOf, loansOutOf, loanStarters, MAX_SQUAD, recallFromLoan as recallPlayer, requestLoanReport, squadSize,
-  wageBill, wageRoom,
-  type Loan, type LoanPlayingTime,
+  coachRequests, coachTalkBlock, loanOf, loansOutOf, loanStarters, MAX_SQUAD, recallFromLoan as recallPlayer,
+  requestLoanReport, squadSize, talkToLoanCoach, wageBill, wageRoom,
+  type CoachTalkResult, type Loan, type LoanPlayingTime,
 } from '../engine/world/loans.ts';
 import {
   arrivalsFor, moveDay, pendingMoveOf, seasonOfDay, type PendingMove,
@@ -142,6 +142,15 @@ export interface IncomingOfferReview {
   counterPlayingTime: LoanPlayingTime;
   message: string | null;
   expiresOnDay: number;
+}
+
+/** A conversation with a loanee's coach about his playing time: what is being
+ *  asked, how, and — once spoken — the coach's answer. */
+export interface CoachTalk {
+  playerIdx: number;
+  request: LoanPlayingTime;
+  firm: boolean;
+  result: CoachTalkResult | null;
 }
 
 /** One step in the in-game back/forward history — which screen, and which
@@ -277,6 +286,8 @@ class Game {
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
   incomingOffer: IncomingOfferReview | null = null;
+  /** A word with the coach of a club playing one of ours on loan. */
+  coachTalk: CoachTalk | null = null;
   /** Fixture id of the press conference currently open full-screen, if any. */
   activeInterviewFixtureId: number | null = null;
   matchday: MatchdayState | null = null;
@@ -345,6 +356,7 @@ class Game {
     this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.matchday = null;
     this.liveSim = null;
     this.pendingManager = null;
@@ -398,6 +410,7 @@ class Game {
       this.selectedCompetition = null;
       this.negotiation = null;
       this.incomingOffer = null;
+      this.coachTalk = null;
       this.matchday = null;
       this.liveSim = null;
       this.currentSaveId = id;
@@ -490,6 +503,7 @@ class Game {
   private employmentChanged(): void {
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCompetition = null;
@@ -586,6 +600,7 @@ class Game {
     this.selectedCompetition = entry.selectedCompetition;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -635,6 +650,7 @@ class Game {
     // full-screen prompt for it closes.
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -648,6 +664,7 @@ class Game {
       this.selectedReview = null;
       this.selectedCompetition = null;
       this.incomingOffer = null;
+      this.coachTalk = null;
     }
     this.emit();
   }
@@ -662,6 +679,7 @@ class Game {
       this.selectedReview = null;
       this.selectedCompetition = null;
       this.incomingOffer = null;
+      this.coachTalk = null;
     }
     this.emit();
   }
@@ -677,6 +695,7 @@ class Game {
     this.selectedReview = null;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -703,6 +722,7 @@ class Game {
     this.selectedClub = null;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -738,6 +758,7 @@ class Game {
     this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.inboxSelected = messageId;
     m.read = true;
     this.emit();
@@ -799,6 +820,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -850,6 +872,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -952,6 +975,7 @@ class Game {
     this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -1111,6 +1135,7 @@ class Game {
     this.selectedCompetition = null;
     this.negotiation = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -1835,6 +1860,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -2215,6 +2241,60 @@ class Game {
     const buyer = world.clubs[offer.buyingClubId];
     this.notice = `Your terms have gone to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
+    this.coachTalk = null;
+    this.emit();
+  }
+
+  /** Sit down with the coach of a club playing one of yours on loan too little. */
+  openCoachTalk(playerIdx: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const problem = coachTalkBlock(world, playerIdx);
+    const requests = coachRequests(world, playerIdx);
+    if (problem !== null || requests.length === 0) {
+      this.notice = problem ?? 'There is nothing to ask his coach for.';
+      this.emit();
+      return;
+    }
+    this.coachTalk = { playerIdx, request: requests[0], firm: false, result: null };
+    this.negotiation = null;
+    this.incomingOffer = null;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedReview = null;
+    this.selectedCompetition = null;
+    this.emit();
+  }
+
+  setCoachRequest(request: LoanPlayingTime): void {
+    if (this.coachTalk === null || this.coachTalk.result !== null) return;
+    this.coachTalk.request = request;
+    this.emit();
+  }
+
+  setCoachFirm(firm: boolean): void {
+    if (this.coachTalk === null || this.coachTalk.result !== null) return;
+    this.coachTalk.firm = firm;
+    this.emit();
+  }
+
+  /** Say it: the coach answers there and then. */
+  speakToCoach(): void {
+    const t = this.coachTalk;
+    const world = this.world;
+    if (t === null || world === null || t.result !== null) return;
+    const result = talkToLoanCoach(world, t.playerIdx, t.request, t.firm);
+    if (result === null) {
+      this.notice = coachTalkBlock(world, t.playerIdx) ?? 'That is not something to ask him for.';
+      this.coachTalk = null;
+    } else {
+      t.result = result;
+    }
+    this.emit();
+  }
+
+  closeCoachTalk(): void {
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -2262,6 +2342,7 @@ class Game {
       ? `Loan agreed with ${buyer?.name ?? 'them'} — ${name} will decide by ${this.dateLabelForDay(due)}.`
       : `${name} is talking terms with ${buyer?.name ?? 'them'} — he will decide by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -2281,6 +2362,7 @@ class Game {
     const buyer = world.clubs[offer.buyingClubId];
     this.notice = `Asking price sent to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 
@@ -2291,6 +2373,7 @@ class Game {
     if (n === null || world === null) return;
     world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.notice = 'You turned down the offer.';
     this.emit();
   }
@@ -2298,6 +2381,7 @@ class Game {
   /** Close the offer sheet without deciding — it stays pending and can be reopened later. */
   closeOfferView(): void {
     this.incomingOffer = null;
+    this.coachTalk = null;
     this.emit();
   }
 

@@ -11,9 +11,9 @@ import { endSeason } from '../season/rollover.ts';
 import { acceptIncomingOffer, counterLoanOffer, openTalks, processDeals, submitOffer } from './deals.ts';
 import { monthlyLoanReports } from './inbox.ts';
 import {
-  canRecall, evaluateLoanCounter, evaluateLoanRequest, fitMatches, generateLoanOffers, loanOf, loanShare,
+  canRecall, coachRequests, coachTalkBlock, evaluateLoanCounter, evaluateLoanRequest, fitMatches, generateLoanOffers, loanOf, loanShare,
   loanStarters, playingTimeOnOffer, promiseShare, recallFromLoan, recordLoanMatch, requestLoanReport, returnLoans,
-  reviewLoanPromises, squadSize, startLoan, wageBill, type Loan,
+  reviewLoanPromises, squadSize, startLoan, talkToLoanCoach, wageBill, type Loan,
 } from './loans.ts';
 import { generateListedBids, type IncomingOffer } from './negotiation.ts';
 import { rollInjuries, weeklyTraining } from './progression.ts';
@@ -417,4 +417,91 @@ test('a loan club short-changing him on games is reported, and the user can reca
   assert.equal(loanOf(world, p), undefined);
   assert.ok(club.players.includes(p) && !borrower.players.includes(p));
   assert.equal(world.messages[world.messages.length - 1].loanReport?.final, true);
+});
+
+/** One of ours on loan at a club where his level earns him a rotation place: exactly two better outside hitters. */
+function loanedForRotation(seed: number, promise: 'starter' | 'rotation' | 'backup'): { world: World; borrower: Club; p: number; loan: Loan } {
+  const { world, club } = setup(seed);
+  startSeason(world, newSeasonContext());
+  const store = world.players;
+  const p = outsides(world, club)[outsides(world, club).length - 1];
+  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < 16 &&
+    outsides(world, c).filter((q) => store.currentAbility[q] > store.currentAbility[p]).length === 2)!;
+  assert.ok(borrower !== undefined, 'this test needs a club with exactly two better outside hitters');
+  const loan = startLoan(world, club, borrower, p, 0.5, undefined, promise);
+  return { world, borrower, p, loan };
+}
+
+/** He has been fit for eight matches and on court for a fifth of the play. */
+function benched(loan: Loan): void {
+  loan.stats = { ...loan.stats!, clubMatches: 8, clubRallies: 1400, fitMatches: 8, fitRallies: 1400, apps: 3, rallies: 280, ratingSum: 20 };
+}
+
+test('a loanee\'s coach can be spoken to once he is playing too little — and not every week', () => {
+  const { world, p, loan } = loanedForRotation(71, 'starter');
+  assert.match(coachTalkBlock(world, p) ?? '', /few matches/);
+  loan.stats = { ...loan.stats!, clubMatches: 8, clubRallies: 1400, fitMatches: 8, fitRallies: 1400, apps: 8, rallies: 1350 };
+  assert.match(coachTalkBlock(world, p) ?? '', /getting his games/);
+
+  benched(loan);
+  assert.equal(coachTalkBlock(world, p), null);
+  assert.deepEqual(coachRequests(world, p), ['starter'], 'only the deal itself: there is nothing above a starting place');
+  const name = world.players.fullName(p);
+  const result = talkToLoanCoach(world, p, 'starter', false);
+  assert.ok(result !== null && result.reply.length > 0);
+  assert.ok(world.messages.some((m) => m.playerIdx === p && m.loanOut === true &&
+    (m.subject.includes(`agrees to play ${name} more`) || m.subject.includes(`won't give ${name} more games`))));
+  assert.equal(talkToLoanCoach(world, p, 'starter', false), null, 'not again straight away');
+  assert.match(coachTalkBlock(world, p) ?? '', /only recently/);
+  world.day += 21;
+  assert.equal(coachTalkBlock(world, p), null);
+});
+
+test('a coach will not give a loanee more than his squad allows', () => {
+  const { world, p, loan } = loanedForRotation(72, 'backup');
+  let agreed = 0;
+  for (let i = 0; i < 30; i++) {
+    loan.coachTalkOn = undefined;
+    loan.playingTime = 'backup';
+    benched(loan);
+    if (talkToLoanCoach(world, p, 'starter', false)?.agreed === true) agreed++;
+  }
+  assert.ok(agreed <= 6, `${agreed} of 30`);
+});
+
+test('a coach who agrees keeps his word: the deal honoured, or the playing time raised', () => {
+  const upgrade = loanedForRotation(73, 'backup');
+  let raised = false;
+  for (let i = 0; i < 30 && !raised; i++) {
+    upgrade.loan.coachTalkOn = undefined;
+    benched(upgrade.loan);
+    raised = talkToLoanCoach(upgrade.world, upgrade.p, 'rotation', false)?.agreed === true;
+  }
+  assert.ok(raised, 'within his squad\'s means, he comes round');
+  assert.equal(upgrade.loan.playingTime, 'rotation');
+
+  const deal = loanedForRotation(74, 'starter');
+  let kept = false;
+  for (let i = 0; i < 30 && !kept; i++) {
+    deal.loan.coachTalkOn = undefined;
+    deal.loan.honour = 0.4;
+    benched(deal.loan);
+    kept = talkToLoanCoach(deal.world, deal.p, 'starter', true)?.agreed === true;
+  }
+  assert.ok(kept);
+  assert.equal(deal.loan.honour, 1, 'from now on he keeps to it');
+});
+
+test('a firm word he refuses leaves the coach less inclined to keep his word', () => {
+  const { world, p, loan } = loanedForRotation(75, 'backup');
+  let dug = false;
+  for (let i = 0; i < 40 && !dug; i++) {
+    loan.coachTalkOn = undefined;
+    loan.playingTime = 'backup';
+    loan.honour = 0.9;
+    benched(loan);
+    dug = talkToLoanCoach(world, p, 'rotation', true)?.reply.startsWith('I don\'t appreciate') === true;
+  }
+  assert.ok(dug);
+  assert.ok(loan.honour! < 0.9);
 });
