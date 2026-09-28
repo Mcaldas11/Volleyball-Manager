@@ -5,13 +5,15 @@ import { Position } from '../model/positions.ts';
 import { generateWorld } from './worldGen.ts';
 import { seasonEndDay, stubManager, type World } from './world.ts';
 import { contractNotices } from './contracts.ts';
-import { newSeasonContext, startSeason } from '../season/seasonEngine.ts';
+import { advanceDay, newSeasonContext, pickLineup, startSeason } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
-import { acceptIncomingOffer, openTalks, processDeals, submitOffer } from './deals.ts';
+import { acceptIncomingOffer, counterLoanOffer, openTalks, processDeals, submitOffer } from './deals.ts';
 import {
-  evaluateLoanRequest, generateLoanOffers, loanOf, returnLoans, squadSize, startLoan, wageBill,
+  evaluateLoanCounter, evaluateLoanRequest, generateLoanOffers, loanOf, loanShare, playingTimeOnOffer,
+  requestLoanReport, returnLoans, reviewLoanPromises, squadSize, startLoan, wageBill,
 } from './loans.ts';
-import { generateListedBids } from './negotiation.ts';
+import { generateListedBids, type IncomingOffer } from './negotiation.ts';
+import { weeklyTraining } from './progression.ts';
 
 type Club = World['clubs'][number];
 
@@ -159,4 +161,138 @@ test('the season rollover sends every loan home', () => {
   assert.equal(world.loans.length, 0);
   assert.notEqual(world.players.clubId[p], club.id, 'he has gone back — or moved on, if his contract ran out');
   assert.ok(!club.players.includes(p));
+});
+
+/** One of ours on the fringe, and a club he would not get into on merit: two better outside hitters. */
+function fringeOutAndBorrower(world: World, club: Club): { p: number; borrower: Club } {
+  const store = world.players;
+  const p = outsides(world, club)[outsides(world, club).length - 1];
+  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < 16 &&
+    outsides(world, c).filter((q) => store.currentAbility[q] > store.currentAbility[p]).length >= 2)!;
+  assert.ok(borrower !== undefined, 'this test needs a club with two better outside hitters');
+  return { p, borrower };
+}
+
+test('a player the lineup would leave out starts when he must', () => {
+  const { world, club } = setup(51);
+  const worst = outsides(world, club)[outsides(world, club).length - 1];
+  assert.ok(!pickLineup(world.players, club).lineup.includes(worst), 'on merit he is on the bench');
+  assert.ok(pickLineup(world.players, club, new Set([worst])).lineup.includes(worst));
+});
+
+test('a club that promised a loanee a starting place gives him the games, and his matches can be compiled', () => {
+  const { world, club } = setup(52);
+  const ctx = newSeasonContext();
+  startSeason(world, ctx);
+  const { p, borrower } = fringeOutAndBorrower(world, club);
+  const loan = startLoan(world, club, borrower, p, 0.5, undefined, 'starter');
+  while ((loan.stats?.clubMatches ?? 0) < 8 && world.day < 250) advanceDay(world, ctx);
+
+  assert.ok(loan.stats!.clubMatches >= 8, 'his club has played');
+  assert.ok(loanShare(loan.stats) >= 0.6, `he has played most of it (${loanShare(loan.stats).toFixed(2)})`);
+  assert.ok(loan.stats!.apps >= 6);
+
+  const message = requestLoanReport(world, p);
+  assert.ok(message !== null);
+  const report = message.loanReport!;
+  assert.equal(report.playingTime, 'starter');
+  assert.equal(report.stats.apps, loan.stats!.apps);
+  assert.ok(report.stats.ratingSum > 0 && report.verdict.length > 0);
+  assert.equal(report.final, false);
+
+  returnLoans(world);
+  const back = world.messages.find((m) => m.subject === `${world.players.fullName(p)} returns from loan`);
+  assert.ok(back?.loanReport?.final === true, 'the return brings the final report');
+  assert.equal(requestLoanReport(world, p), null, 'nothing left to compile once he is back');
+});
+
+test('a club only promises the games its squad can give, and haggles within that', () => {
+  const { world, club } = setup(53);
+  const { p, borrower } = fringeOutAndBorrower(world, club);
+  const most = playingTimeOnOffer(world, borrower, p);
+  assert.notEqual(most, 'starter', 'two better outside hitters stand in his way');
+  const refused = evaluateLoanCounter(world, borrower, p,
+    { wageShare: 0.5, playingTime: most }, { wageShare: 0.5, playingTime: 'starter' });
+  assert.equal(refused.accepted, false);
+  assert.match(refused.reason, /can't promise/);
+
+  // Terms within what they can give are usually agreed.
+  let agreed = 0;
+  for (let i = 0; i < 20; i++) {
+    if (evaluateLoanCounter(world, borrower, p, { wageShare: 0.5, playingTime: 'backup' }, { wageShare: 0.5, playingTime: most }).accepted) agreed++;
+  }
+  assert.ok(agreed >= 8, `${agreed} of 20`);
+});
+
+test('a loan offer can be countered for more playing time, and the agreed terms go on the loan', () => {
+  const { world, club } = setup(54);
+  const store = world.players;
+  world.day = 10; // the summer window is open
+  const p = outsides(world, club)[outsides(world, club).length - 1];
+  store.contractUntil[p] = seasonEndDay(world.season + 1);
+  // A club where he would start: none of its outside hitters is better than him.
+  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < 16 &&
+    playingTimeOnOffer(world, c, p) === 'starter')!;
+  assert.ok(borrower !== undefined);
+  const offer: IncomingOffer = {
+    id: world.nextOfferId++, playerIdx: p, buyingClubId: borrower.id, fee: 0,
+    loan: { wageShare: 0.25, playingTime: 'rotation' }, expiresOnDay: world.day + 14, status: 'open',
+  };
+  world.incomingOffers.push(offer);
+
+  for (let attempt = 0; attempt < 6 && offer.loan?.playingTime !== 'starter'; attempt++) {
+    if ((offer.status ?? 'open') === 'open') counterLoanOffer(world, offer, { wageShare: 0.25, playingTime: 'starter' });
+    runDays(world, 3, () => offer.status !== 'countered');
+  }
+  assert.equal(offer.loan?.playingTime, 'starter', 'they came round to a starting place');
+  assert.ok(world.messages.some((m) => m.subject === `Loan terms agreed: ${store.fullName(p)}`));
+
+  runDays(world, 6, () => !world.incomingOffers.includes(offer));
+  const loan = loanOf(world, p);
+  if (loan !== undefined) {
+    assert.equal(loan.playingTime, 'starter');
+    assert.ok(world.messages.some((m) => m.loanOut === true && m.playerIdx === p), 'the move comes with its compile button');
+  } else {
+    assert.ok(world.messages.some((m) => m.subject.startsWith(`${store.fullName(p)} rejects`)));
+  }
+});
+
+test('a lender complains when its player is denied the promised games, then recalls him', () => {
+  const { world, club } = setup(55);
+  const { lender, p } = lenderWithFringeOutside(world, club);
+  const loan = startLoan(world, lender, club, p, 0.5, undefined, 'starter');
+  const name = world.players.fullName(p);
+  loan.stats = { ...loan.stats!, clubMatches: 6, clubRallies: 900, rallies: 50, apps: 1 };
+  reviewLoanPromises(world);
+  assert.ok(world.messages.some((m) => m.subject === `${lender.name} unhappy with ${name}'s playing time`));
+  assert.equal(loanOf(world, p), loan, 'a warning first');
+
+  loan.stats = { ...loan.stats, clubMatches: 12, clubRallies: 1800 };
+  reviewLoanPromises(world);
+  assert.equal(loanOf(world, p), undefined);
+  assert.ok(lender.players.includes(p) && !club.players.includes(p));
+  assert.ok(world.messages.some((m) => m.subject === `${name} recalled by ${lender.name}`));
+});
+
+test('a young player who plays develops faster than one on the bench', () => {
+  const grow = (minutes: number): number => {
+    const world = generateWorld({ seed: 56, startYear: 2026, scale: 'small', manager: stubManager() });
+    const store = world.players;
+    // The same youngster in both worlds: a good deal of room left to grow.
+    let pick = -1;
+    for (let i = 0; i < store.count && pick < 0; i++) {
+      if (store.clubId[i] >= 0 && store.ageOn(i, world.year, 181) <= 20 &&
+        store.potentialAbility[i] - store.currentAbility[i] > 300) pick = i;
+    }
+    assert.ok(pick >= 0);
+    const before = store.currentAbility[pick];
+    for (let week = 0; week < 20; week++) {
+      store.playingTime[pick] = minutes;
+      weeklyTraining(world);
+    }
+    return store.currentAbility[pick] - before;
+  };
+  const playing = grow(100);
+  const benched = grow(0);
+  assert.ok(playing > benched * 1.5, `playing ${playing} vs benched ${benched}`);
 });

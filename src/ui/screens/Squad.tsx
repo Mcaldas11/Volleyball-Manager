@@ -8,6 +8,7 @@ import {
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import {
@@ -467,6 +468,7 @@ export function PlayerDetail(): JSX.Element | null {
             {loan !== null && (
               <span className="loan-note">
                 <Icon name="swap" size={13} /> On loan from <ClubLink id={loan.parentClubId} short /> until {loanEnds}
+                {loan.playingTime !== undefined && <> · {PLAYING_TIME_NAMES[loan.playingTime].toLowerCase()}</>}
               </span>
             )}
             {move !== null && (
@@ -503,6 +505,11 @@ export function PlayerDetail(): JSX.Element | null {
             </button>
           )}
           {isOwn && !isYouth && move === null && <TransferMenu p={p} />}
+          {lentOut && (
+            <button onClick={() => g.compileLoanMatches(p)}>
+              <Icon name="stats" size={14} /> Compile matches
+            </button>
+          )}
           {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && (
             <button
               className="primary"

@@ -1,4 +1,7 @@
 import type { JSX } from 'react';
+import {
+  LOAN_PLAYING_TIMES, LOAN_WAGE_SHARES, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanPlayingTime,
+} from '../../engine/world/loans.ts';
 import { ClubLink, ContractPaper, ContractRow, money, MoneyInput } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -35,6 +38,8 @@ export function IncomingOfferScreen(): JSX.Element | null {
   if (offer?.loan !== undefined) {
     const wage = store.wage[n.playerIdx];
     const share = offer.loan.wageShare;
+    const minutes = offer.loan.playingTime;
+    const asked = offer.counterLoan;
     return (
       <ContractPaper
         kicker="Loan offer"
@@ -45,14 +50,31 @@ export function IncomingOfferScreen(): JSX.Element | null {
       >
         <ContractRow label="From"><ClubLink id={buyingClub.id} /></ContractRow>
         <ContractRow label="Loan until">30 Jun {world.startYear + world.season + 1} <span className="faint">· the end of the season</span></ContractRow>
+        <ContractRow label="Playing time">
+          {minutes !== undefined
+            ? <><span className="gold-text">{PLAYING_TIME_NAMES[minutes]}</span> <span className="faint">· about {Math.round(PLAYING_TIME_SHARE[minutes] * 100)}% of their play</span></>
+            : <span className="faint">Not agreed</span>}
+        </ContractRow>
         <ContractRow label="They pay">
           <span className="gold-text">{Math.round(share * 100)}% of his wage</span> <span className="faint">· {money(Math.round(wage * share))}</span>
         </ContractRow>
         <ContractRow label="You pay">{money(Math.round(wage * (1 - share)))} <span className="faint">of his {money(wage)}</span></ContractRow>
         {status === 'open' && <ContractRow label="Expires">{g.dateLabelForDay(n.expiresOnDay)}</ContractRow>}
-        <p className="contract-hint">He stays your player: he comes back on 30 June, and still counts towards your 16.</p>
+        <p className="contract-hint">
+          He stays your player: he comes back on 30 June, and still counts towards your 16. A loan is for games —
+          the more he plays, the more he develops. You can compile his matches there at any time.
+        </p>
         {shutNote}
 
+        {status === 'countered' && asked !== undefined && (
+          <div className="contract-awaiting">
+            <Icon name="clock" size={18} />
+            <span>
+              <b>Awaiting their answer</b> — due {g.dateLabelForDay(offer.resolvesOn ?? world.day)}. You asked for playing time
+              as a {PLAYING_TIME_NAMES[asked.playingTime].toLowerCase()} and {Math.round(asked.wageShare * 100)}% of his wage.
+            </span>
+          </div>
+        )}
         {status === 'accepted' && (
           <div className="contract-awaiting">
             <Icon name="clock" size={18} />
@@ -61,6 +83,31 @@ export function IncomingOfferScreen(): JSX.Element | null {
               {' '}whether to go.
             </span>
           </div>
+        )}
+
+        {status === 'open' && (
+          <>
+            <div className="contract-offer">
+              <ContractRow label="Ask for playing time">
+                <select value={n.counterPlayingTime} onChange={(e) => g.setCounterPlayingTime(e.target.value as LoanPlayingTime)}>
+                  {LOAN_PLAYING_TIMES.map((t) => <option key={t} value={t}>{PLAYING_TIME_NAMES[t]}</option>)}
+                </select>
+              </ContractRow>
+              <ContractRow label="Ask them to pay">
+                <select value={n.counterShare} onChange={(e) => g.setCounterShare(Number(e.target.value))}>
+                  {LOAN_WAGE_SHARES.map((s) => (
+                    <option key={s} value={s}>{Math.round(s * 100)}% of his wage · {money(Math.round(wage * s))}</option>
+                  ))}
+                </select>
+              </ContractRow>
+              <div className="contract-footer">
+                <button className="accent" onClick={() => g.counterLoanOffer()}>
+                  <Icon name="transfers" size={14} /> Propose terms
+                </button>
+              </div>
+            </div>
+            {n.message !== null && <p className="contract-note"><Icon name="alert" size={15} /> {n.message}</p>}
+          </>
         )}
 
         <div className="contract-actions">

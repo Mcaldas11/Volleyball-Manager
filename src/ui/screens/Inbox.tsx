@@ -6,7 +6,10 @@ import {
   contractEndSeason, messageCategory, type GameMessage, type MessageCategory,
 } from '../../engine/world/world.ts';
 import {
-  ClubCrest, initials, money, PlayerFace, StarMeter,
+  loanShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport,
+} from '../../engine/world/loans.ts';
+import {
+  ClubCrest, initials, money, PlayerFace, RatingBadge, StarMeter,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
@@ -367,6 +370,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
 
   if (m.roundup !== undefined) return <Roundup message={m} />;
 
+  if (m.loanReport !== undefined) return <LoanReportSheet report={m.loanReport} />;
+
   if (m.jobOfferId !== undefined && m.clubId !== undefined) {
     const club = world.clubs[m.clubId];
     if (club === undefined) return null;
@@ -471,6 +476,69 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   }
 
   return null;
+}
+
+function pct(n: number, of: number): string {
+  return of > 0 ? `${Math.round((n / of) * 100)}%` : '—';
+}
+
+/** A loan compiled: the games he has had against the ones promised, what he
+ *  did in them, and how he has come on. */
+function LoanReportSheet({ report: r }: { report: LoanReport }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const st = r.stats;
+  const club = world.clubs[r.loanClubId];
+  const share = loanShare(st);
+  const promised = r.playingTime !== undefined ? PLAYING_TIME_SHARE[r.playingTime] : null;
+  const kept = promised === null || st.clubMatches < 4 || share >= promised - 0.15;
+  const gain = r.abilityNow - r.abilityStart;
+  const avg = st.apps > 0 ? st.ratingSum / st.apps : 0;
+  return (
+    <div className="paper-roundup">
+      <div className="paper-report">
+        <div className="paper-label">
+          {r.final ? 'Final loan report' : 'Loan report'} · {club?.name ?? 'Loan club'} · {g.longDateLabel(r.fromDay)} – {g.longDateLabel(r.toDay)}
+        </div>
+        <ReportRow k="Playing time agreed">{r.playingTime !== undefined ? PLAYING_TIME_NAMES[r.playingTime] : 'Not agreed'}</ReportRow>
+        <ReportRow k="Appearances">{st.apps} of {st.clubMatches} match{st.clubMatches === 1 ? '' : 'es'}</ReportRow>
+        <ReportRow k="Time on court" tone={st.clubMatches === 0 ? undefined : kept ? 'good' : 'bad'}>
+          {st.clubMatches === 0 ? '—' : `${Math.round(share * 100)}% of the play`}
+          {promised !== null && st.clubMatches > 0 ? ` · ${Math.round(promised * 100)}% promised` : ''}
+        </ReportRow>
+        <ReportRow k="Average rating">
+          {avg > 0 ? <><RatingBadge value={avg} size="sm" /> <span className="paper-muted">best {st.best.toFixed(1)}</span></> : '—'}
+        </ReportRow>
+        <ReportRow k="Player of the match">{st.mvps}</ReportRow>
+        <ReportRow k="Ability" tone={gain >= 8 ? 'good' : gain <= -8 ? 'bad' : undefined}>
+          {r.abilityStart} → {r.abilityNow} ({gain >= 0 ? '+' : '−'}{Math.abs(gain)})
+        </ReportRow>
+        {r.form.length > 0 && (
+          <ReportRow k="Recent form">
+            <span className="paper-form">{r.form.map((v, i) => <RatingBadge key={i} value={v} size="sm" />)}</span>
+          </ReportRow>
+        )}
+      </div>
+      <div className="paper-report">
+        <div className="paper-label">Statistics</div>
+        <ReportRow k="Points">{st.points}{st.apps > 0 ? ` · ${(st.points / st.apps).toFixed(1)} a match` : ''}</ReportRow>
+        {st.attacks > 0 && (
+          <ReportRow k="Attack">
+            {st.kills} kills · {pct(st.kills, st.attacks)} kill rate · efficiency {pct(st.kills - st.attackFaults, st.attacks)}
+          </ReportRow>
+        )}
+        <ReportRow k="Serve">{st.aces} aces</ReportRow>
+        <ReportRow k="Block">{st.blocks} blocks</ReportRow>
+        {st.receptions > 0 && <ReportRow k="Reception">{pct(st.goodReceptions, st.receptions)} positive · {st.receptions} passes</ReportRow>}
+        <ReportRow k="Defence">{st.digs} digs</ReportRow>
+        {st.assists > 0 && <ReportRow k="Setting">{st.assists} assists</ReportRow>}
+      </div>
+      <div className="paper-report">
+        <div className="paper-label">Staff verdict</div>
+        <p className="paper-verdict">{r.verdict}</p>
+      </div>
+    </div>
+  );
 }
 
 /** A league matchday: every result, and the table as it left it. */
@@ -607,6 +675,16 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     out.push(
       <button key="scout" className="paper-btn primary-dark" onClick={() => g.focusScouting(p)}>
         <Icon name="scouting" size={15} /> Open scouting report
+      </button>,
+    );
+  }
+
+  // One of ours out on loan: have his matches there compiled, as often as you like.
+  const lentOut = p !== undefined ? world.loans.find((l) => l.playerIdx === p && l.parentClubId === world.userClubId) : undefined;
+  if ((m.loanOut === true || m.loanReport !== undefined) && lentOut !== undefined && p !== undefined) {
+    out.push(
+      <button key="compile" className="paper-btn primary-dark" onClick={() => g.compileLoanMatches(p)}>
+        <Icon name="stats" size={15} /> {m.loanReport !== undefined ? 'Compile again' : 'Compile matches'}
       </button>,
     );
   }

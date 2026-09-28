@@ -32,10 +32,11 @@ import {
 } from '../engine/world/world.ts';
 import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
 import {
-  acceptIncomingOffer, closeTalks, counterIncomingOffer, openTalks, submitOffer, type Talks,
+  acceptIncomingOffer, closeTalks, counterIncomingOffer, counterLoanOffer, openTalks, submitOffer, type Talks,
 } from '../engine/world/deals.ts';
 import {
-  loanOf, loansOutOf, MAX_SQUAD, squadSize, wageBill, wageRoom, type Loan,
+  loanOf, loansOutOf, loanStarters, MAX_SQUAD, requestLoanReport, squadSize, wageBill, wageRoom,
+  type Loan, type LoanPlayingTime,
 } from '../engine/world/loans.ts';
 import {
   arrivalsFor, moveDay, pendingMoveOf, seasonOfDay, type PendingMove,
@@ -96,6 +97,8 @@ export interface Negotiation {
   termsYears: number;
   /** Loan talks: the share of his wage you offer to pay, 0-1. */
   loanShare: number;
+  /** Loan talks: the playing time you promise him. */
+  loanPlayingTime: LoanPlayingTime;
   /** A problem with the offer itself (budget, window) before it is sent. */
   message: string | null;
 }
@@ -133,6 +136,9 @@ export interface IncomingOfferReview {
   buyingClubId: number;
   fee: number;
   counterFee: number;
+  /** Loan offers: the terms being drafted to ask them for. */
+  counterShare: number;
+  counterPlayingTime: LoanPlayingTime;
   message: string | null;
   expiresOnDay: number;
 }
@@ -1230,8 +1236,9 @@ class Game {
       bench: md.homeBench,
       tactics: club.tactics,
     };
-    const homeSetup = md.userIsHome ? userSetup : toTeamSetup(world.players, homeClub);
-    const awaySetup = md.userIsHome ? toTeamSetup(world.players, awayClub) : userSetup;
+    // The other side keeps any promise of games it has made a loanee.
+    const homeSetup = md.userIsHome ? userSetup : toTeamSetup(world.players, homeClub, loanStarters(world, homeClub));
+    const awaySetup = md.userIsHome ? toTeamSetup(world.players, awayClub, loanStarters(world, awayClub)) : userSetup;
 
     this.liveSim = new MatchSimulator(world.players, {
       home: homeSetup,
@@ -1819,6 +1826,7 @@ class Game {
       termsRole: t.lastOffer.role,
       termsYears: t.lastOffer.years,
       loanShare: t.lastOffer.wageShare ?? 0.5,
+      loanPlayingTime: t.lastOffer.playingTime ?? 'rotation',
       message: null,
     };
     this.selectedPlayer = null;
@@ -2007,6 +2015,13 @@ class Game {
     this.emit();
   }
 
+  /** The playing time to promise a player you want on loan. */
+  setLoanPlayingTime(playingTime: LoanPlayingTime): void {
+    if (this.negotiation === null) return;
+    this.negotiation.loanPlayingTime = playingTime;
+    this.emit();
+  }
+
   /** Send the loan request to his club. Their answer comes back in a few days. */
   submitLoanRequest(): void {
     const n = this.negotiation;
@@ -2022,7 +2037,7 @@ class Game {
       this.emit();
       return;
     }
-    const due = submitOffer(world, t, { ...t.lastOffer, wageShare: n.loanShare });
+    const due = submitOffer(world, t, { ...t.lastOffer, wageShare: n.loanShare, playingTime: n.loanPlayingTime });
     this.notice = `Loan request sent to ${lender.name} — they will reply by ${this.dateLabelForDay(due)}.`;
     this.negotiation = null;
     this.emit();
@@ -2148,6 +2163,8 @@ class Game {
       buyingClubId: offer.buyingClubId,
       fee: offer.fee,
       counterFee: offer.counterFee ?? offer.fee,
+      counterShare: offer.counterLoan?.wageShare ?? offer.loan?.wageShare ?? 0,
+      counterPlayingTime: offer.counterLoan?.playingTime ?? offer.loan?.playingTime ?? 'rotation',
       message: null,
       expiresOnDay: offer.expiresOnDay,
     };
@@ -2163,6 +2180,57 @@ class Game {
     if (this.incomingOffer === null) return;
     this.incomingOffer.counterFee = amount;
     this.emit();
+  }
+
+  /** Loan offers: the share of his wage to ask them to pay. */
+  setCounterShare(share: number): void {
+    if (this.incomingOffer === null) return;
+    this.incomingOffer.counterShare = share;
+    this.incomingOffer.message = null;
+    this.emit();
+  }
+
+  /** Loan offers: the playing time to ask them to promise. */
+  setCounterPlayingTime(playingTime: LoanPlayingTime): void {
+    if (this.incomingOffer === null) return;
+    this.incomingOffer.counterPlayingTime = playingTime;
+    this.incomingOffer.message = null;
+    this.emit();
+  }
+
+  /** Ask a club that wants one of yours on loan for better terms. They answer in a day or two. */
+  counterLoanOffer(): void {
+    const n = this.incomingOffer;
+    const world = this.world;
+    const offer = this.reviewedOffer();
+    if (n === null || world === null || offer === null || offer.loan === undefined || (offer.status ?? 'open') !== 'open') return;
+    const same = n.counterShare === offer.loan.wageShare && n.counterPlayingTime === (offer.loan.playingTime ?? 'rotation');
+    if (same) {
+      n.message = 'Those are the terms they have offered — ask for more, or simply accept.';
+      this.emit();
+      return;
+    }
+    const due = counterLoanOffer(world, offer, { wageShare: n.counterShare, playingTime: n.counterPlayingTime });
+    const buyer = world.clubs[offer.buyingClubId];
+    this.notice = `Your terms have gone to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
+    this.incomingOffer = null;
+    this.emit();
+  }
+
+  /**
+   * Have the staff compile the matches of one of your players out on loan:
+   * the report lands in the inbox at once, and opens.
+   */
+  compileLoanMatches(playerIdx: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const message = requestLoanReport(world, playerIdx);
+    if (message === null) {
+      this.notice = `${world.players.fullName(playerIdx)} is no longer out on loan.`;
+      this.emit();
+      return;
+    }
+    this.openMessage(message.id);
   }
 
   private reviewedOffer(): IncomingOffer | null {
@@ -2191,7 +2259,7 @@ class Game {
     const world = this.world;
     const offer = this.reviewedOffer();
     if (n === null || world === null || offer === null || (offer.status ?? 'open') !== 'open') return;
-    if (offer.loan !== undefined) return; // a loan offer is taken or left as it stands
+    if (offer.loan !== undefined) return; // a loan's terms go through counterLoanOffer
     if (n.counterFee <= offer.fee) {
       n.message = 'Ask for more than they have offered — or simply accept.';
       this.emit();

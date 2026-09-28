@@ -1,5 +1,7 @@
 import type { JSX } from 'react';
-import { LOAN_WAGE_SHARES } from '../../engine/world/loans.ts';
+import {
+  LOAN_PLAYING_TIMES, LOAN_WAGE_SHARES, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanPlayingTime,
+} from '../../engine/world/loans.ts';
 import {
   MAX_CONTRACT_YEARS, SQUAD_ROLE_NAMES, SquadRole, TALKS_PATIENCE, yearsLeft,
 } from '../../engine/world/negotiation.ts';
@@ -75,7 +77,8 @@ export function NegotiationScreen(): JSX.Element | null {
         <b>Awaiting reply</b> — due {g.dateLabelForDay(pending.resolvesOn)}.
         {' '}{t.kind === 'loan'
           ? `${sellingClub?.name ?? 'The club'} are considering lending him, with you paying ` +
-            `${Math.round((pending.offer.wageShare ?? 0.5) * 100)}% of his wage.`
+            `${Math.round((pending.offer.wageShare ?? 0.5) * 100)}% of his wage and promising playing time as a ` +
+            `${PLAYING_TIME_NAMES[pending.offer.playingTime ?? 'rotation'].toLowerCase()}.`
           : t.stage === 'fee'
             ? `${sellingClub?.name ?? 'The club'} are considering your bid of ${money(pending.offer.fee)}.`
             : `${renewal ? 'He is' : 'He and his agent are'} considering ${money(pending.offer.wage)} a season until ${endsLabel(startSeason + pending.offer.years - 1)}.`}
@@ -116,6 +119,13 @@ export function NegotiationScreen(): JSX.Element | null {
         {awaiting}
         {pending === null && (
           <div className="contract-offer">
+            <ContractRow label="Playing time">
+              <select value={n.loanPlayingTime} onChange={(e) => g.setLoanPlayingTime(e.target.value as LoanPlayingTime)}>
+                {LOAN_PLAYING_TIMES.map((pt) => (
+                  <option key={pt} value={pt}>{PLAYING_TIME_NAMES[pt]} · about {Math.round(PLAYING_TIME_SHARE[pt] * 100)}% of your play</option>
+                ))}
+              </select>
+            </ContractRow>
             <ContractRow label="You pay">
               <select value={n.loanShare} onChange={(e) => g.setLoanShare(Number(e.target.value))}>
                 {LOAN_WAGE_SHARES.map((s) => (
@@ -127,6 +137,10 @@ export function NegotiationScreen(): JSX.Element | null {
               {sellingClub.shortName} pay the rest: {money(wage - cost)} · Room in the wage budget:{' '}
               <b className={wageRoom < cost ? 'bad' : ''}>{money(wageRoom)}</b>
               {windowHint}
+            </p>
+            <p className="contract-hint">
+              Clubs lend players to see them play: promising more games makes a yes likelier, especially for a young
+              player. Keep your promise — fall well short and {sellingClub.shortName} will complain, then recall him.
             </p>
           </div>
         )}

@@ -15,7 +15,7 @@ import { MatchFormat } from '../match/engine.ts';
 import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 import type { IncomingOffer } from './negotiation.ts';
 import type { Talks } from './deals.ts';
-import type { Loan } from './loans.ts';
+import type { Loan, LoanReport } from './loans.ts';
 import type { PendingMove } from './moves.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
@@ -343,6 +343,11 @@ export interface GameMessage {
   fixtureId?: number;
   /** A club's offer of its head coach's job — see `World.career.offers`. */
   jobOfferId?: number;
+  /** One of the user's players has gone out on loan — the message he can
+   *  have the player's matches there compiled from. */
+  loanOut?: boolean;
+  /** A compiled account of a loan: games, statistics, development. */
+  loanReport?: LoanReport;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
    *  tabs existed still load — {@link messageCategory} derives it from the
    *  older fields when absent. */

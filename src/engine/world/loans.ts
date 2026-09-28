@@ -8,14 +8,79 @@
  *
  * Loans always involve the user's club, one way or the other: the user
  * borrows players from other clubs, and other clubs borrow the user's.
+ *
+ * A loan is for games. The deal names the playing time the borrowing club
+ * promises — a regular starter, a rotation player, a back-up — and a club
+ * that has promised games gives them: a loanee short of his share starts the
+ * next match. Everything he does there is kept on the loan, so his own club
+ * can have his matches compiled into a report whenever it likes.
  */
 
 import type { Club } from '../model/club.ts';
+import { matchRating, playedInMatch } from '../match/playerRating.ts';
+import type { PlayerMatchStats } from '../match/stats.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, POSITION_NAMES } from '../model/positions.ts';
 import { arrivalsFor, moveDay, pendingMoveOf, pendingWages, seasonOfDay } from './moves.ts';
 import type { IncomingOffer } from './negotiation.ts';
-import { euros, seasonEndDay, type GameMessage, type World } from './world.ts';
+import { euros, seasonEndDay, type Fixture, type GameMessage, type World } from './world.ts';
+
+/** The playing time a borrowing club promises. */
+export type LoanPlayingTime = 'starter' | 'rotation' | 'backup';
+
+/** Best first. */
+export const LOAN_PLAYING_TIMES: readonly LoanPlayingTime[] = ['starter', 'rotation', 'backup'];
+
+export const PLAYING_TIME_NAMES: Readonly<Record<LoanPlayingTime, string>> = {
+  starter: 'Regular starter',
+  rotation: 'Rotation player',
+  backup: 'Back-up',
+};
+
+/** The share of the borrowing club's play each promise stands for. */
+export const PLAYING_TIME_SHARE: Readonly<Record<LoanPlayingTime, number>> = {
+  starter: 0.85,
+  rotation: 0.45,
+  backup: 0.15,
+};
+
+/** Higher is more playing time. */
+function playingTimeRank(t: LoanPlayingTime): number {
+  return t === 'starter' ? 2 : t === 'rotation' ? 1 : 0;
+}
+
+/** What a loanee has done at the club that borrowed him, match by match. */
+export interface LoanStats {
+  /** The borrowing club's matches since he joined. */
+  clubMatches: number;
+  /** Rallies he could have played in them — a middle or a libero only ever plays two in three. */
+  clubRallies: number;
+  apps: number;
+  /** Rallies he was on court for. */
+  rallies: number;
+  ratingSum: number;
+  best: number;
+  points: number;
+  kills: number;
+  attacks: number;
+  /** Attack errors, blocked attacks included. */
+  attackFaults: number;
+  aces: number;
+  blocks: number;
+  digs: number;
+  receptions: number;
+  /** Perfect and positive passes. */
+  goodReceptions: number;
+  assists: number;
+  mvps: number;
+}
+
+export function newLoanStats(): LoanStats {
+  return {
+    clubMatches: 0, clubRallies: 0, apps: 0, rallies: 0, ratingSum: 0, best: 0, points: 0, kills: 0,
+    attacks: 0, attackFaults: 0, aces: 0, blocks: 0, digs: 0, receptions: 0, goodReceptions: 0, assists: 0, mvps: 0,
+  };
+}
 
 export interface Loan {
   playerIdx: number;
@@ -27,6 +92,33 @@ export interface Loan {
   wageShare: number;
   /** Absolute day the loan runs to: 30 June, the end of the season. */
   endsOn: number;
+  /** The playing time promised. Absent on loans agreed before it was part of the deal. */
+  playingTime?: LoanPlayingTime;
+  /** The day he joined, and his ability then — to measure how he has come on. */
+  startDay?: number;
+  startAbility?: number;
+  stats?: LoanStats;
+  /** His club has already complained about his playing time, at this many matches. */
+  complainedAt?: number;
+}
+
+/** A snapshot of a loan, compiled into a report for the inbox. */
+export interface LoanReport {
+  playerIdx: number;
+  loanClubId: number;
+  parentClubId: number;
+  fromDay: number;
+  toDay: number;
+  /** The loan is over — this is the final account of it. */
+  final: boolean;
+  playingTime?: LoanPlayingTime;
+  stats: LoanStats;
+  abilityStart: number;
+  abilityNow: number;
+  /** His last few match ratings, oldest first. */
+  form: number[];
+  /** The scouts' verdict, in a sentence or two. */
+  verdict: string;
 }
 
 /** Most players a club can have on its books — its own out on loan included. */
@@ -100,6 +192,7 @@ export function startLoan(
   playerIdx: number,
   wageShare: number,
   endsOn = seasonEndDay(world.season),
+  playingTime?: LoanPlayingTime,
 ): Loan {
   const store = world.players;
   parent.players = parent.players.filter((p) => p !== playerIdx);
@@ -113,6 +206,10 @@ export function startLoan(
     loanClubId: borrower.id,
     wageShare,
     endsOn,
+    playingTime,
+    startDay: world.day,
+    startAbility: store.currentAbility[playerIdx],
+    stats: newLoanStats(),
   };
   world.loans.push(loan);
   return loan;
@@ -141,13 +238,17 @@ export function returnLoans(world: World): void {
     const name = store.fullName(loan.playerIdx);
     const borrower = world.clubs[loan.loanClubId];
     const parent = world.clubs[loan.parentClubId];
+    // The last word on his loan, before it is gone.
+    const report = compileLoanReport(world, loan, true);
     endLoan(world, loan);
     if (loan.parentClubId === world.userClubId && borrower !== undefined) {
       say(world, {
         subject: `${name} returns from loan`,
-        body: `${name}'s loan at ${borrower.name} is over, and he is back with the squad.`,
+        body: `${name}'s loan at ${borrower.name} is over, and he is back with the squad. ` +
+          'The staff have compiled his matches there.',
         playerIdx: loan.playerIdx,
         clubId: borrower.id,
+        loanReport: report,
         category: 'offer',
       });
     } else if (loan.loanClubId === world.userClubId && parent !== undefined) {
@@ -173,10 +274,16 @@ export interface LoanVerdict {
 /**
  * Will a club lend one of its players out? Never a first-choice player, never
  * if it would leave the club short of a team; beyond that it is about money —
- * the more of his wage the borrower covers, the likelier — and about a young
- * player getting games, which clubs like.
+ * the more of his wage the borrower covers, the likelier — and about games: a
+ * club lends a player to see him play, a young one above all.
  */
-export function evaluateLoanRequest(world: World, parent: Club, playerIdx: number, wageShare: number): LoanVerdict {
+export function evaluateLoanRequest(
+  world: World,
+  parent: Club,
+  playerIdx: number,
+  wageShare: number,
+  playingTime: LoanPlayingTime = 'rotation',
+): LoanVerdict {
   const store = world.players;
   const pos = store.position[playerIdx] as Position;
   const samePos = parent.players
@@ -195,27 +302,88 @@ export function evaluateLoanRequest(world: World, parent: Club, playerIdx: numbe
     return { accepted: false, final: true, reason: 'They cannot spare him — without him they could not field a team.' };
   }
   const age = store.ageOn(playerIdx, world.year, 181);
-  let chance = 0.15 + wageShare * 0.75 + (age <= 23 ? 0.15 : 0);
+  const young = age <= 23;
+  // Games are the point of a loan: more of them sway a club, a place on the
+  // bench puts it off — all the more for a young player.
+  const games = (playingTimeRank(playingTime) - 1) * (young ? 0.25 : 0.12);
+  let chance = 0.15 + wageShare * 0.75 + (young ? 0.15 : 0) + games;
   // Lending their only cover in the position is a risk they rarely take.
   if (left === needed) chance *= 0.4;
-  if (world.rng.chance(Math.min(0.95, chance))) {
+  if (world.rng.chance(Math.max(0.02, Math.min(0.95, chance)))) {
     return { accepted: true, final: false, reason: 'They agree to the loan.' };
   }
   return {
     accepted: false,
     final: false,
-    reason: wageShare < 0.75 ? 'They want you to cover more of his wages.' : 'They would rather keep him for now.',
+    reason: playingTime === 'backup' && young
+      ? 'They want him playing regularly, not sitting on a bench.'
+      : wageShare < 0.75 ? 'They want you to cover more of his wages.' : 'They would rather keep him for now.',
   };
 }
 
-/** Does the player want the loan? Most want games; an ambitious one won't drop far down for them. */
-export function playerAgreesToLoan(world: World, borrower: Club, playerIdx: number): boolean {
+/**
+ * Does the player want the loan? Most want games, and a starting place wins
+ * almost anyone round; a place on the bench puts plenty off, and an ambitious
+ * player won't drop far down even to play.
+ */
+export function playerAgreesToLoan(
+  world: World,
+  borrower: Club,
+  playerIdx: number,
+  playingTime: LoanPlayingTime = 'rotation',
+): boolean {
   const store = world.players;
+  if (playingTime === 'backup' && world.rng.chance(0.35)) return false;
   const level = store.currentAbility[playerIdx] / 2000;
   const clubLevel = borrower.reputation / 10000;
   if (level <= clubLevel + 0.2) return true;
   const ambition = store.getAttr(playerIdx, 'ambition') / 20;
-  return !world.rng.chance(ambition * 0.8);
+  return !world.rng.chance(ambition * (playingTime === 'starter' ? 0.4 : 0.8));
+}
+
+/**
+ * The most playing time a club can honestly promise a loanee: a starting
+ * place if nobody in its squad is better in his position than its starters
+ * there, a share of the games behind one, the bench behind more.
+ */
+export function playingTimeOnOffer(world: World, borrower: Club, playerIdx: number): LoanPlayingTime {
+  const store = world.players;
+  const pos = store.position[playerIdx] as Position;
+  const ability = store.currentAbility[playerIdx];
+  const better = borrower.players.filter((q) =>
+    q !== playerIdx && store.position[q] === pos && store.currentAbility[q] > ability).length;
+  const starters = STARTERS_AT[pos];
+  if (better < starters) return 'starter';
+  if (better === starters) return 'rotation';
+  return 'backup';
+}
+
+/** The borrowing club's answer to the user's counter-proposal on a loan offer. */
+export function evaluateLoanCounter(
+  world: World,
+  borrower: Club,
+  playerIdx: number,
+  offered: { wageShare: number; playingTime: LoanPlayingTime },
+  asked: { wageShare: number; playingTime: LoanPlayingTime },
+): { accepted: boolean; reason: string } {
+  const most = playingTimeOnOffer(world, borrower, playerIdx);
+  if (playingTimeRank(asked.playingTime) > playingTimeRank(most)) {
+    return {
+      accepted: false,
+      reason: `They can't promise him more than ${PLAYING_TIME_NAMES[most].toLowerCase()} minutes — ` +
+        'there are better players in his position in their squad.',
+    };
+  }
+  const wage = world.players.wage[playerIdx];
+  const more = Math.max(0, asked.wageShare - offered.wageShare);
+  if (more > 0 && wageRoom(world, borrower) < wage * asked.wageShare) {
+    return { accepted: false, reason: 'They have no room in their wage budget to pay more of his wage.' };
+  }
+  const steps = Math.max(0, playingTimeRank(asked.playingTime) - playingTimeRank(offered.playingTime));
+  const chance = 0.9 - steps * 0.2 - more * 1.4;
+  return world.rng.chance(Math.max(0.05, chance))
+    ? { accepted: true, reason: 'They accept your terms.' }
+    : { accepted: false, reason: 'They are not prepared to go that far.' };
 }
 
 /**
@@ -248,13 +416,19 @@ export function generateLoanOffers(world: World): void {
     // The most they can put in, in quarters, and something up to that.
     const most = Math.min(1, Math.floor((wageRoom(world, borrower) / wage) * 4) / 4);
     const wageShare = Math.max(0.25, Math.round(world.rng.range(0.25, most) * 4) / 4);
+    // They open a step below what they could give, often enough — there is
+    // room to push them.
+    const couldGive = playingTimeOnOffer(world, borrower, p);
+    const playingTime = couldGive !== 'backup' && world.rng.chance(0.4)
+      ? LOAN_PLAYING_TIMES[LOAN_PLAYING_TIMES.indexOf(couldGive) + 1]
+      : couldGive;
 
     const offer: IncomingOffer = {
       id: world.nextOfferId++,
       playerIdx: p,
       buyingClubId: borrower.id,
       fee: 0,
-      loan: { wageShare },
+      loan: { wageShare, playingTime },
       expiresOnDay: world.day + 14,
       status: 'open',
     };
@@ -262,13 +436,207 @@ export function generateLoanOffers(world: World): void {
     say(world, {
       subject: `Loan offer for ${store.fullName(p)}`,
       body: `${borrower.name} would like to take ${store.fullName(p)} on loan to the end of the season, ` +
-        `paying ${Math.round(wageShare * 100)}% of his ` +
-        `${euros(store.wage[p])} wage. Accept it or turn it down.`,
+        `paying ${Math.round(wageShare * 100)}% of his ${euros(store.wage[p])} wage, with playing time as a ` +
+        `${PLAYING_TIME_NAMES[playingTime].toLowerCase()}. Accept it, turn it down, or ask for better terms.`,
       offerId: offer.id,
       playerIdx: p,
       from: borrower.name,
       clubId: borrower.id,
       category: 'offer',
     });
+  }
+}
+
+// ---- A loan's matches ----------------------------------------------------------------
+
+/** Of a match's rallies, the share a player in his position is on court for:
+ *  a middle and a libero split the back row, everyone else plays them all. */
+export function courtShare(position: number): number {
+  return position === Position.MiddleBlocker || position === Position.Libero ? 0.67 : 1;
+}
+
+/** How much of the play he has had at the club that borrowed him, 0-1. */
+export function loanShare(stats: LoanStats | undefined): number {
+  return stats === undefined || stats.clubRallies === 0 ? 0 : Math.min(1, stats.rallies / stats.clubRallies);
+}
+
+/**
+ * File a finished match against every loan at either club: the match counts
+ * towards the games he could have had, and — if he played — everything he did
+ * in it towards his loan's record. Called for every club fixture.
+ */
+export function recordLoanMatch(
+  world: World,
+  fixture: Fixture,
+  homeStats: Map<number, PlayerMatchStats>,
+  awayStats: Map<number, PlayerMatchStats>,
+): void {
+  if (world.loans.length === 0 || world.competitions[fixture.competitionId]?.kind === 'international') return;
+  const store = world.players;
+  const rallies = fixture.setScores.reduce((sum, [h, a]) => sum + h + a, 0);
+  for (const loan of world.loans) {
+    const home = loan.loanClubId === fixture.home;
+    if (!home && loan.loanClubId !== fixture.away) continue;
+    const p = loan.playerIdx;
+    const st = loan.stats ??= newLoanStats();
+    st.clubMatches++;
+    st.clubRallies += Math.round(rallies * courtShare(store.position[p]));
+
+    const s = (home ? homeStats : awayStats).get(p);
+    if (s === undefined || !playedInMatch(s)) continue;
+    const setsFor = home ? fixture.homeSets : fixture.awaySets;
+    const setsAgainst = home ? fixture.awaySets : fixture.homeSets;
+    const rating = matchRating(s, store.position[p] as Position, setsFor, setsAgainst);
+    st.apps++;
+    st.rallies += s.ralliesPlayed;
+    st.ratingSum += rating;
+    st.best = Math.max(st.best, rating);
+    st.points += s.attackKills + s.serveAces + s.blockPoints;
+    st.kills += s.attackKills;
+    st.attacks += s.attacksTotal;
+    st.attackFaults += s.attackErrors + s.attackBlocked;
+    st.aces += s.serveAces;
+    st.blocks += s.blockPoints;
+    st.digs += s.digsTotal;
+    st.receptions += s.receptionsTotal;
+    st.goodReceptions += s.receptionPerfect + s.receptionPositive;
+    st.assists += s.setAssists;
+    if (fixture.mvp === p) st.mvps++;
+  }
+}
+
+/**
+ * The loanees a club has promised games to and is behind on: they start its
+ * next match, if they are fit. A club only ever gives more than it promised,
+ * never less — a loanee good enough to win his place keeps it. The user
+ * picks his own team.
+ */
+export function loanStarters(world: World, club: Club): Set<number> | undefined {
+  if (club.id === world.userClubId || world.loans.length === 0) return undefined;
+  let out: Set<number> | undefined;
+  for (const loan of world.loans) {
+    if (loan.loanClubId !== club.id || loan.playingTime === undefined) continue;
+    if (loanShare(loan.stats) >= PLAYING_TIME_SHARE[loan.playingTime]) continue;
+    (out ??= new Set()).add(loan.playerIdx);
+  }
+  return out;
+}
+
+/** The staff's summing-up of a loan: the games, the level, the progress. */
+function loanVerdict(world: World, r: LoanReport): string {
+  const club = world.clubs[r.loanClubId]?.name ?? 'His club';
+  const st = r.stats;
+  if (st.clubMatches === 0) return `${club} have not played a match since he joined.`;
+  const share = loanShare(st);
+  const parts: string[] = [];
+  const record = `${st.apps} appearance${st.apps === 1 ? '' : 's'} in ${st.clubMatches} match${st.clubMatches === 1 ? '' : 'es'}`;
+  if (st.apps === 0) parts.push(`He has not played at all in ${st.clubMatches} match${st.clubMatches === 1 ? '' : 'es'}.`);
+  else if (share >= 0.7) parts.push(`He is a regular in the side: ${record}.`);
+  else if (share >= 0.35) parts.push(`He is getting a fair share of the games: ${record}.`);
+  else parts.push(`He is mostly on the bench: ${record}.`);
+  if (r.playingTime !== undefined && st.clubMatches >= 4 && share < PLAYING_TIME_SHARE[r.playingTime] - 0.15) {
+    parts.push(`That is well short of the playing time agreed — ${PLAYING_TIME_NAMES[r.playingTime].toLowerCase()}.`);
+  }
+  if (st.apps >= 3) {
+    const avg = st.ratingSum / st.apps;
+    parts.push(avg >= 7.2 ? 'His performances have been excellent.'
+      : avg >= 6.7 ? 'He has played well.'
+        : avg >= 6.2 ? 'His performances have been steady.'
+          : 'He has struggled on court.');
+  }
+  const gain = r.abilityNow - r.abilityStart;
+  parts.push(gain >= 25 ? `He has come on a great deal: his ability is up ${gain} since he joined.`
+    : gain >= 8 ? `He is developing: his ability is up ${gain}.`
+      : gain <= -8 ? `His ability has dropped by ${-gain}.`
+        : 'His ability has held steady.');
+  return parts.join(' ');
+}
+
+/** Everything a loan has amounted to so far, as the staff would put it in a report. */
+export function compileLoanReport(world: World, loan: Loan, final = false): LoanReport {
+  const store = world.players;
+  const p = loan.playerIdx;
+  const report: LoanReport = {
+    playerIdx: p,
+    loanClubId: loan.loanClubId,
+    parentClubId: loan.parentClubId,
+    fromDay: loan.startDay ?? world.day,
+    toDay: world.day,
+    final,
+    playingTime: loan.playingTime,
+    stats: { ...(loan.stats ?? newLoanStats()) },
+    abilityStart: loan.startAbility ?? store.currentAbility[p],
+    abilityNow: store.currentAbility[p],
+    form: [...(world.ratingForm.get(p) ?? [])],
+    verdict: '',
+  };
+  report.verdict = loanVerdict(world, report);
+  return report;
+}
+
+/**
+ * The user compiles the matches of one of his players out on loan: the report
+ * arrives in the inbox at once. Returns the message, or null if the player
+ * is not out on loan from the user's club.
+ */
+export function requestLoanReport(world: World, playerIdx: number): GameMessage | null {
+  const loan = loanOf(world, playerIdx);
+  if (loan === undefined || loan.parentClubId !== world.userClubId) return null;
+  const borrower = world.clubs[loan.loanClubId];
+  const name = world.players.fullName(playerIdx);
+  say(world, {
+    subject: `Loan report: ${name} at ${borrower?.name ?? 'his loan club'}`,
+    body: `The staff have compiled ${name}'s matches at ${borrower?.name ?? 'his loan club'} since he joined.`,
+    from: 'Loan Manager',
+    playerIdx,
+    clubId: borrower?.id,
+    loanReport: compileLoanReport(world, loan),
+    category: 'offer',
+  });
+  return world.messages[world.messages.length - 1];
+}
+
+/** Matches before a club judges whether the user is keeping his promise. */
+const PROMISE_REVIEW_MATCHES = 6;
+
+/**
+ * Clubs that have lent the user a player watch whether he gets the games that
+ * were promised. Well short of them after a few matches, the club complains;
+ * still short after a few more, it recalls him. Called weekly.
+ */
+export function reviewLoanPromises(world: World): void {
+  const store = world.players;
+  for (const loan of [...world.loans]) {
+    if (loan.loanClubId !== world.userClubId || loan.playingTime === undefined) continue;
+    const st = loan.stats;
+    if (st === undefined || st.clubMatches < PROMISE_REVIEW_MATCHES) continue;
+    const short = loanShare(st) < PLAYING_TIME_SHARE[loan.playingTime] - 0.2;
+    if (!short) continue;
+    const parent = world.clubs[loan.parentClubId];
+    const name = store.fullName(loan.playerIdx);
+    const promised = PLAYING_TIME_NAMES[loan.playingTime].toLowerCase();
+    if (loan.complainedAt === undefined) {
+      loan.complainedAt = st.clubMatches;
+      say(world, {
+        subject: `${parent?.name ?? 'His club'} unhappy with ${name}'s playing time`,
+        body: `${parent?.name ?? 'His club'} lent you ${name} on the promise of playing time as a ${promised}, ` +
+          `and he has played in ${st.apps} of your ${st.clubMatches} matches. Give him the games, or they will take him back.`,
+        playerIdx: loan.playerIdx,
+        from: parent?.name,
+        clubId: parent?.id,
+        category: 'offer',
+      });
+    } else if (st.clubMatches - loan.complainedAt >= PROMISE_REVIEW_MATCHES) {
+      endLoan(world, loan);
+      say(world, {
+        subject: `${name} recalled by ${parent?.name ?? 'his club'}`,
+        body: `${parent?.name ?? 'His club'} have recalled ${name} from his loan: he was promised playing time as a ` +
+          `${promised} and has not had it.`,
+        playerIdx: loan.playerIdx,
+        from: parent?.name,
+        clubId: parent?.id,
+        category: 'offer',
+      });
+    }
   }
 }

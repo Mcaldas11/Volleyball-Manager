@@ -21,6 +21,8 @@ import { Position } from './positions.ts';
 
 export const NO_CLUB = -1;
 export const NO_PLAYER = -1;
+/** Where `playingTime` starts: neither a regular nor out of the side. */
+export const PLAYING_TIME_UNKNOWN = 50;
 
 /** Bit flags packed into the `flags` column. */
 export const enum PlayerFlag {
@@ -148,6 +150,9 @@ export class PlayerStore {
   injuryDaysLeft!: Uint16Array;
   injuryType!: Uint8Array;
   flags!: Uint8Array;
+  /** How much he has been playing lately, 0-100: a rolling share of his
+   *  club's recent matches spent on court. 50 until he has a record. */
+  playingTime!: Uint8Array;
 
   // ---- Contract & market --------------------------------------------------
   /** Absolute game-day on which the contract expires. */
@@ -201,6 +206,7 @@ export class PlayerStore {
     this.injuryDaysLeft = new Uint16Array(cap);
     this.injuryType = new Uint8Array(cap);
     this.flags = new Uint8Array(cap);
+    this.playingTime = new Uint8Array(cap).fill(PLAYING_TIME_UNKNOWN);
     this.contractUntil = new Int32Array(cap);
     this.wage = new Float64Array(cap);
     this.value = new Float64Array(cap);
@@ -226,6 +232,7 @@ export class PlayerStore {
       attrs: this.attrs, currentAbility: this.currentAbility, potentialAbility: this.potentialAbility,
       clubId: this.clubId, condition: this.condition, morale: this.morale, form: this.form,
       injuryDaysLeft: this.injuryDaysLeft, injuryType: this.injuryType, flags: this.flags,
+      playingTime: this.playingTime,
       contractUntil: this.contractUntil, wage: this.wage, value: this.value,
       reputation: this.reputation, careerMatches: this.careerMatches, careerPoints: this.careerPoints,
       careerAces: this.careerAces, careerBlocks: this.careerBlocks, careerTitles: this.careerTitles,
@@ -260,6 +267,7 @@ export class PlayerStore {
     this.injuryDaysLeft.set(old.injuryDaysLeft.subarray(0, n));
     this.injuryType.set(old.injuryType.subarray(0, n));
     this.flags.set(old.flags.subarray(0, n));
+    this.playingTime.set(old.playingTime.subarray(0, n));
     this.contractUntil.set(old.contractUntil.subarray(0, n));
     this.wage.set(old.wage.subarray(0, n));
     this.value.set(old.value.subarray(0, n));

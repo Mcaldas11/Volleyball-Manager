@@ -15,6 +15,7 @@
 import { matchRating, playedInMatch } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import type { Position } from '../model/positions.ts';
+import { courtShare, recordLoanMatch } from './loans.ts';
 import type { Fixture, World } from './world.ts';
 
 /** One player's line in one competition in one season. */
@@ -84,7 +85,9 @@ function recordSide(
   }
 }
 
-/** Rate everyone who played in a finished fixture and file it under its competition. */
+/** Rate everyone who played in a finished fixture and file it under its
+ *  competition — along with how much each squad player got on court, and what
+ *  any loanee at either club did. */
 export function recordFixture(
   world: World,
   fixture: Fixture,
@@ -93,6 +96,34 @@ export function recordFixture(
 ): void {
   recordSide(world, fixture, homeStats, fixture.homeSets, fixture.awaySets);
   recordSide(world, fixture, awayStats, fixture.awaySets, fixture.homeSets);
+  // National teams' squads are not clubs.
+  if (world.competitions[fixture.competitionId]?.kind === 'international') return;
+  recordPlayingTime(world, fixture, fixture.home, homeStats);
+  recordPlayingTime(world, fixture, fixture.away, awayStats);
+  recordLoanMatch(world, fixture, homeStats, awayStats);
+}
+
+/** Weight of the latest match in a player's rolling playing time. */
+const PLAYING_TIME_WEIGHT = 0.2;
+
+/**
+ * Move every squad player's rolling playing time towards his share of this
+ * match: all of it for a starter who saw it out, a little for a substitute,
+ * none for the bench. It is what decides how much a young player gets out of
+ * his training.
+ */
+function recordPlayingTime(world: World, fixture: Fixture, clubId: number, stats: Map<number, PlayerMatchStats>): void {
+  const club = world.clubs[clubId];
+  if (club === undefined) return;
+  const store = world.players;
+  const rallies = Math.max(1, fixture.setScores.reduce((sum, [h, a]) => sum + h + a, 0));
+  for (const p of club.players) {
+    const s = stats.get(p);
+    const share = s !== undefined && playedInMatch(s)
+      ? Math.min(1, s.ralliesPlayed / (rallies * courtShare(store.position[p])))
+      : 0;
+    store.playingTime[p] = Math.round(store.playingTime[p] * (1 - PLAYING_TIME_WEIGHT) + share * 100 * PLAYING_TIME_WEIGHT);
+  }
 }
 
 /** A player's lines for one season, league first then cups, in competition order. */

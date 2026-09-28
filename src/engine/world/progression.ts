@@ -158,10 +158,16 @@ export function weeklyTraining(world: World): void {
     const facilities = world.clubs[club].trainingFacilities / 20;
     const quality = 0.45 + coaching[club] * 0.6 + facilities * 0.35;
 
+    // Games are where training sticks. A young player who plays comes on far
+    // quicker than one watching from the bench — the reason to send him out
+    // on loan; an established one needs them less.
+    const minutes = store.playingTime[i] / 100;
+    const games = age <= 24 ? 0.6 + minutes * 0.8 : 0.85 + minutes * 0.3;
+
     const gap = ceiling - ca;
     // Weekly movement is tiny; a season of it is what shows.
     const rate = gap > 0 ? 0.012 : 0.006;
-    const delta = gap * rate * drive * quality + rng.gaussian(0, 0.7);
+    const delta = gap * rate * drive * quality * (gap > 0 ? games : 1) + rng.gaussian(0, 0.7);
 
     if (Math.abs(delta) < 0.05) continue;
     applyAbilityDelta(store, i, delta, age, rng);

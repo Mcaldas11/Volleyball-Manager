@@ -18,7 +18,7 @@
 
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
-import { endLoan, loanOf, MAX_SQUAD } from './loans.ts';
+import { endLoan, loanOf, MAX_SQUAD, type LoanPlayingTime } from './loans.ts';
 import { pendingMoveOf } from './moves.ts';
 import {
   contractEndSeason, dayOfYear, euros, logTransfer, seasonEndDay, windowCloseDay, type World,
@@ -316,8 +316,11 @@ export interface IncomingOffer {
   /** The day the pending answer comes back. */
   resolvesOn?: number;
   /** Set when they want him on loan to the end of the season rather than to
-   *  buy him: the share of his wage they would pay. `fee` is then 0. */
-  loan?: { wageShare: number };
+   *  buy him: the share of his wage they would pay, and the playing time they
+   *  promise him (absent on offers made before it was part of the deal). `fee` is then 0. */
+  loan?: { wageShare: number; playingTime?: LoanPlayingTime };
+  /** Loan offers: the terms you asked for, while they are with them. */
+  counterLoan?: { wageShare: number; playingTime: LoanPlayingTime };
 }
 
 export const MAX_PENDING_OFFERS = 2;

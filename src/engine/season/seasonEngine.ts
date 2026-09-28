@@ -28,7 +28,7 @@ import { progressCups, scheduleCupSeason } from './cups.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
-import { generateLoanOffers } from '../world/loans.ts';
+import { generateLoanOffers, loanStarters, reviewLoanPromises } from '../world/loans.ts';
 import { contractNotices } from '../world/contracts.ts';
 import { processDeals } from '../world/deals.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
@@ -66,11 +66,14 @@ export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
  * Choose a starting seven, respecting the coach's preferred lineup but
  * replacing anyone injured, sold or otherwise unavailable with the best fit
  * alternative. A second, defensive libero is only ever used when the coach
- * has named one — nobody is auto-picked for that role.
+ * has named one — nobody is auto-picked for that role. `mustStart` names
+ * players who start ahead of anyone, if fit: loanees owed the games their
+ * loan promised (see loanStarters).
  */
 export function pickLineup(
   store: PlayerStore,
   club: Club,
+  mustStart?: ReadonlySet<number>,
 ): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[] } {
   const available = club.players.filter((p) => store.isAvailable(p));
   const availableSet = new Set(available);
@@ -89,11 +92,25 @@ export function pickLineup(
   };
 
   const used = new Set<number>();
+  const lineup: number[] = LINEUP_SLOT_POSITIONS.map(() => -1);
+
+  // Anyone who must start takes the first slot in his position.
+  let forcedLibero = -1;
+  for (const p of mustStart ?? []) {
+    if (!availableSet.has(p) || used.has(p)) continue;
+    if (store.position[p] === Position.Libero) {
+      if (forcedLibero < 0) { forcedLibero = p; used.add(p); }
+      continue;
+    }
+    const slot = LINEUP_SLOT_POSITIONS.findIndex((pos, s) => pos === store.position[p] && lineup[s] === -1);
+    if (slot >= 0) { lineup[slot] = p; used.add(p); }
+  }
 
   // Honour whichever named starters are still fit to play their slot; an
   // empty or stale preference (nobody has set one, or the player named for
   // it left, got injured, or changed position) just falls through below.
-  const lineup: number[] = LINEUP_SLOT_POSITIONS.map((pos, slot) => {
+  LINEUP_SLOT_POSITIONS.forEach((pos, slot) => {
+    if (lineup[slot] !== -1) return;
     const preferred = club.preferredLineup[slot];
     if (
       preferred !== undefined && preferred >= 0
@@ -101,9 +118,8 @@ export function pickLineup(
       && !used.has(preferred)
     ) {
       used.add(preferred);
-      return preferred;
+      lineup[slot] = preferred;
     }
-    return -1;
   });
 
   // Anything the preference didn't cover: best remaining player at that slot's
@@ -123,9 +139,10 @@ export function pickLineup(
   }
 
   const preferredLibero = club.preferredLibero;
-  const libero =
-    preferredLibero >= 0 && availableSet.has(preferredLibero)
-    && store.position[preferredLibero] === Position.Libero && !used.has(preferredLibero)
+  const libero = forcedLibero >= 0
+    ? forcedLibero
+    : preferredLibero >= 0 && availableSet.has(preferredLibero)
+      && store.position[preferredLibero] === Position.Libero && !used.has(preferredLibero)
       ? preferredLibero
       : pools[Position.Libero]?.find((p) => !used.has(p)) ?? -1;
   if (libero !== -1) used.add(libero);
@@ -145,8 +162,8 @@ export function pickLineup(
   return { lineup: finalLineup, libero, defensiveLibero, bench };
 }
 
-export function toTeamSetup(store: PlayerStore, club: Club): TeamSetup {
-  const { lineup, libero, defensiveLibero, bench } = pickLineup(store, club);
+export function toTeamSetup(store: PlayerStore, club: Club, mustStart?: ReadonlySet<number>): TeamSetup {
+  const { lineup, libero, defensiveLibero, bench } = pickLineup(store, club, mustStart);
   return {
     clubId: club.id,
     name: club.name,
@@ -175,10 +192,14 @@ export function playFixture(
   const away = world.clubs[fixture.away];
   if (home === undefined || away === undefined) return;
 
+  // A club that has promised a loanee games gives them.
+  const homeOwed = loanStarters(world, home);
+  const awayOwed = loanStarters(world, away);
+
   if (detailed) {
     const result = simulateMatch(store, {
-      home: toTeamSetup(store, home),
-      away: toTeamSetup(store, away),
+      home: toTeamSetup(store, home, homeOwed),
+      away: toTeamSetup(store, away, awayOwed),
       format: fixture.format,
       importance: fixture.importance,
       neutralVenue: fixture.neutralVenue,
@@ -190,8 +211,8 @@ export function playFixture(
     return;
   }
 
-  const h = pickLineup(store, home);
-  const a = pickLineup(store, away);
+  const h = pickLineup(store, home, homeOwed);
+  const a = pickLineup(store, away, awayOwed);
   const result = quickSimulate(store, h, a, fixture.format, world.rng, !fixture.neutralVenue);
 
   fixture.played = true;
@@ -382,6 +403,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
       generateIncomingOffers(world);
       generateListedBids(world);
       generateLoanOffers(world);
+      reviewLoanPromises(world);
     }
   }
 

@@ -8,6 +8,7 @@
  * stays, and plays, where he is.
  */
 
+import type { LoanPlayingTime } from './loans.ts';
 import { DAYS_PER_SEASON, nextTransferWindow, transferWindowOn, type World } from './world.ts';
 
 export interface PendingMove {
@@ -27,6 +28,8 @@ export interface PendingMove {
   contractEnd: number;
   /** Loans: the share of his wage the borrowing club pays. */
   wageShare: number;
+  /** Loans: the playing time the borrowing club has promised. */
+  playingTime?: LoanPlayingTime;
 }
 
 /** The day a deal agreed today is completed: today, while a window is open;

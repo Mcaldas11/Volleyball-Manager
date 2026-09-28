@@ -3922,3 +3922,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 @media (max-width: 900px) {
   .home-row.career-home-row, .home-row.career-home-row-2 { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* A loan report in the inbox. */
+.paper-form { display: inline-flex; gap: 4px; }
+.paper-verdict { margin: 0; font-size: 14px; line-height: 1.55; color: var(--paper-ink); }

@@ -24,7 +24,8 @@ import {
   type ContractDemands, type IncomingOffer, type SquadRole,
 } from './negotiation.ts';
 import {
-  evaluateLoanRequest, loanOf, MAX_SQUAD, playerAgreesToLoan, squadSize, startLoan, wageRoom,
+  evaluateLoanCounter, evaluateLoanRequest, loanOf, MAX_SQUAD, PLAYING_TIME_NAMES, playerAgreesToLoan, squadSize,
+  startLoan, wageRoom, type LoanPlayingTime,
 } from './loans.ts';
 import { moveDay, pendingMoveOf, seasonOfDay, windowOpeningLabel } from './moves.ts';
 import { euros, seasonEndDay, seasonEndYear, type GameMessage, type World } from './world.ts';
@@ -38,6 +39,8 @@ export interface TalksOffer {
   years: number;
   /** Loan talks only: the share of his wage you would pay, 0-1. */
   wageShare?: number;
+  /** Loan talks only: the playing time you promise him. */
+  playingTime?: LoanPlayingTime;
 }
 
 /** Another club after the same player, and the wage it is offering him. */
@@ -142,18 +145,25 @@ function agreeTransfer(world: World, buyer: Club, playerIdx: number, wage: numbe
 
 /** Settle an agreed loan: at once while a window is open, otherwise from the
  *  day the next one opens — to the end of the season it starts in. */
-function agreeLoan(world: World, parent: Club, borrower: Club, playerIdx: number, wageShare: number): number {
+function agreeLoan(
+  world: World, parent: Club, borrower: Club, playerIdx: number, wageShare: number, playingTime?: LoanPlayingTime,
+): number {
   const day = moveDay(world);
   if (day === world.day) {
-    startLoan(world, parent, borrower, playerIdx, wageShare);
+    startLoan(world, parent, borrower, playerIdx, wageShare, undefined, playingTime);
     return day;
   }
   world.players.setFlag(playerIdx, PlayerFlag.LoanListed, false);
   world.pendingMoves.push({
     kind: 'loan', playerIdx, fromClubId: parent.id, toClubId: borrower.id, movesOn: day,
-    fee: 0, wage: world.players.wage[playerIdx], contractEnd: 0, wageShare,
+    fee: 0, wage: world.players.wage[playerIdx], contractEnd: 0, wageShare, playingTime,
   });
   return day;
+}
+
+/** "as a regular starter" — the playing time in a loan's small print. */
+function minutesText(playingTime: LoanPlayingTime | undefined): string {
+  return playingTime === undefined ? '' : `, with playing time as a ${PLAYING_TIME_NAMES[playingTime].toLowerCase()}`;
 }
 
 /**
@@ -191,15 +201,16 @@ export function completeDueMoves(world: World, byDay = world.day): void {
     if (m.kind === 'loan') {
       if (from === undefined || store.clubId[p] !== from.id) continue;
       const until = `30 June ${seasonEndYear(world, seasonOfDay(m.movesOn))}`;
-      startLoan(world, from, to, p, m.wageShare, seasonEndDay(seasonOfDay(m.movesOn)));
+      startLoan(world, from, to, p, m.wageShare, seasonEndDay(seasonOfDay(m.movesOn)), m.playingTime);
       if (userIn || userOut) {
         say(world, {
           subject: userIn ? `${name} arrives on loan` : `${name} leaves on loan`,
           body: userIn
-            ? `The window is open and ${name} has joined on loan from ${from.name}, until ${until}.`
-            : `The window is open and ${name} has gone to ${to.name} on loan, until ${until}.`,
+            ? `The window is open and ${name} has joined on loan from ${from.name}, until ${until}${minutesText(m.playingTime)}.`
+            : `The window is open and ${name} has gone to ${to.name} on loan, until ${until}${minutesText(m.playingTime)}.`,
           playerIdx: p,
           clubId: userIn ? from.id : to.id,
+          loanOut: userOut ? true : undefined,
           category: 'offer',
         });
       }
@@ -270,7 +281,7 @@ export function openTalks(world: World, club: Club, playerIdx: number, kind: Tal
       wage: store.wage[playerIdx],
       role: demands.role,
       years: kind === 'renewal' ? demands.minYears : Math.min(demands.maxYears, Math.max(demands.minYears, 3)),
-      ...(kind === 'loan' ? { wageShare: 0.5 } : {}),
+      ...(kind === 'loan' ? { wageShare: 0.5, playingTime: 'rotation' as const } : {}),
     },
     pending: null,
     reply: null,
@@ -494,6 +505,7 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
   const parent = world.clubs[t.sellingClubId];
   if (parent === undefined) { closeTalks(world, t); return; }
   const share = offer.wageShare ?? 0.5;
+  const minutes = offer.playingTime ?? 'rotation';
   const shareText = `${Math.round(share * 100)}% of his wages`;
 
   const problem = squadSize(world, club) >= MAX_SQUAD ? 'the squad is full'
@@ -510,13 +522,13 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
   const starts = moveDay(world);
   const verdict = store.contractUntil[p] < seasonEndDay(seasonOfDay(starts))
     ? { accepted: false, final: true, reason: 'His contract runs out before the loan would end.' }
-    : evaluateLoanRequest(world, parent, p, share);
+    : evaluateLoanRequest(world, parent, p, share, minutes);
   if (!verdict.accepted) {
     t.reply = 'feeRejected';
     t.expiresOn = idleDeadline(world);
     say(world, {
       subject: `Loan request turned down: ${name}`,
-      body: `${parent.name} have said no to loaning you ${name} with you paying ${shareText}. ${verdict.reason}` +
+      body: `${parent.name} have said no to loaning you ${name} with you paying ${shareText}${minutesText(minutes)}. ${verdict.reason}` +
         (verdict.final ? '' : ' You can try again with a better offer.'),
       talksId: verdict.final ? undefined : t.id,
       playerIdx: p,
@@ -528,11 +540,11 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
     return;
   }
 
-  if (!playerAgreesToLoan(world, club, p)) {
+  if (!playerAgreesToLoan(world, club, p, minutes)) {
     say(world, {
       subject: `${name} turns down the loan`,
       body: `${parent.name} were willing to let him go, but ${name} doesn't want to join ${club.name} on loan — ` +
-        'he is holding out for a bigger club.',
+        (minutes === 'backup' ? 'he wants to play, not sit on the bench.' : 'he is holding out for a bigger club.'),
       playerIdx: p,
       from: `${name}'s agent`,
       category: 'offer',
@@ -541,14 +553,16 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
     return;
   }
 
-  const day = agreeLoan(world, parent, club, p, share);
+  const day = agreeLoan(world, parent, club, p, share, minutes);
   const until = `30 June ${seasonEndYear(world, seasonOfDay(day))}`;
   say(world, {
     subject: day > world.day ? `Loan agreed: ${name}` : `${name} joins on loan`,
     body: (day > world.day
       ? `${parent.name} will loan you ${name} from ${windowOpeningLabel(world, day)}, when the window opens, until ${until}. `
       : `${name} has joined on loan from ${parent.name} until ${until}. `) +
-      `You pay ${shareText} (${euros(Math.round(store.wage[p] * share))} a season); ${parent.name} cover the rest.`,
+      `You pay ${shareText} (${euros(Math.round(store.wage[p] * share))} a season); ${parent.name} cover the rest. ` +
+      `You have promised him playing time as a ${PLAYING_TIME_NAMES[minutes].toLowerCase()} — ` +
+      `${parent.name} will be watching.`,
     playerIdx: p,
     clubId: parent.id,
     category: 'offer',
@@ -606,6 +620,17 @@ export function counterIncomingOffer(world: World, offer: IncomingOffer, fee: nu
   return offer.resolvesOn;
 }
 
+/** Ask a club that wants one of yours on loan for better terms — more of his
+ *  wage, more playing time. They answer in a day or two. Returns the day. */
+export function counterLoanOffer(
+  world: World, offer: IncomingOffer, terms: { wageShare: number; playingTime: LoanPlayingTime },
+): number {
+  offer.status = 'countered';
+  offer.counterLoan = { ...terms };
+  offer.resolvesOn = world.day + world.rng.int(REPLY_DAYS.counter[0], REPLY_DAYS.counter[1]);
+  return offer.resolvesOn;
+}
+
 function removeOffers(world: World, keep: (o: IncomingOffer) => boolean): void {
   world.incomingOffers = world.incomingOffers.filter(keep);
 }
@@ -626,6 +651,10 @@ function processSales(world: World): void {
       continue;
     }
 
+    if (status === 'countered' && o.loan !== undefined) {
+      answerLoanCounter(world, o, buyer);
+      continue;
+    }
     if (status === 'countered') {
       const result = evaluateCounterFee(world, buyer, o.playerIdx, o.fee, o.counterFee ?? o.fee);
       if (result.accepted) {
@@ -727,6 +756,44 @@ function processSales(world: World): void {
   }
 }
 
+/** The borrowing club answers your terms for a loan: agreed, and the player
+ *  decides; refused, and their own offer still stands. */
+function answerLoanCounter(world: World, o: IncomingOffer, borrower: Club): void {
+  const name = world.players.fullName(o.playerIdx);
+  const offered = { wageShare: o.loan?.wageShare ?? 0, playingTime: o.loan?.playingTime ?? 'rotation' as LoanPlayingTime };
+  const asked = o.counterLoan ?? offered;
+  const result = evaluateLoanCounter(world, borrower, o.playerIdx, offered, asked);
+  const terms = (t: typeof offered): string =>
+    `${Math.round(t.wageShare * 100)}% of his wage and playing time as a ${PLAYING_TIME_NAMES[t.playingTime].toLowerCase()}`;
+  if (result.accepted) {
+    o.loan = { ...asked };
+    acceptIncomingOffer(world, o);
+    say(world, {
+      subject: `Loan terms agreed: ${name}`,
+      body: `${borrower.name} have agreed to your terms for ${name}: ${terms(asked)}. He will decide in the next ` +
+        'few days whether to go.',
+      offerId: o.id,
+      playerIdx: o.playerIdx,
+      from: borrower.name,
+      clubId: borrower.id,
+      category: 'offer',
+    });
+    return;
+  }
+  o.status = 'open';
+  o.expiresOnDay = Math.max(o.expiresOnDay, world.day + 5);
+  say(world, {
+    subject: `Loan terms refused: ${name}`,
+    body: `${borrower.name} won't take ${name} on ${terms(asked)}. ${result.reason} ` +
+      `Their offer — ${terms(offered)} — still stands.`,
+    offerId: o.id,
+    playerIdx: o.playerIdx,
+    from: borrower.name,
+    clubId: borrower.id,
+    category: 'offer',
+  });
+}
+
 /** A loan offer for one of yours was accepted: the player decides whether to go. */
 function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
   const store = world.players;
@@ -734,6 +801,7 @@ function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
   const name = store.fullName(p);
   const club = world.clubs[world.userClubId];
   const share = o.loan?.wageShare ?? 0;
+  const minutes = o.loan?.playingTime;
   if (club === undefined || !club.players.includes(p) || loanOf(world, p) !== undefined ||
     pendingMoveOf(world, p) !== undefined) {
     removeOffers(world, (x) => x.id !== o.id);
@@ -749,29 +817,33 @@ function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
     });
     return;
   }
-  if (!playerAgreesToLoan(world, borrower, p)) {
+  if (!playerAgreesToLoan(world, borrower, p, minutes)) {
     removeOffers(world, (x) => x.id !== o.id);
     say(world, {
       subject: `${name} rejects ${borrower.name}`,
-      body: `${name} doesn't want to go to ${borrower.name} on loan — he is staying.`,
+      body: minutes === 'backup'
+        ? `${name} doesn't want to go to ${borrower.name} to sit on the bench — he is staying.`
+        : `${name} doesn't want to go to ${borrower.name} on loan — he is staying.`,
       playerIdx: p,
       from: name,
       category: 'offer',
     });
     return;
   }
-  const day = agreeLoan(world, club, borrower, p, share);
+  const day = agreeLoan(world, club, borrower, p, share, minutes);
   const until = `30 June ${seasonEndYear(world, seasonOfDay(day))}`;
   removeOffers(world, (x) => x.playerIdx !== p);
   world.talks = world.talks.filter((t) => t.playerIdx !== p);
   say(world, {
     subject: day > world.day ? `${name} agrees a loan to ${borrower.name}` : `${name} leaves on loan`,
     body: (day > world.day
-      ? `${name} will join ${borrower.name} on loan when the window opens on ${windowOpeningLabel(world, day)}, until ${until}. `
-      : `${name} has joined ${borrower.name} on loan until ${until}. `) +
-      `They pay ${Math.round(share * 100)}% of his wage; the club covers the rest (${euros(Math.round(store.wage[p] * (1 - share)))} a season).`,
+      ? `${name} will join ${borrower.name} on loan when the window opens on ${windowOpeningLabel(world, day)}, until ${until}${minutesText(minutes)}. `
+      : `${name} has joined ${borrower.name} on loan until ${until}${minutesText(minutes)}. `) +
+      `They pay ${Math.round(share * 100)}% of his wage; the club covers the rest (${euros(Math.round(store.wage[p] * (1 - share)))} a season).` +
+      (day > world.day ? '' : ' Compile his matches whenever you want to see how he is getting on.'),
     playerIdx: p,
     clubId: borrower.id,
+    loanOut: day > world.day ? undefined : true,
     category: 'offer',
   });
 }
