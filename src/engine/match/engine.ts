@@ -28,6 +28,7 @@ import {
   rotate,
   rotationOf,
 } from './court.ts';
+import { matchRating } from './playerRating.ts';
 import { computeRatings, contest, type PlayerMatchRatings } from './ratings.ts';
 import {
   AttackLane,
@@ -122,6 +123,15 @@ export interface MatchResult {
   mvp: number;
 }
 
+/** Why a coach made a change: a tired player, a bad night, or simply a better option. */
+export type SubstitutionReason = 'fatigue' | 'form' | 'upgrade';
+
+export interface SubstitutionPlan {
+  outPlayerIdx: number;
+  inPlayerIdx: number;
+  reason: SubstitutionReason;
+}
+
 /** Reception grades, as they appear on a scoresheet. */
 const enum Grade {
   Error = 0,
@@ -149,6 +159,26 @@ const GRADE_SYMBOL = ['/', '-', '+', '#'];
 const SERVE_EDGE = 5;
 const ATTACK_DEFENCE_BALANCE = -8;
 
+/**
+ * How a coach judges a substitution — see `suggestSubstitution()`. The margin
+ * is the fraction by which the replacement's current value (ability x live
+ * condition x form) must beat the player coming off.
+ */
+const SUB_MARGIN = 0.04;
+const SUB_MARGIN_PER_SUB_USED = 0.02;
+/** Trailing by four or more lowers the bar by this much; leading raises it. */
+const SUB_MARGIN_SCORE_SHIFT = 0.03;
+/** Extra margin to undo a swap already made this set, so a coach doesn't flip-flop. */
+const SUB_MARGIN_REVERSAL = 0.08;
+/** Live condition at or below which a player is visibly tiring. */
+const TIRED_FATIGUE = 0.94;
+/** Rallies on court before a match rating says anything about form. */
+const FORM_MIN_RALLIES = 30;
+/** Match rating below which a player counts as having a bad night... */
+const FORM_FLOOR = 5.5;
+/** ...and how much of their value each rating point under it costs them. */
+const FORM_PENALTY = 0.1;
+
 /** Per-team mutable state for the duration of one match. */
 class TeamRuntime {
   court = new Int32Array(6);
@@ -163,13 +193,16 @@ class TeamRuntime {
   setsWon = 0;
   momentum = 0;
   currentRun = 0;
-  private readonly startLineup: number[];
+  /** The six who start each set, in rotational order — the coach may hand in a new sheet between sets. */
+  startLineup: number[];
   private readonly startRotation: number;
+  private readonly positions: Uint8Array;
 
   constructor(
     readonly setup: TeamSetup,
     store: PlayerStore,
   ) {
+    this.positions = store.position;
     this.startLineup = setup.lineup.slice();
     this.startRotation = setup.startingRotation ?? 0;
     this.liberoIdx = setup.libero;
@@ -186,11 +219,6 @@ class TeamRuntime {
       this.ratings.set(p, computeRatings(store, p, role));
     }
 
-    for (const p of setup.lineup) {
-      if (store.position[p] === Position.Setter) this.setterIdx = p;
-    }
-    if (this.setterIdx < 0) this.setterIdx = setup.lineup[0];
-
     this.resetForSet();
   }
 
@@ -201,6 +229,13 @@ class TeamRuntime {
   resetForSet(): void {
     for (let i = 0; i < 6; i++) this.court[i] = this.startLineup[i];
     for (let r = 0; r < this.startRotation; r++) rotate(this.court);
+    // Picked afresh every set: last set's setter may have been substituted,
+    // or left out of this set's six altogether.
+    this.setterIdx = -1;
+    for (const p of this.startLineup) {
+      if (this.positions[p] === Position.Setter) this.setterIdx = p;
+    }
+    if (this.setterIdx < 0) this.setterIdx = this.startLineup[0];
     this.score = 0;
     this.momentum = 0;
     this.currentRun = 0;
@@ -396,19 +431,13 @@ export class MatchSimulator {
     outPlayerIdx: number,
     inPlayerIdx: number,
   ): { ok: boolean; reason?: string } {
+    const error = this.substitutionError(team, outPlayerIdx, inPlayerIdx);
+    if (error !== null) return { ok: false, reason: error };
+
     const t = this.teams[team];
     const zone = t.court.indexOf(outPlayerIdx);
-    if (zone === -1) return { ok: false, reason: 'That player is not on court.' };
-    if (!t.ratings.has(inPlayerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
-    if (t.court.includes(inPlayerIdx)) return { ok: false, reason: 'That player is already on court.' };
-    if (this.subsUsedThisSet[team] >= 5) return { ok: false, reason: 'No substitutions left this set.' };
-
     const pairing = this.subPairing[team];
     const requiredPartner = pairing.get(outPlayerIdx);
-    if (requiredPartner !== undefined && requiredPartner !== inPlayerIdx) {
-      return { ok: false, reason: 'That player can only be replaced by whoever substituted for them.' };
-    }
-
     t.court[zone] = inPlayerIdx;
     if (t.setterIdx === outPlayerIdx) t.setterIdx = inPlayerIdx;
     this.subsUsedThisSet[team]++;
@@ -419,8 +448,92 @@ export class MatchSimulator {
     return { ok: true };
   }
 
+  /** Why substitute() would refuse this swap, or null if it is legal. */
+  private substitutionError(team: 0 | 1, outPlayerIdx: number, inPlayerIdx: number): string | null {
+    const t = this.teams[team];
+    if (!t.court.includes(outPlayerIdx)) return 'That player is not on court.';
+    if (!t.ratings.has(inPlayerIdx)) return 'That player is not part of the squad.';
+    if (t.court.includes(inPlayerIdx)) return 'That player is already on court.';
+    if (this.subsUsedThisSet[team] >= 5) return 'No substitutions left this set.';
+
+    const pairing = this.subPairing[team];
+    const requiredPartner = pairing.get(outPlayerIdx);
+    if (requiredPartner !== undefined && requiredPartner !== inPlayerIdx) {
+      return 'That player can only be replaced by whoever substituted for them.';
+    }
+    const inPartner = pairing.get(inPlayerIdx);
+    if (inPartner !== undefined && inPartner !== outPlayerIdx) {
+      return 'That player can only come back on for the player they swapped with.';
+    }
+    return null;
+  }
+
   subsRemaining(team: 0 | 1): number {
     return 5 - this.subsUsedThisSet[team];
+  }
+
+  /**
+   * The change a coach would make right now, or null if the six on court are
+   * still the best available. Drives the AI side of a live match.
+   *
+   * A swap has to be warranted, not merely possible: the replacement must play
+   * the same position and be clearly more effective *at this moment* — a fresh
+   * reserve against a starter who is running on empty, or anyone against a
+   * starter who is having a nightmare. The margin required grows as the set's
+   * five substitutions get used up and while the set is going well, and
+   * shrinks when it is slipping away.
+   */
+  suggestSubstitution(team: 0 | 1): SubstitutionPlan | null {
+    this.startIfNeeded();
+    if (this.matchOver || this.subsUsedThisSet[team] >= 5) return null;
+    const t = this.teams[team];
+    const lead = t.score - this.teams[1 - team].score;
+    let margin = SUB_MARGIN + this.subsUsedThisSet[team] * SUB_MARGIN_PER_SUB_USED;
+    if (lead <= -4) margin -= SUB_MARGIN_SCORE_SHIFT;
+    else if (lead >= 4) margin += SUB_MARGIN_SCORE_SHIFT;
+
+    const pairing = this.subPairing[team];
+    let best: SubstitutionPlan | null = null;
+    let bestExcess = 0;
+    for (const out of t.court) {
+      const outFit = this.fitness(team, out);
+      const outValue = this.store.currentAbility[out] * outFit.fatigue * outFit.form;
+      for (const inc of t.ratings.keys()) {
+        if (this.store.position[inc] !== this.store.position[out]) continue;
+        if (this.substitutionError(team, out, inc) !== null) continue;
+        const inFit = this.fitness(team, inc);
+        const inValue = this.store.currentAbility[inc] * inFit.fatigue * inFit.form;
+        const needed = margin + (pairing.get(out) === inc ? SUB_MARGIN_REVERSAL : 0);
+        const excess = inValue / Math.max(1, outValue) - 1 - needed;
+        if (excess <= bestExcess) continue;
+        bestExcess = excess;
+        const tiredness = 1 - outFit.fatigue;
+        const slump = 1 - outFit.form;
+        const reason: SubstitutionReason =
+          tiredness > 0 && tiredness >= slump ? 'fatigue' : slump > 0 ? 'form' : 'upgrade';
+        best = { outPlayerIdx: out, inPlayerIdx: inc, reason };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * How much of their ability a player can bring to the court right now:
+   * `fatigue` is their live condition once they are visibly tiring (a little
+   * wear early on worries no coach), `form` a discount for a bad night on the
+   * scoresheet — applied only once there are enough rallies to judge.
+   */
+  private fitness(team: 0 | 1, playerIdx: number): { fatigue: number; form: number } {
+    const t = this.teams[team];
+    const condition = t.rate(playerIdx).fatigue;
+    const fatigue = condition <= TIRED_FATIGUE ? condition : 1;
+    const s = t.stats.players.get(playerIdx);
+    if (s === undefined || s.ralliesPlayed < FORM_MIN_RALLIES) return { fatigue, form: 1 };
+    const rating = matchRating(
+      s, this.store.position[playerIdx] as Position, t.setsWon, this.teams[1 - team].setsWon,
+    );
+    const form = rating >= FORM_FLOOR ? 1 : Math.max(0.6, 1 - (FORM_FLOOR - rating) * FORM_PENALTY);
+    return { fatigue, form };
   }
 
   /**
@@ -472,6 +585,53 @@ export class MatchSimulator {
       }
       t.defensiveLibero = playerIdx;
     }
+    return { ok: true };
+  }
+
+  /** The six a team starts the current set with, in rotational order (index 0 in zone 1). */
+  startingLineup(team: 0 | 1): number[] {
+    return this.teams[team].startLineup.slice();
+  }
+
+  /**
+   * Hand in the line-up sheet for the coming set: the six who start it, in
+   * rotational order, and the libero(s). Allowed only before the set's first
+   * serve. Anyone from the matchday squad may start, and it is not a
+   * substitution — the set's five are all still to come. The new six also
+   * start every later set until another sheet replaces it.
+   */
+  setStartingLineup(
+    team: 0 | 1,
+    lineup: readonly number[],
+    libero: number,
+    defensiveLibero = -1,
+  ): { ok: boolean; reason?: string } {
+    this.startIfNeeded();
+    const t = this.teams[team];
+    if (this.matchOver) return { ok: false, reason: 'The match is over.' };
+    if (t.score !== 0 || this.teams[1 - team].score !== 0) {
+      return { ok: false, reason: 'The set is already under way.' };
+    }
+    if (lineup.length !== 6 || new Set(lineup).size !== 6) {
+      return { ok: false, reason: 'Pick six different players to start the set.' };
+    }
+    if (lineup.some((p) => !t.ratings.has(p))) return { ok: false, reason: 'That player is not part of the squad.' };
+    for (const l of [libero, defensiveLibero]) {
+      if (l < 0) continue;
+      if (!t.ratings.has(l)) return { ok: false, reason: 'That player is not part of the squad.' };
+      if (this.store.position[l] !== Position.Libero) return { ok: false, reason: 'Only a registered libero can play libero.' };
+      if (lineup.includes(l)) return { ok: false, reason: 'A libero cannot also start in the six.' };
+    }
+    if (defensiveLibero >= 0 && (libero < 0 || defensiveLibero === libero)) {
+      return { ok: false, reason: 'Name a different libero for reception first.' };
+    }
+
+    t.startLineup = lineup.slice();
+    t.receptionLibero = libero;
+    t.defensiveLibero = defensiveLibero;
+    t.resetForSet();
+    this.subsUsedThisSet[team] = 0;
+    this.subPairing[team].clear();
     return { ok: true };
   }
 

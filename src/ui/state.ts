@@ -10,7 +10,7 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  MatchSimulator, type MatchResult, type RallyLogEntry, type TeamSetup,
+  MatchSimulator, type MatchResult, type RallyLogEntry, type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
@@ -148,6 +148,11 @@ const DAY_TICK_MS = 45;
 /** The furthest a single Continue runs without anything happening. */
 const MAX_CONTINUE_DAYS = 62;
 
+/** Rallies the AI lets a substitution settle before it considers another. */
+const AI_SUB_COOLDOWN_RALLIES = 4;
+/** Chance, each rally, that the AI acts on a substitution it judges warranted. */
+const AI_SUB_CHANCE = 0.5;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -183,9 +188,15 @@ export interface MatchdayLogEntry {
 
 export interface MatchdayState {
   fixture: Fixture;
-  stage: 'lineup' | 'live';
+  /** Team selection before kickoff, the match itself, or the break between
+   *  two sets, where the user picks the six to start the next one. */
+  stage: 'lineup' | 'live' | 'setBreak';
+  /** Set once a set has been won; the break opens as soon as the viewer has
+   *  shown that final point. */
+  setBreakPending: boolean;
   userIsHome: boolean;
-  /** The user's side; edited pre-kickoff, regardless of home/away. */
+  /** The user's side, regardless of home/away; edited pre-kickoff and again
+   *  at every set break. */
   homeLineup: number[];
   /** The reception libero — the only libero, unless a defensive one is named. */
   homeLibero: number;
@@ -205,13 +216,15 @@ export interface MatchdayState {
   /** Which team's timeout is currently open (pausing play for tactics/subs), or null. */
   timeoutActive: 0 | 1 | null;
   /** The most recent substitution, either side — drives the live "X off, Y on" banner.
-   *  `libero` marks a libero change rather than a regular substitution. */
+   *  `libero` marks a libero change rather than a regular substitution;
+   *  `reason` is set when the AI made it, so the banner can say why. */
   lastSubstitution: {
     team: 0 | 1;
     outPlayerIdx: number;
     inPlayerIdx: number;
     seq: number;
     libero?: 'reception' | 'defence';
+    reason?: SubstitutionReason;
   } | null;
 }
 
@@ -244,6 +257,8 @@ class Game {
   private subSeq = 0;
   /** Index into matchday.log at the last timeout (either side) — a simple anti-spam cooldown for the AI. */
   private lastTimeoutAtRally = -Infinity;
+  /** Index into matchday.log at the AI's last substitution, so it lets a change settle before the next. */
+  private lastAISubAtRally = -Infinity;
   watched: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   /** Set right after a rollover the user's own club won a league title in —
@@ -966,6 +981,7 @@ class Game {
     this.matchday = {
       fixture: next,
       stage: 'lineup',
+      setBreakPending: false,
       userIsHome: next.home === club.id,
       homeLineup: lineup,
       homeLibero: libero,
@@ -989,10 +1005,10 @@ class Game {
     this.emit();
   }
 
-  /** Swap a starter on the pre-match lineup screen. */
+  /** Swap a starter on the team sheet — before kickoff or at a set break. */
   setMatchdayPlayer(zoneIdx: number, playerIdx: number): void {
     const md = this.matchday;
-    if (md === null || md.stage !== 'lineup') return;
+    if (md === null || md.stage === 'live') return;
     md.homeLineup[zoneIdx] = playerIdx;
     this.emit();
   }
@@ -1000,7 +1016,7 @@ class Game {
   /** Swap two starting zones' players — dragging one starter onto another on the team sheet. */
   swapMatchdayPlayers(zoneA: number, zoneB: number): void {
     const md = this.matchday;
-    if (md === null || md.stage !== 'lineup') return;
+    if (md === null || md.stage === 'live') return;
     const a = md.homeLineup[zoneA];
     md.homeLineup[zoneA] = md.homeLineup[zoneB];
     md.homeLineup[zoneB] = a;
@@ -1011,7 +1027,7 @@ class Game {
    *  defensive libero swaps the two roles over. */
   setMatchdayLibero(playerIdx: number): void {
     const md = this.matchday;
-    if (md === null || md.stage !== 'lineup') return;
+    if (md === null || md.stage === 'live') return;
     if (playerIdx === md.homeDefensiveLibero) md.homeDefensiveLibero = md.homeLibero;
     md.homeLibero = playerIdx;
     this.emit();
@@ -1020,7 +1036,7 @@ class Game {
   /** Name (or with -1, drop) the second libero who plays whenever the team serves. */
   setMatchdayDefensiveLibero(playerIdx: number): void {
     const md = this.matchday;
-    if (md === null || md.stage !== 'lineup') return;
+    if (md === null || md.stage === 'live') return;
     if (playerIdx >= 0 && playerIdx === md.homeLibero) {
       if (md.homeDefensiveLibero < 0) return;
       md.homeLibero = md.homeDefensiveLibero;
@@ -1127,6 +1143,9 @@ class Game {
     md.stage = 'live';
     md.log = [];
     md.timeoutsUsed = [0, 0];
+    // Both cooldowns count rallies in md.log, which starts again from zero.
+    this.lastTimeoutAtRally = -Infinity;
+    this.lastAISubAtRally = -Infinity;
     md.snapshot = this.liveSim.snapshot();
     this.emit();
   }
@@ -1163,7 +1182,7 @@ class Game {
   playNextRally(): MatchdayLogEntry | null {
     const md = this.matchday;
     const sim = this.liveSim;
-    if (md === null || sim === null || md.stage !== 'live') return null;
+    if (md === null || sim === null || md.stage !== 'live' || md.setBreakPending) return null;
 
     const preSnap = sim.snapshot();
     const entry = sim.step();
@@ -1176,13 +1195,79 @@ class Game {
     };
     md.log.push(logEntry);
     md.snapshot = sim.snapshot();
-    // Fresh timeout allowance each set, same as the engine's own substitution limit.
-    if (md.snapshot.set !== preSnap.set) md.timeoutsUsed = [0, 0];
     // The final point is left for the viewer to play out; it calls
     // completeMatchday() once it has been shown.
-    if (!md.snapshot.matchOver) this.maybeAIAct();
+    if (!md.snapshot.matchOver) {
+      if (md.snapshot.set !== preSnap.set) {
+        // Fresh timeout allowance each set, same as the engine's own
+        // substitution limit — and the viewer opens the set break once this
+        // set's last point has been shown.
+        md.timeoutsUsed = [0, 0];
+        md.setBreakPending = true;
+      } else {
+        this.maybeAIAct();
+      }
+    }
     this.emit();
     return logEntry;
+  }
+
+  /**
+   * Open the break between sets, once the set's last point has been shown:
+   * the team sheet comes back, filled in with the six who started the set
+   * just finished and the liberos playing now, for the user to keep or change.
+   */
+  openSetBreak(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || !md.setBreakPending) return;
+    this.resetSetBreakSheet();
+    md.stage = 'setBreak';
+    md.setBreakPending = false;
+    md.timeoutActive = null;
+    md.paused = false;
+    md.pauseUntil = null;
+    // So the live view, when it comes back, doesn't re-announce an old change.
+    md.lastSubstitution = null;
+    this.emit();
+  }
+
+  /** The user's line-up sheet as the last set started it: its six and the liberos playing now. */
+  lastSetSheet(): { lineup: number[]; libero: number; defensiveLibero: number } | null {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return null;
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const liberos = sim.liberos(team);
+    return { lineup: sim.startingLineup(team), libero: liberos.reception, defensiveLibero: liberos.defence };
+  }
+
+  /** Put the set-break team sheet back to the last set's — "the same team again". */
+  resetSetBreakSheet(): void {
+    const md = this.matchday;
+    const sheet = this.lastSetSheet();
+    if (md === null || sheet === null) return;
+    md.homeLineup = sheet.lineup;
+    md.homeLibero = sheet.libero;
+    md.homeDefensiveLibero = sheet.defensiveLibero;
+    this.emit();
+  }
+
+  /** Hand in the team sheet from the set break and play on. */
+  startNextSet(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.stage !== 'setBreak') return;
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const result = sim.setStartingLineup(team, md.homeLineup, md.homeLibero, md.homeDefensiveLibero);
+    if (!result.ok) {
+      this.notice = result.reason ?? 'That line-up is not allowed.';
+      this.emit();
+      return;
+    }
+    md.snapshot = sim.snapshot();
+    md.stage = 'live';
+    this.emit();
   }
 
   /** Close a match whose last point has been played and shown — commits the
@@ -1210,6 +1295,7 @@ class Game {
     team: 0 | 1,
     outPlayerIdx: number,
     inPlayerIdx: number,
+    why?: SubstitutionReason,
   ): { ok: boolean; reason?: string } {
     const md = this.matchday;
     const sim = this.liveSim;
@@ -1219,7 +1305,7 @@ class Game {
       md.snapshot = sim.snapshot();
       md.paused = true;
       md.pauseUntil = Date.now() + 3000;
-      md.lastSubstitution = { team, outPlayerIdx, inPlayerIdx, seq: ++this.subSeq };
+      md.lastSubstitution = { team, outPlayerIdx, inPlayerIdx, seq: ++this.subSeq, reason: why };
     }
     return result;
   }
@@ -1227,7 +1313,8 @@ class Game {
   /** Bring on a bench player for the user's own side, mid-match. */
   substitute(outPlayerIdx: number, inPlayerIdx: number): void {
     const md = this.matchday;
-    if (md === null || md.stage !== 'live') return;
+    // Once a set is won, changes wait for the set break's team sheet.
+    if (md === null || md.stage !== 'live' || md.setBreakPending) return;
     const teamIdx = md.userIsHome ? 0 : 1;
     const result = this.performSubstitution(teamIdx, outPlayerIdx, inPlayerIdx);
     if (!result.ok) this.notice = result.reason ?? 'That substitution is not allowed.';
@@ -1318,7 +1405,7 @@ class Game {
    */
   callTimeout(): void {
     const md = this.matchday;
-    if (md === null || md.stage !== 'live' || md.timeoutActive !== null) return;
+    if (md === null || md.stage !== 'live' || md.setBreakPending || md.timeoutActive !== null) return;
     const teamIdx = md.userIsHome ? 0 : 1;
     if (md.timeoutsUsed[teamIdx] >= 2) return;
     this.startTimeout(teamIdx);
@@ -1333,23 +1420,21 @@ class Game {
   }
 
   /**
-   * A simple heuristic for the AI side's timeouts and substitutions — not
-   * real tactical reasoning, just enough that the opponent isn't a
-   * fire-and-forget spectator: call a timeout after conceding an unanswered
-   * run, and occasionally strengthen a clearly weak matchup off the bench.
-   * Deliberately uses Math.random(), not the world's seeded rng — this is
-   * real-time UI flavour, not part of the deterministic world simulation.
+   * The AI side's bench decisions: call a timeout after conceding an
+   * unanswered run, and make a substitution whenever the engine's coaching
+   * judgement says one is needed — a starter running on empty or having a
+   * bad night, with a same-position reserve who would do better right now.
+   * A new change waits a few rallies for the last to settle, and a warranted
+   * one isn't always made on the very next whistle. Deliberately uses
+   * Math.random(), not the world's seeded rng — this is real-time UI
+   * flavour, not part of the deterministic world simulation.
    */
   private maybeAIAct(): void {
     const md = this.matchday;
     const sim = this.liveSim;
-    const world = this.world;
-    if (md === null || sim === null || world === null || md.timeoutActive !== null) return;
-    const snap = md.snapshot;
-    if (snap === null) return;
+    if (md === null || sim === null || md.timeoutActive !== null) return;
 
     const aiTeam: 0 | 1 = md.userIsHome ? 1 : 0;
-    const store = world.players;
 
     const recent = md.log.slice(-3);
     const concededRun = recent.length === 3 && recent.every((l) => l.entry.winner !== aiTeam);
@@ -1361,22 +1446,11 @@ class Game {
       return;
     }
 
-    if (sim.subsRemaining(aiTeam) > 0 && Math.random() < 0.012) {
-      const court = aiTeam === 0 ? snap.homeCourt : snap.awayCourt;
-      const bench = sim.benchFor(aiTeam);
-      let bestOut = -1;
-      let bestIn = -1;
-      let bestGain = 80; // only a meaningful upgrade is worth using a sub on
-      for (const onCourtIdx of court) {
-        const pos = store.position[onCourtIdx];
-        for (const benchIdx of bench) {
-          if (store.position[benchIdx] !== pos) continue;
-          const gain = store.currentAbility[benchIdx] - store.currentAbility[onCourtIdx];
-          if (gain > bestGain) { bestGain = gain; bestOut = onCourtIdx; bestIn = benchIdx; }
-        }
-      }
-      if (bestOut !== -1) this.performSubstitution(aiTeam, bestOut, bestIn);
-    }
+    if (md.log.length - this.lastAISubAtRally < AI_SUB_COOLDOWN_RALLIES) return;
+    const plan = sim.suggestSubstitution(aiTeam);
+    if (plan === null || Math.random() >= AI_SUB_CHANCE) return;
+    const result = this.performSubstitution(aiTeam, plan.outPlayerIdx, plan.inPlayerIdx, plan.reason);
+    if (result.ok) this.lastAISubAtRally = md.log.length;
   }
 
   private finalizeMatchday(): void {

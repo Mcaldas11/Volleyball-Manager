@@ -353,7 +353,8 @@ function headerInfo(g: ReturnType<typeof useGame>): {
 } {
   const world = g.world!;
   if (g.matchday !== null) {
-    return { title: g.matchday.stage === 'lineup' ? 'Team Selection' : 'Live Match', tabs: null };
+    const stage = g.matchday.stage;
+    return { title: stage === 'lineup' ? 'Team Selection' : stage === 'setBreak' ? 'Set Break' : 'Live Match', tabs: null };
   }
   if (g.postMatch !== null) return { title: 'Full Time', tabs: null };
   if (g.negotiation !== null) return { title: 'Contract Negotiation', tabs: null };
@@ -470,7 +471,8 @@ function ContinueButton(): JSX.Element {
   if (g.processing) {
     label = 'Processing';
   } else if (inMatch) {
-    label = g.matchday?.stage === 'lineup' ? 'Team selection' : 'Match in progress';
+    label = g.matchday?.stage === 'lineup' ? 'Team selection'
+      : g.matchday?.stage === 'setBreak' ? 'Set break' : 'Match in progress';
   } else if (g.postMatch !== null) {
     action = () => g.finishPostMatch();
   } else if (inInbox && unread > 0) {

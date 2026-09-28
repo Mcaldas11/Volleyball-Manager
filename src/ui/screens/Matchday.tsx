@@ -89,7 +89,8 @@ export function MatchdayScreen(): JSX.Element | null {
   const g = useGame();
   const md = g.matchday;
   if (md === null) return null;
-  return md.stage === 'lineup' ? <LineupSetup /> : <LiveMatchView />;
+  if (md.stage === 'lineup') return <LineupSetup />;
+  return md.stage === 'setBreak' ? <SetBreak /> : <LiveMatchView />;
 }
 
 /** Average current ability of a squad's best six — a quick read of how strong a side is. */
@@ -161,6 +162,92 @@ function LineupSetup(): JSX.Element {
           </div>
           <button className="primary lg" onClick={() => g.kickOff()}>
             <Icon name="whistle" size={18} /> Kick off
+          </button>
+        </div>
+      </div>
+
+      <TeamSheet
+        lineup={md.homeLineup}
+        libero={md.homeLibero}
+        defensiveLibero={md.homeDefensiveLibero}
+        bench={bench}
+        store={store}
+        onSetPlayer={(slot, p) => g.setMatchdayPlayer(slot, p)}
+        onSwapPlayers={(a, b) => g.swapMatchdayPlayers(a, b)}
+        onSetLibero={(p) => g.setMatchdayLibero(p)}
+        onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
+      />
+    </div>
+  );
+}
+
+/**
+ * The break between two sets: the score so far, and the team sheet again,
+ * filled in with the six who started the set just played — keep them, or
+ * change anyone and any zone before the next set starts.
+ */
+function SetBreak(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const md = g.matchday!;
+  const store = world.players;
+
+  const home = world.clubs[md.fixture.home];
+  const away = world.clubs[md.fixture.away];
+  const setsPlayed = md.snapshot?.set ?? 0;
+  const setScores = completedSets(md.log, setsPlayed, false);
+  const bench = club.players.filter((p) =>
+    store.isAvailable(p) && !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
+  const teamAvg = Math.round(
+    md.homeLineup.reduce((s, p) => s + store.currentAbility[p], 0) / Math.max(1, md.homeLineup.length));
+  const last = g.lastSetSheet();
+  const changed = last !== null && (
+    last.lineup.some((p, i) => md.homeLineup[i] !== p)
+    || last.libero !== md.homeLibero || last.defensiveLibero !== md.homeDefensiveLibero);
+
+  return (
+    <div className="md-setup">
+      <div className="md-banner">
+        <div className="md-banner-team">
+          {home !== undefined && <ClubCrest club={home} size={46} />}
+          <div className="md-banner-team-text">
+            <span className="md-banner-name">{home?.name ?? '—'}</span>
+            <span className="md-banner-tag">Home{md.userIsHome ? ' · Your team' : ''}</span>
+          </div>
+        </div>
+        <div className="md-banner-mid">
+          <span className="md-banner-comp">End of set {setsPlayed}</span>
+          <span className="md-banner-vs md-banner-sets">{md.snapshot?.homeSets ?? 0} – {md.snapshot?.awaySets ?? 0}</span>
+          <span className="md-banner-date mono">{setScores.map(([h, a]) => `${h}-${a}`).join('  ·  ')}</span>
+        </div>
+        <div className="md-banner-team right">
+          <div className="md-banner-team-text">
+            <span className="md-banner-name">{away?.name ?? '—'}</span>
+            <span className="md-banner-tag">Away{!md.userIsHome ? ' · Your team' : ''}</span>
+          </div>
+          {away !== undefined && <ClubCrest club={away} size={46} />}
+        </div>
+        <div className="md-banner-side">
+          <div className="md-strength">
+            <div className="lineup-bar-rating">
+              <span className="faint">Set {setsPlayed + 1} six</span>
+              <StarMeter value={teamAvg} size={13} />
+              <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
+            </div>
+            <div className="md-setbreak-actions">
+              {changed && (
+                <button className="sm ghost" onClick={() => g.resetSetBreakSheet()} title="Back to the six who started the last set">
+                  <Icon name="swap" size={13} /> Same as last set
+                </button>
+              )}
+              <button className="sm danger" onClick={() => g.finishMatchdayNow()} title="Skip to the result">
+                <Icon name="fastForward" size={13} /> Finish match
+              </button>
+            </div>
+          </div>
+          <button className="primary lg" onClick={() => g.startNextSet()}>
+            <Icon name="whistle" size={18} /> Start set {setsPlayed + 1}
           </button>
         </div>
       </div>
@@ -348,7 +435,8 @@ function LiveMatchView(): JSX.Element {
       ?.shortName ?? '';
     const text = sub.libero !== undefined
       ? `${teamName}: ${store.shortName(sub.inPlayerIdx)} in as ${sub.libero === 'reception' ? 'reception' : 'defensive'} libero`
-      : `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}`;
+      : `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}${
+        sub.reason === 'fatigue' ? ' (tired)' : sub.reason === 'form' ? ' (struggling)' : ''}`;
     setSubAnnouncement({ text, team: sub.team, key: sub.seq });
     if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
@@ -380,6 +468,12 @@ function LiveMatchView(): JSX.Element {
           await sleep(150);
           continue;
         }
+        // A set won while this view was away (it unmounted mid-pause) still
+        // needs its break before another rally can be played.
+        if (current.setBreakPending) {
+          g.openSetBreak();
+          break;
+        }
         animatingRef.current = true;
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
@@ -391,6 +485,13 @@ function LiveMatchView(): JSX.Element {
           // Full time: let the last point sink in, then on to the report.
           await sleep(2200 / current.speed);
           if (!cancelled.current) g.completeMatchday();
+          break;
+        }
+        if (g.matchday?.setBreakPending === true) {
+          // Set over: same pause, then the set break's team sheet takes the
+          // screen. Coming back from it mounts this view, and its loop, afresh.
+          await sleep(2200 / current.speed);
+          if (!cancelled.current) g.openSetBreak();
           break;
         }
         // Everyone walks into position for the next serve — rotating on a side-out.

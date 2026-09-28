@@ -122,6 +122,122 @@ test('substitute() only lets a substituted starter return for the player who rep
   assert.equal(sim.substitute(0, starter, sub1).ok, true);
 });
 
+test('substitute() will not bring on a bench player already paired with someone else', () => {
+  const { store, setup } = buildMatch(6, 445);
+  const sim = new MatchSimulator(store, setup);
+  sim.step();
+
+  const [starterA, starterB] = setup.home.lineup;
+  const sub = setup.home.bench[0];
+  assert.equal(sim.substitute(0, starterA, sub).ok, true);
+  assert.equal(sim.substitute(0, sub, starterA).ok, true);
+
+  // `sub` has had their one swap this set, with starterA — they can't now
+  // come on for anybody else.
+  assert.equal(sim.substitute(0, starterB, sub).ok, false);
+});
+
+test('suggestSubstitution() makes no change at the first whistle when the starters are the best available', () => {
+  const { store, setup } = buildMatch(11, 1111);
+  for (const team of [setup.home, setup.away]) {
+    for (const starter of team.lineup) {
+      const clearlyBetter = team.bench.some((p) =>
+        store.position[p] === store.position[starter]
+        && store.currentAbility[p] > store.currentAbility[starter] * 1.04);
+      assert.ok(!clearlyBetter, 'this test needs starters no reserve clearly outranks');
+    }
+  }
+  const sim = new MatchSimulator(store, setup);
+  assert.equal(sim.suggestSubstitution(0), null);
+  assert.equal(sim.suggestSubstitution(1), null);
+});
+
+test('suggestSubstitution() only ever proposes legal like-for-like changes, and does make some', () => {
+  let made = 0;
+  for (let seed = 0; seed < 6; seed++) {
+    const { store, setup } = buildMatch(12 + seed, 1200 + seed);
+    const sim = new MatchSimulator(store, setup);
+    while (sim.step() !== null) {
+      for (const team of [0, 1] as const) {
+        const plan = sim.suggestSubstitution(team);
+        if (plan === null) continue;
+        assert.equal(store.position[plan.inPlayerIdx], store.position[plan.outPlayerIdx]);
+        const result = sim.substitute(team, plan.outPlayerIdx, plan.inPlayerIdx);
+        assert.equal(result.ok, true, result.reason);
+        made++;
+      }
+    }
+  }
+  assert.ok(made > 0, 'over six full matches, somebody should have needed replacing');
+});
+
+/** Play on until the current set is over; false if the match ended instead. */
+function playToNextSet(sim: MatchSimulator): boolean {
+  const set = sim.snapshot().set;
+  while (sim.step() !== null) {
+    const snap = sim.snapshot();
+    if (snap.matchOver) return false;
+    if (snap.set !== set) return true;
+  }
+  return false;
+}
+
+test('setStartingLineup() changes the six only between sets, and the new six keep starting', () => {
+  const { store, setup } = buildMatch(18, 1818);
+  const sim = new MatchSimulator(store, setup);
+  const libero = setup.home.libero;
+  const defence = setup.home.defensiveLibero ?? -1;
+  const reserveOH = setup.home.bench.find((p) => store.position[p] === Position.OutsideHitter);
+  assert.ok(reserveOH !== undefined, 'this test needs an outside hitter on the bench');
+  const newSix = setup.home.lineup.slice();
+  newSix[1] = reserveOH;
+
+  sim.step();
+  assert.equal(sim.setStartingLineup(0, newSix, libero, defence).ok, false, 'not in the middle of a set');
+
+  assert.ok(playToNextSet(sim));
+  sim.substitute(0, sim.snapshot().homeCourt[0], setup.home.bench[0]);
+  const result = sim.setStartingLineup(0, newSix, libero, defence);
+  assert.equal(result.ok, true, result.reason);
+  assert.deepEqual(sim.snapshot().homeCourt, newSix);
+  assert.deepEqual(sim.startingLineup(0), newSix);
+  assert.equal(sim.subsRemaining(0), 5, 'a new line-up sheet is not a substitution');
+
+  // The six handed in carry on starting later sets too.
+  assert.ok(playToNextSet(sim));
+  assert.deepEqual(sim.snapshot().homeCourt, newSix);
+});
+
+test('setStartingLineup() rejects duplicates, outsiders and a libero in the six', () => {
+  const { store, setup } = buildMatch(19, 1919);
+  const sim = new MatchSimulator(store, setup);
+  const libero = setup.home.libero;
+  const six = setup.home.lineup;
+  assert.equal(sim.setStartingLineup(0, [six[0], six[0], six[2], six[3], six[4], six[5]], libero).ok, false);
+  assert.equal(sim.setStartingLineup(0, [999_999, six[1], six[2], six[3], six[4], six[5]], libero).ok, false);
+  assert.equal(sim.setStartingLineup(0, [libero, six[1], six[2], six[3], six[4], six[5]], libero).ok, false);
+  assert.equal(sim.setStartingLineup(0, six, six[0]).ok, false, 'only a registered libero plays libero');
+  assert.equal(sim.setStartingLineup(0, six, libero).ok, true);
+});
+
+test('a setter substituted in one set does not go on setting from the bench the next', () => {
+  const { store, setup } = buildMatch(20, 2020);
+  const starter = setup.home.lineup.find((p) => store.position[p] === Position.Setter);
+  const reserve = setup.home.bench.find((p) => store.position[p] === Position.Setter);
+  assert.ok(starter !== undefined && reserve !== undefined, 'this test needs two setters');
+  const sim = new MatchSimulator(store, setup);
+  sim.step();
+  assert.equal(sim.substitute(0, starter, reserve).ok, true);
+
+  assert.ok(playToNextSet(sim));
+  const setsMade = (p: number): number => sim.liveStats().home.players.get(p)?.setsMade ?? 0;
+  const reserveBefore = setsMade(reserve);
+  const starterBefore = setsMade(starter);
+  playToNextSet(sim);
+  assert.equal(setsMade(reserve), reserveBefore, 'the reserve setter is back on the bench');
+  assert.ok(setsMade(starter) > starterBefore, 'the starting setter is back running the offence');
+});
+
 /** A match whose home side registers a second, defensive libero from its bench. */
 function buildTwoLiberoMatch(worldSeed: number, matchSeed: number): { store: PlayerStore; setup: MatchSetup; reception: number; defence: number } {
   const { store, setup } = buildMatch(worldSeed, matchSeed);
