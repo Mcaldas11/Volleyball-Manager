@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { seasonEndDay, stubManager } from '../engine/world/world.ts';
-import { reviveWorld } from './persistence.ts';
+import { newSeasonContext, playFixture, startSeason } from '../engine/season/seasonEngine.ts';
+import { reviveSeason, reviveWorld } from './persistence.ts';
 
 test('world round-trips through structuredClone with prototypes restored', () => {
   const world = generateWorld({ seed: 1, startYear: 2026, scale: 'small', manager: stubManager(3) });
@@ -75,4 +76,29 @@ test('reviveWorld moves old contract days to the 30 June of the season they ran 
   assert.equal(revived.players.contractUntil[b], seasonEndDay(2));
   assert.equal(revived.players.contractUntil[c], seasonEndDay(3));
   assert.ok(revived.talksBlockedUntil instanceof Map);
+});
+
+test('season stats survive a save and load', () => {
+  const world = generateWorld({ seed: 5, startYear: 2026, scale: 'small', manager: stubManager() });
+  const ctx = newSeasonContext();
+  startSeason(world, ctx);
+  const fixture = world.fixtures[0];
+  playFixture(world, ctx, fixture, false);
+  assert.ok(ctx.stats.size > 0, 'the match should have produced stat lines');
+
+  // What saveGame() hands IndexedDB, through the same clone algorithm.
+  const saved = structuredClone({ stats: ctx.stats, seasonStartAbility: ctx.seasonStartAbility });
+  const revived = reviveSeason(world, saved);
+  assert.ok(revived.stats instanceof Map);
+  assert.deepEqual(revived.stats, ctx.stats);
+  assert.deepEqual(revived.seasonStartAbility, ctx.seasonStartAbility);
+});
+
+test('a save from before seasons were kept loads with fresh leaderboards and a baseline for most improved', () => {
+  const world = generateWorld({ seed: 6, startYear: 2026, scale: 'small', manager: stubManager() });
+  const revived = reviveSeason(world, undefined);
+  assert.equal(revived.stats.size, 0);
+  assert.ok(revived.seasonStartAbility.size > 0);
+  const [p] = revived.seasonStartAbility.keys();
+  assert.equal(revived.seasonStartAbility.get(p), world.players.currentAbility[p]);
 });

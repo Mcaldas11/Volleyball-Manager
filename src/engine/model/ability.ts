@@ -130,6 +130,16 @@ export function computeCurrentAbility(store: PlayerStore, i: number): number {
   return Math.round(Math.max(0, Math.min(1, combined)) * 2000);
 }
 
+/**
+ * How a coach rates a player for selection on matchday: ability, shaded by
+ * physical condition, so a rested player gets the nod over a marginally
+ * better tired one. Shared by team selection and the live match's AI bench,
+ * so the bench never undoes a choice the team sheet made on purpose.
+ */
+export function selectionScore(store: PlayerStore, i: number): number {
+  return store.currentAbility[i] * (0.7 + 0.3 * (store.condition[i] / 100));
+}
+
 /** Recompute and store CA. Call after any attribute change. */
 export function refreshAbility(store: PlayerStore, i: number): number {
   const ca = computeCurrentAbility(store, i);

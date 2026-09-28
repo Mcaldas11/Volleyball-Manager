@@ -2602,6 +2602,14 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .md-banner-vs { font: 800 24px/1 var(--font-display); color: var(--text-faint); }
 .md-banner-date { font-size: 12px; color: var(--text-dim); }
 .md-banner-sets { color: var(--text); }
+.md-banner-changes {
+  display: flex; align-items: center; gap: 4px; min-width: 0; margin-top: 2px;
+  font-size: 12px; color: var(--text-faint);
+}
+.md-banner-team.right .md-banner-changes { justify-content: flex-end; }
+.md-banner-changes > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.md-banner-changes svg { flex: none; }
+.md-banner-changes.changed { color: var(--gold); }
 .md-setbreak-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
 
 .live { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }

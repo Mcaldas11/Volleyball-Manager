@@ -298,8 +298,8 @@ function TopScorer(): JSX.Element {
   const points = (s: (typeof lines)[number]): number => s.attackKills + s.serveAces + s.blockPoints;
   const top = lines.sort((a, b) => points(b) - points(a))[0];
 
-  // Season lines live with the session; after loading a save, fall back to
-  // the permanent records, which keep points, aces and blocks.
+  // A save written before season lines were kept loads without them; fall
+  // back to the permanent records, which keep points, aces and blocks.
   let p: number | undefined = top?.playerIdx;
   let fallback: { apps: number } | null = null;
   if (top === undefined) {

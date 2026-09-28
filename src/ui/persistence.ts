@@ -9,10 +9,11 @@
  * therefore their methods) across a clone, so `reviveWorld` restores it after
  * every read.
  *
- * Two object stores back one database: `meta` holds small per-save summaries
- * so the load-game list renders instantly, and `world` holds the heavy full
- * `World` blob, keyed separately. Listing saves never touches the `world`
- * store.
+ * Three object stores back one database: `meta` holds small per-save
+ * summaries so the load-game list renders instantly, `world` holds the heavy
+ * full `World` blob, and `season` the season-so-far figures that live beside
+ * the World rather than in it — all keyed by save id. Listing saves never
+ * touches the other two stores.
  */
 
 import { Rng } from '../engine/core/rng.ts';
@@ -21,6 +22,9 @@ import { Position } from '../engine/model/positions.ts';
 import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
 import { ensureCupCompetitions } from '../engine/season/cups.ts';
+import {
+  newSeasonContext, recordSeasonStartAbility, type SeasonContext, type SeasonStats,
+} from '../engine/season/seasonEngine.ts';
 
 export interface SaveMeta {
   id: string;
@@ -37,10 +41,23 @@ export interface SaveMeta {
   schemaVersion: number;
 }
 
+/**
+ * The part of the season context worth keeping in a save: every player's
+ * season stat line (the leaderboards) and abilities as the season began (the
+ * "most improved" award). Full match logs are left out — they only feed the
+ * report of a match just played.
+ */
+export interface SavedSeason {
+  stats: SeasonStats;
+  seasonStartAbility: Map<number, number>;
+}
+
 const DB_NAME = 'vbm-saves';
-const DB_VERSION = 1;
+/** 2 added the `season` store. */
+const DB_VERSION = 2;
 const META_STORE = 'meta';
 const WORLD_STORE = 'world';
+const SEASON_STORE = 'season';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -56,8 +73,13 @@ function openDb(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(WORLD_STORE)) db.createObjectStore(WORLD_STORE);
+      if (!db.objectStoreNames.contains(SEASON_STORE)) db.createObjectStore(SEASON_STORE);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // Let a newer version of the game, open in another tab, upgrade the database.
+      req.result.onversionchange = () => { req.result.close(); dbPromise = null; };
+      resolve(req.result);
+    };
     req.onerror = () => reject(new Error('Could not open save storage.'));
   });
   return dbPromise;
@@ -89,12 +111,14 @@ export async function listSaves(): Promise<SaveMeta[]> {
   return all.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export async function saveGame(id: string, meta: SaveMeta, world: World): Promise<void> {
+export async function saveGame(id: string, meta: SaveMeta, world: World, season: SeasonContext): Promise<void> {
   const db = await openDb();
   try {
-    const tx = db.transaction([META_STORE, WORLD_STORE], 'readwrite');
+    const saved: SavedSeason = { stats: season.stats, seasonStartAbility: season.seasonStartAbility };
+    const tx = db.transaction([META_STORE, WORLD_STORE, SEASON_STORE], 'readwrite');
     tx.objectStore(META_STORE).put(meta);
     tx.objectStore(WORLD_STORE).put(world, id);
+    tx.objectStore(SEASON_STORE).put(saved, id);
     await txDone(tx);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'QuotaExceededError') {
@@ -104,20 +128,41 @@ export async function saveGame(id: string, meta: SaveMeta, world: World): Promis
   }
 }
 
-export async function loadGame(id: string): Promise<World> {
+export async function loadGame(id: string): Promise<{ world: World; season: SeasonContext }> {
   const db = await openDb();
-  const tx = db.transaction(WORLD_STORE, 'readonly');
-  const raw = await reqToPromise(tx.objectStore(WORLD_STORE).get(id) as IDBRequest<World | undefined>);
+  const tx = db.transaction([WORLD_STORE, SEASON_STORE], 'readonly');
+  const worldReq = tx.objectStore(WORLD_STORE).get(id) as IDBRequest<World | undefined>;
+  const seasonReq = tx.objectStore(SEASON_STORE).get(id) as IDBRequest<SavedSeason | undefined>;
+  const [raw, season] = await Promise.all([reqToPromise(worldReq), reqToPromise(seasonReq)]);
   if (raw === undefined) throw new Error('That save could not be found.');
-  return reviveWorld(raw);
+  const world = reviveWorld(raw);
+  return { world, season: reviveSeason(world, season) };
 }
 
 export async function deleteSave(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META_STORE, WORLD_STORE], 'readwrite');
+  const tx = db.transaction([META_STORE, WORLD_STORE, SEASON_STORE], 'readwrite');
   tx.objectStore(META_STORE).delete(id);
   tx.objectStore(WORLD_STORE).delete(id);
+  tx.objectStore(SEASON_STORE).delete(id);
   await txDone(tx);
+}
+
+/**
+ * Rebuild the season context from what a save kept of it. A save written
+ * before seasons were kept has none: its leaderboards start again from the
+ * load, and "most improved" is measured from the load too, rather than not
+ * at all.
+ */
+export function reviveSeason(world: World, saved: SavedSeason | undefined): SeasonContext {
+  const ctx = newSeasonContext();
+  if (saved === undefined) {
+    recordSeasonStartAbility(world, ctx);
+    return ctx;
+  }
+  ctx.stats = saved.stats;
+  ctx.seasonStartAbility = saved.seasonStartAbility;
+  return ctx;
 }
 
 /**

@@ -205,6 +205,17 @@ function SetBreak(): JSX.Element {
   const changed = last !== null && (
     last.lineup.some((p, i) => md.homeLineup[i] !== p)
     || last.libero !== md.homeLibero || last.defensiveLibero !== md.homeDefensiveLibero);
+  // The opponent has already handed in its sheet: say what it changed.
+  const opponentText = md.opponentChanges.length === 0
+    ? 'Same six as last set'
+    : md.opponentChanges.map((c) => `${store.shortName(c.inPlayerIdx)} for ${store.shortName(c.outPlayerIdx)}${
+      c.reason === 'fatigue' ? ' (tired)' : c.reason === 'form' ? ' (struggling)' : ''}`).join(' · ');
+  const opponentNote = (
+    <span className={`md-banner-changes${md.opponentChanges.length > 0 ? ' changed' : ''}`} title={opponentText}>
+      {md.opponentChanges.length > 0 && <Icon name="swap" size={11} />}
+      <span>{opponentText}</span>
+    </span>
+  );
 
   return (
     <div className="md-setup">
@@ -214,6 +225,7 @@ function SetBreak(): JSX.Element {
           <div className="md-banner-team-text">
             <span className="md-banner-name">{home?.name ?? '—'}</span>
             <span className="md-banner-tag">Home{md.userIsHome ? ' · Your team' : ''}</span>
+            {!md.userIsHome && opponentNote}
           </div>
         </div>
         <div className="md-banner-mid">
@@ -225,6 +237,7 @@ function SetBreak(): JSX.Element {
           <div className="md-banner-team-text">
             <span className="md-banner-name">{away?.name ?? '—'}</span>
             <span className="md-banner-tag">Away{!md.userIsHome ? ' · Your team' : ''}</span>
+            {md.userIsHome && opponentNote}
           </div>
           {away !== undefined && <ClubCrest club={away} size={46} />}
         </div>

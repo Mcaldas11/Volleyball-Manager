@@ -10,7 +10,8 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  MatchSimulator, type MatchResult, type RallyLogEntry, type SubstitutionReason, type TeamSetup,
+  MatchSimulator, type MatchResult, type RallyLogEntry, type SubstitutionPlan, type SubstitutionReason,
+  type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
@@ -194,6 +195,9 @@ export interface MatchdayState {
   /** Set once a set has been won; the break opens as soon as the viewer has
    *  shown that final point. */
   setBreakPending: boolean;
+  /** What the AI side changed in its six for the set about to start — shown
+   *  at the set break. Empty when it kept the same team. */
+  opponentChanges: SubstitutionPlan[];
   userIsHome: boolean;
   /** The user's side, regardless of home/away; edited pre-kickoff and again
    *  at every set break. */
@@ -353,9 +357,9 @@ class Game {
     this.busy = true;
     this.emit();
     try {
-      const world = await readSaveWorld(id);
+      const { world, season } = await readSaveWorld(id);
       this.world = world;
-      this.ctx = newSeasonContext();
+      this.ctx = season;
       this.watched = null;
       this.lastRollover = null;
       this.trophyCelebration = null;
@@ -404,7 +408,7 @@ class Game {
         updatedAt: Date.now(),
         schemaVersion: 1,
       };
-      await writeSaveWorld(this.currentSaveId, meta, world);
+      await writeSaveWorld(this.currentSaveId, meta, world, this.ctx);
       this.notice = 'Game saved.';
     } catch (err) {
       this.notice = err instanceof Error ? err.message : 'Could not save this career.';
@@ -982,6 +986,7 @@ class Game {
       fixture: next,
       stage: 'lineup',
       setBreakPending: false,
+      opponentChanges: [],
       userIsHome: next.home === club.id,
       homeLineup: lineup,
       homeLibero: libero,
@@ -1204,6 +1209,7 @@ class Game {
         // set's last point has been shown.
         md.timeoutsUsed = [0, 0];
         md.setBreakPending = true;
+        this.aiPicksNextSet();
       } else {
         this.maybeAIAct();
       }
@@ -1230,6 +1236,27 @@ class Game {
     // So the live view, when it comes back, doesn't re-announce an old change.
     md.lastSubstitution = null;
     this.emit();
+  }
+
+  /**
+   * The AI side hands in its line-up sheet for the coming set: the same six
+   * again, unless a starter is tiring or having a bad night and a reserve in
+   * the same position would do better. What it changed is kept for the set
+   * break to show.
+   */
+  private aiPicksNextSet(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return;
+    const aiTeam: 0 | 1 = md.userIsHome ? 1 : 0;
+    md.opponentChanges = [];
+    const plan = sim.suggestStartingLineup(aiTeam);
+    if (plan === null) return;
+    const liberos = sim.liberos(aiTeam);
+    if (sim.setStartingLineup(aiTeam, plan.lineup, liberos.reception, liberos.defence).ok) {
+      md.opponentChanges = plan.changes;
+      md.snapshot = sim.snapshot();
+    }
   }
 
   /** The user's line-up sheet as the last set started it: its six and the liberos playing now. */

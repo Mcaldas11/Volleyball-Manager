@@ -20,6 +20,7 @@
  */
 
 import { Rng } from '../core/rng.ts';
+import { selectionScore } from '../model/ability.ts';
 import type { PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import {
@@ -161,8 +162,8 @@ const ATTACK_DEFENCE_BALANCE = -8;
 
 /**
  * How a coach judges a substitution — see `suggestSubstitution()`. The margin
- * is the fraction by which the replacement's current value (ability x live
- * condition x form) must beat the player coming off.
+ * is the fraction by which the replacement's current value (selection score x
+ * live condition x form) must beat the player coming off.
  */
 const SUB_MARGIN = 0.04;
 const SUB_MARGIN_PER_SUB_USED = 0.02;
@@ -170,6 +171,13 @@ const SUB_MARGIN_PER_SUB_USED = 0.02;
 const SUB_MARGIN_SCORE_SHIFT = 0.03;
 /** Extra margin to undo a swap already made this set, so a coach doesn't flip-flop. */
 const SUB_MARGIN_REVERSAL = 0.08;
+/**
+ * The same judgement for the six handed in at a set break — a lower bar than
+ * a substitution, since it costs none, shifted up after a set won and down
+ * after one lost.
+ */
+const LINEUP_MARGIN = 0.03;
+const LINEUP_MARGIN_SCORE_SHIFT = 0.02;
 /** Live condition at or below which a player is visibly tiring. */
 const TIRED_FATIGUE = 0.94;
 /** Rallies on court before a match rating says anything about form. */
@@ -496,25 +504,71 @@ export class MatchSimulator {
     let best: SubstitutionPlan | null = null;
     let bestExcess = 0;
     for (const out of t.court) {
-      const outFit = this.fitness(team, out);
-      const outValue = this.store.currentAbility[out] * outFit.fatigue * outFit.form;
+      const outValue = this.currentValue(team, out);
       for (const inc of t.ratings.keys()) {
         if (this.store.position[inc] !== this.store.position[out]) continue;
         if (this.substitutionError(team, out, inc) !== null) continue;
-        const inFit = this.fitness(team, inc);
-        const inValue = this.store.currentAbility[inc] * inFit.fatigue * inFit.form;
         const needed = margin + (pairing.get(out) === inc ? SUB_MARGIN_REVERSAL : 0);
-        const excess = inValue / Math.max(1, outValue) - 1 - needed;
+        const excess = this.currentValue(team, inc) / Math.max(1, outValue) - 1 - needed;
         if (excess <= bestExcess) continue;
         bestExcess = excess;
-        const tiredness = 1 - outFit.fatigue;
-        const slump = 1 - outFit.form;
-        const reason: SubstitutionReason =
-          tiredness > 0 && tiredness >= slump ? 'fatigue' : slump > 0 ? 'form' : 'upgrade';
-        best = { outPlayerIdx: out, inPlayerIdx: inc, reason };
+        best = { outPlayerIdx: out, inPlayerIdx: inc, reason: this.reasonToReplace(team, out) };
       }
     }
     return best;
+  }
+
+  /**
+   * The six a coach would hand in for the coming set, with the changes from
+   * the last set's, or null to keep them. The same judgement as
+   * suggestSubstitution() — like for like, a starter who is tiring or having
+   * a bad night makes way for someone who would do better right now — but a
+   * new line-up sheet costs no substitution, so the bar is lower; it is
+   * higher after a set won (nobody changes a winning team) and lower after
+   * one lost. Only meaningful at a set break, before the first serve.
+   */
+  suggestStartingLineup(team: 0 | 1): { lineup: number[]; changes: SubstitutionPlan[] } | null {
+    this.startIfNeeded();
+    const t = this.teams[team];
+    if (this.matchOver || t.score !== 0 || this.teams[1 - team].score !== 0) return null;
+    let margin = LINEUP_MARGIN;
+    const last = this.setScores[this.setScores.length - 1];
+    if (last !== undefined) {
+      const wonIt = team === 0 ? last[0] > last[1] : last[1] > last[0];
+      margin += wonIt ? LINEUP_MARGIN_SCORE_SHIFT : -LINEUP_MARGIN_SCORE_SHIFT;
+    }
+
+    const lineup = t.startLineup.slice();
+    const changes: SubstitutionPlan[] = [];
+    for (let slot = 0; slot < lineup.length; slot++) {
+      const starter = lineup[slot];
+      let pick = -1;
+      let pickValue = this.currentValue(team, starter) * (1 + margin);
+      for (const p of t.ratings.keys()) {
+        if (this.store.position[p] !== this.store.position[starter]) continue;
+        if (lineup.includes(p) || p === t.receptionLibero || p === t.defensiveLibero) continue;
+        const value = this.currentValue(team, p);
+        if (value > pickValue) { pick = p; pickValue = value; }
+      }
+      if (pick === -1) continue;
+      lineup[slot] = pick;
+      changes.push({ outPlayerIdx: starter, inPlayerIdx: pick, reason: this.reasonToReplace(team, starter) });
+    }
+    return changes.length > 0 ? { lineup, changes } : null;
+  }
+
+  /** What a player is worth on court right now, as a coach sees it. */
+  private currentValue(team: 0 | 1, playerIdx: number): number {
+    const fit = this.fitness(team, playerIdx);
+    return selectionScore(this.store, playerIdx) * fit.fatigue * fit.form;
+  }
+
+  /** Why a coach would take this player off: tiredness, a bad night, or simply someone better. */
+  private reasonToReplace(team: 0 | 1, playerIdx: number): SubstitutionReason {
+    const fit = this.fitness(team, playerIdx);
+    const tiredness = 1 - fit.fatigue;
+    const slump = 1 - fit.form;
+    return tiredness > 0 && tiredness >= slump ? 'fatigue' : slump > 0 ? 'form' : 'upgrade';
   }
 
   /**

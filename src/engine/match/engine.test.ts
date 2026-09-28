@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { generateWorld } from '../world/worldGen.ts';
 import { stubManager } from '../world/world.ts';
 import { toTeamSetup } from '../season/seasonEngine.ts';
+import { selectionScore } from '../model/ability.ts';
 import type { PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import { MatchFormat, MatchSimulator, type MatchSetup } from './engine.ts';
@@ -218,6 +219,42 @@ test('setStartingLineup() rejects duplicates, outsiders and a libero in the six'
   assert.equal(sim.setStartingLineup(0, [libero, six[1], six[2], six[3], six[4], six[5]], libero).ok, false);
   assert.equal(sim.setStartingLineup(0, six, six[0]).ok, false, 'only a registered libero plays libero');
   assert.equal(sim.setStartingLineup(0, six, libero).ok, true);
+});
+
+test('suggestStartingLineup() is only offered before a set\'s first serve, and keeps a fresh six', () => {
+  const { store, setup } = buildMatch(11, 1111);
+  for (const starter of setup.home.lineup) {
+    const clearlyBetter = setup.home.bench.some((p) =>
+      store.position[p] === store.position[starter]
+      && selectionScore(store, p) > selectionScore(store, starter) * 1.03);
+    assert.ok(!clearlyBetter, 'this test needs starters no reserve clearly outranks');
+  }
+  const sim = new MatchSimulator(store, setup);
+  assert.equal(sim.suggestStartingLineup(0), null, 'nobody is tired or off form yet');
+  sim.step();
+  assert.equal(sim.suggestStartingLineup(0), null, 'the set is under way');
+});
+
+test('suggestStartingLineup() only proposes legal like-for-like line-ups, and does change some', () => {
+  let changes = 0;
+  for (let seed = 0; seed < 6; seed++) {
+    const { store, setup } = buildMatch(30 + seed, 3000 + seed);
+    const sim = new MatchSimulator(store, setup);
+    while (playToNextSet(sim)) {
+      for (const team of [0, 1] as const) {
+        const before = sim.startingLineup(team);
+        const plan = sim.suggestStartingLineup(team);
+        if (plan === null) continue;
+        plan.lineup.forEach((p, slot) => assert.equal(store.position[p], store.position[before[slot]]));
+        assert.equal(plan.changes.length, plan.lineup.filter((p, slot) => p !== before[slot]).length);
+        const liberos = sim.liberos(team);
+        const result = sim.setStartingLineup(team, plan.lineup, liberos.reception, liberos.defence);
+        assert.equal(result.ok, true, result.reason);
+        changes += plan.changes.length;
+      }
+    }
+  }
+  assert.ok(changes > 0, 'over six full matches, some starter should have needed a rest');
 });
 
 test('a setter substituted in one set does not go on setting from the bench the next', () => {

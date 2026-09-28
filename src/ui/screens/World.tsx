@@ -13,6 +13,15 @@ type StatKey = 'rating' | 'points' | 'kills' | 'efficiency' | 'aces' | 'blocks' 
 
 /** Appearances needed before an average rating can top the chart. */
 const MIN_RATED_APPS = 5;
+/** Attacks or receptions needed before a rate (efficiency, positivity) can top the chart... */
+const MIN_RATE_SAMPLE = 60;
+/** ...scaled down early in the season to this many per match played so far. */
+const SAMPLE_PER_MATCH = 15;
+
+/** Sort order for a rate stat: players with a big enough sample ahead of those without. */
+function qualifiedFirst(a: boolean, b: boolean): number {
+  return a === b ? 0 : a ? -1 : 1;
+}
 
 const STAT_COLUMNS: ReadonlyArray<readonly [StatKey, string]> = [
   ['rating', 'Av rating'],
@@ -47,8 +56,15 @@ export function StatsScreen(): JSX.Element {
   const club = g.club!;
   const leagueClubs = new Set(world.competitions[club.leagueId]?.participants ?? []);
 
-  const rows = [...g.ctx.stats.values()]
-    .filter((s) => s.matches >= 3)
+  // Everyone who has played a match this season is listed. The rate stats
+  // still need a fair sample before they can top the chart, but early in the
+  // season nobody has a big one, so the bar grows with the matches played.
+  const played = [...g.ctx.stats.values()].filter((s) => s.matches >= 1);
+  const mostMatches = played.reduce((m, s) => Math.max(m, s.matches), 1);
+  const minSample = Math.min(MIN_RATE_SAMPLE, SAMPLE_PER_MATCH * mostMatches);
+  const minRatedApps = Math.min(MIN_RATED_APPS, mostMatches);
+
+  const rows = played
     .filter((s) => !ownLeagueOnly || leagueClubs.has(store.clubId[s.playerIdx]))
     .map((s) => {
       const season = seasonTotals(world, s.playerIdx);
@@ -58,29 +74,22 @@ export function StatsScreen(): JSX.Element {
         efficiency: attackEfficiency(s),
         reception: receptionPositivity(s),
         rating: averageRating(season),
-        rated: season.apps >= MIN_RATED_APPS,
+        rated: season.apps >= minRatedApps,
       };
     })
     .sort((a, b) => {
       switch (sort) {
-        case 'rating':
-          if (a.rated !== b.rated) return a.rated ? -1 : 1;
-          return b.rating - a.rating;
+        case 'rating': return qualifiedFirst(a.rated, b.rated) || b.rating - a.rating;
         case 'kills': return b.s.attackKills - a.s.attackKills;
         case 'efficiency':
-          // Require a real sample before an efficiency rate can top the chart.
-          if (a.s.attacksTotal < 60 || b.s.attacksTotal < 60) {
-            return (b.s.attacksTotal < 60 ? -1 : 0) - (a.s.attacksTotal < 60 ? -1 : 0);
-          }
-          return b.efficiency - a.efficiency;
+          return qualifiedFirst(a.s.attacksTotal >= minSample, b.s.attacksTotal >= minSample)
+            || b.efficiency - a.efficiency;
         case 'aces': return b.s.serveAces - a.s.serveAces;
         case 'blocks': return b.s.blockPoints - a.s.blockPoints;
         case 'digs': return b.s.digsTotal - a.s.digsTotal;
         case 'reception':
-          if (a.s.receptionsTotal < 60 || b.s.receptionsTotal < 60) {
-            return (b.s.receptionsTotal < 60 ? -1 : 0) - (a.s.receptionsTotal < 60 ? -1 : 0);
-          }
-          return b.reception - a.reception;
+          return qualifiedFirst(a.s.receptionsTotal >= minSample, b.s.receptionsTotal >= minSample)
+            || b.reception - a.reception;
         default: return b.points - a.points;
       }
     })
@@ -91,7 +100,7 @@ export function StatsScreen(): JSX.Element {
       <div className="comp-bar">
         <div className="comp-bar-title">
           <span className="comp-bar-name">Season {world.year} leaders</span>
-          <span className="faint">Accumulated rally by rally from every match played · minimum 3 matches</span>
+          <span className="faint">Accumulated rally by rally from every match played</span>
         </div>
         <Segmented
           options={[[1, 'My league'], [0, 'Whole world']] as const}

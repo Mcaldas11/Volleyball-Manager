@@ -14,6 +14,7 @@
  */
 
 import type { Rng } from '../core/rng.ts';
+import { selectionScore } from '../model/ability.ts';
 import { awardLeaguePoints, type Club, type LeagueTableRow } from '../model/club.ts';
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
@@ -74,12 +75,8 @@ export function pickLineup(
   const byPos = (pos: Position): number[] =>
     available
       .filter((p) => store.position[p] === pos)
-      .sort((a, b) => {
-        // Rested players get the nod over marginally better tired ones.
-        const score = (i: number): number =>
-          store.currentAbility[i] * (0.7 + 0.3 * (store.condition[i] / 100));
-        return score(b) - score(a);
-      });
+      // Rested players get the nod over marginally better tired ones.
+      .sort((a, b) => selectionScore(store, b) - selectionScore(store, a));
 
   const pools: Partial<Record<Position, number[]>> = {
     [Position.Setter]: byPos(Position.Setter),
@@ -433,13 +430,16 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
   // Cups and continental competitions fit around the league calendar.
   scheduleCupSeason(world);
 
-  if (ctx !== undefined) {
-    const store = world.players;
-    ctx.seasonStartAbility.clear();
-    for (let i = 0; i < store.count; i++) {
-      if (!store.isActive(i)) continue;
-      ctx.seasonStartAbility.set(i, store.currentAbility[i]);
-    }
+  if (ctx !== undefined) recordSeasonStartAbility(world, ctx);
+}
+
+/** Note every active player's ability as it stands now, as the baseline for the "most improved" award. */
+export function recordSeasonStartAbility(world: World, ctx: SeasonContext): void {
+  const store = world.players;
+  ctx.seasonStartAbility.clear();
+  for (let i = 0; i < store.count; i++) {
+    if (!store.isActive(i)) continue;
+    ctx.seasonStartAbility.set(i, store.currentAbility[i]);
   }
 }
 
