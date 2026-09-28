@@ -35,7 +35,8 @@ import {
   acceptIncomingOffer, closeTalks, counterIncomingOffer, counterLoanOffer, openTalks, submitOffer, type Talks,
 } from '../engine/world/deals.ts';
 import {
-  loanOf, loansOutOf, loanStarters, MAX_SQUAD, requestLoanReport, squadSize, wageBill, wageRoom,
+  loanOf, loansOutOf, loanStarters, MAX_SQUAD, recallFromLoan as recallPlayer, requestLoanReport, squadSize,
+  wageBill, wageRoom,
   type Loan, type LoanPlayingTime,
 } from '../engine/world/loans.ts';
 import {
@@ -2214,6 +2215,17 @@ class Game {
     const buyer = world.clubs[offer.buyingClubId];
     this.notice = `Your terms have gone to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
+    this.emit();
+  }
+
+  /** Recall one of your players from a loan whose club hasn't given him the games it promised. */
+  recallFromLoan(playerIdx: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const name = world.players.fullName(playerIdx);
+    this.notice = recallPlayer(world, playerIdx)
+      ? `${name} is back from his loan.`
+      : `${name} can't be recalled — his loan club is giving him the games it promised.`;
     this.emit();
   }
 

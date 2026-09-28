@@ -28,11 +28,11 @@ import { progressCups, scheduleCupSeason } from './cups.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
-import { generateLoanOffers, loanStarters, reviewLoanPromises } from '../world/loans.ts';
+import { generateLoanOffers, loanOf, loanStarters, reviewLoanPromises } from '../world/loans.ts';
 import { contractNotices } from '../world/contracts.ts';
 import { processDeals } from '../world/deals.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
-import { monthlyStatement, recoveryNotice, roundupNotices } from '../world/inbox.ts';
+import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices } from '../world/inbox.ts';
 import { recordFixture } from '../world/records.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 
@@ -363,6 +363,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   // running down, the answers to every offer that is due today — and the
   // job market: applications answered, coaches appointed, boards meeting.
   monthlyStatement(world);
+  monthlyLoanReports(world);
   contractNotices(world);
   processDeals(world);
   careerDay(world);
@@ -434,7 +435,12 @@ function dailyRecovery(world: World, store: PlayerStore): void {
         store.setFlag(i, PlayerFlag.Injured, false);
         // Players come back short of match fitness.
         store.condition[i] = Math.min(store.condition[i], 65);
-        if (store.clubId[i] === world.userClubId && world.userClubId >= 0) recoveryNotice(world, i);
+        if (store.clubId[i] === world.userClubId && world.userClubId >= 0) {
+          recoveryNotice(world, i);
+        } else if (world.loans.length > 0 && loanOf(world, i)?.parentClubId === world.userClubId && world.userClubId >= 0) {
+          // One of his out on loan: his club still wants to know.
+          recoveryNotice(world, i, world.clubs[store.clubId[i]]);
+        }
       }
       continue;
     }

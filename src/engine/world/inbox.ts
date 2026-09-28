@@ -11,7 +11,7 @@
 
 import { compareTableRows, type Club } from '../model/club.ts';
 import { INJURY_NAMES } from '../model/players.ts';
-import { wageBill } from './loans.ts';
+import { compileLoanReport, diffLoanStats, newLoanStats, wageBill } from './loans.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
 import {
   contractEndSeason, DAYS_PER_SEASON, euros, messageCategory,
@@ -222,27 +222,79 @@ export function injuryDuration(days: number): string {
   return `about ${months} month${months === 1 ? '' : 's'}`;
 }
 
-/** The medical room's note that one of the user's players has been injured. */
-export function injuryNotice(world: World, playerIdx: number, type: number, days: number): void {
+/** The medical room's note that one of the user's players has been injured —
+ *  here, or out on loan at `onLoanAt`. */
+export function injuryNotice(world: World, playerIdx: number, type: number, days: number, onLoanAt?: Club): void {
   const name = world.players.fullName(playerIdx);
   const injury = (INJURY_NAMES[type] ?? 'injury').toLowerCase();
   postMessage(world, {
-    subject: `${name} ruled out through injury`,
-    body: `${name} has suffered ${/^[aeiou]/.test(injury) ? 'an' : 'a'} ${injury} and is expected to be out for ` +
+    subject: onLoanAt !== undefined ? `${name} injured on loan at ${onLoanAt.name}` : `${name} ruled out through injury`,
+    body: `${name} has suffered ${/^[aeiou]/.test(injury) ? 'an' : 'a'} ${injury}` +
+      `${onLoanAt !== undefined ? ` while on loan at ${onLoanAt.name}` : ''} and is expected to be out for ` +
       `${injuryDuration(days)}.`,
     playerIdx,
     injury: { type, days },
+    clubId: onLoanAt?.id,
+    loanOut: onLoanAt !== undefined ? true : undefined,
     category: 'medical',
   });
 }
 
 /** …and that he is fit again. */
-export function recoveryNotice(world: World, playerIdx: number): void {
+export function recoveryNotice(world: World, playerIdx: number, onLoanAt?: Club): void {
   const name = world.players.fullName(playerIdx);
   postMessage(world, {
-    subject: `${name} available for selection`,
-    body: `${name} has completed his recovery and is available for training and match selection.`,
+    subject: onLoanAt !== undefined ? `${name} fit again at ${onLoanAt.name}` : `${name} available for selection`,
+    body: onLoanAt !== undefined
+      ? `${name} has completed his recovery and is available to ${onLoanAt.name} again.`
+      : `${name} has completed his recovery and is available for training and match selection.`,
     playerIdx,
+    clubId: onLoanAt?.id,
+    loanOut: onLoanAt !== undefined ? true : undefined,
     category: 'medical',
   });
+}
+
+/**
+ * On the first of every month, the loan manager reports on each of the
+ * user's players out on loan whose club played in the month just gone: that
+ * month on its own — games, form, progress — and the loan so far. Called at
+ * the start of each day.
+ */
+export function monthlyLoanReports(world: World): void {
+  if (world.userClubId < 0 || world.loans.length === 0) return;
+  const d = world.day % DAYS_PER_SEASON;
+  if (!MONTH_STARTS.includes(d) || world.day === 0) return;
+  const prevDay = world.day - 1;
+  const month = monthLabel(world, Math.floor(prevDay / DAYS_PER_SEASON), prevDay % DAYS_PER_SEASON);
+  const store = world.players;
+
+  for (const loan of world.loans) {
+    if (loan.parentClubId !== world.userClubId) continue;
+    const report = compileLoanReport(world, loan);
+    const stats = diffLoanStats(report.stats, loan.monthStats ?? newLoanStats());
+    const abilityChange = report.abilityNow - (loan.monthAbility ?? report.abilityStart);
+    loan.monthStats = { ...report.stats };
+    loan.monthAbility = report.abilityNow;
+    if (stats.clubMatches === 0) continue;
+
+    report.month = { label: month, stats, abilityChange };
+    const name = store.fullName(loan.playerIdx);
+    const club = world.clubs[loan.loanClubId]?.name ?? 'his loan club';
+    const games = `${stats.apps} appearance${stats.apps === 1 ? '' : 's'} in ${stats.clubMatches} match${stats.clubMatches === 1 ? '' : 'es'}`;
+    const injured = stats.clubMatches - (stats.fitMatches ?? stats.clubMatches);
+    postMessage(world, {
+      subject: `Loan update: ${name} — ${month}`,
+      body: `${name}'s ${month} at ${club}: ${games}` +
+        (injured > 0 ? `, ${injured === stats.clubMatches ? 'all of them' : `${injured} of them`} missed through injury` : '') +
+        (stats.apps > 0 ? `, averaging a rating of ${(stats.ratingSum / stats.apps).toFixed(1)}` : '') +
+        `. His ability has ${abilityChange > 0 ? `risen by ${abilityChange}` : abilityChange < 0 ? `fallen by ${-abilityChange}` : 'held steady'} over the month.`,
+      from: 'Loan Manager',
+      playerIdx: loan.playerIdx,
+      clubId: loan.loanClubId,
+      loanReport: report,
+      loanOut: true,
+      category: 'offer',
+    });
+  }
 }

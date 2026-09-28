@@ -343,9 +343,12 @@ export interface GameMessage {
   fixtureId?: number;
   /** A club's offer of its head coach's job — see `World.career.offers`. */
   jobOfferId?: number;
-  /** One of the user's players has gone out on loan — the message he can
-   *  have the player's matches there compiled from. */
+  /** News of one of the user's players out on loan: the inbox offers to
+   *  compile his matches there. */
   loanOut?: boolean;
+  /** The club playing him has broken its promise of games: the inbox offers
+   *  to recall him, while that is still so. */
+  loanRecall?: boolean;
   /** A compiled account of a loan: games, statistics, development. */
   loanReport?: LoanReport;
   /** Inbox tab this belongs in. Optional so saves written before the inbox

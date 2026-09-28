@@ -6,7 +6,7 @@ import {
   contractEndSeason, messageCategory, type GameMessage, type MessageCategory,
 } from '../../engine/world/world.ts';
 import {
-  loanShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport,
+  canRecall, fitMatches, promiseShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport, type LoanStats,
 } from '../../engine/world/loans.ts';
 import {
   ClubCrest, initials, money, PlayerFace, RatingBadge, StarMeter,
@@ -483,28 +483,33 @@ function pct(n: number, of: number): string {
 }
 
 /** A loan compiled: the games he has had against the ones promised, what he
- *  did in them, and how he has come on. */
+ *  did in them, and how he has come on — with the month just gone on its own,
+ *  in a monthly update. */
 function LoanReportSheet({ report: r }: { report: LoanReport }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const st = r.stats;
   const club = world.clubs[r.loanClubId];
-  const share = loanShare(st);
+  const fit = fitMatches(st);
+  const share = promiseShare(st);
   const promised = r.playingTime !== undefined ? PLAYING_TIME_SHARE[r.playingTime] : null;
-  const kept = promised === null || st.clubMatches < 4 || share >= promised - 0.15;
+  const kept = promised === null || fit < 4 || share >= promised - 0.15;
   const gain = r.abilityNow - r.abilityStart;
   const avg = st.apps > 0 ? st.ratingSum / st.apps : 0;
+  const injured = st.clubMatches - fit;
   return (
     <div className="paper-roundup">
+      {r.month !== undefined && <LoanMonth label={r.month.label} stats={r.month.stats} abilityChange={r.month.abilityChange} />}
       <div className="paper-report">
         <div className="paper-label">
-          {r.final ? 'Final loan report' : 'Loan report'} · {club?.name ?? 'Loan club'} · {g.longDateLabel(r.fromDay)} – {g.longDateLabel(r.toDay)}
+          {r.final ? 'Final loan report' : r.month !== undefined ? 'The loan so far' : 'Loan report'} · {club?.name ?? 'Loan club'} · {g.longDateLabel(r.fromDay)} – {g.longDateLabel(r.toDay)}
         </div>
         <ReportRow k="Playing time agreed">{r.playingTime !== undefined ? PLAYING_TIME_NAMES[r.playingTime] : 'Not agreed'}</ReportRow>
         <ReportRow k="Appearances">{st.apps} of {st.clubMatches} match{st.clubMatches === 1 ? '' : 'es'}</ReportRow>
-        <ReportRow k="Time on court" tone={st.clubMatches === 0 ? undefined : kept ? 'good' : 'bad'}>
-          {st.clubMatches === 0 ? '—' : `${Math.round(share * 100)}% of the play`}
-          {promised !== null && st.clubMatches > 0 ? ` · ${Math.round(promised * 100)}% promised` : ''}
+        {injured > 0 && <ReportRow k="Missed injured" tone="bad">{injured} match{injured === 1 ? '' : 'es'}</ReportRow>}
+        <ReportRow k="Time on court when fit" tone={fit === 0 ? undefined : kept ? 'good' : 'bad'}>
+          {fit === 0 ? '—' : `${Math.round(share * 100)}% of the play`}
+          {promised !== null && fit > 0 ? ` · ${Math.round(promised * 100)}% promised` : ''}
         </ReportRow>
         <ReportRow k="Average rating">
           {avg > 0 ? <><RatingBadge value={avg} size="sm" /> <span className="paper-muted">best {st.best.toFixed(1)}</span></> : '—'}
@@ -541,6 +546,26 @@ function LoanReportSheet({ report: r }: { report: LoanReport }): JSX.Element {
   );
 }
 
+/** One month of a loan, on its own. */
+function LoanMonth({ label, stats: m, abilityChange }: { label: string; stats: LoanStats; abilityChange: number }): JSX.Element {
+  const avg = m.apps > 0 ? m.ratingSum / m.apps : 0;
+  const injured = m.clubMatches - fitMatches(m);
+  return (
+    <div className="paper-report">
+      <div className="paper-label">{label}</div>
+      <ReportRow k="Appearances">{m.apps} of {m.clubMatches} match{m.clubMatches === 1 ? '' : 'es'}</ReportRow>
+      {injured > 0 && <ReportRow k="Missed injured" tone="bad">{injured} match{injured === 1 ? '' : 'es'}</ReportRow>}
+      <ReportRow k="Average rating">{avg > 0 ? <RatingBadge value={avg} size="sm" /> : '—'}</ReportRow>
+      <ReportRow k="Points">
+        {m.points} · {m.kills} kills · {m.aces} aces · {m.blocks} blocks
+      </ReportRow>
+      {m.mvps > 0 && <ReportRow k="Player of the match">{m.mvps}</ReportRow>}
+      <ReportRow k="Ability this month" tone={abilityChange > 0 ? 'good' : abilityChange < 0 ? 'bad' : undefined}>
+        {abilityChange > 0 ? '+' : abilityChange < 0 ? '−' : ''}{Math.abs(abilityChange)}
+      </ReportRow>
+    </div>
+  );
+}
 /** A league matchday: every result, and the table as it left it. */
 function Roundup({ message: m }: { message: GameMessage }): JSX.Element {
   const g = useGame();
@@ -685,6 +710,14 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     out.push(
       <button key="compile" className="paper-btn primary-dark" onClick={() => g.compileLoanMatches(p)}>
         <Icon name="stats" size={15} /> {m.loanReport !== undefined ? 'Compile again' : 'Compile matches'}
+      </button>,
+    );
+  }
+  // A loan club short-changing him on games: he can be brought home.
+  if (m.loanRecall === true && p !== undefined && canRecall(world, p)) {
+    out.push(
+      <button key="recall" className="paper-btn" onClick={() => g.recallFromLoan(p)}>
+        <Icon name="back" size={15} /> Recall from loan
       </button>,
     );
   }

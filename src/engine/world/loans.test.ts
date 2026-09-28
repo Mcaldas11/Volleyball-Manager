@@ -2,18 +2,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PlayerFlag } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
+import { newPlayerStats, type PlayerMatchStats } from '../match/stats.ts';
 import { generateWorld } from './worldGen.ts';
-import { seasonEndDay, stubManager, type World } from './world.ts';
+import { seasonEndDay, stubManager, type Fixture, type World } from './world.ts';
 import { contractNotices } from './contracts.ts';
 import { advanceDay, newSeasonContext, pickLineup, startSeason } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
 import { acceptIncomingOffer, counterLoanOffer, openTalks, processDeals, submitOffer } from './deals.ts';
+import { monthlyLoanReports } from './inbox.ts';
 import {
-  evaluateLoanCounter, evaluateLoanRequest, generateLoanOffers, loanOf, loanShare, playingTimeOnOffer,
-  requestLoanReport, returnLoans, reviewLoanPromises, squadSize, startLoan, wageBill,
+  canRecall, evaluateLoanCounter, evaluateLoanRequest, fitMatches, generateLoanOffers, loanOf, loanShare,
+  loanStarters, playingTimeOnOffer, promiseShare, recallFromLoan, recordLoanMatch, requestLoanReport, returnLoans,
+  reviewLoanPromises, squadSize, startLoan, wageBill, type Loan,
 } from './loans.ts';
 import { generateListedBids, type IncomingOffer } from './negotiation.ts';
-import { weeklyTraining } from './progression.ts';
+import { rollInjuries, weeklyTraining } from './progression.ts';
 
 type Club = World['clubs'][number];
 
@@ -186,6 +189,7 @@ test('a club that promised a loanee a starting place gives him the games, and hi
   startSeason(world, ctx);
   const { p, borrower } = fringeOutAndBorrower(world, club);
   const loan = startLoan(world, club, borrower, p, 0.5, undefined, 'starter');
+  loan.honour = 1; // a club as good as its word
   while ((loan.stats?.clubMatches ?? 0) < 8 && world.day < 250) advanceDay(world, ctx);
 
   assert.ok(loan.stats!.clubMatches >= 8, 'his club has played');
@@ -262,12 +266,12 @@ test('a lender complains when its player is denied the promised games, then reca
   const { lender, p } = lenderWithFringeOutside(world, club);
   const loan = startLoan(world, lender, club, p, 0.5, undefined, 'starter');
   const name = world.players.fullName(p);
-  loan.stats = { ...loan.stats!, clubMatches: 6, clubRallies: 900, rallies: 50, apps: 1 };
+  loan.stats = { ...loan.stats!, clubMatches: 6, clubRallies: 900, fitMatches: 6, fitRallies: 900, rallies: 50, apps: 1 };
   reviewLoanPromises(world);
   assert.ok(world.messages.some((m) => m.subject === `${lender.name} unhappy with ${name}'s playing time`));
   assert.equal(loanOf(world, p), loan, 'a warning first');
 
-  loan.stats = { ...loan.stats, clubMatches: 12, clubRallies: 1800 };
+  loan.stats = { ...loan.stats, clubMatches: 12, clubRallies: 1800, fitMatches: 12, fitRallies: 1800 };
   reviewLoanPromises(world);
   assert.equal(loanOf(world, p), undefined);
   assert.ok(lender.players.includes(p) && !club.players.includes(p));
@@ -295,4 +299,122 @@ test('a young player who plays develops faster than one on the bench', () => {
   const playing = grow(100);
   const benched = grow(0);
   assert.ok(playing > benched * 1.5, `playing ${playing} vs benched ${benched}`);
+});
+
+/** One of ours out on loan to a club that has played, with a record to report on. */
+function loanedOut(seed: number): { world: World; club: Club; borrower: Club; p: number; loan: Loan } {
+  const { world, club } = setup(seed);
+  startSeason(world, newSeasonContext());
+  const { p, borrower } = fringeOutAndBorrower(world, club);
+  const loan = startLoan(world, club, borrower, p, 0.5, undefined, 'starter');
+  return { world, club, borrower, p, loan };
+}
+
+/** A finished match between the loan club and someone, with the loanee's line in it. */
+function playedMatch(world: World, borrower: Club, line: PlayerMatchStats, mvp: boolean): Fixture {
+  const opponent = world.clubs.find((c) => c.id !== borrower.id && c.leagueId === borrower.leagueId)!;
+  return {
+    id: 999_999, competitionId: borrower.leagueId, day: world.day, home: borrower.id, away: opponent.id, round: 0,
+    format: world.fixtures[0].format, importance: 0.4, neutralVenue: false, played: true,
+    homeSets: 3, awaySets: 1, setScores: [[25, 20], [23, 25], [25, 18], [25, 21]], mvp: mvp ? line.playerIdx : -1,
+  };
+}
+
+function bigNight(p: number): PlayerMatchStats {
+  return {
+    ...newPlayerStats(p), ralliesPlayed: 182, attacksTotal: 44, attackKills: 26, attackErrors: 2, attackBlocked: 1,
+    serveAces: 4, servesTotal: 18, blockPoints: 4, receptionsTotal: 20, receptionPerfect: 11, receptionPositive: 6,
+    digsTotal: 12, plusMinus: 14,
+  };
+}
+
+test('each month brings an update on every loanee whose club has played', () => {
+  const { world, p, loan } = loanedOut(61);
+  const name = world.players.fullName(p);
+  loan.stats = { ...loan.stats!, clubMatches: 4, clubRallies: 700, fitMatches: 4, fitRallies: 700, apps: 4, rallies: 690, ratingSum: 27.2 };
+  world.day = 92; // 1 October: September's update
+  monthlyLoanReports(world);
+  const update = world.messages.find((m) => m.subject === `Loan update: ${name} — September 2026`);
+  assert.ok(update?.loanReport?.month !== undefined, 'the month on its own');
+  assert.equal(update.loanReport.month.stats.clubMatches, 4);
+  assert.equal(update.loanOut, true);
+
+  world.day = 123; // 1 November, and no matches since
+  monthlyLoanReports(world);
+  assert.ok(!world.messages.some((m) => m.subject === `Loan update: ${name} — October 2026`), 'nothing to report');
+
+  loan.stats = { ...loan.stats, clubMatches: 7, clubRallies: 1200, apps: 6 };
+  world.day = 153; // 1 December
+  monthlyLoanReports(world);
+  const november = world.messages.find((m) => m.subject === `Loan update: ${name} — November 2026`);
+  assert.equal(november?.loanReport?.month?.stats.clubMatches, 3, 'only the month just gone');
+});
+
+test('the user hears when a loanee is injured, and when he is fit again', () => {
+  const { world, borrower, p } = loanedOut(62);
+  const store = world.players;
+  const name = store.fullName(p);
+  // Injury-prone and worn out: sooner or later he goes down.
+  store.setAttr(p, 'injuryProneness', 20);
+  for (let week = 0; week < 400 && store.injuryDaysLeft[p] === 0; week++) {
+    store.condition[p] = 20;
+    rollInjuries(world);
+  }
+  assert.ok(store.injuryDaysLeft[p] > 0);
+  assert.ok(world.messages.some((m) => m.subject === `${name} injured on loan at ${borrower.name}` && m.category === 'medical'));
+
+  store.injuryDaysLeft[p] = 1;
+  advanceDay(world, newSeasonContext());
+  assert.ok(world.messages.some((m) => m.subject === `${name} fit again at ${borrower.name}`));
+});
+
+test('a standout match by a loanee makes the inbox — though not every week', () => {
+  const { world, borrower, p } = loanedOut(63);
+  const name = world.players.fullName(p);
+  const line = bigNight(p);
+  recordLoanMatch(world, playedMatch(world, borrower, line, true), new Map([[p, line]]), new Map());
+  const news = world.messages.filter((m) => m.subject === `${name} player of the match for ${borrower.name}`);
+  assert.equal(news.length, 1);
+  assert.match(news[0].body, /3-1/);
+
+  world.day += 7;
+  recordLoanMatch(world, playedMatch(world, borrower, line, true), new Map([[p, line]]), new Map());
+  assert.equal(world.messages.filter((m) => m.subject === `${name} player of the match for ${borrower.name}`).length, 1);
+});
+
+test('matches missed through injury do not count against a promise of games', () => {
+  const { world, borrower, p, loan } = loanedOut(64);
+  world.players.injuryDaysLeft[p] = 20;
+  recordLoanMatch(world, playedMatch(world, borrower, newPlayerStats(-1), false), new Map(), new Map());
+  assert.equal(loan.stats!.clubMatches, 1);
+  assert.equal(loan.stats!.fitMatches, 0);
+  assert.equal(promiseShare(loan.stats), 0);
+  assert.equal(fitMatches(loan.stats), 0);
+});
+
+test('a club not as good as its word leaves an owed loanee out', () => {
+  const { world, borrower, p, loan } = loanedOut(65);
+  loan.honour = 0;
+  assert.equal(loanStarters(world, borrower), undefined);
+  loan.honour = 1;
+  assert.ok(loanStarters(world, borrower)?.has(p));
+});
+
+test('a loan club short-changing him on games is reported, and the user can recall him', () => {
+  const { world, club, borrower, p, loan } = loanedOut(66);
+  const name = world.players.fullName(p);
+  assert.equal(canRecall(world, p), false, 'nothing to complain about yet');
+  loan.stats = { ...loan.stats!, clubMatches: 8, clubRallies: 1400, fitMatches: 8, fitRallies: 1400, apps: 3, rallies: 300 };
+  reviewLoanPromises(world);
+  const alert = world.messages.find((m) => m.subject === `${name} short of his promised games at ${borrower.name}`);
+  assert.ok(alert?.loanRecall === true);
+  assert.ok(canRecall(world, p));
+
+  reviewLoanPromises(world);
+  assert.equal(world.messages.filter((m) => m.subject === alert.subject).length, 1, 'not again straight away');
+
+  assert.equal(recallFromLoan(world, p), true);
+  assert.equal(loanOf(world, p), undefined);
+  assert.ok(club.players.includes(p) && !borrower.players.includes(p));
+  assert.equal(world.messages[world.messages.length - 1].loanReport?.final, true);
 });

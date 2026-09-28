@@ -27,6 +27,7 @@ import type { SeasonStats } from '../season/seasonEngine.ts';
 import { NATIONS } from './nations.ts';
 import { estimateValue, generatePlayer, rollPotential } from './playerGen.ts';
 import { injuryNotice } from './inbox.ts';
+import { loanOf } from './loans.ts';
 import { seasonEndDay, type World } from './world.ts';
 
 /** Injuries a player can pick up, with duration in days and severity. */
@@ -95,7 +96,12 @@ export function rollInjuries(world: World): void {
     store.injuryType[i] = def.type;
     store.setFlag(i, PlayerFlag.Injured, true);
     store.morale[i] = Math.max(10, store.morale[i] - rng.int(5, 20));
-    if (club === world.userClubId) injuryNotice(world, i, def.type, days);
+    if (club === world.userClubId) {
+      injuryNotice(world, i, def.type, days);
+    } else if (world.loans.length > 0 && world.userClubId >= 0 && loanOf(world, i)?.parentClubId === world.userClubId) {
+      // One of the user's out on loan.
+      injuryNotice(world, i, def.type, days, world.clubs[club]);
+    }
 
     // Serious injuries take something permanent out of a career.
     if (def.permanentCost > 0) {
