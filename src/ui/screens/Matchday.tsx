@@ -672,7 +672,7 @@ function LiveMatchView(): JSX.Element {
           <div className="card court-panel">
             <LiveCourt scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels} />
 
-            {/* Who plays which half — the user's side is always nearest the camera. */}
+            {/* Who plays which half — the user's side is always on the left. */}
             <span className="court-tag far">
               {farClub !== undefined && <ClubCrest club={farClub} size={16} />}
               <span className="court-tag-name">{farClub?.shortName ?? '—'}</span>

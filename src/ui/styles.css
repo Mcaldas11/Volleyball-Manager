@@ -2721,8 +2721,9 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .court-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; container-type: inline-size; }
 .court-panel { flex: 1; min-height: 0; position: relative; padding: 0; overflow: hidden; }
 
-/* The live court is a canvas drawn in perspective (see LiveCourt.tsx) sized
-   to this box; the court is fitted inside it and the dark arena fills the rest. */
+/* The live court is a canvas drawn as television shows a match — from the side
+   stand (see LiveCourt.tsx) — sized to this box; the court is fitted inside it
+   and the dark arena fills the rest. */
 .live-court {
   position: relative;
   flex: 1;
@@ -2748,8 +2749,9 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   font-weight: 700;
   pointer-events: none;
 }
-.court-tag.far { top: 10px; }
-.court-tag.near { bottom: 10px; }
+/* The near team plays on the left of the picture, the far team on the right. */
+.court-tag.near { bottom: 10px; max-width: calc(50% - 20px); }
+.court-tag.far { bottom: 10px; left: auto; right: 10px; max-width: calc(50% - 20px); }
 .court-tag-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .court-tag-sets { padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); font: 800 12px/1.3 var(--font-display); color: var(--text-dim); }
 .court-tag-sets::before { content: 'Sets '; font-weight: 600; color: var(--text-faint); }
