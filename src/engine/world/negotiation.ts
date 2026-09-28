@@ -19,6 +19,7 @@
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { endLoan, loanOf, MAX_SQUAD } from './loans.ts';
+import { pendingMoveOf } from './moves.ts';
 import {
   contractEndSeason, dayOfYear, euros, logTransfer, seasonEndDay, windowCloseDay, type World,
 } from './world.ts';
@@ -116,8 +117,19 @@ export function evaluatePersonalTerms(
   return { accepted, reason: accepted ? 'Accepts the terms.' : 'Is not convinced by this offer.' };
 }
 
+/** Pay a transfer fee from the buying club to the selling one. */
+export function payFee(world: World, buyingClub: Club, sellingClubId: number, fee: number): void {
+  const seller = world.clubs[sellingClubId];
+  if (seller === undefined || fee === 0) return;
+  seller.finances.balance += fee;
+  buyingClub.finances.balance -= fee;
+  buyingClub.finances.transferBudget = Math.max(0, buyingClub.finances.transferBudget - fee);
+}
+
 /** Finalize an agreed transfer: move the player, pay the fee, set the new
- *  contract — to 30 June of `contractEnd`'s season, two seasons if unsaid. */
+ *  contract — to 30 June of `contractEnd`'s season, two seasons if unsaid.
+ *  `paid` when the fee changed hands already, on a deal done while the
+ *  window was shut; `logSeason` is the season the move counts towards. */
 export function completeTransfer(
   world: World,
   buyingClub: Club,
@@ -125,6 +137,7 @@ export function completeTransfer(
   wage: number,
   fee: number,
   contractEnd = seasonEndDay(world.season + 1),
+  { paid = false, logSeason = world.season }: { paid?: boolean; logSeason?: number } = {},
 ): void {
   const store = world.players;
   // A player out on loan is sold by the club that owns him, so he goes back there first.
@@ -133,13 +146,11 @@ export function completeTransfer(
   store.setFlag(playerIdx, PlayerFlag.Transferable, false);
   store.setFlag(playerIdx, PlayerFlag.LoanListed, false);
   const oldClubId = store.clubId[playerIdx];
-  logTransfer(world, playerIdx, oldClubId, buyingClub.id, oldClubId >= 0 ? fee : 0);
+  logTransfer(world, playerIdx, oldClubId, buyingClub.id, oldClubId >= 0 || paid ? fee : 0, logSeason);
   if (oldClubId >= 0) {
     const oldClub = world.clubs[oldClubId];
     oldClub.players = oldClub.players.filter((p) => p !== playerIdx);
-    oldClub.finances.balance += fee;
-    buyingClub.finances.balance -= fee;
-    buyingClub.finances.transferBudget = Math.max(0, buyingClub.finances.transferBudget - fee);
+    if (!paid) payFee(world, buyingClub, oldClubId, fee);
   }
   buyingClub.players.push(playerIdx);
   store.clubId[playerIdx] = buyingClub.id;
@@ -318,9 +329,9 @@ export const MAX_PENDING_OFFERS = 2;
 export function generateIncomingOffers(world: World): void {
   // Bids never acted on lapse; ones already in motion are seen through.
   world.incomingOffers = world.incomingOffers.filter((o) => (o.status ?? 'open') !== 'open' || o.expiresOnDay > world.day);
-  // Bids only come in while a transfer window is open, and lapse when it shuts.
-  const windowCloses = windowCloseDay(world.day);
-  if (windowCloses === null) return;
+  // Unsolicited bids only come in while a transfer window is open; one agreed
+  // after it shuts is completed when the next one opens.
+  if (windowCloseDay(world.day) === null) return;
 
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : null;
   if (club === null || club.players.length === 0) return;
@@ -331,7 +342,7 @@ export function generateIncomingOffers(world: World): void {
   // Bias toward the squad's best players — that is who a bigger club would
   // want. Anyone only here on loan belongs to another club, which sells him.
   const candidates = club.players
-    .filter((p) => loanOf(world, p) === undefined)
+    .filter((p) => loanOf(world, p) === undefined && pendingMoveOf(world, p) === undefined)
     .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
     .slice(0, 5);
   if (candidates.length === 0) return;
@@ -360,7 +371,7 @@ export function generateIncomingOffers(world: World): void {
 
   const id = world.nextOfferId++;
   world.incomingOffers.push({
-    id, playerIdx, buyingClubId: buyingClub.id, fee, expiresOnDay: Math.min(world.day + 14, windowCloses + 1), status: 'open',
+    id, playerIdx, buyingClubId: buyingClub.id, fee, expiresOnDay: world.day + 14, status: 'open',
   });
   world.messages.push({
     id: world.messages.length,
@@ -386,16 +397,17 @@ const MAX_LISTED_BIDS = 2;
  * The user's transfer-listed players draw bids: the club has said he can go,
  * so interest doesn't depend on him outshining the squad, a wider range of
  * clubs come in, and they pitch below his value, expecting a deal. Called
- * weekly; bids only come in while a transfer window is open.
+ * weekly, all year: a sale agreed while the window is shut completes when it
+ * opens.
  */
 export function generateListedBids(world: World): void {
-  const closes = windowCloseDay(world.day);
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
-  if (closes === null || club === undefined) return;
+  if (club === undefined) return;
   const store = world.players;
 
   for (const p of club.players) {
     if (!store.hasFlag(p, PlayerFlag.Transferable) || loanOf(world, p) !== undefined) continue;
+    if (pendingMoveOf(world, p) !== undefined) continue;
     const bids = world.incomingOffers.filter((o) => o.playerIdx === p && o.loan === undefined);
     if (bids.length >= MAX_LISTED_BIDS || !world.rng.chance(LISTED_BID_CHANCE)) continue;
 
@@ -410,7 +422,7 @@ export function generateListedBids(world: World): void {
 
     const id = world.nextOfferId++;
     world.incomingOffers.push({
-      id, playerIdx: p, buyingClubId: buyer.id, fee, expiresOnDay: Math.min(world.day + 14, closes + 1), status: 'open',
+      id, playerIdx: p, buyingClubId: buyer.id, fee, expiresOnDay: world.day + 14, status: 'open',
     });
     world.messages.push({
       id: world.messages.length,

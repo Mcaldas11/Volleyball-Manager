@@ -958,19 +958,21 @@ export function ScoutingScreen(): JSX.Element {
                   </button>
                   <button
                     className="primary"
-                    disabled={!g.canBuy(target) && g.talksWith(target, 'transfer') === null}
-                    title={g.canBuy(target) ? undefined : 'The transfer window is closed'}
+                    title={g.joinDay(target) > world.day
+                      ? `The window is shut — agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(target))}`
+                      : undefined}
                     onClick={() => g.startNegotiation(target)}
                   >
                     <Icon name="transfers" size={14} />
-                    {g.talksWith(target, 'transfer') !== null
-                      ? 'View talks'
-                      : g.canBuy(target) ? 'Negotiate transfer' : 'Window closed'}
+                    {g.talksWith(target, 'transfer') !== null ? 'View talks' : 'Negotiate transfer'}
                   </button>
                   {store.clubId[target] >= 0 && (
                     <button
                       disabled={!g.canBorrow(target) && g.talksWith(target, 'loan') === null}
-                      title={g.canBorrow(target) ? 'Borrow him until the end of the season' : 'Not available for loan right now'}
+                      title={!g.canBorrow(target) ? 'Not available for loan right now'
+                        : g.joinDay(target) > world.day
+                          ? `The window is shut — a loan agreed now starts on ${g.dateLabelForDay(g.joinDay(target))}`
+                          : 'Borrow him until the end of the season'}
                       onClick={() => g.startLoanRequest(target)}
                     >
                       <Icon name="swap" size={14} />
@@ -1038,7 +1040,7 @@ export function TransfersScreen(): JSX.Element {
   const store = world.players;
   const club = g.club!;
   const targets = g.transferTargets(100);
-  const wageRoom = club.finances.wageBudget - g.wageBill();
+  const wageRoom = g.wageRoom();
   const squadSize = g.squadSize();
   const offers = world.incomingOffers;
   const [sort, onSort] = useSort<TransferSort>('ability');
@@ -1191,8 +1193,6 @@ export function TransfersScreen(): JSX.Element {
                         <td className="num">
                           <button
                             className="sm primary"
-                            disabled={!g.canBuy(p)}
-                            title={g.canBuy(p) ? undefined : 'The transfer window is closed — free agents only'}
                             onClick={(e) => { e.stopPropagation(); g.startNegotiation(p); }}
                           >
                             Negotiate

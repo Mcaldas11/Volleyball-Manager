@@ -10,20 +10,24 @@
  * It runs the other way too. A club's bid for one of your players can draw
  * rival bids; a counter-offer waits for their board; and once a fee is agreed
  * the player takes a few days to decide whether he wants the move at all.
+ *
+ * Talks run all year. A deal for a player under contract agreed while the
+ * transfer window is shut is done on paper — fee paid, terms fixed — and he
+ * moves when the next window opens (see moves.ts).
  */
 
 import type { Club } from '../model/club.ts';
+import { PlayerFlag } from '../model/players.ts';
 import {
-  completeTransfer, contractDemands, evaluateCounterFee, evaluateFeeOffer, resolveIncomingMove,
+  completeTransfer, contractDemands, evaluateCounterFee, evaluateFeeOffer, payFee, resolveIncomingMove,
   respondToOffer, ROLE_VALUE, SQUAD_ROLE_NAMES, TALKS_COOLDOWN_DAYS, TALKS_PATIENCE,
   type ContractDemands, type IncomingOffer, type SquadRole,
 } from './negotiation.ts';
 import {
   evaluateLoanRequest, loanOf, MAX_SQUAD, playerAgreesToLoan, squadSize, startLoan, wageRoom,
 } from './loans.ts';
-import {
-  euros, seasonEndDay, seasonEndYear, transferWindowOn, windowCloseDay, type GameMessage, type World,
-} from './world.ts';
+import { moveDay, pendingMoveOf, seasonOfDay, windowOpeningLabel } from './moves.ts';
+import { euros, seasonEndDay, seasonEndYear, type GameMessage, type World } from './world.ts';
 
 export interface TalksOffer {
   /** Transfer fee — only while talking to the selling club. */
@@ -87,7 +91,7 @@ export const REPLY_DAYS: Readonly<Record<'fee' | 'terms' | 'renewal' | 'counter'
 const IDLE_DAYS = 21;
 /** Chance per idle day that a rival closes the deal while you wait. */
 const RIVAL_SIGNS_CHANCE = 0.03;
-/** Chance per day, while a window is open, that another club tops a bid for one of yours. */
+/** Chance per day that another club tops a bid for one of yours. */
 const RIVAL_BID_CHANCE = 0.05;
 /** Most bids one of your players can have on the table at once. */
 const MAX_BIDS_PER_PLAYER = 3;
@@ -102,14 +106,128 @@ function listNames(names: string[]): string {
 
 // ---- Talks: signing players and keeping your own ------------------------------------
 
-/** Talks lapse when left idle — and a contracted player's cannot outlive the window. */
-function idleDeadline(world: World, kind: Talks['kind'], sellingClubId: number): number {
-  let deadline = world.day + IDLE_DAYS;
-  if (kind !== 'renewal' && sellingClubId >= 0) {
-    const close = windowCloseDay(world.day);
-    if (close !== null) deadline = Math.min(deadline, close);
+/** Talks lapse when left idle. The window has no say: they run all year. */
+function idleDeadline(world: World): number {
+  return world.day + IDLE_DAYS;
+}
+
+/** The season a player signing today would join in: this one, unless the deal
+ *  has to wait for the summer window. Free agents join on the spot. */
+export function joinSeason(world: World, playerIdx: number): number {
+  return world.players.clubId[playerIdx] < 0 ? world.season : seasonOfDay(moveDay(world));
+}
+
+/**
+ * Settle an agreed transfer. A free agent, or anyone while a window is open,
+ * moves at once; otherwise the fee is paid now and he moves the day the next
+ * window opens. `years` counts from the season he joins in. Returns the day he moves.
+ */
+function agreeTransfer(world: World, buyer: Club, playerIdx: number, wage: number, fee: number, years: number): number {
+  const store = world.players;
+  const from = store.clubId[playerIdx];
+  const day = from < 0 ? world.day : moveDay(world);
+  const contractEnd = seasonEndDay(seasonOfDay(day) + years - 1);
+  if (day === world.day) {
+    completeTransfer(world, buyer, playerIdx, wage, fee, contractEnd);
+    return day;
   }
-  return deadline;
+  payFee(world, buyer, from, fee);
+  store.setFlag(playerIdx, PlayerFlag.Transferable, false);
+  store.setFlag(playerIdx, PlayerFlag.LoanListed, false);
+  world.pendingMoves.push({
+    kind: 'transfer', playerIdx, fromClubId: from, toClubId: buyer.id, movesOn: day, fee, wage, contractEnd, wageShare: 0,
+  });
+  return day;
+}
+
+/** Settle an agreed loan: at once while a window is open, otherwise from the
+ *  day the next one opens — to the end of the season it starts in. */
+function agreeLoan(world: World, parent: Club, borrower: Club, playerIdx: number, wageShare: number): number {
+  const day = moveDay(world);
+  if (day === world.day) {
+    startLoan(world, parent, borrower, playerIdx, wageShare);
+    return day;
+  }
+  world.players.setFlag(playerIdx, PlayerFlag.LoanListed, false);
+  world.pendingMoves.push({
+    kind: 'loan', playerIdx, fromClubId: parent.id, toClubId: borrower.id, movesOn: day,
+    fee: 0, wage: world.players.wage[playerIdx], contractEnd: 0, wageShare,
+  });
+  return day;
+}
+
+/**
+ * The window has opened: every deal waiting on it goes through. Called daily,
+ * and by the season rollover for deals waiting on the summer window, which
+ * opens as the new season starts.
+ */
+export function completeDueMoves(world: World, byDay = world.day): void {
+  const store = world.players;
+  for (const m of [...world.pendingMoves]) {
+    if (m.movesOn > byDay) continue;
+    world.pendingMoves = world.pendingMoves.filter((x) => x !== m);
+    const p = m.playerIdx;
+    const name = store.fullName(p);
+    const to = world.clubs[m.toClubId];
+    const from = world.clubs[m.fromClubId];
+    const userIn = m.toClubId === world.userClubId;
+    const userOut = m.fromClubId === world.userClubId;
+    if (to === undefined) continue;
+
+    if (!store.isActive(p)) {
+      // He has retired in the meantime: the deal is off, and any fee goes back.
+      if (m.kind === 'transfer' && from !== undefined) payFee(world, from, to.id, m.fee);
+      if (userIn || userOut) {
+        say(world, {
+          subject: `Deal off: ${name}`,
+          body: `${name} has retired before his move could go through.` +
+            (m.kind === 'transfer' && m.fee > 0 ? ` The ${euros(m.fee)} fee has been returned.` : ''),
+          category: 'offer',
+        });
+      }
+      continue;
+    }
+
+    if (m.kind === 'loan') {
+      if (from === undefined || store.clubId[p] !== from.id) continue;
+      const until = `30 June ${seasonEndYear(world, seasonOfDay(m.movesOn))}`;
+      startLoan(world, from, to, p, m.wageShare, seasonEndDay(seasonOfDay(m.movesOn)));
+      if (userIn || userOut) {
+        say(world, {
+          subject: userIn ? `${name} arrives on loan` : `${name} leaves on loan`,
+          body: userIn
+            ? `The window is open and ${name} has joined on loan from ${from.name}, until ${until}.`
+            : `The window is open and ${name} has gone to ${to.name} on loan, until ${until}.`,
+          playerIdx: p,
+          clubId: userIn ? from.id : to.id,
+          category: 'offer',
+        });
+      }
+      continue;
+    }
+
+    completeTransfer(world, to, p, m.wage, m.fee, m.contractEnd, { paid: true, logSeason: seasonOfDay(m.movesOn) });
+    // Anything else still pending for him is moot now.
+    world.talks = world.talks.filter((t) => t.playerIdx !== p);
+    world.incomingOffers = world.incomingOffers.filter((o) => o.playerIdx !== p);
+    if (userIn) {
+      say(world, {
+        subject: `${name} arrives`,
+        body: `The window is open and ${name} has joined${from !== undefined ? ` from ${from.name}` : ''}, ` +
+          `on the contract agreed: ${euros(m.wage)} a season until 30 June ${seasonEndYear(world, seasonOfDay(m.contractEnd))}.`,
+        playerIdx: p,
+        clubId: from?.id,
+        category: 'offer',
+      });
+    } else if (userOut) {
+      say(world, {
+        subject: `${name} leaves for ${to.name}`,
+        body: `The window is open and ${name} has left for ${to.name}, as agreed.`,
+        clubId: to.id,
+        category: 'offer',
+      });
+    }
+  }
 }
 
 /** Clubs that will also be chasing a player: the better he is, the more of them. */
@@ -157,7 +275,7 @@ export function openTalks(world: World, club: Club, playerIdx: number, kind: Tal
     pending: null,
     reply: null,
     rivals: kind === 'transfer' ? findRivals(world, club, playerIdx, demands) : [],
-    expiresOn: idleDeadline(world, kind, sellingClubId),
+    expiresOn: idleDeadline(world),
   };
   world.talks.push(talks);
   return talks;
@@ -182,7 +300,8 @@ function stillAvailable(world: World, t: Talks): boolean {
   const club = world.players.clubId[t.playerIdx];
   // One of ours out on loan is still ours to renew.
   const ours = club === world.userClubId || loanOf(world, t.playerIdx)?.parentClubId === world.userClubId;
-  return world.players.isActive(t.playerIdx) &&
+  // A player who has agreed a move and is waiting on the window is spoken for.
+  return world.players.isActive(t.playerIdx) && pendingMoveOf(world, t.playerIdx) === undefined &&
     (t.kind === 'renewal' ? ours : club === t.sellingClubId && club !== world.userClubId && !ours);
 }
 
@@ -201,10 +320,10 @@ function signForRival(world: World, t: Talks, rival: RivalSuitor): void {
   const club = world.clubs[rival.clubId];
   if (club === undefined) return;
   const fee = t.sellingClubId >= 0 ? Math.max(t.agreedFee, store.value[t.playerIdx]) : 0;
-  completeTransfer(world, club, t.playerIdx, rival.wage, fee, seasonEndDay(world.season + world.rng.int(1, 3)));
+  const day = agreeTransfer(world, club, t.playerIdx, rival.wage, fee, world.rng.int(1, 3) + 1);
   say(world, {
     subject: `${store.fullName(t.playerIdx)} joins ${club.name}`,
-    body: `${store.fullName(t.playerIdx)} has signed for ${club.name} instead — ` +
+    body: `${store.fullName(t.playerIdx)} has ${day > world.day ? 'agreed to join' : 'signed for'} ${club.name} instead — ` +
       `they moved faster, offering ${euros(rival.wage)} a season. Your talks with him are over.`,
     playerIdx: t.playerIdx,
     clubId: club.id,
@@ -232,7 +351,7 @@ function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
   if (seller === undefined) { closeTalks(world, t); return; }
   const result = evaluateFeeOffer(world, seller, t.playerIdx, offer.fee);
   t.valuation = result.valuation;
-  t.expiresOn = idleDeadline(world, t.kind, t.sellingClubId);
+  t.expiresOn = idleDeadline(world);
   const rivals = t.rivals.map((r) => world.clubs[r.clubId]?.name).filter((n): n is string => n !== undefined);
   const hurry = rivals.length > 0 ? ` Be quick: ${listNames(rivals)} ${rivals.length > 1 ? 'are' : 'is'} also after him.` : '';
   if (result.accepted) {
@@ -284,7 +403,9 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
   }
 
   const response = respondToOffer(t.demands, offer, t.patience);
-  const endSeason = world.season + offer.years - 1;
+  // A contract runs from the season he joins in — next season's, for a deal
+  // that has to wait for the summer window.
+  const endSeason = (renewal ? world.season : joinSeason(world, p)) + offer.years - 1;
   const ends = `30 June ${seasonEndYear(world, endSeason)}`;
 
   if (response.outcome === 'accepted') {
@@ -311,11 +432,14 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
       return;
     }
     const seller = t.sellingClubId >= 0 ? world.clubs[t.sellingClubId] : undefined;
-    completeTransfer(world, club, p, offer.wage, t.agreedFee, seasonEndDay(endSeason));
+    const day = agreeTransfer(world, club, p, offer.wage, t.agreedFee, offer.years);
+    const paid = seller !== undefined && t.agreedFee > 0 ? ` ${euros(t.agreedFee)} has been paid to ${seller.name}.` : '';
     say(world, {
       subject: `${name} signs`,
-      body: `${name} has agreed terms and joins on a contract worth ${euros(offer.wage)} a season until ${ends}.` +
-        (seller !== undefined && t.agreedFee > 0 ? ` ${euros(t.agreedFee)} has been paid to ${seller.name}.` : ''),
+      body: day > world.day
+        ? `${name} has agreed terms: ${euros(offer.wage)} a season until ${ends}. The transfer window is shut, ` +
+          `so he stays at ${seller?.name ?? 'his club'} until it opens on ${windowOpeningLabel(world, day)}, and joins then.${paid}`
+        : `${name} has agreed terms and joins on a contract worth ${euros(offer.wage)} a season until ${ends}.${paid}`,
       playerIdx: p,
       category,
     });
@@ -346,7 +470,7 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
   t.demands = response.demands;
   t.patience = response.patience;
   t.reply = response.gap;
-  t.expiresOn = idleDeadline(world, t.kind, t.sellingClubId);
+  t.expiresOn = idleDeadline(world);
   const d = response.demands;
   const years = d.minYears === d.maxYears ? `${d.minYears}` : `${d.minYears}–${d.maxYears}`;
   say(world, {
@@ -372,20 +496,24 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
   const share = offer.wageShare ?? 0.5;
   const shareText = `${Math.round(share * 100)}% of his wages`;
 
-  const problem = transferWindowOn(world.day) === null ? 'the transfer window has closed'
-    : squadSize(world, club) >= MAX_SQUAD ? 'the squad is full'
-      : wageRoom(world, club) < store.wage[p] * share ? 'there is no longer room in the wage budget'
-        : null;
+  const problem = squadSize(world, club) >= MAX_SQUAD ? 'the squad is full'
+    : wageRoom(world, club) < store.wage[p] * share ? 'there is no longer room in the wage budget'
+      : null;
   if (problem !== null) {
     say(world, { subject: `Loan off: ${name}`, body: `The loan for ${name} has fallen through: ${problem}.`, playerIdx: p, category: 'offer' });
     closeTalks(world, t);
     return;
   }
 
-  const verdict = evaluateLoanRequest(world, parent, p, share);
+  // A loan agreed with the window shut starts when it opens, and runs to the end
+  // of that season — which his contract has to outlast.
+  const starts = moveDay(world);
+  const verdict = store.contractUntil[p] < seasonEndDay(seasonOfDay(starts))
+    ? { accepted: false, final: true, reason: 'His contract runs out before the loan would end.' }
+    : evaluateLoanRequest(world, parent, p, share);
   if (!verdict.accepted) {
     t.reply = 'feeRejected';
-    t.expiresOn = idleDeadline(world, t.kind, t.sellingClubId);
+    t.expiresOn = idleDeadline(world);
     say(world, {
       subject: `Loan request turned down: ${name}`,
       body: `${parent.name} have said no to loaning you ${name} with you paying ${shareText}. ${verdict.reason}` +
@@ -413,10 +541,13 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
     return;
   }
 
-  startLoan(world, parent, club, p, share);
+  const day = agreeLoan(world, parent, club, p, share);
+  const until = `30 June ${seasonEndYear(world, seasonOfDay(day))}`;
   say(world, {
-    subject: `${name} joins on loan`,
-    body: `${name} has joined on loan from ${parent.name} until 30 June ${seasonEndYear(world, world.season)}. ` +
+    subject: day > world.day ? `Loan agreed: ${name}` : `${name} joins on loan`,
+    body: (day > world.day
+      ? `${parent.name} will loan you ${name} from ${windowOpeningLabel(world, day)}, when the window opens, until ${until}. `
+      : `${name} has joined on loan from ${parent.name} until ${until}. `) +
       `You pay ${shareText} (${euros(Math.round(store.wage[p] * share))} a season); ${parent.name} cover the rest.`,
     playerIdx: p,
     clubId: parent.id,
@@ -449,9 +580,7 @@ function processTalks(world: World, club: Club): void {
     if (world.day > t.expiresOn) {
       say(world, {
         subject: `Talks lapse: ${store.fullName(t.playerIdx)}`,
-        body: t.kind !== 'renewal' && t.sellingClubId >= 0 && transferWindowOn(world.day) === null
-          ? `The transfer window has shut with no deal done for ${store.fullName(t.playerIdx)}.`
-          : `Talks with ${store.fullName(t.playerIdx)} went nowhere and have lapsed.`,
+        body: `Talks with ${store.fullName(t.playerIdx)} went nowhere and have lapsed.`,
         playerIdx: t.playerIdx,
         category: t.kind === 'renewal' ? 'contract' : 'offer',
       });
@@ -536,15 +665,24 @@ function processSales(world: World): void {
     }
     const decision = resolveIncomingMove(world, buyer, o.playerIdx);
     if (decision.accepted) {
-      completeTransfer(world, buyer, o.playerIdx, decision.wage, o.fee);
+      const day = agreeTransfer(world, buyer, o.playerIdx, decision.wage, o.fee, 2);
       removeOffers(world, (x) => x.playerIdx !== o.playerIdx);
       world.talks = world.talks.filter((t) => t.playerIdx !== o.playerIdx);
-      say(world, {
-        subject: `${name} leaves for ${buyer.name}`,
-        body: `${name} has agreed terms with ${buyer.name} and leaves the club. ${euros(o.fee)} has been received.`,
-        clubId: buyer.id,
-        category: 'offer',
-      });
+      say(world, day > world.day
+        ? {
+          subject: `${name} agrees to join ${buyer.name}`,
+          body: `${name} has agreed terms with ${buyer.name}, and ${euros(o.fee)} has been received. The transfer ` +
+            `window is shut, so he stays with you until it opens on ${windowOpeningLabel(world, day)}, and leaves then.`,
+          playerIdx: o.playerIdx,
+          clubId: buyer.id,
+          category: 'offer',
+        }
+        : {
+          subject: `${name} leaves for ${buyer.name}`,
+          body: `${name} has agreed terms with ${buyer.name} and leaves the club. ${euros(o.fee)} has been received.`,
+          clubId: buyer.id,
+          category: 'offer',
+        });
     } else {
       removeOffers(world, (x) => x.id !== o.id);
       say(world, {
@@ -557,9 +695,7 @@ function processSales(world: World): void {
     }
   }
 
-  // While a window is open, a bid for one of yours can draw a better one.
-  const closes = windowCloseDay(world.day);
-  if (closes === null) return;
+  // A bid for one of yours can draw a better one.
   const isOpenBid = (o: IncomingOffer): boolean => (o.status ?? 'open') === 'open' && o.loan === undefined;
   const players = [...new Set(world.incomingOffers.filter(isOpenBid).map((o) => o.playerIdx))];
   for (const p of players) {
@@ -576,7 +712,7 @@ function processSales(world: World): void {
     if (fee > club.finances.transferBudget || fee > club.finances.balance) continue;
     const id = world.nextOfferId++;
     world.incomingOffers.push({
-      id, playerIdx: p, buyingClubId: club.id, fee, expiresOnDay: Math.min(world.day + 14, closes + 1), status: 'open',
+      id, playerIdx: p, buyingClubId: club.id, fee, expiresOnDay: world.day + 14, status: 'open',
     });
     say(world, {
       subject: `Rival bid for ${store.fullName(p)}`,
@@ -598,8 +734,19 @@ function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
   const name = store.fullName(p);
   const club = world.clubs[world.userClubId];
   const share = o.loan?.wageShare ?? 0;
-  if (club === undefined || !club.players.includes(p) || loanOf(world, p) !== undefined) {
+  if (club === undefined || !club.players.includes(p) || loanOf(world, p) !== undefined ||
+    pendingMoveOf(world, p) !== undefined) {
     removeOffers(world, (x) => x.id !== o.id);
+    return;
+  }
+  if (store.contractUntil[p] < seasonEndDay(seasonOfDay(moveDay(world)))) {
+    removeOffers(world, (x) => x.id !== o.id);
+    say(world, {
+      subject: `Loan off: ${name}`,
+      body: `The loan to ${borrower.name} can't go ahead: ${name}'s contract runs out before it would end.`,
+      playerIdx: p,
+      category: 'offer',
+    });
     return;
   }
   if (!playerAgreesToLoan(world, borrower, p)) {
@@ -613,12 +760,15 @@ function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
     });
     return;
   }
-  startLoan(world, club, borrower, p, share);
+  const day = agreeLoan(world, club, borrower, p, share);
+  const until = `30 June ${seasonEndYear(world, seasonOfDay(day))}`;
   removeOffers(world, (x) => x.playerIdx !== p);
   world.talks = world.talks.filter((t) => t.playerIdx !== p);
   say(world, {
-    subject: `${name} leaves on loan`,
-    body: `${name} has joined ${borrower.name} on loan until 30 June ${seasonEndYear(world, world.season)}. ` +
+    subject: day > world.day ? `${name} agrees a loan to ${borrower.name}` : `${name} leaves on loan`,
+    body: (day > world.day
+      ? `${name} will join ${borrower.name} on loan when the window opens on ${windowOpeningLabel(world, day)}, until ${until}. `
+      : `${name} has joined ${borrower.name} on loan until ${until}. `) +
       `They pay ${Math.round(share * 100)}% of his wage; the club covers the rest (${euros(Math.round(store.wage[p] * (1 - share)))} a season).`,
     playerIdx: p,
     clubId: borrower.id,
@@ -630,6 +780,7 @@ function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
 export function processDeals(world: World): void {
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
   if (club === undefined) return;
+  completeDueMoves(world);
   processTalks(world, club);
   processSales(world);
 }

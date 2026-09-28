@@ -24,6 +24,13 @@ export function IncomingOfferScreen(): JSX.Element | null {
   const value = store.value[n.playerIdx];
   const vsValue = value > 0 ? Math.round(((fee - value) / value) * 100) : 0;
   const rivals = world.incomingOffers.filter((o) => o.playerIdx === n.playerIdx && o.id !== n.offerId);
+  // Offers can be taken any day; with the window shut he only goes once it opens.
+  const joinDay = g.joinDay(n.playerIdx);
+  const shutNote = joinDay > world.day && (
+    <p className="contract-hint">
+      The transfer window is shut: if this goes through he stays with you until {g.dateLabelForDay(joinDay)}, and goes then.
+    </p>
+  );
 
   if (offer?.loan !== undefined) {
     const wage = store.wage[n.playerIdx];
@@ -44,6 +51,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
         <ContractRow label="You pay">{money(Math.round(wage * (1 - share)))} <span className="faint">of his {money(wage)}</span></ContractRow>
         {status === 'open' && <ContractRow label="Expires">{g.dateLabelForDay(n.expiresOnDay)}</ContractRow>}
         <p className="contract-hint">He stays your player: he comes back on 30 June, and still counts towards your 16.</p>
+        {shutNote}
 
         {status === 'accepted' && (
           <div className="contract-awaiting">
@@ -85,6 +93,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
         </span>
       </ContractRow>
       <ContractRow label="Market value">{money(value)}</ContractRow>
+      {status === 'open' && shutNote}
       {status === 'open' && <ContractRow label="Expires">{g.dateLabelForDay(n.expiresOnDay)}</ContractRow>}
       {rivals.length > 0 && (
         <p className="contract-rivals">

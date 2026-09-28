@@ -191,8 +191,9 @@ export function reviveWorld(raw: World): World {
   raw.talksBlockedUntil ??= new Map();
   raw.talks ??= [];
   raw.nextTalksId ??= 0;
-  // Saves from before loans existed.
+  // Saves from before loans, and deals done while the window was shut, existed.
   raw.loans ??= [];
+  raw.pendingMoves ??= [];
   migrateContractDays(raw.players);
   // Saves from before the cups were played: national cups, super cups and the
   // Club World Championship are added; all of them start with the next season.

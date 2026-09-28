@@ -16,6 +16,7 @@ import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 import type { IncomingOffer } from './negotiation.ts';
 import type { Talks } from './deals.ts';
 import type { Loan } from './loans.ts';
+import type { PendingMove } from './moves.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 
@@ -528,6 +529,8 @@ export interface World {
   nextTalksId: number;
   /** Players out on loan, into or out of the user's club — see loans.ts. */
   loans: Loan[];
+  /** Deals agreed while the window was shut, waiting for it to open — see moves.ts. */
+  pendingMoves: PendingMove[];
 }
 
 export function dayOfSeason(world: World): number {
@@ -579,6 +582,7 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     talks: [],
     nextTalksId: 0,
     loans: [],
+    pendingMoves: [],
   };
 }
 

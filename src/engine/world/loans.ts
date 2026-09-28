@@ -13,10 +13,9 @@
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, POSITION_NAMES } from '../model/positions.ts';
+import { arrivalsFor, moveDay, pendingMoveOf, pendingWages, seasonOfDay } from './moves.ts';
 import type { IncomingOffer } from './negotiation.ts';
-import {
-  euros, seasonEndDay, seasonEndYear, windowCloseDay, type GameMessage, type World,
-} from './world.ts';
+import { euros, seasonEndDay, type GameMessage, type World } from './world.ts';
 
 export interface Loan {
   playerIdx: number;
@@ -81,19 +80,27 @@ export function wageBill(world: World, club: Club): number {
   return Math.round(bill);
 }
 
-/** Room left in a club's wage budget. */
+/** Room left in a club's wage budget, once players who have agreed to join are paid for. */
 export function wageRoom(world: World, club: Club): number {
-  return club.finances.wageBudget - wageBill(world, club);
+  return club.finances.wageBudget - wageBill(world, club) - pendingWages(world, club.id);
 }
 
 /** Players a club answers for against the squad limit: everyone at the club,
- *  plus its own players out on loan, who will be back at the end of the season. */
+ *  its own players out on loan, who will be back at the end of the season,
+ *  and anyone who has agreed to join and is waiting on the window. */
 export function squadSize(world: World, club: Club): number {
-  return club.players.length + loansOutOf(world, club.id).length;
+  return club.players.length + loansOutOf(world, club.id).length + arrivalsFor(world, club.id).length;
 }
 
-/** Send a player out on loan until the end of the season. */
-export function startLoan(world: World, parent: Club, borrower: Club, playerIdx: number, wageShare: number): Loan {
+/** Send a player out on loan — until the end of the season, unless told otherwise. */
+export function startLoan(
+  world: World,
+  parent: Club,
+  borrower: Club,
+  playerIdx: number,
+  wageShare: number,
+  endsOn = seasonEndDay(world.season),
+): Loan {
   const store = world.players;
   parent.players = parent.players.filter((p) => p !== playerIdx);
   borrower.players.push(playerIdx);
@@ -105,7 +112,7 @@ export function startLoan(world: World, parent: Club, borrower: Club, playerIdx:
     parentClubId: parent.id,
     loanClubId: borrower.id,
     wageShare,
-    endsOn: seasonEndDay(world.season),
+    endsOn,
   };
   world.loans.push(loan);
   return loan;
@@ -214,17 +221,19 @@ export function playerAgreesToLoan(world: World, borrower: Club, playerIdx: numb
 /**
  * Clubs that could use the user's loan-listed players make offers to borrow
  * them — clubs at or below his level, where he would play, with room in the
- * squad and the wage budget. Called weekly; offers only come in while a
- * transfer window is open.
+ * squad and the wage budget. Called weekly, all year: a loan agreed while the
+ * window is shut starts when it opens.
  */
 export function generateLoanOffers(world: World): void {
-  const closes = windowCloseDay(world.day);
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
-  if (closes === null || club === undefined) return;
+  if (club === undefined) return;
   const store = world.players;
 
   for (const p of club.players) {
     if (!store.hasFlag(p, PlayerFlag.LoanListed) || loanOf(world, p) !== undefined) continue;
+    if (pendingMoveOf(world, p) !== undefined) continue;
+    // A loan runs to the end of the season it starts in; his contract must outlast it.
+    if (store.contractUntil[p] < seasonEndDay(seasonOfDay(moveDay(world)))) continue;
     const open = world.incomingOffers.filter((o) => o.playerIdx === p && o.loan !== undefined);
     if (open.length >= MAX_LOAN_OFFERS || !world.rng.chance(LOAN_OFFER_CHANCE)) continue;
 
@@ -246,14 +255,14 @@ export function generateLoanOffers(world: World): void {
       buyingClubId: borrower.id,
       fee: 0,
       loan: { wageShare },
-      expiresOnDay: Math.min(world.day + 14, closes + 1),
+      expiresOnDay: world.day + 14,
       status: 'open',
     };
     world.incomingOffers.push(offer);
     say(world, {
       subject: `Loan offer for ${store.fullName(p)}`,
-      body: `${borrower.name} would like to take ${store.fullName(p)} on loan until 30 June ` +
-        `${seasonEndYear(world, world.season)}, paying ${Math.round(wageShare * 100)}% of his ` +
+      body: `${borrower.name} would like to take ${store.fullName(p)} on loan to the end of the season, ` +
+        `paying ${Math.round(wageShare * 100)}% of his ` +
         `${euros(store.wage[p])} wage. Accept it or turn it down.`,
       offerId: offer.id,
       playerIdx: p,

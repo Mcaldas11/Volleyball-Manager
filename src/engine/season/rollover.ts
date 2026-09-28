@@ -21,12 +21,13 @@ import {
 } from '../world/progression.ts';
 import { selectAllNationalSquads } from '../world/worldGen.ts';
 import {
-  logTransfer, seasonEndDay, seasonEndYear,
+  DAYS_PER_SEASON, logTransfer, seasonEndDay, seasonEndYear,
   type HallOfFameEntry, type SeasonAwardLine, type SeasonRecord, type World,
 } from '../world/world.ts';
 import { startSeason, type SeasonContext } from './seasonEngine.ts';
 import { pruneCompetitionRecords } from '../world/records.ts';
 import { returnLoans, wageBill } from '../world/loans.ts';
+import { completeDueMoves } from '../world/deals.ts';
 import { clubBooks } from './books.ts';
 import { beginSeasonReview, postSeasonReview } from './seasonReview.ts';
 
@@ -83,6 +84,10 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   const retired = processRetirements(world);
   report.retired = retired.length;
   inductHallOfFame(world, retired, report);
+
+  // Deals done since the winter window shut go through as the summer one
+  // opens — after retirements, before contracts run out and squads are trimmed.
+  completeDueMoves(world, (world.season + 1) * DAYS_PER_SEASON);
 
   promoteYouth(world);
   report.youthIntake = generateYouthIntake(world).length;

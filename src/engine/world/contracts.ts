@@ -34,8 +34,8 @@ export function contractNotices(world: World): void {
     if (d === w.opens) {
       push({
         subject: 'Transfer window open',
-        body: `The ${WINDOW_NAME[w.name]} transfer window is open until ${CLOSES_ON[w.name]}. Players can be bought ` +
-          'and sold until it shuts — free agents can be signed at any time.',
+        body: `The ${WINDOW_NAME[w.name]} transfer window is open until ${CLOSES_ON[w.name]}. Players under contract ` +
+          'move straight away while it is open; deals agreed since the last one shut go through today.',
         category: 'news',
       });
     }
@@ -43,8 +43,9 @@ export function contractNotices(world: World): void {
       const next = nextTransferWindow(world.day).window;
       push({
         subject: 'Transfer window closed',
-        body: `The ${WINDOW_NAME[w.name]} transfer window has closed. No more players can move between clubs ` +
-          `until the ${WINDOW_NAME[next.name]} window opens on ${OPENS_ON[next.name]}.`,
+        body: `The ${WINDOW_NAME[w.name]} transfer window has closed. You can still negotiate — but a player ` +
+          `under contract signed from now on only joins when the ${WINDOW_NAME[next.name]} window opens on ` +
+          `${OPENS_ON[next.name]}. Free agents join at once.`,
         category: 'news',
       });
     }

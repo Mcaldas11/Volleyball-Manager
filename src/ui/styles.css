@@ -827,6 +827,7 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .role-tag.libero { background: rgba(181, 140, 255, 0.15); color: var(--elite); border: 1px solid rgba(181, 140, 255, 0.4); }
 .role-tag.loan { background: var(--accent-soft); color: var(--accent-bright); border: 1px solid rgba(79, 141, 255, 0.4); }
 .role-tag.listed { background: var(--gold-soft); color: var(--gold-bright); border: 1px solid rgba(215, 167, 63, 0.4); }
+.role-tag.leaving { background: var(--bad-soft); color: var(--bad); border: 1px solid rgba(226, 87, 79, 0.4); }
 /* One of ours out on loan: still listed with the squad, but not available to pick. */
 .data-table tr.row-away td { opacity: 0.55; }
 .data-table tr.row-away:hover td { opacity: 0.85; }

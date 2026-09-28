@@ -39,6 +39,14 @@ export function NegotiationScreen(): JSX.Element | null {
   const currentStep = t.stage === 'fee' && sellingClub !== null ? 0 : steps.length - 1;
   const endsLabel = (season: number): string => `30 Jun ${world.startYear + season + 1}`;
   const txWindow = g.transferWindowStatus();
+  // Talks run all year, but a player under contract only moves in a window:
+  // agreed now, he joins on this day — and his contract counts from that season.
+  const joinDay = g.joinDay(player);
+  const joinsLater = !renewal && joinDay > world.day;
+  const startSeason = renewal ? world.season : g.joinSeason(player);
+  const windowHint = txWindow.open
+    ? <> · window closes {g.dateLabelForDay(txWindow.untilDay)}</>
+    : <> · window shut: {t.kind === 'loan' ? 'the loan would start' : 'he would join'} on {g.dateLabelForDay(joinDay)}</>;
   const pending = t.pending;
   const rivals = t.rivals.map((r) => r.clubId).filter((id) => world.clubs[id] !== undefined);
 
@@ -70,7 +78,7 @@ export function NegotiationScreen(): JSX.Element | null {
             `${Math.round((pending.offer.wageShare ?? 0.5) * 100)}% of his wage.`
           : t.stage === 'fee'
             ? `${sellingClub?.name ?? 'The club'} are considering your bid of ${money(pending.offer.fee)}.`
-            : `${renewal ? 'He is' : 'He and his agent are'} considering ${money(pending.offer.wage)} a season until ${endsLabel(world.season + pending.offer.years - 1)}.`}
+            : `${renewal ? 'He is' : 'He and his agent are'} considering ${money(pending.offer.wage)} a season until ${endsLabel(startSeason + pending.offer.years - 1)}.`}
         {' '}Keep playing — the answer will come to your inbox.
       </span>
     </div>
@@ -88,7 +96,7 @@ export function NegotiationScreen(): JSX.Element | null {
   if (t.kind === 'loan' && sellingClub !== null) {
     const wage = store.wage[player];
     const cost = Math.round(wage * n.loanShare);
-    const wageRoom = club.finances.wageBudget - g.wageBill();
+    const wageRoom = g.wageRoom();
     return (
       <ContractPaper
         kicker="Loan request"
@@ -100,7 +108,10 @@ export function NegotiationScreen(): JSX.Element | null {
         <ContractRow label="His club"><ClubLink id={sellingClub.id} /></ContractRow>
         <ContractRow label="Contract until">{endsLabel(contractEndSeason(store.contractUntil[player]))}</ContractRow>
         <ContractRow label="Wage">{money(wage)} <span className="faint">/ season</span></ContractRow>
-        <ContractRow label="Loan until">{endsLabel(world.season)} <span className="faint">· the end of the season</span></ContractRow>
+        <ContractRow label="Loan">
+          {joinsLater && <>{g.dateLabelForDay(joinDay)} – </>}{endsLabel(startSeason)}
+          <span className="faint"> · {joinsLater ? 'from when the window opens' : 'to'} the end of the season</span>
+        </ContractRow>
 
         {awaiting}
         {pending === null && (
@@ -115,7 +126,7 @@ export function NegotiationScreen(): JSX.Element | null {
             <p className="contract-hint">
               {sellingClub.shortName} pay the rest: {money(wage - cost)} · Room in the wage budget:{' '}
               <b className={wageRoom < cost ? 'bad' : ''}>{money(wageRoom)}</b>
-              {txWindow.open && <> · window closes {g.dateLabelForDay(txWindow.untilDay)}</>}
+              {windowHint}
             </p>
           </div>
         )}
@@ -162,7 +173,7 @@ export function NegotiationScreen(): JSX.Element | null {
             <p className="contract-hint">
               Transfer budget: {money(ceiling)}
               {t.valuation !== null && <> · valued around {money(t.valuation)}</>}
-              {txWindow.open && <> · window closes {g.dateLabelForDay(txWindow.untilDay)}</>}
+              {windowHint}
             </p>
           </div>
         )}
@@ -188,11 +199,10 @@ export function NegotiationScreen(): JSX.Element | null {
   const d = t.demands;
   const demandYears = d.minYears === d.maxYears ? `${d.minYears}` : `${d.minYears}–${d.maxYears}`;
   const demandDates = d.minYears === d.maxYears
-    ? endsLabel(world.season + d.minYears - 1)
-    : `${endsLabel(world.season + d.minYears - 1)} – ${endsLabel(world.season + d.maxYears - 1)}`;
-  let committed = g.wageBill();
-  if (renewal) committed -= store.wage[player];
-  const wageRoom = club.finances.wageBudget - committed;
+    ? endsLabel(startSeason + d.minYears - 1)
+    : `${endsLabel(startSeason + d.minYears - 1)} – ${endsLabel(startSeason + d.maxYears - 1)}`;
+  // A renewal's new wage replaces what he earns now.
+  const wageRoom = g.wageRoom() + (renewal ? store.wage[player] : 0);
 
   return (
     <ContractPaper
@@ -252,7 +262,7 @@ export function NegotiationScreen(): JSX.Element | null {
                   <select value={n.termsYears} onChange={(e) => g.setTermsYears(Number(e.target.value))}>
                     {yearOptions.map((y) => (
                       <option key={y} value={y}>
-                        {endsLabel(world.season + y - 1)} · {y} season{y === 1 ? '' : 's'}
+                        {endsLabel(startSeason + y - 1)} · {y} season{y === 1 ? '' : 's'}
                       </option>
                     ))}
                   </select>
@@ -260,6 +270,7 @@ export function NegotiationScreen(): JSX.Element | null {
               </div>
               <p className="contract-hint">
                 Room in the wage budget: <b className={wageRoom < n.termsWage ? 'bad' : ''}>{money(wageRoom)}</b>
+                {joinsLater && <> · the window is shut: he joins on {g.dateLabelForDay(joinDay)}</>}
               </p>
             </>
           )}
