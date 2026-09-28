@@ -412,7 +412,9 @@ export function PlayerDetail(): JSX.Element | null {
   const borrowed = loan !== null && loan.loanClubId === world.userClubId;
   const lentOut = loan !== null && loan.parentClubId === world.userClubId;
   const isOwn = club?.id === world.userClubId && !borrowed;
-  const elsewhere = club !== null && club.id !== world.userClubId && !lentOut;
+  // Only a manager with a club to sign him for can make an offer.
+  const managing = g.club !== null;
+  const elsewhere = managing && club !== null && club.id !== world.userClubId && !lentOut;
   const loanEnds = loan !== null ? g.dateLabelForDay(loan.endsOn) : '';
   const loanPct = loan !== null ? `${Math.round(loan.wageShare * 100)}%` : '';
   const transferTalks = g.talksWith(p, 'transfer');
@@ -501,7 +503,7 @@ export function PlayerDetail(): JSX.Element | null {
             </button>
           )}
           {isOwn && !isYouth && move === null && <TransferMenu p={p} />}
-          {(elsewhere || (club === null && store.isActive(p))) && move === null && (
+          {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && (
             <button
               className="primary"
               title={joinsLater ? `The window is shut — agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(p))}` : undefined}

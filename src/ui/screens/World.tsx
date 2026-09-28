@@ -50,11 +50,13 @@ export function StatsScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
+  const club = g.club;
   const [sort, setSort] = useState<StatKey>('points');
-  const [ownLeagueOnly, setOwnLeagueOnly] = useState(true);
+  // Without a club there is no league of one's own to narrow to.
+  const [ownLeague, setOwnLeagueOnly] = useState(true);
+  const ownLeagueOnly = ownLeague && club !== null;
 
-  const club = g.club!;
-  const leagueClubs = new Set(world.competitions[club.leagueId]?.participants ?? []);
+  const leagueClubs = new Set(club !== null ? world.competitions[club.leagueId]?.participants ?? [] : []);
 
   // Everyone who has played a match this season is listed. The rate stats
   // still need a fair sample before they can top the chart, but early in the
@@ -102,11 +104,13 @@ export function StatsScreen(): JSX.Element {
           <span className="comp-bar-name">Season {world.year} leaders</span>
           <span className="faint">Accumulated rally by rally from every match played</span>
         </div>
-        <Segmented
-          options={[[1, 'My league'], [0, 'Whole world']] as const}
-          value={ownLeagueOnly ? 1 : 0}
-          onChange={(v) => setOwnLeagueOnly(v === 1)}
-        />
+        {club !== null && (
+          <Segmented
+            options={[[1, 'My league'], [0, 'Whole world']] as const}
+            value={ownLeagueOnly ? 1 : 0}
+            onChange={(v) => setOwnLeagueOnly(v === 1)}
+          />
+        )}
       </div>
 
       <Card
@@ -140,7 +144,7 @@ export function StatsScreen(): JSX.Element {
                   {rows.map((r, i) => (
                     <tr
                       key={r.s.playerIdx}
-                      className={`clickable${store.clubId[r.s.playerIdx] === club.id ? ' me' : ''}`}
+                      className={`clickable${store.clubId[r.s.playerIdx] === world.userClubId ? ' me' : ''}`}
                       onClick={() => g.select(r.s.playerIdx)}
                     >
                       <td className="num">

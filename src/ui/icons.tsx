@@ -13,7 +13,8 @@ export type IconName =
   | 'play' | 'pause' | 'save' | 'exit' | 'close' | 'news' | 'task' | 'offer'
   | 'press' | 'whistle' | 'clock' | 'star' | 'ball' | 'alert' | 'collapse'
   | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check'
-  | 'inbox' | 'archive' | 'medical' | 'coin' | 'contract' | 'board' | 'playOutline' | 'chevronLeft' | 'arrowRight';
+  | 'inbox' | 'archive' | 'medical' | 'coin' | 'contract' | 'board' | 'playOutline' | 'chevronLeft' | 'arrowRight'
+  | 'career';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   home: <><path d="M3.5 10.5 12 4l8.5 6.5" /><path d="M5.5 9v10.5h13V9" /><path d="M10 19.5v-5h4v5" /></>,
@@ -66,6 +67,7 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   playOutline: <path d="M7.5 5.2v13.6L18.5 12 7.5 5.2Z" />,
   chevronLeft: <path d="m14.5 6-6 6 6 6" />,
   arrowRight: <><path d="M4.5 12h14" /><path d="m13.5 7 5 5-5 5" /></>,
+  career: <><path d="M12 3v18" /><path d="M5.5 5.5h10l2.5 2.5-2.5 2.5h-10v-5Z" /><path d="M18.5 12.5h-10L6 15l2.5 2.5h10v-5Z" /></>,
 };
 
 export function Icon({

@@ -84,8 +84,10 @@ export interface Club {
   seasonsInTopFlight: number;
   /** Board's expectation for this season, as a target league position. */
   boardExpectation: number;
-  /** 0-100. Below ~25 and the manager is in danger. */
+  /** 0-100. Below ~25 and the manager is in danger — see career.ts. */
   boardConfidence: number;
+  /** Absolute day the current head coach was appointed. */
+  coachSince: number;
 }
 
 export interface LeagueTableRow {
@@ -189,6 +191,7 @@ export function newClub(id: number, name: string, nation: number, tier: number):
     seasonsInTopFlight: 0,
     boardExpectation: 8,
     boardConfidence: 60,
+    coachSince: 0,
   };
 }
 

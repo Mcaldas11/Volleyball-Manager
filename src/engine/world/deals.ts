@@ -778,9 +778,11 @@ function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
 
 /** The day's movement on every deal. Called once a day. */
 export function processDeals(world: World): void {
+  // Deals already agreed go through even once the manager who made them has
+  // left — they were the club's.
+  completeDueMoves(world);
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
   if (club === undefined) return;
-  completeDueMoves(world);
   processTalks(world, club);
   processSales(world);
 }

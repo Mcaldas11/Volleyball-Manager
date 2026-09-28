@@ -34,6 +34,7 @@ import { processDeals } from '../world/deals.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
 import { monthlyStatement, recoveryNotice, roundupNotices } from '../world/inbox.ts';
 import { recordFixture } from '../world/records.ts';
+import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 
 /** Season-long statistics, keyed by player index. */
 export type SeasonStats = Map<number, SeasonStatLine>;
@@ -338,10 +339,12 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   const todays = world.fixturesByDay.get(world.day);
 
   // The month's books, transfer windows opening and shutting, contracts
-  // running down — and the answers to every offer that is due today.
+  // running down, the answers to every offer that is due today — and the
+  // job market: applications answered, coaches appointed, boards meeting.
   monthlyStatement(world);
   contractNotices(world);
   processDeals(world);
+  careerDay(world);
 
   if (todays !== undefined) {
     for (const fid of todays) {
@@ -356,6 +359,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     }
     // Including a match of the user's already played live earlier today.
     roundupNotices(world, todays);
+    // Every result weighs on its clubs' boards — the user's may act on it.
+    boardResults(world, todays);
   }
 
   // Any press conference for a match just played goes stale unfinished; line
@@ -432,6 +437,8 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
   }
   // Cups and continental competitions fit around the league calendar.
   scheduleCupSeason(world);
+  // Every board sets its target for the season, the divisions settled.
+  setBoardExpectations(world);
 
   if (ctx !== undefined) recordSeasonStartAbility(world, ctx);
 }

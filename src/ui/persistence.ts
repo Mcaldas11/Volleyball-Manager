@@ -22,6 +22,7 @@ import { Position } from '../engine/model/positions.ts';
 import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
 import { ensureCupCompetitions } from '../engine/season/cups.ts';
+import { backfillCareer } from '../engine/world/career.ts';
 import {
   newSeasonContext, recordSeasonStartAbility, type SeasonContext, type SeasonStats,
 } from '../engine/season/seasonEngine.ts';
@@ -194,6 +195,9 @@ export function reviveWorld(raw: World): World {
   // Saves from before loans, and deals done while the window was shut, existed.
   raw.loans ??= [];
   raw.pendingMoves ??= [];
+  // Saves from before the manager had a career: the club being managed
+  // becomes the first job on record.
+  backfillCareer(raw);
   migrateContractDays(raw.players);
   // Saves from before the cups were played: national cups, super cups and the
   // Club World Championship are added; all of them start with the next season.

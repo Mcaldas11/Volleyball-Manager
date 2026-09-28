@@ -38,10 +38,11 @@ const KIND_ORDER = ['league', 'supercup', 'cup', 'continental', 'clubworld'];
 export function CompetitionsScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
-  const confederation = NATIONS[club.nation].confederation;
+  const club = g.club;
+  // Between jobs, the manager follows his own continent's.
+  const confederation = NATIONS[club?.nation ?? world.manager.nation].confederation;
 
-  const mine = world.competitions
+  const mine = club === null ? [] : world.competitions
     .filter((c) => isCupCompetition(c) && c.cup?.season === world.season && c.cup.entrants.includes(club.id))
     .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
   // The headline competitions you can only watch this year.
@@ -51,7 +52,7 @@ export function CompetitionsScreen(): JSX.Element {
   return (
     <div className="comps">
       <div className="comps-grid">
-        <LeagueCard />
+        {club !== null && <LeagueCard />}
         {mine.map((c) => <CupCard key={c.id} comp={c} />)}
         {following.map((c) => <SpectatorCard key={c.id} comp={c} />)}
       </div>

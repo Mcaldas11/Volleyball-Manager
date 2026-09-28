@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { Position } from '../../engine/model/positions.ts';
-import { StaffRole } from '../../engine/model/staff.ts';
+import { boardMood, headCoachOf, vacancyAt } from '../../engine/world/career.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { clubTrophies } from '../../engine/world/world.ts';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { VacancyAction } from './Career.tsx';
 
 /**
  * A read-only page for any club in the world — reachable by clicking its name
@@ -37,7 +38,8 @@ export function ClubDetail(): JSX.Element | null {
     : 0;
 
   const isUserClub = club.id === world.userClubId;
-  const coach = world.staff.find((s) => s.clubId === club.id && s.role === StaffRole.HeadCoach);
+  const coach = headCoachOf(world, club);
+  const vacancy = vacancyAt(world, club.id);
   const trophies = clubTrophies(world, club.id);
 
   return (
@@ -136,7 +138,7 @@ export function ClubDetail(): JSX.Element | null {
                 />
                 <div className="coach-row-text">
                   <strong>{world.manager.firstName} {world.manager.lastName}</strong>
-                  <span className="faint"><Flag nation={world.manager.nation} /> You</span>
+                  <span className="faint"><Flag nation={world.manager.nation} /> You · board {boardMood(club.boardConfidence).toLowerCase()}</span>
                 </div>
               </div>
             ) : coach !== undefined ? (
@@ -148,7 +150,15 @@ export function ClubDetail(): JSX.Element | null {
                 </div>
               </div>
             ) : (
-              <Empty>Vacant.</Empty>
+              <div className="coach-vacant">
+                <div className="coach-row-text">
+                  <strong>Vacant</strong>
+                  <span className="faint">
+                    {vacancy !== undefined ? `Looking for a head coach since ${g.dateLabelForDay(vacancy.since)}` : 'No head coach'}
+                  </span>
+                </div>
+                {vacancy !== undefined && <VacancyAction club={club} />}
+              </div>
             )}
           </Card>
 

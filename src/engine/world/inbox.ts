@@ -29,6 +29,7 @@ export const CATEGORY_SENDER: Readonly<Record<MessageCategory, string>> = {
   matchday: 'League Office',
   finance: 'Finance Office',
   board: 'Board of Directors',
+  career: 'Your Agent',
 };
 
 /** Who a message is from. */
@@ -46,10 +47,11 @@ export function postMessage(world: World, msg: Omit<GameMessage, 'id' | 'day' | 
 /**
  * Whether a message is still waiting on the manager: a bid to answer, a press
  * conference to attend, talks where the next move is his, an expiring
- * contract nobody has opened talks on. Read against the live world, so a
- * message stops asking for action the moment the matter is settled.
+ * contract nobody has opened talks on, a job offer. Read against the live
+ * world, so a message stops asking for action the moment the matter is settled.
  */
 export function messageNeedsAction(world: World, m: GameMessage): boolean {
+  if (m.jobOfferId !== undefined && world.career.offers.some((o) => o.id === m.jobOfferId)) return true;
   if (m.offerId !== undefined) {
     const offer = world.incomingOffers.find((o) => o.id === m.offerId);
     if (offer !== undefined && (offer.status ?? 'open') === 'open') return true;

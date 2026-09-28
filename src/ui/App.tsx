@@ -5,11 +5,12 @@ import {
   ClubCrest, clubThemeStyle, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
 import { Icon, type IconName } from './icons.tsx';
-import { PHASE_NAMES, useGame, type ScreenId } from './state.ts';
+import { CLUBLESS_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
 } from './screens/Menu.tsx';
 import { CalendarScreen } from './screens/Calendar.tsx';
+import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { HomeScreen } from './screens/Home.tsx';
@@ -59,6 +60,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
     sections: [
       { id: 'home', label: 'Home', icon: 'home', tabs: [['home', 'Home']] },
       { id: 'inbox', label: 'Inbox', icon: 'inbox', tabs: [['inbox', 'Inbox']] },
+      { id: 'career', label: 'Career', icon: 'career', tabs: [['career', 'Profile'], ['jobs', 'Job Centre']] },
     ],
   },
   {
@@ -120,6 +122,12 @@ function sectionFor(screen: ScreenId): Section {
   return ALL_SECTIONS.find((s) => s.tabs.some(([id]) => id === screen)) ?? ALL_SECTIONS[0];
 }
 
+/** A section as it stands for the manager now: out of work, only the tabs
+ *  that need no club are left — and a section with none left goes. */
+function availableTabs(section: Section, hasClub: boolean): Array<[ScreenId, string]> {
+  return hasClub ? section.tabs : section.tabs.filter(([id]) => CLUBLESS_SCREENS.has(id));
+}
+
 const SIDEBAR_KEY = 'vm.sidebarCollapsed';
 
 function readCollapsed(): boolean {
@@ -134,13 +142,14 @@ export function App(): JSX.Element {
   const g = useGame();
 
   if (g.world === null) return <MenuScreen />;
-  if (g.world.userClubId < 0) return <ClubSelect />;
+  // A career still to begin picks its first club; one between jobs carries on.
+  if (g.world.userClubId < 0 && !g.unemployed) return <ClubSelect />;
   return <GameShell />;
 }
 
 function GameShell(): JSX.Element {
   const g = useGame();
-  const club = g.club!;
+  const club = g.club;
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
   const toggleCollapsed = (): void => {
@@ -160,7 +169,7 @@ function GameShell(): JSX.Element {
   const contentClass = live ? ' content-live' : ' content-fill';
 
   return (
-    <div className={`app${collapsed || live ? ' sidebar-collapsed' : ''}`} style={clubThemeStyle(club)}>
+    <div className={`app${collapsed || live ? ' sidebar-collapsed' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
       <Sidebar collapsed={collapsed || live} locked={live} onToggle={toggleCollapsed} />
       <div className="main-col">
         <Header />
@@ -207,9 +216,13 @@ function MenuScreen(): JSX.Element {
 
 function Screen(): JSX.Element {
   const g = useGame();
+  // Out of work, anything about the club is gone with it.
+  if (g.club === null && !CLUBLESS_SCREENS.has(g.screen)) return <HomeScreen />;
   switch (g.screen) {
     case 'home': return <HomeScreen />;
     case 'inbox': return <InboxScreen />;
+    case 'career': return <CareerScreen />;
+    case 'jobs': return <JobCentreScreen />;
     case 'calendar': return <CalendarScreen />;
     case 'competitions': return <CompetitionsScreen />;
     case 'squad': return <SquadScreen />;
@@ -247,10 +260,11 @@ function Sidebar({
 }): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
+  const club = g.club;
   const unread = g.unreadMessages().length;
   const takeover = inTakeover(g);
-  const clubInfoActive = g.selectedClub === club.id;
+  const clubInfoActive = club !== null && g.selectedClub === club.id;
+  const offers = world.career.offers.length;
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null ||
     g.negotiation !== null || g.incomingOffer !== null;
   const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
@@ -301,17 +315,24 @@ function Sidebar({
       </div>
 
       <nav className="side-nav">
-        {SECTION_GROUPS.map((grp) => (
-          <div className="side-group" key={grp.label}>
-            <div className="side-group-label">{grp.label}</div>
-            {grp.sections.map((s) => item(
-              s.id, s.label, s.icon, activeSection === s.id,
-              () => g.go(s.tabs[0][0]),
-              s.id === 'inbox' ? unread : undefined,
-            ))}
-            {grp.label === 'Club' && item('clubinfo', 'Club Info', 'club', clubInfoActive, () => g.selectClub(club.id))}
-          </div>
-        ))}
+        {SECTION_GROUPS.map((grp) => {
+          const sections = grp.sections
+            .map((s) => ({ s, tabs: availableTabs(s, club !== null) }))
+            .filter(({ tabs }) => tabs.length > 0);
+          if (sections.length === 0) return null;
+          return (
+            <div className="side-group" key={grp.label}>
+              <div className="side-group-label">{grp.label}</div>
+              {sections.map(({ s, tabs }) => item(
+                s.id, s.label, s.icon, activeSection === s.id,
+                () => g.go(tabs[0][0]),
+                s.id === 'inbox' ? unread : s.id === 'career' ? offers : undefined,
+              ))}
+              {grp.label === 'Club' && club !== null &&
+                item('clubinfo', 'Club Info', 'club', clubInfoActive, () => g.selectClub(club.id))}
+            </div>
+          );
+        })}
       </nav>
 
       <ManagerMenu name={`${world.manager.firstName} ${world.manager.lastName}`} photo={managerPhotoUrl(world.manager)} />
@@ -334,6 +355,9 @@ function ManagerMenu({ name, photo }: { name: string; photo: string }): JSX.Elem
       </button>
       {open && (
         <div className="menu-pop menu-pop-up">
+          <button disabled={inTakeover(g)} onClick={() => { setOpen(false); g.go('career'); }}>
+            <Icon name="career" size={16} /> Career &amp; jobs
+          </button>
           <button disabled={g.busy} onClick={() => { void g.saveCurrentGame(); setOpen(false); }}>
             <Icon name="save" size={16} /> {g.busy ? 'Saving…' : 'Save game'}
           </button>
@@ -367,27 +391,39 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   if (g.selectedReview !== null) return { title: 'Season Review', tabs: null };
   if (g.selectedCompetition !== null) return { title: 'Competition', tabs: null };
   const section = sectionFor(g.screen);
-  return { title: section.label, tabs: section.tabs.length > 1 ? section.tabs : null };
+  const tabs = availableTabs(section, g.club !== null);
+  return { title: section.label, tabs: tabs.length > 1 ? tabs : null };
 }
 
 function Header(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
+  const club = g.club;
   const info = headerInfo(g);
   const takeover = inTakeover(g);
-  const league = world.competitions[club.leagueId];
+  const league = club !== null ? world.competitions[club.leagueId] : undefined;
+  const manager = `${world.manager.firstName} ${world.manager.lastName}`;
 
   return (
     <header className="hdr">
       <div className="hdr-top">
-        <button className="hdr-club" onClick={() => g.selectClub(club.id)} disabled={takeover} title="Club info">
-          <ClubCrest club={club} size={36} />
-          <span className="hdr-club-text">
-            <strong>{club.name}</strong>
-            <span>{league?.name ?? ''}<span className="hdr-role">Head coach</span></span>
-          </span>
-        </button>
+        {club !== null ? (
+          <button className="hdr-club" onClick={() => g.selectClub(club.id)} disabled={takeover} title="Club info">
+            <ClubCrest club={club} size={36} />
+            <span className="hdr-club-text">
+              <strong>{club.name}</strong>
+              <span>{league?.name ?? ''}<span className="hdr-role">Head coach</span></span>
+            </span>
+          </button>
+        ) : (
+          <button className="hdr-club" onClick={() => g.go('career')} disabled={takeover} title="Career">
+            <PersonFace photoUrl={managerPhotoUrl(world.manager)} name={manager} size={36} />
+            <span className="hdr-club-text">
+              <strong>{manager}</strong>
+              <span>Out of work<span className="hdr-role">Free agent</span></span>
+            </span>
+          </button>
+        )}
         <span className="hdr-divider" />
         <h1 className="hdr-h1">{info.title}</h1>
 

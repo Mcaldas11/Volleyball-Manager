@@ -6,11 +6,13 @@ import { matchRating } from '../../engine/match/playerRating.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
 import { seasonTotals } from '../../engine/world/records.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { boardMood } from '../../engine/world/career.ts';
 import {
-  attrClass, ClubCrest, money, PlayerFace, RatingBadge, StarMeter,
+  attrClass, Bar, ClubCrest, money, PlayerFace, RatingBadge, StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { UnemployedHome } from './Career.tsx';
 
 function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
@@ -33,6 +35,8 @@ const KEY_ATTRS: Readonly<Record<Position, readonly AttributeName[]>> = {
  * going, then the top scorer, the board's mood and the money.
  */
 export function HomeScreen(): JSX.Element {
+  const g = useGame();
+  if (g.club === null) return <UnemployedHome />;
   return (
     <div className="home">
       <NowManaging />
@@ -377,14 +381,15 @@ function BoardCard(): JSX.Element {
   const started = (table.find((r) => r.clubId === club.id)?.played ?? 0) > 0;
   const target = club.boardExpectation;
 
-  let mood = 'Neutral';
-  let moodCls = 'dim';
+  // The board's mood is its confidence in the coach; the league line is
+  // where the table has the club against the target.
+  const confidence = club.boardConfidence;
+  const moodCls = confidence >= 60 ? 'good' : confidence >= 45 ? 'dim' : confidence >= 35 ? 'warn' : 'bad';
   let league: [string, string] = ['Season not started', 'neutral'];
   if (started) {
-    if (pos <= target - 1) { mood = 'Very satisfied'; moodCls = 'good'; league = ['On course', 'good']; }
-    else if (pos === target) { mood = 'Satisfied'; moodCls = 'good'; league = ['On course', 'good']; }
-    else if (pos === target + 1) { mood = 'Neutral'; moodCls = 'warn'; league = ['At risk', 'warn']; }
-    else { mood = 'Concerned'; moodCls = 'bad'; league = ['Off course', 'bad']; }
+    if (pos <= target) league = ['On course', 'good'];
+    else if (pos === target + 1) league = ['At risk', 'warn'];
+    else league = ['Off course', 'bad'];
   }
   const wages = g.wageBill();
   const withinWages = wages <= club.finances.wageBudget;
@@ -392,10 +397,11 @@ function BoardCard(): JSX.Element {
   return (
     <section className="hm-card hm-board">
       <header className="hm-card-head">
-        <h3>Board expectations</h3>
-        <button className="hm-link" onClick={() => g.selectClub(club.id)}>Details</button>
+        <h3>Board confidence</h3>
+        <button className="hm-link" onClick={() => g.go('career')}>Details</button>
       </header>
-      <div className={`hm-mood ${moodCls}`}>{mood}</div>
+      <div className={`hm-mood ${moodCls}`}>{boardMood(confidence)}</div>
+      <div className="hm-conf"><Bar value={confidence} wide /></div>
       <div className="hm-target">Finish {ordinal(target)} or better{started ? ` · now ${ordinal(pos)}` : ''}</div>
       <div className="hm-board-rows">
         <div className="hm-board-row"><span>Domestic league</span><span className={`hm-pill ${league[1]}`}>{league[0]}</span></div>

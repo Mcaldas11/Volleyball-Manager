@@ -30,6 +30,7 @@ import { returnLoans, wageBill } from '../world/loans.ts';
 import { completeDueMoves } from '../world/deals.ts';
 import { clubBooks } from './books.ts';
 import { beginSeasonReview, postSeasonReview } from './seasonReview.ts';
+import { captureFinishes, seasonObjectives, seasonReckoning } from '../world/career.ts';
 
 export interface RolloverReport {
   season: number;
@@ -76,7 +77,11 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   // Next season's continental places and super cups go on this season's results.
   qualifyForCups(world);
   settleFinances(world, report, record);
+  const finishes = captureFinishes(world);
   applyPromotionRelegation(world, report);
+  // Every board judges its coach's season — before the summer's contracts
+  // run out, so a club that parts with the user renews its own players.
+  seasonReckoning(world, record, finishes);
 
   revisePotential(world, ctx.stats);
   applyAgeing(world);
@@ -111,6 +116,7 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   ctx.stats.clear();
   ctx.detailedResults.clear();
   startSeason(world, ctx);
+  seasonObjectives(world);
 
   return report;
 }

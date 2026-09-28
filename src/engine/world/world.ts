@@ -19,6 +19,7 @@ import type { Loan } from './loans.ts';
 import type { PendingMove } from './moves.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
+import type { ManagerCareer, Vacancy } from './career.ts';
 
 /**
  * What a competition is: a domestic league; a national cup, or the super cup
@@ -278,10 +279,11 @@ export interface SeasonReview {
 
 /** Which inbox folder a message belongs in: club & season news, scouting,
  *  transfers, media, contracts, the medical room, the league's matchday
- *  round-ups, the finance office and the board. */
+ *  round-ups, the finance office, the board — and the manager's own career:
+ *  approaches from other clubs, job applications, leaving a club. */
 export type MessageCategory =
   | 'news' | 'task' | 'offer' | 'interview' | 'contract'
-  | 'medical' | 'matchday' | 'finance' | 'board';
+  | 'medical' | 'matchday' | 'finance' | 'board' | 'career';
 
 /** The finance office's month-end snapshot of the club's books. */
 export interface FinanceStatement {
@@ -339,6 +341,8 @@ export interface GameMessage {
   /** Fixture a pre-match interview request concerns — looked up against
    *  `World.pendingInterviews` to render the question and answer options. */
   fixtureId?: number;
+  /** A club's offer of its head coach's job — see `World.career.offers`. */
+  jobOfferId?: number;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
    *  tabs existed still load — {@link messageCategory} derives it from the
    *  older fields when absent. */
@@ -531,6 +535,10 @@ export interface World {
   loans: Loan[];
   /** Deals agreed while the window was shut, waiting for it to open — see moves.ts. */
   pendingMoves: PendingMove[];
+  /** The user's own career: jobs held, reputation, offers and applications — see career.ts. */
+  career: ManagerCareer;
+  /** Clubs without a head coach, looking for one. */
+  vacancies: Vacancy[];
 }
 
 export function dayOfSeason(world: World): number {
@@ -583,6 +591,23 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     nextTalksId: 0,
     loans: [],
     pendingMoves: [],
+    career: newCareer(),
+    vacancies: [],
+  };
+}
+
+/** A career not yet begun: no job, no name in the game. */
+export function newCareer(): ManagerCareer {
+  return {
+    reputation: 0,
+    jobs: [],
+    offers: [],
+    applications: [],
+    nextOfferId: 0,
+    warning: 0,
+    warnedOn: -1,
+    blockedUntil: new Map(),
+    lastApproach: -1,
   };
 }
 

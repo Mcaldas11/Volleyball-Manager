@@ -41,8 +41,11 @@ import {
   arrivalsFor, moveDay, pendingMoveOf, seasonOfDay, type PendingMove,
 } from '../engine/world/moves.ts';
 import { NATIONS } from '../engine/world/nations.ts';
-import { welcomeMessages } from '../engine/world/inbox.ts';
-import { entryNotices, isCupFinal } from '../engine/season/cups.ts';
+import { isCupFinal } from '../engine/season/cups.ts';
+import {
+  acceptJobOffer as takeJobOffer, appointManager, applyForJob as sendApplication, applicationBlock,
+  declineJobOffer as turnDownJobOffer, isUnemployed, resign as resignFromClub,
+} from '../engine/world/career.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
@@ -57,7 +60,13 @@ import {
 export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
-  | 'youth' | 'stats' | 'rankings' | 'halloffame';
+  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs';
+
+/** The screens that still make sense without a club — everything a manager
+ *  between jobs can look at. */
+export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
+  'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame',
+]);
 
 export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
 
@@ -448,9 +457,7 @@ class Game {
 
   takeCharge(clubId: number): void {
     if (this.world === null) return;
-    this.world.userClubId = clubId;
-    welcomeMessages(this.world);
-    entryNotices(this.world);
+    appointManager(this.world, clubId);
     this.screen = 'home';
     this.resetHistory();
     this.emit();
@@ -459,6 +466,82 @@ class Game {
   get club(): Club | null {
     if (this.world === null || this.world.userClubId < 0) return null;
     return this.world.clubs[this.world.userClubId];
+  }
+
+  /** Out of work between jobs — not the same as not having picked a first club. */
+  get unemployed(): boolean {
+    return this.world !== null && isUnemployed(this.world);
+  }
+
+  // ---- Career -----------------------------------------------------------
+
+  /**
+   * The manager's club has changed under the interface — he was sacked, or
+   * resigned, or took another job. Whatever was open on the old club closes,
+   * and the history (full of the old club's screens) starts again.
+   */
+  private employmentChanged(): void {
+    this.negotiation = null;
+    this.incomingOffer = null;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedCompetition = null;
+    this.watched = null;
+    this.postMatch = null;
+    this.activeInterviewFixtureId = null;
+    if (this.club === null && !CLUBLESS_SCREENS.has(this.screen)) this.screen = 'home';
+    this.resetHistory();
+  }
+
+  /** Walk out on the club. */
+  resign(): void {
+    const world = this.world;
+    if (world === null || this.matchday !== null || this.postMatch !== null || this.processing) return;
+    const name = this.club?.name ?? 'the club';
+    if (!resignFromClub(world)) return;
+    this.employmentChanged();
+    this.screen = 'career';
+    this.notice = `You have resigned from ${name}.`;
+    this.emit();
+  }
+
+  /** Apply for a club's vacant head coach's job. */
+  applyForJob(clubId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const problem = applicationBlock(world, clubId);
+    const app = problem === null ? sendApplication(world, clubId) : null;
+    this.notice = app !== null
+      ? `Application sent to ${world.clubs[clubId]?.name ?? 'the club'} — expect an answer by ${this.dateLabelForDay(app.answerOn)}.`
+      : problem ?? 'You cannot apply for that job.';
+    this.emit();
+  }
+
+  /** Take a job on offer — leaving the current club, if there is one. */
+  acceptJobOffer(offerId: number): void {
+    const world = this.world;
+    if (world === null || this.matchday !== null || this.postMatch !== null || this.processing) return;
+    const offer = world.career.offers.find((o) => o.id === offerId);
+    if (offer === undefined || !takeJobOffer(world, offerId)) {
+      this.notice = 'That offer is no longer on the table.';
+      this.emit();
+      return;
+    }
+    this.employmentChanged();
+    this.screen = 'home';
+    this.inboxSelected = null;
+    this.notice = `You are the new head coach of ${world.clubs[offer.clubId]?.name ?? 'the club'}.`;
+    this.emit();
+  }
+
+  /** Turn a job offer down. */
+  declineJobOffer(offerId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const offer = world.career.offers.find((o) => o.id === offerId);
+    turnDownJobOffer(world, offerId);
+    if (offer !== undefined) this.notice = `You turned down ${world.clubs[offer.clubId]?.name ?? 'the club'}.`;
+    this.emit();
   }
 
   // ---- Navigation -------------------------------------------------------
@@ -802,9 +885,11 @@ class Game {
     this.processing = false;
 
     // A season review opened by the rollover keeps the screen; otherwise the
-    // first of the new post is waiting in the inbox.
+    // first of the new post is waiting in the inbox — news of the manager's
+    // own job before anything else.
     if (this.world === world && world.messages.length > before && this.selectedReview === null) {
-      this.openMessage(world.messages[before].id);
+      const fresh = world.messages.slice(before);
+      this.openMessage((fresh.find((m) => m.category === 'career') ?? fresh[0]).id);
     }
     this.emit();
   }
@@ -813,18 +898,19 @@ class Game {
   private stepDay(): void {
     const world = this.world;
     if (world === null) return;
+    const clubId = world.userClubId;
     if (dayOfSeason(world) >= 350) {
       this.rollover();
-      return;
+    } else {
+      // The user's own matches always run through the full rally engine.
+      advanceDay(world, this.ctx, {
+        detailedClubs: clubId >= 0 ? new Set([clubId]) : undefined,
+      });
+      // Keep the most recent of the user's matches available to review.
+      const played = this.fixtureOn(world.day - 1);
+      if (played !== null && played.played) this.captureWatched(played);
     }
-    const clubId = world.userClubId;
-    // The user's own matches always run through the full rally engine.
-    advanceDay(world, this.ctx, {
-      detailedClubs: clubId >= 0 ? new Set([clubId]) : undefined,
-    });
-    // Keep the most recent of the user's matches available to review.
-    const played = this.fixtureOn(world.day - 1);
-    if (played !== null && played.played) this.captureWatched(played);
+    if (world.userClubId !== clubId) this.employmentChanged();
   }
 
   /** The user's match today, if it is still to be played. */
@@ -872,9 +958,12 @@ class Game {
     if (world === null || this.postMatch === null) return;
     this.postMatch = null;
     const before = world.messages.length;
-    advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
+    const clubId = world.userClubId;
+    advanceDay(world, this.ctx, { detailedClubs: new Set([clubId]) });
+    if (world.userClubId !== clubId) this.employmentChanged();
     const fresh = world.messages.slice(before);
-    const first = fresh.find((m) => m.roundup !== undefined) ?? fresh[0];
+    // The sack, if that result was one too many; otherwise the round-up.
+    const first = fresh.find((m) => m.category === 'career') ?? fresh.find((m) => m.roundup !== undefined) ?? fresh[0];
     if (first !== undefined) this.openMessage(first.id);
     else this.go('home');
   }

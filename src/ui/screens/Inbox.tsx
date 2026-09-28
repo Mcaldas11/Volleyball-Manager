@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { INJURY_NAMES } from '../../engine/model/players.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
-import { messageNeedsAction, messageSender, injuryDuration } from '../../engine/world/inbox.ts';
+import { messageNeedsAction, messageSender, injuryDuration, ordinal } from '../../engine/world/inbox.ts';
 import {
   contractEndSeason, messageCategory, type GameMessage, type MessageCategory,
 } from '../../engine/world/world.ts';
@@ -24,10 +24,11 @@ export const CATEGORY_META: Readonly<Record<MessageCategory, { label: string; ic
   news: { label: 'Club & Season', icon: 'news', color: '#3fb0c9' },
   board: { label: 'Board', icon: 'board', color: '#4f8dff' },
   finance: { label: 'Finance', icon: 'coin', color: '#d9b43c' },
+  career: { label: 'Career', icon: 'career', color: '#2fbf9b' },
 };
 
 const FOLDER_ORDER: readonly MessageCategory[] = [
-  'offer', 'contract', 'task', 'medical', 'matchday', 'interview', 'news', 'board', 'finance',
+  'career', 'offer', 'contract', 'task', 'medical', 'matchday', 'interview', 'news', 'board', 'finance',
 ];
 
 type Folder = 'inbox' | 'starred' | 'archive' | MessageCategory;
@@ -366,6 +367,32 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
 
   if (m.roundup !== undefined) return <Roundup message={m} />;
 
+  if (m.jobOfferId !== undefined && m.clubId !== undefined) {
+    const club = world.clubs[m.clubId];
+    if (club === undefined) return null;
+    const offer = world.career.offers.find((o) => o.id === m.jobOfferId);
+    const league = world.competitions[club.leagueId];
+    const avg = club.players.length > 0
+      ? club.players.reduce((s, p) => s + store.currentAbility[p], 0) / club.players.length
+      : 0;
+    const status = offer !== undefined ? 'Awaiting your answer'
+      : world.userClubId === club.id ? 'Accepted' : 'Closed';
+    return (
+      <div className="paper-report">
+        <div className="paper-label">The job</div>
+        <ReportRow k="Club">{club.name}</ReportRow>
+        {league !== undefined && <ReportRow k="League">{league.name} · Tier {league.tier}</ReportRow>}
+        <ReportRow k="Reputation"><StarMeter value={club.reputation} max={10000} size={14} /></ReportRow>
+        <ReportRow k="Board target">Finish {ordinal(club.boardExpectation)} or better</ReportRow>
+        <ReportRow k="Squad average"><StarMeter value={avg} size={14} /></ReportRow>
+        <ReportRow k="Transfer budget">{money(club.finances.transferBudget)}</ReportRow>
+        <ReportRow k="Wage budget">{money(club.finances.wageBudget)} a season</ReportRow>
+        <ReportRow k="Status" tone={offer !== undefined || status === 'Accepted' ? 'good' : undefined}>{status}</ReportRow>
+        {offer !== undefined && <ReportRow k="Offer stands until">{g.longDateLabel(offer.expiresOn)}</ReportRow>}
+      </div>
+    );
+  }
+
   if (m.offerId !== undefined) {
     const offer = world.incomingOffers.find((o) => o.id === m.offerId);
     const buyer = offer !== undefined ? world.clubs[offer.buyingClubId] : undefined;
@@ -529,6 +556,23 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
         </button>,
       );
     }
+  }
+
+  const jobOffer = m.jobOfferId !== undefined ? world.career.offers.find((o) => o.id === m.jobOfferId) : undefined;
+  if (jobOffer !== undefined) {
+    const busy = g.processing || g.matchday !== null || g.postMatch !== null;
+    out.push(
+      <button key="accept-job" className="paper-btn primary-dark" disabled={busy} onClick={() => g.acceptJobOffer(jobOffer.id)}>
+        <Icon name="check" size={15} /> Accept job
+      </button>,
+      <button key="decline-job" className="paper-btn" onClick={() => g.declineJobOffer(jobOffer.id)}>Decline</button>,
+    );
+  }
+  if (cat === 'career' && m.clubId !== undefined && world.clubs[m.clubId] !== undefined) {
+    out.push(<button key="club" className="paper-btn" onClick={() => g.selectClub(m.clubId!)}>View club</button>);
+  }
+  if (cat === 'career' && jobOffer === undefined && g.unemployed) {
+    out.push(<button key="jobs" className="paper-btn" onClick={() => g.go('jobs')}>Job Centre</button>);
   }
 
   if (m.offerId !== undefined && world.incomingOffers.some((o) => o.id === m.offerId)) {
