@@ -17,6 +17,8 @@
  */
 
 import type { Club } from '../model/club.ts';
+import { PlayerFlag } from '../model/players.ts';
+import { endLoan, loanOf, MAX_SQUAD } from './loans.ts';
 import {
   contractEndSeason, dayOfYear, euros, logTransfer, seasonEndDay, windowCloseDay, type World,
 } from './world.ts';
@@ -125,6 +127,11 @@ export function completeTransfer(
   contractEnd = seasonEndDay(world.season + 1),
 ): void {
   const store = world.players;
+  // A player out on loan is sold by the club that owns him, so he goes back there first.
+  const loan = loanOf(world, playerIdx);
+  if (loan !== undefined) endLoan(world, loan);
+  store.setFlag(playerIdx, PlayerFlag.Transferable, false);
+  store.setFlag(playerIdx, PlayerFlag.LoanListed, false);
   const oldClubId = store.clubId[playerIdx];
   logTransfer(world, playerIdx, oldClubId, buyingClub.id, oldClubId >= 0 ? fee : 0);
   if (oldClubId >= 0) {
@@ -297,6 +304,9 @@ export interface IncomingOffer {
   counterFee?: number;
   /** The day the pending answer comes back. */
   resolvesOn?: number;
+  /** Set when they want him on loan to the end of the season rather than to
+   *  buy him: the share of his wage they would pay. `fee` is then 0. */
+  loan?: { wageShare: number };
 }
 
 export const MAX_PENDING_OFFERS = 2;
@@ -314,13 +324,17 @@ export function generateIncomingOffers(world: World): void {
 
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : null;
   if (club === null || club.players.length === 0) return;
-  if (world.incomingOffers.length >= MAX_PENDING_OFFERS) return;
+  // Bids drawn by the transfer and loan lists don't crowd out unsolicited ones.
+  if (world.incomingOffers.filter((o) => o.loan === undefined).length >= MAX_PENDING_OFFERS) return;
 
   const store = world.players;
-  // Bias toward the squad's best players — that is who a bigger club would want.
-  const candidates = [...club.players]
+  // Bias toward the squad's best players — that is who a bigger club would
+  // want. Anyone only here on loan belongs to another club, which sells him.
+  const candidates = club.players
+    .filter((p) => loanOf(world, p) === undefined)
     .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
     .slice(0, 5);
+  if (candidates.length === 0) return;
   const playerIdx = world.rng.pick(candidates);
   const playerLevel = store.currentAbility[playerIdx] / 2000;
 
@@ -361,6 +375,57 @@ export function generateIncomingOffers(world: World): void {
     clubId: buyingClub.id,
     category: 'offer',
   });
+}
+
+/** Chance each week, while a window is open, that a transfer-listed player draws a bid. */
+const LISTED_BID_CHANCE = 0.45;
+/** Most bids a transfer-listed player can draw at once. */
+const MAX_LISTED_BIDS = 2;
+
+/**
+ * The user's transfer-listed players draw bids: the club has said he can go,
+ * so interest doesn't depend on him outshining the squad, a wider range of
+ * clubs come in, and they pitch below his value, expecting a deal. Called
+ * weekly; bids only come in while a transfer window is open.
+ */
+export function generateListedBids(world: World): void {
+  const closes = windowCloseDay(world.day);
+  const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
+  if (closes === null || club === undefined) return;
+  const store = world.players;
+
+  for (const p of club.players) {
+    if (!store.hasFlag(p, PlayerFlag.Transferable) || loanOf(world, p) !== undefined) continue;
+    const bids = world.incomingOffers.filter((o) => o.playerIdx === p && o.loan === undefined);
+    if (bids.length >= MAX_LISTED_BIDS || !world.rng.chance(LISTED_BID_CHANCE)) continue;
+
+    const level = store.currentAbility[p] / 2000;
+    const suitors = world.clubs.filter((c) =>
+      c.id !== club.id && c.players.length > 0 && c.players.length < MAX_SQUAD &&
+      c.reputation / 10000 >= level - 0.25 && !bids.some((o) => o.buyingClubId === c.id));
+    if (suitors.length === 0) continue;
+    const buyer = world.rng.pick(suitors);
+    const fee = Math.round((store.value[p] * world.rng.range(0.7, 1.0)) / 1000) * 1000;
+    if (fee > buyer.finances.transferBudget || fee > buyer.finances.balance) continue;
+
+    const id = world.nextOfferId++;
+    world.incomingOffers.push({
+      id, playerIdx: p, buyingClubId: buyer.id, fee, expiresOnDay: Math.min(world.day + 14, closes + 1), status: 'open',
+    });
+    world.messages.push({
+      id: world.messages.length,
+      day: world.day,
+      year: world.year,
+      subject: `Bid for ${store.fullName(p)}: ${euros(fee)}`,
+      body: `${buyer.name} have seen ${store.fullName(p)} on the transfer list and bid ${euros(fee)} for him. ` +
+        'Accept it, ask for more, or turn it down.',
+      offerId: id,
+      playerIdx: p,
+      from: buyer.name,
+      clubId: buyer.id,
+      category: 'offer',
+    });
+  }
 }
 
 /** Will the buying club pay more than their original offer? */

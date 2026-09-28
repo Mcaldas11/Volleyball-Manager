@@ -26,6 +26,7 @@ import {
 } from '../world/world.ts';
 import { startSeason, type SeasonContext } from './seasonEngine.ts';
 import { pruneCompetitionRecords } from '../world/records.ts';
+import { returnLoans, wageBill } from '../world/loans.ts';
 import { clubBooks } from './books.ts';
 import { beginSeasonReview, postSeasonReview } from './seasonReview.ts';
 
@@ -204,6 +205,10 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
 
     if (f.seasonsInDebt >= 3 && f.balance < -500_000) dissolved.push(club);
   }
+
+  // The season's wages are settled, loans split and all: everyone out on loan
+  // goes home — before a club that has gone under can take them down with it.
+  returnLoans(world);
 
   for (const club of dissolved) {
     report.bankruptcies.push(club.name);
@@ -424,8 +429,7 @@ function runTransferWindow(world: World): number {
   const available = new Set(freeAgents);
 
   for (const club of shoppers) {
-    let wageRoom = club.finances.wageBudget;
-    for (const p of club.players) wageRoom -= store.wage[p];
+    let wageRoom = club.finances.wageBudget - wageBill(world, club);
 
     for (const posKey of [
       Position.Setter, Position.Opposite, Position.OutsideHitter,

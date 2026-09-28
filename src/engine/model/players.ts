@@ -28,9 +28,12 @@ export const enum PlayerFlag {
   Regen = 1 << 1,
   Youth = 1 << 2,
   Injured = 1 << 3,
+  /** On his club's transfer list: other clubs are invited to bid. */
   Transferable = 1 << 4,
   NationalTeam = 1 << 5,
   HallOfFame = 1 << 6,
+  /** Offered out on loan: other clubs are invited to borrow him. */
+  LoanListed = 1 << 7,
 }
 
 /** Injury categories, ordered roughly by severity of long-term consequence. */

@@ -5,6 +5,7 @@
  */
 
 import type { Club } from '../model/club.ts';
+import { wageBill } from '../world/loans.ts';
 import type { World } from '../world/world.ts';
 
 export interface ClubBooks {
@@ -19,8 +20,8 @@ export function clubBooks(world: World, club: Club): ClubBooks {
   const store = world.players;
   const f = club.finances;
 
-  let playerWages = 0;
-  for (const p of club.players) playerWages += store.wage[p];
+  // Players on loan count for the share of their wage each club pays.
+  const playerWages = wageBill(world, club);
   let youthWages = 0;
   for (const p of club.youthPlayers) youthWages += store.wage[p];
   let staffWages = 0;

@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
 import {
-  ClubCrest, clubThemeStyle, managerPhotoUrl, PersonFace, PlayerFace, Pos,
+  ClubCrest, clubThemeStyle, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
 import { Icon, type IconName } from './icons.tsx';
 import { PHASE_NAMES, useGame, type ScreenId } from './state.ts';
@@ -419,27 +419,6 @@ function Header(): JSX.Element {
       )}
     </header>
   );
-}
-
-/** Close a popover when the user clicks anywhere outside it or presses Escape. */
-function useDismiss(open: boolean, close: () => void): React.RefObject<HTMLDivElement> {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent): void => {
-      if (ref.current !== null && !ref.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-  return ref;
 }
 
 /**

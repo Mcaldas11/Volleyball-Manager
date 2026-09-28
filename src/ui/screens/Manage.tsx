@@ -427,8 +427,9 @@ export function FinancesScreen(): JSX.Element {
   const f = club.finances;
   // Senior-squad wages only — matches the affordability check a transfer
   // negotiation actually runs (see submitTermsOffer), so this is "room left
-  // to sign someone," not the club's total wage-type spend.
-  const wages = club.players.reduce((s, p) => s + store.wage[p], 0);
+  // to sign someone," not the club's total wage-type spend. Loans count for
+  // the share of the wage the club pays.
+  const wages = g.wageBill();
   const youthWages = club.youthPlayers.reduce((s, p) => s + store.wage[p], 0);
   const staffWages = club.staff.reduce((s, id) => s + (g.world!.staff[id]?.wage ?? 0), 0);
   // Mirrors settleFinances() in rollover.ts exactly, so this is a true preview
@@ -966,6 +967,16 @@ export function ScoutingScreen(): JSX.Element {
                       ? 'View talks'
                       : g.canBuy(target) ? 'Negotiate transfer' : 'Window closed'}
                   </button>
+                  {store.clubId[target] >= 0 && (
+                    <button
+                      disabled={!g.canBorrow(target) && g.talksWith(target, 'loan') === null}
+                      title={g.canBorrow(target) ? 'Borrow him until the end of the season' : 'Not available for loan right now'}
+                      onClick={() => g.startLoanRequest(target)}
+                    >
+                      <Icon name="swap" size={14} />
+                      {g.talksWith(target, 'loan') !== null ? 'Loan talks' : 'Request loan'}
+                    </button>
+                  )}
                 </div>
 
                 {report === null ? (
@@ -1027,8 +1038,8 @@ export function TransfersScreen(): JSX.Element {
   const store = world.players;
   const club = g.club!;
   const targets = g.transferTargets(100);
-  const committed = club.players.reduce((s, p) => s + store.wage[p], 0);
-  const wageRoom = club.finances.wageBudget - committed;
+  const wageRoom = club.finances.wageBudget - g.wageBill();
+  const squadSize = g.squadSize();
   const offers = world.incomingOffers;
   const [sort, onSort] = useSort<TransferSort>('ability');
   const txWindow = g.transferWindowStatus();
@@ -1050,7 +1061,7 @@ export function TransfersScreen(): JSX.Element {
       <div className="tiles">
         <StatTile label="Transfer budget" value={money(Math.min(club.finances.transferBudget, club.finances.balance))} sub="available to spend" />
         <StatTile label="Wage room" value={money(wageRoom)} tone={wageRoom < 0 ? 'bad' : 'good'} sub={`of ${money(club.finances.wageBudget)}`} />
-        <StatTile label="Squad" value={`${club.players.length}/16`} tone={club.players.length >= 16 ? 'warn' : undefined} sub={club.players.length >= 16 ? 'full — release to sign' : 'places available'} />
+        <StatTile label="Squad" value={`${squadSize}/16`} tone={squadSize >= 16 ? 'warn' : undefined} sub={squadSize >= 16 ? 'full — release to sign' : 'places available'} />
         <StatTile label="Offers received" value={offers.length} tone={offers.length > 0 ? 'gold' : undefined} sub="awaiting a decision" />
         <StatTile
           label="Transfer window"
@@ -1113,7 +1124,9 @@ export function TransfersScreen(): JSX.Element {
                     <td className="strong">{store.fullName(o.playerIdx)}</td>
                     <td><Pos pos={store.position[o.playerIdx] as Position} /></td>
                     <td><ClubLink id={o.buyingClubId} /></td>
-                    <td className="num gold-text">{money(o.fee)}</td>
+                    <td className="num gold-text">
+                      {o.loan !== undefined ? `Loan · ${Math.round(o.loan.wageShare * 100)}% wage` : money(o.fee)}
+                    </td>
                     <td className="num dim">{money(store.value[o.playerIdx])}</td>
                     <td className="dim">
                       {status === 'open' && <>Expires {g.dateLabelForDay(o.expiresOnDay)}</>}

@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { LOAN_WAGE_SHARES } from '../../engine/world/loans.ts';
 import {
   MAX_CONTRACT_YEARS, SQUAD_ROLE_NAMES, SquadRole, TALKS_PATIENCE, yearsLeft,
 } from '../../engine/world/negotiation.ts';
@@ -15,9 +16,11 @@ const ROLE_OPTIONS = (Object.values(SquadRole) as Array<SquadRole | string>)
 /**
  * Contract talks. Signing a player under contract is two steps: a transfer
  * fee with his club, then personal terms with him (free agents skip the fee);
- * keeping one of your own is personal terms alone. The player states his
- * demands up front. Every offer goes off for an answer that comes back days
- * later in the inbox — while other clubs chasing him make their own offers.
+ * keeping one of your own is personal terms alone; borrowing one is a single
+ * question to his club — how much of his wage you will pay until the end of
+ * the season. The player states his demands up front. Every offer goes off
+ * for an answer that comes back days later in the inbox — while other clubs
+ * chasing him make their own offers.
  */
 export function NegotiationScreen(): JSX.Element | null {
   const g = useGame();
@@ -62,9 +65,12 @@ export function NegotiationScreen(): JSX.Element | null {
       <Icon name="clock" size={18} />
       <span>
         <b>Awaiting reply</b> — due {g.dateLabelForDay(pending.resolvesOn)}.
-        {' '}{t.stage === 'fee'
-          ? `${sellingClub?.name ?? 'The club'} are considering your bid of ${money(pending.offer.fee)}.`
-          : `${renewal ? 'He is' : 'He and his agent are'} considering ${money(pending.offer.wage)} a season until ${endsLabel(world.season + pending.offer.years - 1)}.`}
+        {' '}{t.kind === 'loan'
+          ? `${sellingClub?.name ?? 'The club'} are considering lending him, with you paying ` +
+            `${Math.round((pending.offer.wageShare ?? 0.5) * 100)}% of his wage.`
+          : t.stage === 'fee'
+            ? `${sellingClub?.name ?? 'The club'} are considering your bid of ${money(pending.offer.fee)}.`
+            : `${renewal ? 'He is' : 'He and his agent are'} considering ${money(pending.offer.wage)} a season until ${endsLabel(world.season + pending.offer.years - 1)}.`}
         {' '}Keep playing — the answer will come to your inbox.
       </span>
     </div>
@@ -78,6 +84,58 @@ export function NegotiationScreen(): JSX.Element | null {
       {pending === null && primary}
     </div>
   );
+
+  if (t.kind === 'loan' && sellingClub !== null) {
+    const wage = store.wage[player];
+    const cost = Math.round(wage * n.loanShare);
+    const wageRoom = club.finances.wageBudget - g.wageBill();
+    return (
+      <ContractPaper
+        kicker="Loan request"
+        title={store.fullName(player)}
+        subtitle={`Loan talks with ${sellingClub.name}`}
+        playerId={store.id[player]}
+        onClose={() => g.cancelNegotiation()}
+      >
+        <ContractRow label="His club"><ClubLink id={sellingClub.id} /></ContractRow>
+        <ContractRow label="Contract until">{endsLabel(contractEndSeason(store.contractUntil[player]))}</ContractRow>
+        <ContractRow label="Wage">{money(wage)} <span className="faint">/ season</span></ContractRow>
+        <ContractRow label="Loan until">{endsLabel(world.season)} <span className="faint">· the end of the season</span></ContractRow>
+
+        {awaiting}
+        {pending === null && (
+          <div className="contract-offer">
+            <ContractRow label="You pay">
+              <select value={n.loanShare} onChange={(e) => g.setLoanShare(Number(e.target.value))}>
+                {LOAN_WAGE_SHARES.map((s) => (
+                  <option key={s} value={s}>{Math.round(s * 100)}% of his wage · {money(Math.round(wage * s))}</option>
+                ))}
+              </select>
+            </ContractRow>
+            <p className="contract-hint">
+              {sellingClub.shortName} pay the rest: {money(wage - cost)} · Room in the wage budget:{' '}
+              <b className={wageRoom < cost ? 'bad' : ''}>{money(wageRoom)}</b>
+              {txWindow.open && <> · window closes {g.dateLabelForDay(txWindow.untilDay)}</>}
+            </p>
+          </div>
+        )}
+        {pending === null && n.message !== null && (
+          <p className="contract-note"><Icon name="alert" size={15} /> {n.message}</p>
+        )}
+        {pending === null && n.message === null && t.reply === 'feeRejected' && (
+          <p className="contract-note">
+            <Icon name="alert" size={15} />
+            <span>
+              They turned down lending him with you paying {Math.round((t.lastOffer.wageShare ?? 0.5) * 100)}% of his
+              wage. Offering to cover more of it is the surest way to change their mind.
+            </span>
+          </p>
+        )}
+
+        {actions(<button className="primary" onClick={() => g.submitLoanRequest()}>Request loan</button>)}
+      </ContractPaper>
+    );
+  }
 
   if (t.stage === 'fee' && sellingClub !== null) {
     return (
@@ -132,8 +190,7 @@ export function NegotiationScreen(): JSX.Element | null {
   const demandDates = d.minYears === d.maxYears
     ? endsLabel(world.season + d.minYears - 1)
     : `${endsLabel(world.season + d.minYears - 1)} – ${endsLabel(world.season + d.maxYears - 1)}`;
-  let committed = 0;
-  for (const p of club.players) committed += store.wage[p];
+  let committed = g.wageBill();
   if (renewal) committed -= store.wage[player];
   const wageRoom = club.finances.wageBudget - committed;
 

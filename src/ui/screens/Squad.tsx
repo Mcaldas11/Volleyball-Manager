@@ -6,13 +6,13 @@ import {
 import {
   POSITION_NAMES, POSITIONS, positionalEffectiveness, type Position,
 } from '../../engine/model/positions.ts';
-import type { PlayerStore } from '../../engine/model/players.ts';
+import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import {
   abilityClass, attrClass, Bar, Card, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
-  RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useSort,
+  RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useDismiss, useSort,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -42,7 +42,11 @@ export function SquadScreen(): JSX.Element {
   const starters = new Set(selection?.lineup ?? []);
   const libero = selection?.libero ?? -1;
   const defensiveLibero = selection?.defensiveLibero ?? -1;
-  const totals = new Map(squad.map((p) => [p, seasonTotals(world, p)]));
+  // Our players out on loan are still ours: listed after the squad, greyed out.
+  const away = g.loanedOut();
+  const awayAt = new Map(away.map((l) => [l.playerIdx, l]));
+  const borrowed = new Set(squad.filter((p) => g.loanOf(p) !== null));
+  const totals = new Map([...squad, ...awayAt.keys()].map((p) => [p, seasonTotals(world, p)]));
   const avgRating = (p: number): number => averageRating(totals.get(p)!);
   const [posFilter, setPosFilter] = useState(-1);
   const [sort, onSort] = useSort<SquadSort>('ability');
@@ -50,15 +54,17 @@ export function SquadScreen(): JSX.Element {
   if (squad.length === 0) return <Empty>No players under contract.</Empty>;
 
   const age = (p: number): number => store.ageOn(p, world.year, 181);
-  const wageBill = squad.reduce((s, p) => s + store.wage[p], 0);
+  const wageBill = g.wageBill();
+  const squadSize = g.squadSize();
   const avgAbility = Math.round(squad.reduce((s, p) => s + store.currentAbility[p], 0) / squad.length);
   const avgAge = squad.reduce((s, p) => s + age(p), 0) / squad.length;
   const injured = squad.filter((p) => store.injuryDaysLeft[p] > 0).length;
   const endsThisSeason = (p: number): boolean => contractEndSeason(store.contractUntil[p]) <= world.season;
-  const expiring = squad.filter(endsThisSeason).length;
+  // Anyone here on loan is under contract to his own club.
+  const expiring = [...squad, ...awayAt.keys()].filter((p) => !borrowed.has(p) && endsThisSeason(p)).length;
 
-  const filtered = posFilter < 0 ? squad : squad.filter((p) => store.position[p] === posFilter);
-  const rows = sortBy(filtered, sort, (p, k) => {
+  const byPos = (list: number[]): number[] => (posFilter < 0 ? list : list.filter((p) => store.position[p] === posFilter));
+  const sorter = (p: number, k: SquadSort): number | string => {
     switch (k) {
       case 'name': return store.fullName(p);
       case 'pos': return store.position[p];
@@ -75,12 +81,18 @@ export function SquadScreen(): JSX.Element {
       case 'rating': return avgRating(p);
       default: return store.currentAbility[p];
     }
-  });
+  };
+  const rows = sortBy(byPos(squad), sort, sorter);
+  const awayRows = sortBy(byPos([...awayAt.keys()]), sort, sorter);
 
   return (
     <>
       <div className="tiles">
-        <StatTile label="Squad size" value={`${squad.length}/16`} sub={`${16 - squad.length} places free`} />
+        <StatTile
+          label="Squad size"
+          value={`${squadSize}/16`}
+          sub={away.length > 0 ? `${away.length} out on loan · ${16 - squadSize} free` : `${16 - squadSize} places free`}
+        />
         <StatTile label="Average age" value={avgAge.toFixed(1)} sub="years" />
         <StatTile
           label="Average ability"
@@ -137,47 +149,63 @@ export function SquadScreen(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {rows.map((p) => (
-                <tr key={p} className="clickable" onClick={() => g.select(p)}>
-                  <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
-                  <td>
-                    <span className="name-cell">
-                      <span className="strong">{store.fullName(p)}</span>
-                      {starters.has(p) && <span className="role-tag starter" title="In the starting six">XI</span>}
-                      {p === libero && (
-                        <span className="role-tag libero" title={defensiveLibero >= 0 ? 'Reception libero' : 'Starting libero'}>L</span>
+              {[...rows, ...awayRows].map((p) => {
+                const out = awayAt.get(p);
+                return (
+                  <tr key={p} className={`clickable${out !== undefined ? ' row-away' : ''}`} onClick={() => g.select(p)}>
+                    <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                    <td>
+                      <span className="name-cell">
+                        <span className="strong">{store.fullName(p)}</span>
+                        {starters.has(p) && <span className="role-tag starter" title="In the starting six">XI</span>}
+                        {p === libero && (
+                          <span className="role-tag libero" title={defensiveLibero >= 0 ? 'Reception libero' : 'Starting libero'}>L</span>
+                        )}
+                        {p === defensiveLibero && <span className="role-tag libero" title="Defensive libero">DL</span>}
+                        <MarketTags p={p} borrowed={borrowed.has(p)} />
+                      </span>
+                    </td>
+                    <td><Pos pos={store.position[p] as Position} /></td>
+                    <td className="num">{age(p)}</td>
+                    <td><Flag nation={store.nation[p]} /></td>
+                    <td className="num dim">{store.heightCm[p]}</td>
+                    <td className="num dim">{store.spikeReachCm[p]}</td>
+                    <td className="num dim">{store.blockReachCm[p]}</td>
+                    <td>
+                      <span className="ability-cell">
+                        <StarMeter value={store.currentAbility[p]} size={11} />
+                        <span className={abilityClass(store.currentAbility[p])}>{store.currentAbility[p]}</span>
+                      </span>
+                    </td>
+                    <td className={`num ${abilityClass(store.potentialAbility[p])}`}>{store.potentialAbility[p]}</td>
+                    <td><span className="cond-cell"><Bar value={store.condition[p]} /><span className="dim">{store.condition[p]}%</span></span></td>
+                    <td><Morale value={store.morale[p]} /></td>
+                    <td>
+                      {out !== undefined
+                        ? (
+                          <span className="status-tag status-loan" title={`Back ${g.dateLabelForDay(out.endsOn)}`}>
+                            On loan · {world.clubs[out.loanClubId]?.shortName ?? '—'}
+                          </span>
+                        )
+                        : <Status store={store} i={p} />}
+                    </td>
+                    <td className="num dim">{totals.get(p)!.apps}</td>
+                    <td className="num"><RatingBadge value={avgRating(p)} size="sm" /></td>
+                    <td className="num dim">{money(store.wage[p])}</td>
+                    {borrowed.has(p)
+                      ? <td className="num dim" title="Under contract to his own club — here until the end of the season">Loan</td>
+                      : (
+                        <td
+                          className={`num ${endsThisSeason(p) ? 'warn-text' : 'dim'}`}
+                          title={endsThisSeason(p) ? 'Contract expires this season' : undefined}
+                        >
+                          {world.startYear + contractEndSeason(store.contractUntil[p]) + 1}
+                        </td>
                       )}
-                      {p === defensiveLibero && <span className="role-tag libero" title="Defensive libero">DL</span>}
-                    </span>
-                  </td>
-                  <td><Pos pos={store.position[p] as Position} /></td>
-                  <td className="num">{age(p)}</td>
-                  <td><Flag nation={store.nation[p]} /></td>
-                  <td className="num dim">{store.heightCm[p]}</td>
-                  <td className="num dim">{store.spikeReachCm[p]}</td>
-                  <td className="num dim">{store.blockReachCm[p]}</td>
-                  <td>
-                    <span className="ability-cell">
-                      <StarMeter value={store.currentAbility[p]} size={11} />
-                      <span className={abilityClass(store.currentAbility[p])}>{store.currentAbility[p]}</span>
-                    </span>
-                  </td>
-                  <td className={`num ${abilityClass(store.potentialAbility[p])}`}>{store.potentialAbility[p]}</td>
-                  <td><span className="cond-cell"><Bar value={store.condition[p]} /><span className="dim">{store.condition[p]}%</span></span></td>
-                  <td><Morale value={store.morale[p]} /></td>
-                  <td><Status store={store} i={p} /></td>
-                  <td className="num dim">{totals.get(p)!.apps}</td>
-                  <td className="num"><RatingBadge value={avgRating(p)} size="sm" /></td>
-                  <td className="num dim">{money(store.wage[p])}</td>
-                  <td
-                    className={`num ${endsThisSeason(p) ? 'warn-text' : 'dim'}`}
-                    title={endsThisSeason(p) ? 'Contract expires this season' : undefined}
-                  >
-                    {world.startYear + contractEndSeason(store.contractUntil[p]) + 1}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
+                  </tr>
+                );
+              })}
+              {rows.length + awayRows.length === 0 && (
                 <tr><td colSpan={17}><Empty>No players in this position.</Empty></td></tr>
               )}
             </tbody>
@@ -188,6 +216,9 @@ export function SquadScreen(): JSX.Element {
         <span className="role-tag starter">XI</span> starting six
         <span className="role-tag libero">L</span> starting libero
         <span className="role-tag libero">DL</span> defensive libero
+        <span className="role-tag loan">LOAN</span> here on loan
+        <span className="role-tag listed">TL</span> transfer listed
+        <span className="role-tag listed">LL</span> available for loan
         <span className="faint">· Click a column heading to sort, a player to open their profile.</span>
       </p>
     </>
@@ -267,6 +298,58 @@ function familiarity(eff: number): { label: string; cls: string } {
   return { label: 'Ineffectual', cls: 'fam-awkward' };
 }
 
+/** The transfer actions on one of your own players: the transfer list, the loan list, and release. */
+function TransferMenu({ p }: { p: number }): JSX.Element {
+  const g = useGame();
+  const store = g.world!.players;
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const listed = store.hasFlag(p, PlayerFlag.Transferable);
+  const loanListed = store.hasFlag(p, PlayerFlag.LoanListed);
+  const act = (f: () => void) => (): void => { setOpen(false); f(); };
+  return (
+    <div className="profile-menu" ref={ref}>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Icon name="transfers" size={14} /> Transfer <Icon name="chevronDown" size={13} />
+      </button>
+      {open && (
+        <div className="menu-pop menu-pop-right">
+          <button onClick={act(() => g.toggleTransferList(p))}>
+            <Icon name="transfers" size={15} />
+            <span className="menu-pop-stack">
+              <span>{listed ? 'Remove from transfer list' : 'Add to transfer list'}</span>
+              <span className="faint">{listed ? 'No more bids invited' : 'Other clubs are invited to bid'}</span>
+            </span>
+          </button>
+          <button onClick={act(() => g.toggleLoanList(p))}>
+            <Icon name="swap" size={15} />
+            <span className="menu-pop-stack">
+              <span>{loanListed ? 'Withdraw from loan list' : 'Offer out on loan'}</span>
+              <span className="faint">{loanListed ? 'He stays at the club' : 'Clubs can borrow him until 30 June'}</span>
+            </span>
+          </button>
+          <div className="menu-sep" />
+          <button className="menu-danger" onClick={act(() => { g.releasePlayer(p); g.select(null); })}>
+            <Icon name="close" size={15} /> Release
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Short tags for where a player stands in the market: listed for transfer or loan, or here on loan. */
+export function MarketTags({ p, borrowed }: { p: number; borrowed: boolean }): JSX.Element {
+  const store = useGame().world!.players;
+  return (
+    <>
+      {borrowed && <span className="role-tag loan" title="Here on loan from another club">LOAN</span>}
+      {store.hasFlag(p, PlayerFlag.Transferable) && <span className="role-tag listed" title="Transfer listed">TL</span>}
+      {store.hasFlag(p, PlayerFlag.LoanListed) && <span className="role-tag listed" title="Available for loan">LL</span>}
+    </>
+  );
+}
+
 /**
  * Full player profile.
  *
@@ -287,7 +370,16 @@ export function PlayerDetail(): JSX.Element | null {
   const secondary = store.secondary[p] as Position | -1;
   const ca = store.currentAbility[p];
   const pa = store.potentialAbility[p];
-  const isOwn = club?.id === world.userClubId;
+  const loan = g.loanOf(p);
+  // Borrowed from another club, or one of ours out on loan elsewhere.
+  const borrowed = loan !== null && loan.loanClubId === world.userClubId;
+  const lentOut = loan !== null && loan.parentClubId === world.userClubId;
+  const isOwn = club?.id === world.userClubId && !borrowed;
+  const elsewhere = club !== null && club.id !== world.userClubId && !lentOut;
+  const loanEnds = loan !== null ? g.dateLabelForDay(loan.endsOn) : '';
+  const loanPct = loan !== null ? `${Math.round(loan.wageShare * 100)}%` : '';
+  const transferTalks = g.talksWith(p, 'transfer');
+  const loanTalks = g.talksWith(p, 'loan');
   const isYouth = isOwn && club !== null && club.youthPlayers.includes(p);
   const season = seasonTotals(world, p);
   const form = world.ratingForm.get(p) ?? [];
@@ -321,6 +413,8 @@ export function PlayerDetail(): JSX.Element | null {
             <Pos pos={natural} />
             <span className="profile-role">{POSITION_NAMES[natural]}</span>
             {secondary !== -1 && <span className="faint">· also {POSITION_NAMES[secondary]}</span>}
+            {store.hasFlag(p, PlayerFlag.Transferable) && <span className="list-tag">Transfer listed</span>}
+            {store.hasFlag(p, PlayerFlag.LoanListed) && <span className="list-tag loan">Available for loan</span>}
           </div>
           <h2 className="profile-name">{store.fullName(p)}</h2>
           <div className="profile-sub">
@@ -328,6 +422,11 @@ export function PlayerDetail(): JSX.Element | null {
             <span>{age} years old</span>
             <span>{store.heightCm[p]} cm</span>
             <span>{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</span>
+            {loan !== null && (
+              <span className="loan-note">
+                <Icon name="swap" size={13} /> On loan from <ClubLink id={loan.parentClubId} short /> until {loanEnds}
+              </span>
+            )}
           </div>
         </div>
         <div className="profile-ratings">
@@ -348,15 +447,33 @@ export function PlayerDetail(): JSX.Element | null {
               Promote to first team
             </button>
           )}
-          {isOwn && !isYouth && (
+          {((isOwn && !isYouth) || lentOut) && (
             <button className={expiring ? 'primary' : ''} onClick={() => g.startRenewal(p)}>
               <Icon name="finances" size={14} />
               {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
             </button>
           )}
-          {isOwn && !isYouth && (
-            <button className="danger" onClick={() => { g.releasePlayer(p); g.select(null); }}>
-              Release
+          {isOwn && !isYouth && <TransferMenu p={p} />}
+          {(elsewhere || (club === null && store.isActive(p))) && (
+            <button
+              className="primary"
+              disabled={!g.canBuy(p) && transferTalks === null}
+              title={g.canBuy(p) || transferTalks !== null ? undefined : 'The transfer window is closed'}
+              onClick={() => g.startNegotiation(p)}
+            >
+              <Icon name="transfers" size={14} />
+              {transferTalks !== null ? 'Transfer talks'
+                : club === null ? 'Offer contract' : g.canBuy(p) ? 'Make offer' : 'Window closed'}
+            </button>
+          )}
+          {elsewhere && (
+            <button
+              disabled={!g.canBorrow(p) && loanTalks === null}
+              title={g.canBorrow(p) || loanTalks !== null ? 'Borrow him until the end of the season' : 'The transfer window is closed'}
+              onClick={() => g.startLoanRequest(p)}
+            >
+              <Icon name="swap" size={14} />
+              {loanTalks === null ? 'Request loan' : loanTalks.pending !== null ? 'Awaiting their answer' : 'Loan talks'}
             </button>
           )}
           <button onClick={() => g.select(null)}><Icon name="close" size={14} /> Close</button>
@@ -368,7 +485,9 @@ export function PlayerDetail(): JSX.Element | null {
         <StatTile
           label="Wage"
           value={money(store.wage[p])}
-          sub={club !== null ? `per season · to ${contractLabel}` : 'per season'}
+          sub={borrowed ? `you pay ${loanPct} · on loan to ${loanEnds}`
+            : lentOut ? `${club?.shortName ?? 'they'} pay ${loanPct} · back ${loanEnds}`
+              : club !== null ? `per season · to ${contractLabel}` : 'per season'}
           tone={expiring ? 'warn' : undefined}
         />
         <StatTile label="Condition" value={`${store.condition[p]}%`} sub={<Bar value={store.condition[p]} wide />} />
@@ -455,6 +574,11 @@ export function PlayerDetail(): JSX.Element | null {
             {club !== null && (
               <KV k="Contract until" cls={expiring ? 'warn-text' : undefined}>
                 {contractLabel} · {seasonsLeft <= 1 ? 'expires this season' : `${seasonsLeft} seasons left`}
+              </KV>
+            )}
+            {loan !== null && (
+              <KV k="Loan">
+                At <ClubLink id={loan.loanClubId} short /> until {loanEnds} · they pay {loanPct} of his wage
               </KV>
             )}
             <KV k="Market value">{money(store.value[p])}</KV>

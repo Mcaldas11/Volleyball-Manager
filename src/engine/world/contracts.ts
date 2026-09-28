@@ -5,6 +5,7 @@
  * reminder listing whoever is still unsigned.
  */
 
+import { loanOf, loansOutOf } from './loans.ts';
 import {
   contractEndSeason, DAYS_PER_SEASON, nextTransferWindow, seasonEndYear, TRANSFER_WINDOWS,
   type GameMessage, type TransferWindow, type World,
@@ -50,7 +51,13 @@ export function contractNotices(world: World): void {
   }
 
   if (d !== FIRST_WARNING_DAY && d !== FINAL_REMINDER_DAY) return;
-  const expiring = club.players.filter((p) => contractEndSeason(store.contractUntil[p]) <= world.season);
+  // Our players wherever they are playing — out on loan too — but not anyone
+  // here on loan, whose contract is his own club's business.
+  const ours = [
+    ...club.players.filter((p) => loanOf(world, p) === undefined),
+    ...loansOutOf(world, club.id).map((l) => l.playerIdx),
+  ];
+  const expiring = ours.filter((p) => contractEndSeason(store.contractUntil[p]) <= world.season);
   const ends = `30 June ${seasonEndYear(world, world.season)}`;
 
   if (d === FIRST_WARNING_DAY) {

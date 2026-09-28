@@ -371,7 +371,6 @@ function BoardCard(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const club = g.club!;
-  const store = world.players;
   const comp = world.competitions[club.leagueId];
   const table = comp !== undefined ? [...comp.table].sort(compareTableRows) : [];
   const pos = table.findIndex((r) => r.clubId === club.id) + 1;
@@ -387,8 +386,7 @@ function BoardCard(): JSX.Element {
     else if (pos === target + 1) { mood = 'Neutral'; moodCls = 'warn'; league = ['At risk', 'warn']; }
     else { mood = 'Concerned'; moodCls = 'bad'; league = ['Off course', 'bad']; }
   }
-  let wages = 0;
-  for (const p of club.players) wages += store.wage[p];
+  const wages = g.wageBill();
   const withinWages = wages <= club.finances.wageBudget;
 
   return (
@@ -412,11 +410,8 @@ function BoardCard(): JSX.Element {
 
 function FinancesCard(): JSX.Element {
   const g = useGame();
-  const world = g.world!;
   const club = g.club!;
-  const store = world.players;
-  let wages = 0;
-  for (const p of club.players) wages += store.wage[p];
+  const wages = g.wageBill();
   const f = club.finances;
   return (
     <section className="hm-card hm-fin">

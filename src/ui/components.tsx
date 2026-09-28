@@ -5,7 +5,9 @@
  * ability, money and injury status read identically everywhere they appear.
  */
 
-import { useEffect, useId, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
+import {
+  useEffect, useId, useRef, useState, type CSSProperties, type JSX, type ReactNode, type RefObject,
+} from 'react';
 import { hashString } from '../engine/core/rng.ts';
 import type { Club } from '../engine/model/club.ts';
 import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
@@ -15,6 +17,27 @@ import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/na
 import { playerFaceUrl, portraitUrl } from './faces.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { useGame } from './state.ts';
+
+/** Close a popover when the user clicks anywhere outside it or presses Escape. */
+export function useDismiss(open: boolean, close: () => void): RefObject<HTMLDivElement> {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent): void => {
+      if (ref.current !== null && !ref.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return ref;
+}
 
 /** One colour per role, used to tell players apart on the court view at a glance. */
 export const POSITION_ACCENT: Readonly<Record<Position, string>> = {

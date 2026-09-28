@@ -11,6 +11,7 @@
 
 import { compareTableRows, type Club } from '../model/club.ts';
 import { INJURY_NAMES } from '../model/players.ts';
+import { wageBill } from './loans.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
 import {
   contractEndSeason, DAYS_PER_SEASON, euros, messageCategory,
@@ -130,9 +131,6 @@ export function monthlyStatement(world: World): void {
   // The month just closed ended yesterday — the previous season's June on 1 July.
   const prevDay = world.day - 1;
   const month = monthLabel(world, Math.floor(prevDay / DAYS_PER_SEASON), prevDay % DAYS_PER_SEASON);
-  const store = world.players;
-  let wageBill = 0;
-  for (const p of club.players) wageBill += store.wage[p];
   const f = club.finances;
   const last = [...world.messages].reverse().find((m) => m.statement !== undefined);
 
@@ -142,7 +140,7 @@ export function monthlyStatement(world: World): void {
     opening: last?.statement?.balance ?? null,
     transferBudget: f.transferBudget,
     wageBudget: f.wageBudget,
-    wageBill,
+    wageBill: wageBill(world, club),
     gateReceipts: Math.max(0, f.seasonIncome - f.prizeMoney),
     travel: f.seasonExpenditure,
   };

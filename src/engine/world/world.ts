@@ -15,6 +15,7 @@ import { MatchFormat } from '../match/engine.ts';
 import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 import type { IncomingOffer } from './negotiation.ts';
 import type { Talks } from './deals.ts';
+import type { Loan } from './loans.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 
@@ -521,10 +522,12 @@ export interface World {
   /** Players who walked out of contract talks with the user, and the day
    *  they will talk again. */
   talksBlockedUntil: Map<number, number>;
-  /** The user's negotiations in progress — signings and renewals. */
+  /** The user's negotiations in progress — signings, loans and renewals. */
   talks: Talks[];
   /** Monotonic id source for talks. */
   nextTalksId: number;
+  /** Players out on loan, into or out of the user's club — see loans.ts. */
+  loans: Loan[];
 }
 
 export function dayOfSeason(world: World): number {
@@ -575,6 +578,7 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     talksBlockedUntil: new Map(),
     talks: [],
     nextTalksId: 0,
+    loans: [],
   };
 }
 

@@ -34,6 +34,9 @@ import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/n
 import {
   acceptIncomingOffer, closeTalks, counterIncomingOffer, openTalks, submitOffer, type Talks,
 } from '../engine/world/deals.ts';
+import {
+  loanOf, loansOutOf, MAX_SQUAD, squadSize, wageBill, type Loan,
+} from '../engine/world/loans.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import { welcomeMessages } from '../engine/world/inbox.ts';
 import { entryNotices, isCupFinal } from '../engine/season/cups.ts';
@@ -79,6 +82,8 @@ export interface Negotiation {
   termsRole: SquadRole;
   /** Seasons the contract runs, counting this one — it ends on 30 June. */
   termsYears: number;
+  /** Loan talks: the share of his wage you offer to pay, 0-1. */
+  loanShare: number;
   /** A problem with the offer itself (budget, window) before it is sent. */
   message: string | null;
 }
@@ -1588,6 +1593,7 @@ class Game {
       if (!store.isActive(i)) continue;
       if (club !== null && store.clubId[i] === club.id) continue;
       if (store.hasFlag(i, PlayerFlag.Youth)) continue;
+      if (club !== null && world.loans.some((l) => l.playerIdx === i && l.parentClubId === club.id)) continue;
       if (q !== '' && !store.fullName(i).toLowerCase().includes(q)) continue;
       if (filters.position !== null && store.position[i] !== filters.position) continue;
       if (filters.freeAgentOnly && store.clubId[i] !== NO_CLUB) continue;
@@ -1677,6 +1683,7 @@ class Game {
       termsWage: t.lastOffer.wage,
       termsRole: t.lastOffer.role,
       termsYears: t.lastOffer.years,
+      loanShare: t.lastOffer.wageShare ?? 0.5,
       message: null,
     };
     this.selectedPlayer = null;
@@ -1697,7 +1704,12 @@ class Game {
       this.openTalksView(existing.id);
       return;
     }
-    if (club.players.length >= 16) {
+    if (loanOf(world, playerIdx) !== undefined) {
+      this.notice = `${world.players.fullName(playerIdx)} is on loan — he can't be bought until he is back at his club.`;
+      this.emit();
+      return;
+    }
+    if (squadSize(world, club) >= MAX_SQUAD) {
       this.notice = 'The squad is full — release a player first.';
       this.emit();
       return;
@@ -1720,7 +1732,12 @@ class Game {
   startRenewal(playerIdx: number): void {
     const world = this.world;
     const club = this.club;
-    if (world === null || club === null || !club.players.includes(playerIdx)) return;
+    if (world === null || club === null) return;
+    // Ours, whether here or out on loan — not a player here on loan, whose
+    // contract is with his own club.
+    const loan = loanOf(world, playerIdx);
+    const ours = loan === undefined ? club.players.includes(playerIdx) : loan.parentClubId === club.id;
+    if (!ours) return;
     const existing = this.talksWith(playerIdx, 'renewal');
     if (existing !== null) {
       this.openTalksView(existing.id);
@@ -1739,6 +1756,140 @@ class Game {
       return;
     }
     this.openTalksView(openTalks(world, club, playerIdx, 'renewal').id);
+  }
+
+  /** The loan a player is on, into or out of the club, if any. */
+  loanOf(playerIdx: number): Loan | null {
+    const world = this.world;
+    return world === null ? null : loanOf(world, playerIdx) ?? null;
+  }
+
+  /** What the club pays its players this season — loans split as agreed. */
+  wageBill(): number {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? 0 : wageBill(world, club);
+  }
+
+  /** Players the club answers for against the 16-man limit, loaned-out ones included. */
+  squadSize(): number {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? 0 : squadSize(world, club);
+  }
+
+  /** The club's own players out on loan elsewhere. */
+  loanedOut(): Loan[] {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? [] : loansOutOf(world, club.id);
+  }
+
+  /** Whether a player can be asked for on loan today: he is under contract
+   *  elsewhere, not already on loan, and a transfer window is open. */
+  canBorrow(playerIdx: number): boolean {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return false;
+    const owner = world.players.clubId[playerIdx];
+    return owner >= 0 && owner !== club.id && loanOf(world, playerIdx) === undefined &&
+      transferWindowOn(world.day) !== null;
+  }
+
+  /** When other clubs will answer a listing: now, or once the next window opens. */
+  private listingNote(): string {
+    const w = this.transferWindowStatus();
+    return w.open
+      ? 'clubs will be told he is available while the window is open.'
+      : `offers can come once the ${w.label.toLowerCase()} opens on ${this.dateLabelForDay(w.untilDay)}.`;
+  }
+
+  /** Whether one of the club's own players can be listed — not someone only here on loan. */
+  private ownContracted(playerIdx: number): boolean {
+    const world = this.world;
+    const club = this.club;
+    return world !== null && club !== null && club.players.includes(playerIdx) && loanOf(world, playerIdx) === undefined;
+  }
+
+  /** Put one of your players on the transfer list, or take him off it. */
+  toggleTransferList(playerIdx: number): void {
+    const world = this.world;
+    if (world === null || !this.ownContracted(playerIdx)) return;
+    const store = world.players;
+    const on = !store.hasFlag(playerIdx, PlayerFlag.Transferable);
+    store.setFlag(playerIdx, PlayerFlag.Transferable, on);
+    this.notice = on
+      ? `${store.fullName(playerIdx)} is on the transfer list — ${this.listingNote()}`
+      : `${store.fullName(playerIdx)} is off the transfer list.`;
+    this.emit();
+  }
+
+  /** Offer one of your players out on loan, or withdraw the offer. */
+  toggleLoanList(playerIdx: number): void {
+    const world = this.world;
+    if (world === null || !this.ownContracted(playerIdx)) return;
+    const store = world.players;
+    const on = !store.hasFlag(playerIdx, PlayerFlag.LoanListed);
+    store.setFlag(playerIdx, PlayerFlag.LoanListed, on);
+    this.notice = on
+      ? `${store.fullName(playerIdx)} is available for loan — ${this.listingNote()}`
+      : `${store.fullName(playerIdx)} is no longer available for loan.`;
+    this.emit();
+  }
+
+  /** Ask another club to loan you one of its players until the end of the season. */
+  startLoanRequest(playerIdx: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    const existing = this.talksWith(playerIdx, 'loan');
+    if (existing !== null) {
+      this.openTalksView(existing.id);
+      return;
+    }
+    const store = world.players;
+    const name = store.fullName(playerIdx);
+    const owner = store.clubId[playerIdx];
+    let problem: string | null = null;
+    if (owner < 0 || owner === club.id) problem = 'Only players under contract at another club can be loaned.';
+    else if (loanOf(world, playerIdx) !== undefined) problem = `${name} is already out on loan.`;
+    else if (transferWindowOn(world.day) === null) {
+      problem = `The transfer window is closed — it reopens on ${this.dateLabelForDay(nextTransferWindow(world.day).day)}.`;
+    } else if (squadSize(world, club) >= MAX_SQUAD) problem = 'The squad is full — release a player first.';
+    else if (this.talksBlocked(playerIdx)) problem = `${name} is not willing to talk to you right now.`;
+    if (problem !== null) {
+      this.notice = problem;
+      this.emit();
+      return;
+    }
+    this.openTalksView(openTalks(world, club, playerIdx, 'loan').id);
+  }
+
+  setLoanShare(share: number): void {
+    if (this.negotiation === null) return;
+    this.negotiation.loanShare = share;
+    this.emit();
+  }
+
+  /** Send the loan request to his club. Their answer comes back in a few days. */
+  submitLoanRequest(): void {
+    const n = this.negotiation;
+    const t = this.currentTalks();
+    const world = this.world;
+    const club = this.club;
+    if (n === null || t === null || world === null || club === null || t.kind !== 'loan' || t.pending !== null) return;
+    const lender = world.clubs[t.sellingClubId];
+    if (lender === undefined) return;
+    const cost = world.players.wage[t.playerIdx] * n.loanShare;
+    if (wageBill(world, club) + cost > club.finances.wageBudget) {
+      n.message = 'Not enough room in the wage budget for that share of his wage.';
+      this.emit();
+      return;
+    }
+    const due = submitOffer(world, t, { ...t.lastOffer, wageShare: n.loanShare });
+    this.notice = `Loan request sent to ${lender.name} — they will reply by ${this.dateLabelForDay(due)}.`;
+    this.negotiation = null;
+    this.emit();
   }
 
   setFeeOffer(amount: number): void {
@@ -1810,8 +1961,7 @@ class Game {
     const p = t.playerIdx;
 
     // A renewal's new wage replaces what he earns now.
-    let committed = 0;
-    for (const q of club.players) committed += store.wage[q];
+    let committed = wageBill(world, club);
     if (t.kind === 'renewal') committed -= store.wage[p];
     if (committed + n.termsWage > club.finances.wageBudget) {
       n.message = 'Not enough room in the wage budget for that contract.';
@@ -1899,8 +2049,10 @@ class Game {
     }
     const due = acceptIncomingOffer(world, offer);
     const buyer = world.clubs[offer.buyingClubId];
-    this.notice = `${world.players.fullName(offer.playerIdx)} is talking terms with ${buyer?.name ?? 'them'} — ` +
-      `he will decide by ${this.dateLabelForDay(due)}.`;
+    const name = world.players.fullName(offer.playerIdx);
+    this.notice = offer.loan !== undefined
+      ? `Loan agreed with ${buyer?.name ?? 'them'} — ${name} will decide by ${this.dateLabelForDay(due)}.`
+      : `${name} is talking terms with ${buyer?.name ?? 'them'} — he will decide by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
     this.emit();
   }
@@ -1911,6 +2063,7 @@ class Game {
     const world = this.world;
     const offer = this.reviewedOffer();
     if (n === null || world === null || offer === null || (offer.status ?? 'open') !== 'open') return;
+    if (offer.loan !== undefined) return; // a loan offer is taken or left as it stands
     if (n.counterFee <= offer.fee) {
       n.message = 'Ask for more than they have offered — or simply accept.';
       this.emit();
@@ -1967,9 +2120,16 @@ class Game {
   releasePlayer(playerIdx: number): void {
     const world = this.world;
     const club = this.club;
-    if (world === null || club === null) return;
+    if (world === null || club === null || !club.players.includes(playerIdx)) return;
+    if (loanOf(world, playerIdx) !== undefined) {
+      this.notice = `${world.players.fullName(playerIdx)} is here on loan — he goes back at the end of the season.`;
+      this.emit();
+      return;
+    }
     club.players = club.players.filter((p) => p !== playerIdx);
     world.players.clubId[playerIdx] = -1;
+    world.players.setFlag(playerIdx, PlayerFlag.Transferable, false);
+    world.players.setFlag(playerIdx, PlayerFlag.LoanListed, false);
     logTransfer(world, playerIdx, club.id, -1, 0);
     this.notice = `${world.players.fullName(playerIdx)} has been released.`;
     this.emit();

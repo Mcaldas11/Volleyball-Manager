@@ -25,6 +25,50 @@ export function IncomingOfferScreen(): JSX.Element | null {
   const vsValue = value > 0 ? Math.round(((fee - value) / value) * 100) : 0;
   const rivals = world.incomingOffers.filter((o) => o.playerIdx === n.playerIdx && o.id !== n.offerId);
 
+  if (offer?.loan !== undefined) {
+    const wage = store.wage[n.playerIdx];
+    const share = offer.loan.wageShare;
+    return (
+      <ContractPaper
+        kicker="Loan offer"
+        title={store.fullName(n.playerIdx)}
+        subtitle={`${buyingClub.name} want to borrow him`}
+        playerId={store.id[n.playerIdx]}
+        onClose={() => g.closeOfferView()}
+      >
+        <ContractRow label="From"><ClubLink id={buyingClub.id} /></ContractRow>
+        <ContractRow label="Loan until">30 Jun {world.startYear + world.season + 1} <span className="faint">· the end of the season</span></ContractRow>
+        <ContractRow label="They pay">
+          <span className="gold-text">{Math.round(share * 100)}% of his wage</span> <span className="faint">· {money(Math.round(wage * share))}</span>
+        </ContractRow>
+        <ContractRow label="You pay">{money(Math.round(wage * (1 - share)))} <span className="faint">of his {money(wage)}</span></ContractRow>
+        {status === 'open' && <ContractRow label="Expires">{g.dateLabelForDay(n.expiresOnDay)}</ContractRow>}
+        <p className="contract-hint">He stays your player: he comes back on 30 June, and still counts towards your 16.</p>
+
+        {status === 'accepted' && (
+          <div className="contract-awaiting">
+            <Icon name="clock" size={18} />
+            <span>
+              <b>Loan agreed</b> — {store.fullName(n.playerIdx)} will decide by {g.dateLabelForDay(offer.resolvesOn ?? world.day)}
+              {' '}whether to go.
+            </span>
+          </div>
+        )}
+
+        <div className="contract-actions">
+          {status === 'open'
+            ? (
+              <>
+                <button className="danger" onClick={() => g.declineOffer()}>Reject</button>
+                <button className="primary" onClick={() => g.acceptOffer()}>Accept loan</button>
+              </>
+            )
+            : <button onClick={() => g.closeOfferView()}>Close</button>}
+        </div>
+      </ContractPaper>
+    );
+  }
+
   return (
     <ContractPaper
       kicker="Transfer offer"

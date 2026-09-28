@@ -27,7 +27,8 @@ import { progressPlayoffs } from './playoffs.ts';
 import { progressCups, scheduleCupSeason } from './cups.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
-import { generateIncomingOffers } from '../world/negotiation.ts';
+import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
+import { generateLoanOffers } from '../world/loans.ts';
 import { contractNotices } from '../world/contracts.ts';
 import { processDeals } from '../world/deals.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
@@ -374,6 +375,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
       weeklyTraining(world);
       rollInjuries(world);
       generateIncomingOffers(world);
+      generateListedBids(world);
+      generateLoanOffers(world);
     }
   }
 

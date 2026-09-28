@@ -601,6 +601,7 @@ select:disabled { opacity: 0.4; cursor: default; }
 .menu-pop-stack .faint { font-size: 11.5px; }
 .menu-pop-note { margin-left: auto; padding: 1px 7px; border-radius: 9px; background: var(--gold-soft); color: var(--gold-bright); font-size: 11px; font-weight: 700; }
 .menu-sep { height: 1px; margin: 4px 2px; background: var(--line); }
+.menu-pop button.menu-danger { color: var(--bad); }
 @keyframes pop-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -824,6 +825,11 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 }
 .role-tag.starter { background: var(--good-soft); color: var(--good); border: 1px solid rgba(60, 207, 110, 0.4); }
 .role-tag.libero { background: rgba(181, 140, 255, 0.15); color: var(--elite); border: 1px solid rgba(181, 140, 255, 0.4); }
+.role-tag.loan { background: var(--accent-soft); color: var(--accent-bright); border: 1px solid rgba(79, 141, 255, 0.4); }
+.role-tag.listed { background: var(--gold-soft); color: var(--gold-bright); border: 1px solid rgba(215, 167, 63, 0.4); }
+/* One of ours out on loan: still listed with the squad, but not available to pick. */
+.data-table tr.row-away td { opacity: 0.55; }
+.data-table tr.row-away:hover td { opacity: 0.85; }
 .ability-cell { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
 .cond-cell, .rating-cell { display: inline-flex; align-items: center; gap: 7px; }
 .cond-cell .dim { font-size: 11.5px; min-width: 32px; }
@@ -907,6 +913,7 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .status-tag { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11.5px; font-weight: 600; }
 .status-injured { background: var(--bad-soft); color: #ff8a86; }
 .status-tired { background: var(--warn-soft); color: var(--warn); }
+.status-loan { background: var(--accent-soft); color: var(--accent-bright); }
 .free-tag { color: var(--good); font-weight: 600; font-size: 12px; }
 .scouted-tag {
   display: inline-block;
@@ -1911,7 +1918,7 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
   flex-wrap: wrap;
   margin-bottom: 12px;
   padding: 14px 22px;
-  overflow: hidden;
+  /* Not clipped: the Transfer menu drops down out of it. */
   background:
     radial-gradient(ellipse 60% 140% at 0% 50%, var(--club-tint), transparent 70%),
     linear-gradient(180deg, var(--surface-2), var(--surface));
@@ -1930,7 +1937,15 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
 .profile-rating { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .profile-rating-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
 .profile-rating-num { font: 700 20px/1 var(--font-display); }
-.profile-actions { display: flex; gap: 8px; align-self: flex-start; }
+.profile-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-self: flex-start; }
+.profile-menu { position: relative; }
+.profile-menu .menu-pop { min-width: 250px; }
+.list-tag {
+  padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700;
+  background: var(--gold-soft); color: var(--gold-bright);
+}
+.list-tag.loan { background: var(--accent-soft); color: var(--accent-bright); }
+.profile-sub > span.loan-note { color: var(--accent-bright); }
 
 .profile-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 16px; margin-bottom: 16px; align-items: start; }
 .profile .tiles { margin-bottom: 12px; }

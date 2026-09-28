@@ -375,8 +375,11 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     return (
       <div className="paper-report">
         <div className="paper-label">The offer</div>
-        {buyer !== undefined && <ReportRow k="Bidding club">{buyer.name}</ReportRow>}
-        {offer !== undefined && <ReportRow k="Fee offered">{money(offer.fee)}</ReportRow>}
+        {buyer !== undefined && <ReportRow k={offer?.loan !== undefined ? 'Borrowing club' : 'Bidding club'}>{buyer.name}</ReportRow>}
+        {offer !== undefined && offer.loan !== undefined && (
+          <ReportRow k="Loan">To 30 June · they pay {Math.round(offer.loan.wageShare * 100)}% of his wage</ReportRow>
+        )}
+        {offer !== undefined && offer.loan === undefined && <ReportRow k="Fee offered">{money(offer.fee)}</ReportRow>}
         {offer !== undefined && <ReportRow k="Market value">{money(store.value[offer.playerIdx])}</ReportRow>}
         <ReportRow k="Status" tone={offer === undefined ? undefined : 'good'}>{status}</ReportRow>
         {offer !== undefined && (offer.status ?? 'open') === 'open' && (
@@ -391,7 +394,10 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     return (
       <div className="paper-report">
         <div className="paper-label">Negotiation</div>
-        <ReportRow k="Stage">{t === undefined ? 'Over' : t.stage === 'fee' ? 'Agreeing a fee with the club' : 'Personal terms'}</ReportRow>
+        <ReportRow k="Stage">
+          {t === undefined ? 'Over' : t.kind === 'loan' ? 'Asking his club for a loan'
+            : t.stage === 'fee' ? 'Agreeing a fee with the club' : 'Personal terms'}
+        </ReportRow>
         {t !== undefined && (
           <ReportRow k="Next move" tone={t.pending === null ? 'good' : undefined}>
             {t.pending === null ? 'Yours' : `Their answer by ${g.longDateLabel(t.pending.resolvesOn)}`}
