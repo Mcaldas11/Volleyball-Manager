@@ -6,7 +6,7 @@ import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
 import {
-  ballAlong, COURT_HALF_LENGTH, flightBulge, NET_HEIGHT, rallyBeats, setupScene, type Ball3,
+  ballAlong, COURT_HALF_LENGTH, flightBulge, NET_HEIGHT, passSpot, rallyBeats, setupScene, type Ball3,
 } from './matchCourt.ts';
 
 function liveMatch(seed: number): { sim: MatchSimulator; positions: Uint8Array } {
@@ -68,10 +68,10 @@ test('each side sees the court as it faces it: left and right mirror across the 
   else assert.ok(left > right, 'the far side faces the camera, so it is mirrored');
 });
 
-test('the ball goes to whoever touches it, and a set at the net precedes attacks after a pass', () => {
+test('the ball goes to whoever touches it, and the second ball is set from wherever the pass went', () => {
   const { sim, positions } = liveMatch(4);
   let rallies = 0;
-  let setsSeen = 0;
+  const setDepths: number[] = [];
   for (let i = 0; i < 120; i++) {
     const pre = sim.snapshot();
     const entry = sim.step();
@@ -84,15 +84,33 @@ test('the ball goes to whoever touches it, and a set at the net precedes attacks
       const at = b.positions.get(b.actor)!;
       assert.ok(Math.hypot(b.ball.x - at.x, b.ball.y - at.y) < 0.8, 'ball should be at the actor');
     }
-    for (const b of beats) {
-      if (b.actor !== null && b.poses.get(b.actor) === 'set') {
-        setsSeen++;
-        assert.ok(depth(b.positions.get(b.actor)!.y) < 0.12, 'setter sets from the net');
-      }
-    }
+    beats.forEach((b, k) => {
+      // The second touch: a set overhead, or a low pass bumped up.
+      const pose = b.actor !== null ? b.poses.get(b.actor) : undefined;
+      const prev = beats[k - 1];
+      const second = pose === 'set' || (pose === 'pass' && prev?.ball != null && prev.ball.y * b.ball!.y > 0);
+      if (b.actor !== null && second) setDepths.push(depth(b.positions.get(b.actor)!.y));
+    });
   }
   assert.ok(rallies > 50);
-  assert.ok(setsSeen > 20, 'plenty of sets should have been scripted');
+  assert.ok(setDepths.length > 20, 'plenty of sets should have been scripted');
+  assert.ok(setDepths.every((d) => d < 0.6), 'sets come from the front half of the side');
+  const atNet = setDepths.filter((d) => d < 0.15).length / setDepths.length;
+  const wellOff = setDepths.filter((d) => d > 0.25).length / setDepths.length;
+  assert.ok(atNet > 0.4, `most passes find the setter at the net (${atNet.toFixed(2)})`);
+  assert.ok(wellOff > 0.05, `but some leave them chasing well off it (${wellOff.toFixed(2)})`);
+});
+
+test('the better the pass, the closer to the net, the higher and the more on target it comes down', () => {
+  for (const j of [-1, -0.4, 0, 0.5, 1]) {
+    const perfect = passSpot(0.75, j);
+    const good = passSpot(0.5, j);
+    const bad = passSpot(0.15, j);
+    assert.ok(perfect.at.v < 0.1, 'a perfect pass is on the target');
+    assert.ok(perfect.at.v <= good.at.v && good.at.v < bad.at.v, 'a worse pass lands further off the net');
+    assert.ok(bad.at.v > 0.35, 'a bad one well off it');
+    assert.ok(perfect.z > good.z && good.z > bad.z, 'and lower');
+  }
 });
 
 test('every flight across the net clears the tape', () => {

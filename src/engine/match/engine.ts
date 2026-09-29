@@ -98,6 +98,7 @@ export interface RallyContact {
   player: number;
   /** Lane for attacks, reception grade for passes. */
   detail?: string;
+  /** How good a pass or dig was, 0 to 1. */
   quality?: number;
 }
 
@@ -1020,14 +1021,13 @@ export class MatchSimulator {
       statsFor(def.stats, blocker).blockTouches++;
       this.push({ kind: 'blockTouch', team: (1 - attacking) as 0 | 1, player: blocker });
     }
-    this.push({ kind: 'dig', team: (1 - attacking) as 0 | 1, player: digger });
-
     // Transition balls are messier than serve reception, so the ceiling is lower.
     const digQuality = clamp(
       rng.gaussian(0.30 + (dr.dig / 100) * 0.34 + (touched ? 0.08 : 0), 0.17),
       0.05,
       0.95,
     );
+    this.push({ kind: 'dig', team: (1 - attacking) as 0 | 1, player: digger, quality: digQuality });
     return { point: -1, nextQuality: digQuality };
   }
 

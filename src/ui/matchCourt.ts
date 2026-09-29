@@ -394,6 +394,33 @@ function holeIn(f: Formation, seed: number): Local {
   return scored[Math.abs(seed) % Math.min(3, scored.length)].c;
 }
 
+/**
+ * Where a pass or dig puts the ball up for the setter, by how good it was —
+ * `q`, 0 to 1, the engine's own measure. A perfect one drops on the target at
+ * the net; the worse it is, the further off the net it comes down, the wider
+ * and the lower, until a bad one is three or four metres back or out towards
+ * a sideline, low enough that the setter has to chase it and bump it up.
+ * `jitter`, between -1 and 1, says which way it strays.
+ */
+export function passSpot(q: number, jitter: number): { at: Local; z: number; arc: number } {
+  const miss = Math.min(1, Math.max(0, (0.66 - q) / 0.56));
+  return {
+    at: {
+      u: Math.min(0.94, Math.max(0.12, TARGET.u + jitter * miss * 0.34)),
+      v: TARGET.v + miss * (0.34 + 0.1 * Math.abs(jitter)),
+    },
+    z: 2.6 - miss * 0.85,
+    // Mostly lower and flatter the worse it is; now and then shanked sky-high.
+    arc: 2.0 - miss * 0.9 + (jitter > 0.55 ? miss * 1.6 : 0),
+  };
+}
+
+/** A repeatable number between -1 and 1 for the `i`th contact of the rally seeded `seed`. */
+function wobble(seed: number, i: number): number {
+  const x = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+}
+
 function teamsOf(court: CourtState, positions: Uint8Array, nearTeam: 0 | 1): [Team, Team] {
   return [
     buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, positions),
@@ -475,14 +502,51 @@ export function rallyBeats(
     });
   };
 
-  // The side that has just passed or dug still has to set before it can hit.
+  // The side that has just passed or dug still has to set before it can hit:
+  // where the first touch sent the ball and who made it — and, once set, who
+  // set it from where.
   let needsSet = false;
-  const setBall = (t: 0 | 1, setArc = 2.0): void => {
+  let pass: { spot: ReturnType<typeof passSpot>; ms: number } | null = null;
+  let firstTouch = -1;
+  let setFrom: { p: number; at: Local } | null = null;
+  // The setter takes the second ball, unless they made the first touch: then
+  // the libero, or failing that the opposite, steps in.
+  const setterFor = (t: 0 | 1, busy: number[]): number => {
+    const team = teams[t];
+    if (team.setter >= 0 && !busy.includes(team.setter)) return team.setter;
+    const free = (role: Position): number | undefined =>
+      team.zones.find((p) => team.role(p) === role && !busy.includes(p));
+    return free(Position.Libero) ?? free(Position.Opposite) ?? team.zones.find((p) => !busy.includes(p)) ?? -1;
+  };
+  const setBall = (t: 0 | 1, attacker = -1): void => {
+    const before = forms[t];
     forms[t] = offenceFormation(teams[t]);
-    const setter = teams[t].setter;
-    push(air(t, setter >= 0 ? at(t, setter) : TARGET, 2.6), setter >= 0 ? setter : null, 680, setArc,
-      setter >= 0 ? [[setter, 'set']] : []);
+    const { spot, ms } = pass ?? { spot: passSpot(1, 0), ms: 680 };
+    const setter = setterFor(t, [firstTouch, attacker]);
+    // A setter who dug the ball stays down where they dug it.
+    const own = teams[t].setter;
+    if (own >= 0 && own !== setter) forms[t].set(own, before.get(own) ?? { u: 0.5, v: 0.5 });
+    if (setter >= 0) {
+      forms[t].set(setter, { ...spot.at });
+      // Anyone waiting where the ball comes down gets out of the setter's way.
+      for (const [p, l] of forms[t]) {
+        const du = l.u - spot.at.u;
+        const dv = l.v - spot.at.v;
+        const d = Math.hypot(du, dv);
+        if (p === setter || d >= 0.12) continue;
+        const k = 0.12 / Math.max(1e-3, d);
+        forms[t].set(p, {
+          u: Math.min(0.96, Math.max(0.04, spot.at.u + (d > 1e-3 ? du : 1) * k)),
+          v: Math.min(1, Math.max(0.04, spot.at.v + (d > 1e-3 ? dv : 0) * k)),
+        });
+      }
+    }
+    setFrom = setter >= 0 ? { p: setter, at: spot.at } : null;
+    // Chasing the ball down: a pass too low to take overhead gets bumped up.
+    push(air(t, spot.at, spot.z), setter >= 0 ? setter : null, ms, spot.arc,
+      setter >= 0 ? [[setter, spot.z >= 2.25 ? 'set' : 'pass']] : []);
     needsSet = false;
+    pass = null;
   };
 
   // The toss: up out of the server's hands and down to where they strike it —
@@ -518,21 +582,26 @@ export function rallyBeats(
         // The serving side switches into its specialist spots as the serve crosses,
         // and the receiving setter releases from hiding to the target.
         forms[o] = defenceFormation(teams[o]);
-        const pass = at(t, c.player);
+        const passer = at(t, c.player);
         const setter = teams[t].setter;
         if (setter >= 0 && setter !== c.player) forms[t].set(setter, { ...TARGET });
-        push(air(t, pass, 0.7), c.player, 900, 0.9, [[c.player, 'receive']]);
+        // A bad pass is a stretch: the passer lunges for it, low.
+        const q = c.kind === 'receptionError' ? 0 : c.quality ?? 0.6;
+        const stretched = q < 0.3;
+        push(air(t, passer, stretched ? 0.45 : 0.7), c.player, 900, 0.9, [[c.player, stretched ? 'dig' : 'receive']]);
         if (c.kind === 'receptionError') {
-          push(air(t, { u: pass.u < 0.5 ? -0.1 : 1.1, v: Math.min(1.1, pass.v + 0.3) }, 0), null, 620, 1.3);
+          push(air(t, { u: passer.u < 0.5 ? -0.1 : 1.1, v: Math.min(1.1, passer.v + 0.3) }, 0), null, 620, 1.3);
         } else {
+          pass = { spot: passSpot(q, wobble(seed, i)), ms: 680 };
+          firstTouch = c.player;
           needsSet = true;
         }
         break;
       }
       case 'setError': {
         setBall(t);
-        const from = teams[t].setter >= 0 ? at(t, teams[t].setter) : TARGET;
-        push(air(t, { u: from.u, v: 0.3 }, 0), null, 460, 0.4);
+        const from = setFrom?.at ?? TARGET;
+        push(air(t, { u: from.u, v: Math.max(0.3, from.v + 0.15) }, 0), null, 460, 0.4);
         break;
       }
       case 'freeball': {
@@ -541,6 +610,8 @@ export function rallyBeats(
         const catcher = teams[o].zones.find((p) => teams[o].role(p) === Position.Libero)
           ?? teams[o].passers[0] ?? teams[o].zones[5];
         push(air(o, at(o, catcher), 0.7), catcher, 950, 2.4, [[catcher, 'pass']]);
+        pass = { spot: passSpot(0.8, wobble(seed, i)), ms: 720 };
+        firstTouch = catcher;
         needsSet = true;
         break;
       }
@@ -549,7 +620,10 @@ export function rallyBeats(
       case 'attackError':
       case 'blocked': {
         const { f, hit, setArc } = attackFormation(teams[t], c.player, c.detail);
-        if (needsSet) setBall(t);
+        if (needsSet) setBall(t, c.player);
+        // Whoever set stays where they set from, to cover.
+        if (setFrom !== null && setFrom.p !== c.player) f.set(setFrom.p, { ...setFrom.at });
+        setFrom = null;
         forms[t] = f;
         const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u);
         forms[o] = block;
@@ -588,8 +662,15 @@ export function rallyBeats(
         push(air(t, at(t, c.player), 0.5), c.player, 340, 0, [[c.player, 'dig']]);
         // The side that just attacked recovers into its defence.
         forms[o] = defenceFormation(teams[o]);
-        if (c.kind === 'dig') needsSet = true;
-        else push(air(t, { u: at(t, c.player).u, v: 1.1 }, 0), null, 520, 1.2);
+        if (c.kind === 'dig') {
+          // A dig pops up higher than a pass, and is seldom right on target.
+          const spot = passSpot(c.quality ?? 0.45, wobble(seed, i));
+          pass = { spot: { ...spot, arc: spot.arc + 0.6 }, ms: 820 };
+          firstTouch = c.player;
+          needsSet = true;
+        } else {
+          push(air(t, { u: at(t, c.player).u, v: 1.1 }, 0), null, 520, 1.2);
+        }
         break;
       }
       default:

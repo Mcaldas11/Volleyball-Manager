@@ -202,14 +202,18 @@ export function buildRig(s: Shape, m: Motion): Rig {
   // How much of a running cycle shows: none standing, all of it at a jog.
   const run = Math.min(1, speed / 1.4) * (1 - m.airborne);
   const stride = strideLength(speed);
-  const bob = run * 0.035 * Math.abs(Math.sin(m.gait));
+  // Running, the hips sink as each foot takes the weight under the body and
+  // rise through the stride.
+  const bob = run * 0.03 * (1 - Math.abs(Math.sin(m.gait)));
+  // Leaning into the run, a little more the faster it is.
+  const drive = Math.min(0.12, 0.022 * Math.max(0, m.moveY)) * (1 - m.airborne);
 
   const pelvisZ = HIP_HEIGHT - s.crouch - bob;
-  const pitch = -(s.tilt + 0.06 * Math.max(0, m.moveY) * (1 - m.airborne));
+  const pitch = -(s.tilt + drive);
 
   // Arms: the hitting arm is the right one for a right-hander. Running swings
   // them against the legs, less so the more an arm is already doing.
-  const swing = 0.55 * run * Math.min(1, speed / 3);
+  const swing = 0.75 * run * Math.min(1, speed / 3);
   const armOf = (side: -1 | 1): Limb => {
     const hitting = side === m.hand;
     const flex = hitting ? s.hFlex : s.oFlex;
@@ -234,8 +238,10 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const legOf = (side: -1 | 1): Limb => {
     const ahead = side === m.hand ? -s.stride / 2 : s.stride / 2;
     const phase = m.gait + (side === 1 ? Math.PI : 0);
-    const reach = (stride / 2) * run * Math.sin(phase);
-    const lift = run * (0.05 + 0.035 * speed) * Math.max(0, Math.cos(phase));
+    // Feet land under the body rather than far out in front, and the heel
+    // kicks up behind on the way through.
+    const reach = Math.min(0.42, stride / 2) * run * Math.sin(phase);
+    const lift = run * (0.05 + 0.04 * speed) * Math.max(0, Math.cos(phase)) * (1 - 0.55 * Math.sin(phase));
     const ax = side * s.stance + dirX * reach;
     const ay = ahead + dirY * reach - m.airborne * s.tuck * 0.45;
     const az = BONES.ankle + lift + m.airborne * s.tuck;
@@ -257,7 +263,7 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const shoulderLift = (flex: number): number => 0.05 * Math.min(1, Math.max(0, (flex - 1.6) / 1.4));
   return {
     pelvis: { y: s.hipShift, z: pelvisZ, pitch },
-    spine: { x: -(s.lean + 0.05 * Math.max(0, m.moveY) * (1 - m.airborne)), y: s.bend * m.hand, z: twist },
+    spine: { x: -(s.lean + drive), y: s.bend * m.hand, z: twist },
     head: {
       x: Math.max(-0.9, Math.min(0.7, -s.nod + m.lookPitch)),
       z: Math.max(-1.1, Math.min(1.1, m.lookYaw - twist)),

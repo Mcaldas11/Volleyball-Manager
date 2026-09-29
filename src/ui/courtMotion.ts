@@ -114,6 +114,9 @@ const CLAP = shape(CLAP_OPEN, { ...arms(1.42, -0.12, 1.0) });
 /** Hands on hips, head down. */
 const HIPS = shape(STAND, { lean: 0.06, nod: 0.45, ...arms(-0.25, 0.55, 1.9, 0.6) });
 
+/** Running flat out: tall, leaning into it, elbows bent and the arms pumping. */
+const RUN = shape(STAND, { crouch: 0.05, tilt: 0.1, lean: 0.14, nod: -0.05, stance: 0.1, stride: 0, ...arms(0.1, 0.12, 1.5) });
+
 /** The posture each pose settles into between contacts. */
 function postureOf(pose: Pose): Shape {
   switch (pose) {
@@ -247,6 +250,8 @@ export interface Body {
   /** Last frame's shape, for blending out of a move cut short. */
   shape: Shape;
   gait: number;
+  /** How far into a proper upright run they are, 0 to 1. */
+  running: number;
   action: Action | null;
   reaction: Action | null;
   fade: { from: Shape; t0: number } | null;
@@ -426,7 +431,7 @@ export class CourtMotion {
     const posture = postureOf(pose);
     return {
       x: startX, y, tx: x, ty: y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: netYaw(y), lift: 0, vz: 0,
-      pose, posture, shape: posture, gait: 0, action: null, reaction: null, fade: null,
+      pose, posture, shape: posture, gait: 0, running: 0, action: null, reaction: null, fade: null,
       alpha: this.first ? 1 : 0, leaving: false,
       scale: Math.min(1.12, Math.max(0.85, f.height / REF_HEIGHT)), hand: f.hand, seed: p,
       rig: buildRig(posture, { ...STILL, hand: f.hand }),
@@ -501,8 +506,13 @@ export class CourtMotion {
       case 'pass':
       case 'dig': {
         const dig = pose === 'dig';
-        // Face the ball coming in, the platform turned a little towards where it is going.
-        const yaw = aim !== null ? incoming + Math.max(-0.35, Math.min(0.35, wrap(towardsAim - incoming))) * 0.4 : incoming;
+        // Face the ball coming in, the platform turned a little towards where
+        // it is going — well round towards the hitter for a bumped set, the
+        // second touch of the side's own ball.
+        const second = this.flight !== null && this.flight.from.y * this.flight.to.y > 0;
+        const turn = aim !== null ? wrap(towardsAim - incoming) : 0;
+        const yaw = second ? incoming + Math.max(-1.2, Math.min(1.2, turn)) * 0.75
+          : incoming + Math.max(-0.35, Math.min(0.35, turn)) * 0.4;
         const [low, hit, after] = dig ? [DIG_LOW, DIG_HIT, DIG_UP] : [PLATFORM, PLATFORM_HIT, PLATFORM_HOLD];
         let drop = 0;
         if (ball !== null) {
@@ -519,9 +529,12 @@ export class CourtMotion {
         break;
       }
       case 'set': {
-        // Square to the left antenna — the side's own left, zone 4.
-        const yaw = b.ty <= 0 ? Math.PI / 2 : -Math.PI / 2;
-        const back = aim !== null && Math.cos(wrap(yawTo(aim.x - b.tx, aim.y - b.ty) - yaw)) < 0;
+        // At the net, square to the left antenna — the side's own left, zone 4 —
+        // and set forwards or arched back over the head. Chasing a pass well
+        // off the net, face the hitter instead.
+        const offNet = Math.abs(b.ty) > 1.6;
+        const yaw = offNet ? towardsAim : b.ty <= 0 ? Math.PI / 2 : -Math.PI / 2;
+        const back = !offNet && aim !== null && Math.cos(wrap(yawTo(aim.x - b.tx, aim.y - b.ty) - yaw)) < 0;
         let h = 0;
         if (ball !== null) {
           const hand = this.placeFor(b, ball, yaw, SET_TOUCH, 'both');
@@ -676,8 +689,15 @@ export class CourtMotion {
     }
 
     // ---- The shape of the body ----
+    const c = Math.cos(b.yaw);
+    const sn = Math.sin(b.yaw);
+    const moveX = b.vx * c + b.vy * sn;
+    const moveY = -b.vx * sn + b.vy * c;
     b.posture = mixShape(b.posture, postureOf(b.pose), 1 - Math.exp(-dt / 0.18));
     let s = b.posture;
+    // Properly on the move forwards they run tall; shuffles and backpedals stay low.
+    b.running += (smooth((moveY - 1.8) / 2.2) - b.running) * (1 - Math.exp(-dt / 0.12));
+    s = mixShape(s, RUN, b.running);
     // A little life while waiting: weight shifting, a bounce on the toes.
     const idle = Math.sin(now / 420 + b.seed * 1.7);
     s = { ...s, crouch: s.crouch + (b.pose === 'stand' ? 0.008 : 0.018) * idle };
@@ -691,10 +711,6 @@ export class CourtMotion {
     b.shape = s;
 
     // ---- Running, and looking at the ball ----
-    const c = Math.cos(b.yaw);
-    const sn = Math.sin(b.yaw);
-    const moveX = b.vx * c + b.vy * sn;
-    const moveY = -b.vx * sn + b.vy * c;
     b.gait += (Math.PI * speed * dt) / strideLength(speed);
     let lookYaw = 0;
     let lookPitch = 0;

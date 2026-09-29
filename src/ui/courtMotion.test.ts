@@ -165,3 +165,27 @@ test('when the ball goes down, the winners celebrate and the losers take it in',
     assert.equal(b.reaction.kind, teamOf(p) === entry.winner ? 'celebrate' : 'dejected');
   }
 });
+
+test('running flat out a player runs tall; shuffling a step or two they stay low', () => {
+  const m = new CourtMotion(() => ({ height: 1.95, hand: 1 }), () => 0);
+  const scene = (x: number, y: number): Parameters<CourtMotion['scene']>[0] => ({
+    positions: new Map([[1, { x, y }]]), poses: new Map([[1, 'ready']]), ball: null, arc: 0, actor: null, ms: 1500,
+  });
+  m.scene(scene(0, -8.5), 0);
+  let now = 0;
+  const run = (ms: number): void => {
+    for (let t = 0; t < ms; t += 16) m.step(0.016, (now += 16));
+  };
+  run(600);
+  const standing = m.bodies.get(1)!.rig.pelvis.z;
+  // Seven metres to the net: a proper run.
+  m.scene(scene(0, -1.5), now);
+  run(450);
+  const running = m.bodies.get(1)!.rig.pelvis.z;
+  assert.ok(running > standing + 0.07, `hips up when running (${running.toFixed(2)} vs ${standing.toFixed(2)})`);
+  run(1500);
+  // A shuffle half a metre to the side: stays down in the stance.
+  m.scene(scene(0.6, -1.5), now);
+  run(120);
+  assert.ok(m.bodies.get(1)!.rig.pelvis.z < standing + 0.04, 'a shuffle stays low');
+});
