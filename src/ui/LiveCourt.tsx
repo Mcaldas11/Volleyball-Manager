@@ -1,67 +1,33 @@
 /**
- * The live court, drawn on a canvas as television shows a match: from high in
- * the side stand, the near team on the left, the far team on the right, the
- * net between them.
+ * The live court, as television shows a match: from high in the side stand,
+ * the near team on the left, the far team on the right, the net between them.
  *
- * The match script (matchCourt.ts) says where every player should be and
- * where the ball is going at each beat; this component makes that motion
- * continuous. It runs its own animation loop: players run toward their
- * targets at a believable speed rather than jumping there, jump for a spike
- * or a block, and the ball flies real three-dimensional arcs — a floated
- * serve, a high pass up to the setter, a flat spike into the floor — always
- * clearing the net, with its shadow on the floor and a marker where it will
- * come down. React only hands over each new scene; everything in between is
- * interpolated frame by frame. The hall itself — floor, boards, the crowd in
- * the stand — is painted once per size and laid under every frame.
+ * Three layers, one over the other. At the bottom, the hall — floor, lines,
+ * advertising boards and the crowd in the stand — painted once per size. Over
+ * it, the players, net and ball in 3D (court3d.ts), their shadows falling on
+ * the painted floor; the two share one camera, so they line up to the pixel.
+ * On top, each player's live rating (and name) riding over their head.
+ *
+ * The match script (matchCourt.ts) says where every player should be, what
+ * they are doing and where the ball is going at each beat; courtMotion.ts
+ * makes that motion continuous — running to the mark, the pass, the set, the
+ * run-up and jump for the spike, the block, the serve — and this component
+ * just hands it each new scene and draws a frame on every animation tick.
+ * Where the browser has no WebGL the players are drawn flat on the top layer
+ * instead.
  */
 
 import { useEffect, useRef, type JSX } from 'react';
 import type { PlayerStore } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
+import { Court3D, type Kit, type Look } from './court3d.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
-import {
-  ballAlong, COURT_HALF_LENGTH, COURT_HALF_WIDTH, flightBulge, NET_HEIGHT,
-  type Ball3, type Pose, type Scene,
-} from './matchCourt.ts';
+import { CourtMotion, flightAt, handOf, type Body } from './courtMotion.ts';
+import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, NET_HEIGHT, type Ball3, type Scene } from './matchCourt.ts';
 
-/** A side's playing colours. */
-export interface Kit {
-  shirt: string;
-  shorts: string;
-  /** Liberos wear a contrasting shirt, as the rules require. */
-  libero: string;
-}
-
-interface Body {
-  x: number;
-  y: number;
-  tx: number;
-  ty: number;
-  lift: number;
-  pose: Pose;
-  alpha: number;
-  leaving: boolean;
-}
-
-interface Flight {
-  from: Ball3;
-  to: Ball3;
-  /** Parabola bulge actually used, after solving for the apex and net clearance. */
-  bulge: number;
-  t0: number;
-  ms: number;
-}
+export type { Kit } from './court3d.ts';
 
 type P3 = [number, number, number];
-
-/** How high each pose lifts a player off the floor, m. */
-const POSE_LIFT: Readonly<Record<Pose, number>> = {
-  stand: 0, pass: 0, set: 0.12, serve: 0.35, spike: 0.8, block: 0.6,
-};
-
-/** Top running speed and how quickly players close on their mark. */
-const MAX_SPEED = 7.5; // m/s
-const SETTLE = 0.2; // s
 
 /** The hall's colours: an FIVB court — orange inside, blue free zone. */
 const FLOOR = {
@@ -71,13 +37,6 @@ const FLOOR = {
   frontZone: '#df8550',
   line: 'rgba(255, 255, 255, 0.92)',
 };
-
-const SKIN = '#e2bf97';
-
-function flightAt(f: Flight, now: number): Ball3 {
-  const t = f.ms <= 0 ? 1 : Math.min(1, Math.max(0, (now - f.t0) / f.ms));
-  return ballAlong(f.from, f.to, f.bulge, t);
-}
 
 function ratingColour(r: number): string {
   if (r >= 8.0) return '#4f9dff';
@@ -102,98 +61,102 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 /** What to print by each player: their live rating, name and rating, or nothing. */
 export type CourtLabels = 'ratings' | 'names' | 'off';
 
+interface CourtProps {
+  store: PlayerStore;
+  kits: [Kit, Kit];
+  /** Which side (0 home, 1 away) a player belongs to. */
+  teamOf: (p: number) => 0 | 1;
+  ratings: Map<number, number>;
+  labels: CourtLabels;
+}
+
 export function LiveCourt({
   scene, store, kits, teamOf, ratings, labels = 'ratings',
 }: {
   scene: Scene;
   store: PlayerStore;
   kits: [Kit, Kit];
-  /** Which side (0 home, 1 away) a player belongs to. */
   teamOf: (p: number) => 0 | 1;
   ratings: Map<number, number>;
   labels?: CourtLabels;
 }): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const live = useRef({
-    bodies: new Map<number, Body>(),
-    flight: null as Flight | null,
-    trail: [] as Ball3[],
-    actor: null as number | null,
-    first: true,
-    props: { store, kits, teamOf, ratings, labels },
-  });
-  live.current.props = { store, kits, teamOf, ratings, labels };
+  const hallRef = useRef<HTMLCanvasElement>(null);
+  const topRef = useRef<HTMLCanvasElement>(null);
+  const props = useRef<CourtProps>({ store, kits, teamOf, ratings, labels });
+  props.current = { store, kits, teamOf, ratings, labels };
+  const motion = useRef<CourtMotion | null>(null);
+  if (motion.current === null) {
+    motion.current = new CourtMotion(
+      (p) => ({ height: (props.current.store.heightCm[p] || 195) / 100, hand: handOf(p) }),
+      (p) => props.current.teamOf(p),
+    );
+  }
 
-  // Hand each new scene to the animation: new targets, new poses, a new flight.
+  // Hand each new scene to the motion: new marks, new moves, a new flight.
   useEffect(() => {
-    const s = live.current;
-    const now = performance.now();
-    for (const [p, g] of scene.positions) {
-      const b = s.bodies.get(p);
-      const pose = scene.poses.get(p) ?? 'stand';
-      if (b === undefined) {
-        // Players arriving mid-match (a substitution) walk on from the sideline.
-        const startX = s.first ? g.x : Math.sign(g.x || 1) * (COURT_HALF_WIDTH + 1.6);
-        s.bodies.set(p, { x: startX, y: g.y, tx: g.x, ty: g.y, lift: 0, pose, alpha: s.first ? 1 : 0, leaving: false });
-      } else {
-        b.tx = g.x;
-        b.ty = g.y;
-        b.pose = pose;
-        b.leaving = false;
-      }
-    }
-    for (const [p, b] of s.bodies) {
-      if (scene.positions.has(p)) continue;
-      b.leaving = true;
-      b.tx = Math.sign(b.x || 1) * (COURT_HALF_WIDTH + 1.8);
-      b.pose = 'stand';
-    }
-    s.actor = scene.actor;
-    if (scene.ball !== null) {
-      const from = s.flight !== null ? flightAt(s.flight, now) : scene.ball;
-      s.flight = { from, to: scene.ball, bulge: flightBulge(from, scene.ball, scene.arc), t0: now, ms: scene.ms };
-    } else {
-      s.flight = null;
-    }
-    s.first = false;
+    motion.current?.scene(scene, performance.now());
   }, [scene]);
 
   // The animation loop — runs for the life of the court.
   useEffect(() => {
-    const canvas = canvasRef.current;
     const wrap = wrapRef.current;
-    if (canvas === null || wrap === null) return;
-    const ctx = canvas.getContext('2d');
-    if (ctx === null) return;
-    const hall = document.createElement('canvas');
+    const hallCanvas = hallRef.current;
+    const topCanvas = topRef.current;
+    const m = motion.current;
+    if (wrap === null || hallCanvas === null || topCanvas === null || m === null) return;
+    const hall = hallCanvas.getContext('2d');
+    const top = topCanvas.getContext('2d');
+    if (hall === null || top === null) return;
+    // The 3D layer gets a canvas of its own for each run of this effect: a
+    // WebGL context given back on cleanup can't be had again from the same
+    // canvas, and React's development mode runs every effect twice.
+    const glCanvas = document.createElement('canvas');
+    glCanvas.className = 'live-court-canvas';
+    wrap.insertBefore(glCanvas, topCanvas);
+    let court: Court3D | null = null;
+    try {
+      court = new Court3D(glCanvas);
+    } catch {
+      glCanvas.remove();
+    }
+
+    const looks = new Map<number, Look>();
+    const numbers = new ShirtNumbers();
+    const lookOf = (p: number): Look => {
+      let look = looks.get(p);
+      if (look === undefined) {
+        look = lookFor(p, props.current, numbers);
+        looks.set(p, look);
+      }
+      return look;
+    };
 
     let project = buildProjector(1, 1);
     let cssW = 0;
     let cssH = 0;
+    let dpr = 1;
     let hallKits = '';
-    // The canvas takes whatever box the layout gives it — the match screen
+    const paintHall = (): void => {
+      hall.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawHall(hall, cssW, cssH, dpr, project, props.current.kits);
+      hallKits = JSON.stringify(props.current.kits);
+    };
+    // The canvases take whatever box the layout gives them — the match screen
     // fits the viewport, so the court shrinks to the space rather than
     // pushing the page into a scroll. The camera fits the court inside that
     // box, and the hall is painted again for the new size.
-    const paintHall = (): void => {
-      const dpr = canvas.width / cssW;
-      hall.width = canvas.width;
-      hall.height = canvas.height;
-      const hctx = hall.getContext('2d');
-      if (hctx === null) return;
-      hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawHall(hctx, cssW, cssH, dpr, project, live.current.props.kits);
-      hallKits = JSON.stringify(live.current.props.kits);
-    };
     const resize = (): void => {
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      dpr = Math.min(2, window.devicePixelRatio || 1);
       cssW = Math.max(1, wrap.clientWidth);
       cssH = Math.max(1, wrap.clientHeight);
-      canvas.width = Math.round(cssW * dpr);
-      canvas.height = Math.round(cssH * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      for (const c of [hallCanvas, topCanvas]) {
+        c.width = Math.round(cssW * dpr);
+        c.height = Math.round(cssH * dpr);
+      }
+      top.setTransform(dpr, 0, 0, dpr, 0, 0);
       project = buildProjector(cssW, cssH);
+      court?.resize(cssW, cssH, dpr);
       paintHall();
     };
     resize();
@@ -203,57 +166,94 @@ export function LiveCourt({
     let raf = 0;
     let last = performance.now();
     const frame = (now: number): void => {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
-      const s = live.current;
-      if (JSON.stringify(s.props.kits) !== hallKits) paintHall();
-      step(s, dt, now);
-      ctx.clearRect(0, 0, cssW, cssH);
-      ctx.drawImage(hall, 0, 0, cssW, cssH);
-      draw(ctx, project, s, now);
+      if (JSON.stringify(props.current.kits) !== hallKits) {
+        looks.clear();
+        paintHall();
+      }
+      m.step(dt, now);
+      top.clearRect(0, 0, cssW, cssH);
+      if (court !== null) {
+        court.render(m, now, dt, lookOf);
+        const c = court;
+        drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
+      } else {
+        drawFlat(top, project, m, props.current, now);
+      }
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
+      court?.dispose();
+      glCanvas.remove();
     };
   }, []);
 
   return (
     <div className="live-court" ref={wrapRef}>
-      <canvas ref={canvasRef} className="live-court-canvas" />
+      <canvas ref={hallRef} className="live-court-canvas" />
+      <canvas ref={topRef} className="live-court-canvas" />
     </div>
   );
 }
 
-type LiveState = {
-  bodies: Map<number, Body>;
-  flight: Flight | null;
-  trail: Ball3[];
-  actor: number | null;
-};
+// ---- How each player looks ------------------------------------------------------------
 
-/** Advance every player and the ball by one frame. */
-function step(s: LiveState, dt: number, now: number): void {
-  for (const [p, b] of s.bodies) {
-    const dx = b.tx - b.x;
-    const dy = b.ty - b.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist > 0.001) {
-      const move = Math.min(dist, Math.min(MAX_SPEED, dist / SETTLE) * dt);
-      b.x += (dx / dist) * move;
-      b.y += (dy / dist) * move;
+/** Shirt numbers: the same one for a player all match, never two alike on a side. */
+class ShirtNumbers {
+  private readonly given = new Map<number, number>();
+  private readonly taken: [Set<number>, Set<number>] = [new Set(), new Set()];
+
+  of(p: number, id: number, team: 0 | 1): number {
+    let n = this.given.get(p);
+    if (n === undefined) {
+      const want = 1 + (((id * 7) % 20) + 20) % 20;
+      n = want;
+      for (let i = 0; i < 99 && this.taken[team].has(n); i++) n = (n % 99) + 1;
+      this.given.set(p, n);
+      this.taken[team].add(n);
     }
-    const lift = POSE_LIFT[b.pose];
-    b.lift += (lift - b.lift) * (1 - Math.exp(-dt / 0.07));
-    const alphaTarget = b.leaving ? 0 : 1;
-    b.alpha += (alphaTarget - b.alpha) * (1 - Math.exp(-dt / 0.25));
-    if (b.leaving && b.alpha < 0.02) s.bodies.delete(p);
+    return n;
   }
-  if (s.flight !== null) {
-    s.trail.push(flightAt(s.flight, now));
-    if (s.trail.length > 7) s.trail.shift();
+}
+
+const SKIN_TONES: readonly string[] = ['#f3d4b8', '#eac29d', '#dcaa80', '#c18a60', '#99653f', '#6e472c', '#553622'];
+
+function lookFor(p: number, props: CourtProps, numbers: ShirtNumbers): Look {
+  const team = props.teamOf(p);
+  const role = props.store.position[p] as Position;
+  const id = props.store.id[p];
+  const h = Math.imul(id, 0x9e3779b1) >>> 0;
+  const tone = h % SKIN_TONES.length;
+  return {
+    kit: props.kits[team],
+    libero: role === Position.Libero,
+    trim: ROLE_TRIM[role],
+    number: numbers.of(p, id, team),
+    skin: SKIN_TONES[tone],
+    // Darker skin, darker hair.
+    hair: tone >= 4 ? HAIR[(h >> 4) % 3 === 0 ? 2 : 0] : HAIR[(h >> 4) % HAIR.length],
+    hairStyle: (h >> 8) % 7 === 0 ? 2 : (h >> 8) % 2,
+  };
+}
+
+/** Each player's live rating, and their name when asked for (always for the
+ *  player on the ball), riding over their head. */
+function drawLabels(
+  ctx: CanvasRenderingContext2D, m: CourtMotion, props: CourtProps,
+  head: (p: number) => { X: number; Y: number; s: number } | null,
+): void {
+  if (props.labels === 'off') return;
+  for (const [p, b] of m.bodies) {
+    const at = head(p);
+    if (at === null) continue;
+    ctx.save();
+    ctx.globalAlpha = b.alpha;
+    drawLabel(ctx, at.X, at.Y, at.s, p, props, m.actor === p);
+    ctx.restore();
   }
 }
 
@@ -448,30 +448,23 @@ function drawHall(
   board([BOARD_X, END_BOARD_Y, 0], [9, END_BOARD_Y, 0], 9 - BOARD_X);
 }
 
-// ---- Every frame ------------------------------------------------------------------
+// ---- Without WebGL: the players drawn flat ---------------------------------------------
 
-function draw(
-  ctx: CanvasRenderingContext2D,
-  project: Projector,
-  s: LiveState & { props: { store: PlayerStore; kits: [Kit, Kit]; teamOf: (p: number) => 0 | 1; ratings: Map<number, number>; labels: CourtLabels } },
-  now: number,
-): void {
-  const { store, kits, teamOf, ratings, labels } = s.props;
-
+function drawFlat(ctx: CanvasRenderingContext2D, project: Projector, m: CourtMotion, props: CourtProps, now: number): void {
   // ---- Shadows and floor markers ----
-  const ball = s.flight !== null ? flightAt(s.flight, now) : null;
-  for (const b of s.bodies.values()) {
+  const ball = m.flight !== null ? flightAt(m.flight, now) : null;
+  for (const b of m.bodies.values()) {
     floorCircle(ctx, project, b.x, b.y, 0.36 * (1 - Math.min(0.5, b.lift * 0.5)), `rgba(0,0,0,${0.32 * b.alpha})`, null);
   }
-  if (s.actor !== null) {
-    const a = s.bodies.get(s.actor);
+  if (m.actor !== null) {
+    const a = m.bodies.get(m.actor);
     if (a !== undefined) floorCircle(ctx, project, a.x, a.y, 0.58, null, 'rgba(255,199,44,0.95)', 2);
   }
-  if (s.flight !== null && s.flight.to.z < 1.3) {
-    const t = Math.min(1, (now - s.flight.t0) / Math.max(1, s.flight.ms));
+  if (m.flight !== null && m.flight.to.z < 1.3) {
+    const t = Math.min(1, (now - m.flight.t0) / Math.max(1, m.flight.ms));
     if (t < 1) {
       const pulse = 0.35 + 0.15 * Math.sin(now / 90);
-      floorCircle(ctx, project, s.flight.to.x, s.flight.to.y, pulse, null, 'rgba(255,255,255,0.8)', 1.5);
+      floorCircle(ctx, project, m.flight.to.x, m.flight.to.y, pulse, null, 'rgba(255,255,255,0.8)', 1.5);
     }
   }
   if (ball !== null) {
@@ -481,14 +474,11 @@ function draw(
 
   // ---- Everything standing up, furthest from the camera first ----
   const items: Array<{ d: number; draw: () => void }> = [];
-  for (const [p, b] of s.bodies) {
-    items.push({
-      d: project(b.x, b.y, 0).d,
-      draw: () => drawPlayer(ctx, project, p, b, store, kits, teamOf, ratings, labels, s.actor === p),
-    });
+  for (const [p, b] of m.bodies) {
+    items.push({ d: project(b.x, b.y, 0).d, draw: () => drawPlayer(ctx, project, p, b, props, m.actor === p) });
   }
   // The net in strips, so a player on the camera's side of it stands in front
-  // of the stretch nearest him and behind the rest.
+  // of the stretch nearest them and behind the rest.
   const postX = COURT_HALF_WIDTH + 0.6;
   const strips = 10;
   for (let i = 0; i < strips; i++) {
@@ -500,7 +490,7 @@ function draw(
     items.push({ d: project(x, 0, 1).d, draw: () => drawPost(ctx, project, x) });
   }
   if (ball !== null) {
-    items.push({ d: project(ball.x, ball.y, ball.z).d - 0.01, draw: () => drawBall(ctx, project, ball, s.trail) });
+    items.push({ d: project(ball.x, ball.y, ball.z).d - 0.01, draw: () => drawBall(ctx, project, ball, m.trail) });
   }
   items.sort((a, b) => b.d - a.d);
   for (const it of items) it.draw();
@@ -583,23 +573,20 @@ function drawBall(ctx: CanvasRenderingContext2D, project: Projector, ball: Ball3
 }
 
 /**
- * A player, standing up off the floor: legs (bent for a pass), knee pads and
- * shoes, shorts, the shirt with his role's trim across the shoulders, arms
- * where the pose puts them, and a head of hair. Drawn to scale for his
- * distance from the camera.
+ * A player drawn flat, standing up off the floor: legs (bent low for a pass),
+ * knee pads and shoes, shorts, the shirt with their role's trim across the
+ * shoulders, arms where the pose puts them, and a head of hair. Drawn to
+ * scale for their distance from the camera.
  */
 function drawPlayer(
   ctx: CanvasRenderingContext2D,
   project: Projector,
   p: number,
   b: Body,
-  store: PlayerStore,
-  kits: [Kit, Kit],
-  teamOf: (p: number) => 0 | 1,
-  ratings: Map<number, number>,
-  labels: CourtLabels,
+  props: CourtProps,
   isActor: boolean,
 ): void {
+  const { store, kits, teamOf } = props;
   const foot = project(b.x, b.y, b.lift);
   const head = project(b.x, b.y, b.lift + 1);
   const perM = foot.Y - head.Y; // screen px per metre of height here
@@ -610,7 +597,7 @@ function drawPlayer(
   const at = (z: number): number => foot.Y - z * perM;
   const wide = (m: number): number => m * s;
   const cx = foot.X;
-  const crouch = b.pose === 'pass';
+  const crouch = b.pose === 'receive' || b.pose === 'dig' || b.pose === 'pass' || b.pose === 'cover';
   const hip = crouch ? 0.78 : 0.93;
   const knee = crouch ? 0.4 : 0.5;
 
@@ -624,7 +611,7 @@ function drawPlayer(
     const hx = cx + side * wide(0.09);
     const kx = cx + side * wide(crouch ? 0.19 : 0.1);
     const fx = cx + side * wide(crouch ? 0.2 : 0.12);
-    ctx.strokeStyle = SKIN;
+    ctx.strokeStyle = FLAT_SKIN;
     ctx.lineWidth = Math.max(1.5, wide(0.12));
     ctx.beginPath();
     ctx.moveTo(hx, at(hip));
@@ -648,9 +635,9 @@ function drawPlayer(
 
   // Arms: up for a block, spike, set or serve; forward and together for a pass.
   const shoulder = hip + 0.58;
-  ctx.strokeStyle = SKIN;
+  ctx.strokeStyle = FLAT_SKIN;
   ctx.lineWidth = Math.max(1.5, wide(0.085));
-  if (b.pose === 'block' || b.pose === 'spike' || b.pose === 'set' || b.pose === 'serve') {
+  if (b.pose === 'block' || b.pose === 'spike' || b.pose === 'set' || b.pose === 'serve' || b.pose === 'float') {
     const reach = b.pose === 'set' ? shoulder + 0.55 : shoulder + 0.75;
     const spread = b.pose === 'block' ? 0.2 : 0.12;
     for (const side of [-1, 1]) {
@@ -700,40 +687,48 @@ function drawPlayer(
   ctx.arc(cx, at(headZ), headR, Math.PI * 1.05, Math.PI * 1.95);
   ctx.fill();
 
-  // Live rating (and optionally the name), over the head.
+  drawLabel(ctx, cx, at(headZ) - headR, s, p, props, isActor);
+  ctx.restore();
+}
+
+const FLAT_SKIN = '#e2bf97';
+
+/** A player's live rating, and optionally their name, just above `(x, top)`. */
+function drawLabel(
+  ctx: CanvasRenderingContext2D, x: number, top: number, s: number, p: number, props: CourtProps, isActor: boolean,
+): void {
+  const { store, ratings, labels } = props;
   const rating = ratings.get(p);
   const showName = labels === 'names' || (labels === 'ratings' && isActor);
-  if (labels !== 'off' && (showName || rating !== undefined)) {
-    const size = Math.max(9, Math.min(12, 0.3 * s));
-    ctx.font = `600 ${size}px "Segoe UI", system-ui, sans-serif`;
-    const name = showName ? store.shortName(p) : '';
-    const nameW = name !== '' ? ctx.measureText(name).width + 8 : 0;
-    const chipW = rating !== undefined ? size * 2.3 : 0;
-    const totalW = nameW + chipW;
-    const boxH = size + 5;
-    const y0 = at(headZ) - headR - boxH - 4;
-    const x0 = cx - totalW / 2;
-    if (nameW > 0) {
-      ctx.fillStyle = 'rgba(8, 10, 14, 0.7)';
-      roundRect(ctx, x0, y0, totalW, boxH, 4);
-      ctx.fill();
-      ctx.fillStyle = isActor ? '#ffd650' : '#ffffff';
-      ctx.textBaseline = 'top';
-      ctx.fillText(name, x0 + 4, y0 + 2.5);
-    }
-    if (rating !== undefined) {
-      const chipX = x0 + nameW;
-      ctx.fillStyle = ratingColour(rating);
-      roundRect(ctx, chipX, y0, chipW, boxH, 3);
-      ctx.fill();
-      ctx.fillStyle = rating >= 8 || rating < 5.6 ? '#ffffff' : '#0b0e13';
-      ctx.font = `800 ${size - 1}px "Segoe UI", system-ui, sans-serif`;
-      ctx.textBaseline = 'top';
-      const label = rating.toFixed(1);
-      ctx.fillText(label, chipX + (chipW - ctx.measureText(label).width) / 2, y0 + 3);
-    }
+  if (labels === 'off' || (!showName && rating === undefined)) return;
+  const size = Math.max(9, Math.min(12, 0.3 * s));
+  ctx.font = `600 ${size}px "Segoe UI", system-ui, sans-serif`;
+  const name = showName ? store.shortName(p) : '';
+  const nameW = name !== '' ? ctx.measureText(name).width + 8 : 0;
+  const chipW = rating !== undefined ? size * 2.3 : 0;
+  const totalW = nameW + chipW;
+  const boxH = size + 5;
+  const y0 = top - boxH - 4;
+  const x0 = x - totalW / 2;
+  if (nameW > 0) {
+    ctx.fillStyle = 'rgba(8, 10, 14, 0.7)';
+    roundRect(ctx, x0, y0, totalW, boxH, 4);
+    ctx.fill();
+    ctx.fillStyle = isActor ? '#ffd650' : '#ffffff';
+    ctx.textBaseline = 'top';
+    ctx.fillText(name, x0 + 4, y0 + 2.5);
   }
-  ctx.restore();
+  if (rating !== undefined) {
+    const chipX = x0 + nameW;
+    ctx.fillStyle = ratingColour(rating);
+    roundRect(ctx, chipX, y0, chipW, boxH, 3);
+    ctx.fill();
+    ctx.fillStyle = rating >= 8 || rating < 5.6 ? '#ffffff' : '#0b0e13';
+    ctx.font = `800 ${size - 1}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textBaseline = 'top';
+    const label = rating.toFixed(1);
+    ctx.fillText(label, chipX + (chipW - ctx.measureText(label).width) / 2, y0 + 3);
+  }
 }
 
 const ROLE_TRIM: Readonly<Record<Position, string>> = {

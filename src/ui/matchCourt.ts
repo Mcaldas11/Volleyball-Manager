@@ -38,12 +38,25 @@ export interface Ball3 extends Ground {
   z: number;
 }
 
-/** What a player's body is doing, for the court drawing. */
-export type Pose = 'stand' | 'pass' | 'set' | 'spike' | 'block' | 'serve';
+/**
+ * What a player's body is doing, for the court drawing. Two kinds: a
+ * posture held while the play goes on around them — relaxed between rallies
+ * (`stand`), on their toes while the ball is live (`ready`), crouched under a
+ * team-mate's attack to cover the block (`cover`), the server with the ball
+ * in their hands (`hold`) — and a contact, which the player times so that
+ * their hands meet the ball as the beat's flight arrives: a jump serve with
+ * its run-up (`serve`) or a float (`float`), a serve received (`receive`), a
+ * hard-driven ball dug (`dig`), any other forearm pass (`pass`), a set, a
+ * spike and a block.
+ */
+export type Pose =
+  | 'stand' | 'ready' | 'cover' | 'hold'
+  | 'serve' | 'float' | 'receive' | 'dig' | 'pass' | 'set' | 'spike' | 'block';
 
 /** Everything the live court shows at one instant. */
 export interface Scene {
   positions: Map<number, Ground>;
+  /** What every player on court is doing. */
   poses: Map<number, Pose>;
   /** Where the ball is heading. */
   ball: Ball3 | null;
@@ -51,6 +64,11 @@ export interface Scene {
   arc: number;
   /** Player making the current contact, marked on court. */
   actor: number | null;
+  /** Where the actor sends the ball once they touch it — the next flight's
+   *  end — so they can face it and follow through towards it. */
+  aim?: Ball3 | null;
+  /** The rally ends as this flight lands, won by this side (0 home, 1 away). */
+  point?: 0 | 1 | null;
   /** How long the flight (and the players' moves) to this scene take, ms. */
   ms: number;
   /** Changes with every beat, so a renderer can tell repeat scenes apart. */
@@ -259,13 +277,32 @@ function receiveFormation(t: Team): Formation {
   return spread(f);
 }
 
+/**
+ * How a player serves: most hitters jump-serve off a run-up, most setters,
+ * middles and liberos float it — with a few of each doing the other, so a
+ * side's serves don't all look alike.
+ */
+export function serveStyle(p: number, role: Position): 'serve' | 'float' {
+  const hitter = role === Position.OutsideHitter || role === Position.Opposite;
+  return hitter ? (p % 5 === 0 ? 'float' : 'serve') : (p % 3 === 0 ? 'serve' : 'float');
+}
+
+/** Where a server starts, and where they strike the ball: a jump server
+ *  leaves room for the run-up and hits over the baseline; a float server
+ *  stands just behind it. */
+function servePoints(t: Team, server: number): { from: Local; hit: Local; z: number } {
+  return serveStyle(server, t.role(server)) === 'serve'
+    ? { from: { u: 0.84, v: 1.17 }, hit: { u: 0.82, v: 1.01 }, z: 3.05 }
+    : { from: { u: 0.84, v: 1.08 }, hit: { u: 0.84, v: 1.05 }, z: 2.55 };
+}
+
 /** The serving side at the moment of the serve: the server behind the
  *  baseline, the front row at the net and the back row in their zones. */
 function serveFormation(t: Team): Formation {
   const f: Formation = new Map();
   for (let z = 0; z < 6; z++) {
     const c = column(z);
-    if (z === 0) f.set(t.zones[z], { u: 0.84, v: 1.08 });
+    if (z === 0) f.set(t.zones[z], { ...servePoints(t, t.zones[z]).from });
     else f.set(t.zones[z], { u: LANE_U[c], v: isFrontRow(z) ? 0.14 : 0.62 });
   }
   return f;
@@ -381,16 +418,22 @@ function toPositions(teams: [Team, Team], forms: [Formation, Formation]): Map<nu
 }
 
 /** The court between rallies: both sides set up for the next serve, the ball
- *  in the server's hand. `nearTeam` plays in the half closest to the camera. */
+ *  in the server's hands. `nearTeam` plays in the half closest to the camera. */
 export function setupScene(court: CourtState, serving: 0 | 1, positions: Uint8Array, nearTeam: 0 | 1): Scene {
   const teams = teamsOf(court, positions, nearTeam);
   const forms = openingFormations(teams, serving);
   const server = teams[serving].zones[0];
   const hand = forms[serving].get(server);
   const at = hand !== undefined ? toWorld(teams[serving].near, hand) : null;
+  // The passers get down into their stance; everyone else waits on the serve.
+  const poses = new Map<number, Pose>();
+  for (const t of [0, 1] as const) {
+    for (const p of forms[t].keys()) poses.set(p, t !== serving && teams[t].passers.includes(p) ? 'ready' : 'stand');
+  }
+  if (at !== null) poses.set(server, 'hold');
   return {
     positions: toPositions(teams, forms),
-    poses: new Map(),
+    poses,
     ball: at !== null ? { ...at, z: 1.1 } : null,
     arc: 1.4,
     actor: null,
@@ -402,7 +445,8 @@ export function setupScene(court: CourtState, serving: 0 | 1, positions: Uint8Ar
  * Script one logged rally as a sequence of beats — where every player is and
  * what they are doing, and where the ball flies — at each contact. `court` is
  * the arrangement the rally was played in; `seed` varies where unreturned
- * balls land.
+ * balls land; `winner`, when known, is marked on the last beat so the court
+ * can celebrate the point as the ball lands.
  */
 export function rallyBeats(
   court: CourtState,
@@ -411,6 +455,7 @@ export function rallyBeats(
   positions: Uint8Array,
   seed: number,
   nearTeam: 0 | 1,
+  winner: 0 | 1 | null = null,
 ): Beat[] {
   const teams = teamsOf(court, positions, nearTeam);
   const forms = openingFormations(teams, serveTeam);
@@ -421,8 +466,12 @@ export function rallyBeats(
     ball: Ball3, actor: number | null, ms: number, arc: number,
     poses: Array<[number, Pose]> = [], callout: Beat['callout'] = null,
   ): void => {
+    // Once the ball is in play everyone is on their toes, bar whoever is doing something.
+    const all = new Map<number, Pose>();
+    for (const f of forms) for (const p of f.keys()) all.set(p, 'ready');
+    for (const [p, pose] of poses) all.set(p, pose);
     beats.push({
-      positions: toPositions(teams, forms), poses: new Map(poses), ball, arc, actor, ms, callout,
+      positions: toPositions(teams, forms), poses: all, ball, arc, actor, ms, callout,
     });
   };
 
@@ -436,16 +485,25 @@ export function rallyBeats(
     needsSet = false;
   };
 
+  // The toss: up out of the server's hands and down to where they strike it —
+  // forward over the baseline for a jump server, who runs in under it.
+  const serve = (t: 0 | 1, p: number): Local => {
+    const { hit, z } = servePoints(teams[t], p);
+    forms[t].set(p, { ...hit });
+    const style = serveStyle(p, teams[t].role(p));
+    push(air(t, hit, z), p, style === 'serve' ? 900 : 700, style === 'serve' ? 1.3 : 0.7, [[p, style]]);
+    return hit;
+  };
+
   contacts.forEach((c, i) => {
     const t = c.team;
     const o = (1 - t) as 0 | 1;
     switch (c.kind) {
       case 'serve':
-        push(air(t, at(t, c.player), 2.9), c.player, 440, 0.8, [[c.player, 'serve']]);
+        serve(t, c.player);
         break;
       case 'serveError': {
-        const from = at(t, c.player);
-        push(air(t, from, 2.9), c.player, 440, 0.8, [[c.player, 'serve']]);
+        const from = serve(t, c.player);
         // Into the net: the ball dies against the tape on the server's own side.
         push({ ...toWorld(teams[t].near, { u: from.u, v: 0.02 }), z: 1.7 }, null, 760, 0.6, [],
           { kind: 'serveError', team: o });
@@ -457,10 +515,13 @@ export function rallyBeats(
         break;
       case 'reception':
       case 'receptionError': {
-        // The serving side switches into its specialist spots as the serve crosses.
+        // The serving side switches into its specialist spots as the serve crosses,
+        // and the receiving setter releases from hiding to the target.
         forms[o] = defenceFormation(teams[o]);
         const pass = at(t, c.player);
-        push(air(t, pass, 0.7), c.player, 900, 0.9, [[c.player, 'pass']]);
+        const setter = teams[t].setter;
+        if (setter >= 0 && setter !== c.player) forms[t].set(setter, { ...TARGET });
+        push(air(t, pass, 0.7), c.player, 900, 0.9, [[c.player, 'receive']]);
         if (c.kind === 'receptionError') {
           push(air(t, { u: pass.u < 0.5 ? -0.1 : 1.1, v: Math.min(1.1, pass.v + 0.3) }, 0), null, 620, 1.3);
         } else {
@@ -493,9 +554,12 @@ export function rallyBeats(
         const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u);
         forms[o] = block;
         const blockPoses: Array<[number, Pose]> = blockers.map((b) => [b, 'block']);
+        // Team-mates crouch in under the hitter, ready for a ball off the block.
+        const cover: Array<[number, Pose]> = [...forms[t].keys()].filter((p) => p !== c.player).map((p) => [p, 'cover']);
         const backRow = hit.v > 0.2;
-        push(air(t, hit, backRow ? 3.0 : 3.15), c.player, setArc < 0.5 ? 380 : 560, setArc,
-          [[c.player, 'spike'], ...blockPoses]);
+        // A high ball to the pin hangs long enough for a full run-up; a quick is on the hitter at once.
+        push(air(t, hit, backRow ? 3.0 : 3.15), c.player, Math.round(380 + setArc * 380), setArc,
+          [...cover, [c.player, 'spike'], ...blockPoses]);
         if (c.kind === 'kill') {
           push(air(o, holeIn(forms[o], seed + i), 0), null, 340, 0, blockPoses, { kind: 'kill', team: t });
         } else if (c.kind === 'attackError') {
@@ -521,7 +585,7 @@ export function rallyBeats(
       }
       case 'dig':
       case 'digError': {
-        push(air(t, at(t, c.player), 0.5), c.player, 340, 0, [[c.player, 'pass']]);
+        push(air(t, at(t, c.player), 0.5), c.player, 340, 0, [[c.player, 'dig']]);
         // The side that just attacked recovers into its defence.
         forms[o] = defenceFormation(teams[o]);
         if (c.kind === 'dig') needsSet = true;
@@ -532,5 +596,11 @@ export function rallyBeats(
         break;
     }
   });
+  // Each contact is aimed where the ball flies next.
+  beats.forEach((b, i) => {
+    b.aim = b.actor !== null ? beats[i + 1]?.ball ?? null : null;
+  });
+  const last = beats[beats.length - 1];
+  if (last !== undefined) last.point = winner;
   return beats;
 }

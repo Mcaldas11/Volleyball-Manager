@@ -59,7 +59,8 @@ async function animateRally(
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, store.position, seed, nearTeam);  for (const beat of beats) {
+  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, store.position, seed, nearTeam, entry.winner);
+  for (const beat of beats) {
     if (cancelled.current) return;
     // Beat timings are tuned for 1x — slower speeds stretch them, faster squeeze.
     const ms = (beat.ms * 1.15) / speed;

@@ -55,30 +55,61 @@ function unit(a: V3): V3 {
   return { x: a.x / l, y: a.y / l, z: a.z / l };
 }
 
-/** A projector for a `width` × `height` box, the court fitted inside it —
- *  centred across, and down towards the bottom, the way a broadcast frames the
- *  court with the stand rising behind it. */
-export function buildProjector(width: number, height: number, pad = 0.03): Projector {
+/**
+ * The camera as a pinhole: where it stands, where it looks, and — for a box
+ * `width` × `height` — its focal length in pixels and the pixel the line of
+ * sight passes through, fitted so the court sits inside the box: centred
+ * across, and down towards the bottom, the way a broadcast frames the court
+ * with the stand rising behind it. The 2D court projects with it, and the 3D
+ * court builds its lens from it, so both frame the match alike.
+ */
+export interface CameraFit {
+  position: Readonly<V3>;
+  target: Readonly<V3>;
+  /** Focal length, px. */
+  focal: number;
+  /** Where the line of sight meets the screen, px from the top-left corner. */
+  cx: number;
+  cy: number;
+}
+
+function basis(): { forward: V3; right: V3; up: V3 } {
   const forward = unit(sub(TARGET, CAMERA));
   const right = unit(cross(forward, { x: 0, y: 0, z: 1 }));
-  const up = cross(right, forward);
-  const raw = (x: number, y: number, z: number): { X: number; Y: number; d: number } => {
+  return { forward, right, up: cross(right, forward) };
+}
+
+export function fitCamera(width: number, height: number, pad = 0.03): CameraFit {
+  const { forward, right, up } = basis();
+  const raw = (x: number, y: number, z: number): { X: number; Y: number } => {
     const v = sub({ x, y, z }, CAMERA);
     const d = Math.max(0.1, dot(v, forward));
-    return { X: dot(v, right) / d, Y: -dot(v, up) / d, d };
+    return { X: dot(v, right) / d, Y: -dot(v, up) / d };
   };
   const probes = FIT_PROBES.map(([x, y, z]) => raw(x, y, z));
   const minX = Math.min(...probes.map((p) => p.X));
   const maxX = Math.max(...probes.map((p) => p.X));
   const minY = Math.min(...probes.map((p) => p.Y));
   const maxY = Math.max(...probes.map((p) => p.Y));
-  const F = Math.min((width * (1 - 2 * pad)) / (maxX - minX), (height * (1 - 2 * pad)) / (maxY - minY));
-  const cx = width / 2 - ((minX + maxX) / 2) * F;
-  // Any room to spare goes above the court, to the stand.
-  const cy = height * (1 - pad) - maxY * F;
+  const focal = Math.min((width * (1 - 2 * pad)) / (maxX - minX), (height * (1 - 2 * pad)) / (maxY - minY));
+  return {
+    position: CAMERA,
+    target: TARGET,
+    focal,
+    cx: width / 2 - ((minX + maxX) / 2) * focal,
+    // Any room to spare goes above the court, to the stand.
+    cy: height * (1 - pad) - maxY * focal,
+  };
+}
+
+/** A projector for a `width` × `height` box, the court fitted inside it (see fitCamera). */
+export function buildProjector(width: number, height: number, pad = 0.03): Projector {
+  const { forward, right, up } = basis();
+  const { focal, cx, cy } = fitCamera(width, height, pad);
   return (x, y, z) => {
-    const p = raw(x, y, z);
-    return { X: cx + p.X * F, Y: cy + p.Y * F, s: F / p.d, d: p.d };
+    const v = sub({ x, y, z }, CAMERA);
+    const d = Math.max(0.1, dot(v, forward));
+    return { X: cx + (dot(v, right) / d) * focal, Y: cy + (-dot(v, up) / d) * focal, s: focal / d, d };
   };
 }
 

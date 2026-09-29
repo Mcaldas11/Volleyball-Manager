@@ -117,3 +117,18 @@ test('every flight across the net clears the tape', () => {
   }
   assert.ok(crossings > 100);
 });
+
+test('everyone on court has something to do in every beat, contacts aim where the ball goes next, and the last beat names the winner', () => {
+  const { sim, positions } = liveMatch(6);
+  for (let i = 0; i < 40; i++) {
+    const pre = sim.snapshot();
+    const entry = sim.step();
+    if (entry === null) break;
+    const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, positions, i, 0, entry.winner);
+    beats.forEach((b, k) => {
+      for (const p of b.positions.keys()) assert.ok(b.poses.has(p), 'every player has a pose');
+      if (b.actor !== null && k + 1 < beats.length) assert.deepEqual(b.aim, beats[k + 1].ball);
+      assert.equal(b.point ?? null, k === beats.length - 1 ? entry.winner : null);
+    });
+  }
+});
