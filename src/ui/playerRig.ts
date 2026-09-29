@@ -314,6 +314,7 @@ function child(f: Frame, offset: V3, rot: M3 = I3): Frame {
 export interface Joints {
   head: V3;
   shoulders: [V3, V3];
+  elbows: [V3, V3];
   hands: [V3, V3];
   ankles: [V3, V3];
 }
@@ -329,10 +330,8 @@ export function jointPositions(r: Rig): Joints {
     return child(spine, [side * BONES.shoulderOut, 0, BONES.shoulderUp + r.shoulderLift[i]],
       mul(mul(rx(a.x), ry(a.y)), rz(a.z)));
   });
-  const hands = shoulders.map((sh, i) => {
-    const elbow = child(sh, [0, 0, -BONES.upperArm], rx(r.arms[i].bend));
-    return child(child(elbow, [0, 0, -BONES.forearm]), [0, 0, -BONES.hand]).t;
-  });
+  const elbows = shoulders.map((sh, i) => child(sh, [0, 0, -BONES.upperArm], rx(r.arms[i].bend)));
+  const hands = elbows.map((elbow) => child(child(elbow, [0, 0, -BONES.forearm]), [0, 0, -BONES.hand]).t);
   const ankles = sides.map((side, i) => {
     const l = r.legs[i];
     const hip = child(pelvis, [side * BONES.hipOut, 0, 0], mul(ry(l.y), rx(l.x)));
@@ -342,6 +341,7 @@ export function jointPositions(r: Rig): Joints {
   return {
     head: head.t,
     shoulders: [shoulders[0].t, shoulders[1].t],
+    elbows: [elbows[0].t, elbows[1].t],
     hands: [hands[0], hands[1]],
     ankles: [ankles[0], ankles[1]],
   };

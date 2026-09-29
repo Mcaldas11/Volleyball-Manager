@@ -68,10 +68,13 @@ interface CourtProps {
   teamOf: (p: number) => 0 | 1;
   ratings: Map<number, number>;
   labels: CourtLabels;
+  /** Short names for the referee's calls: home, away. */
+  teamNames: [string, string];
 }
 
 export function LiveCourt({
-  scene, store, kits, teamOf, ratings, labels = 'ratings',
+  scene, store, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
+  teamNames = ['Home', 'Away'],
 }: {
   scene: Scene;
   store: PlayerStore;
@@ -79,12 +82,19 @@ export function LiveCourt({
   teamOf: (p: number) => 0 | 1;
   ratings: Map<number, number>;
   labels?: CourtLabels;
+  /** A time-out in progress, and whose — once the rally it followed has been shown. */
+  timeout?: 0 | 1 | null;
+  /** Play stopped: the referee waves no serve on. */
+  paused?: boolean;
+  /** How fast the match is being shown. */
+  speed?: number;
+  teamNames?: [string, string];
 }): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, kits, teamOf, ratings, labels });
-  props.current = { store, kits, teamOf, ratings, labels };
+  const props = useRef<CourtProps>({ store, kits, teamOf, ratings, labels, teamNames });
+  props.current = { store, kits, teamOf, ratings, labels, teamNames };
   const motion = useRef<CourtMotion | null>(null);
   if (motion.current === null) {
     motion.current = new CourtMotion(
@@ -97,6 +107,12 @@ export function LiveCourt({
   useEffect(() => {
     motion.current?.scene(scene, performance.now());
   }, [scene]);
+
+  // The referee's side of things: stoppages, time-outs, the pace of play.
+  useEffect(() => {
+    motion.current?.setStoppage(timeout, paused, performance.now());
+  }, [timeout, paused]);
+  if (motion.current !== null) motion.current.pace = speed;
 
   // The animation loop — runs for the life of the court.
   useEffect(() => {
@@ -178,6 +194,7 @@ export function LiveCourt({
         court.render(m, now, dt, lookOf);
         const c = court;
         drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
+        drawCall(top, m, props.current, c.refereeOnScreen(), now);
       } else {
         drawFlat(top, project, m, props.current, now);
       }
@@ -446,6 +463,51 @@ function drawHall(
   board([BOARD_X, -END_BOARD_Y, 0], [BOARD_X, END_BOARD_Y, 0], END_BOARD_Y * 2);
   board([BOARD_X, -END_BOARD_Y, 0], [9, -END_BOARD_Y, 0], 9 - BOARD_X);
   board([BOARD_X, END_BOARD_Y, 0], [9, END_BOARD_Y, 0], 9 - BOARD_X);
+}
+
+/** The referee's call over their head while they make it — whose point,
+ *  whose serve, whose time-out, in that side's colours — and the whistle
+ *  as it blows. */
+function drawCall(
+  ctx: CanvasRenderingContext2D, m: CourtMotion, props: CourtProps, at: { X: number; Y: number; s: number }, now: number,
+): void {
+  const sig = m.signal;
+  if (sig === null) return;
+  const fade = Math.min(1, (now - sig.t0) / 150, (sig.end - now) / 250);
+  if (fade <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = fade;
+  if (now >= sig.whistle[0] && now <= sig.whistle[1]) {
+    // Blasts off the whistle, beside the mouth.
+    const r = Math.max(3, 0.1 * at.s);
+    const mouth = at.Y + 0.2 * at.s;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+    for (let i = 1; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.arc(at.X + r * 0.6, mouth, r * (0.5 + 0.55 * i), -0.65, 0.65);
+      ctx.stroke();
+    }
+  }
+  const name = props.teamNames[sig.team];
+  const text = sig.kind === 'point' ? `${sig.out ? 'OUT · ' : ''}POINT ${name}`
+    : sig.kind === 'timeout' ? `TIME-OUT ${name}` : `SERVE ${name}`;
+  ctx.font = '800 10px "Segoe UI", system-ui, sans-serif';
+  const w = ctx.measureText(text).width + 12;
+  const h = 16;
+  const x0 = at.X - w / 2;
+  const y0 = at.Y - h - 6;
+  roundRect(ctx, x0, y0, w, h, 4);
+  ctx.fillStyle = props.kits[sig.team].shirt;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x0 + 6, y0 + h / 2 + 0.5);
+  ctx.restore();
 }
 
 // ---- Without WebGL: the players drawn flat ---------------------------------------------

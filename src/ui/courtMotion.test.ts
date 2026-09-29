@@ -4,7 +4,7 @@ import { MatchFormat, MatchSimulator } from '../engine/match/engine.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
-import { CourtMotion, handOf, type Body } from './courtMotion.ts';
+import { CourtMotion, handOf, REFEREE_STAND, type Body, type Signal } from './courtMotion.ts';
 import { rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
 import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL } from './playerRig.ts';
 
@@ -188,4 +188,85 @@ test('running flat out a player runs tall; shuffling a step or two they stay low
   m.scene(scene(0.6, -1.5), now);
   run(120);
   assert.ok(m.bodies.get(1)!.rig.pelvis.z < standing + 0.04, 'a shuffle stays low');
+});
+
+/** A match played through the motion rally by rally, noting every call the referee makes. */
+function refereeing(seed: number) {
+  const { sim, store, teamOf } = liveMatch(seed);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: handOf(p) }), teamOf);
+  const calls: Signal[] = [];
+  let now = 0;
+  const run = (ms: number): void => {
+    for (let t = 0; t < ms; t += 16) {
+      m.step(0.016, (now += 16));
+      if (m.signal !== null && calls[calls.length - 1] !== m.signal) calls.push(m.signal);
+    }
+  };
+  const setup = (): { serving: 0 | 1 } => {
+    const pre = sim.snapshot();
+    m.scene(setupScene(pre, pre.serving, store.position, 0), now);
+    return { serving: pre.serving };
+  };
+  const stoppage = (timeout: 0 | 1 | null, paused: boolean): void => m.setStoppage(timeout, paused, now);
+  const rally = (during?: () => void) => {
+    const pre = sim.snapshot();
+    const entry = sim.step()!;
+    rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, 0, 0, entry.winner).forEach((b, k) => {
+      m.scene(b, now);
+      if (k === 0) during?.();
+      run(b.ms);
+    });
+    return entry;
+  };
+  return { m, calls, run, setup, rally, stoppage };
+}
+
+test('the referee waves each serve on before the toss, and gives each point to the side that won it, arm out towards them', () => {
+  const { m, calls, run, setup, rally } = refereeing(15);
+  for (let i = 0; i < 12; i++) {
+    const { serving } = setup();
+    run(1800);
+    const waved = calls[calls.length - 1];
+    assert.equal(waved?.kind, 'serve', 'the serve is waved on before the toss');
+    assert.equal(waved.team, serving);
+    const entry = rally();
+    run(1100);
+    const call = m.signal!;
+    assert.equal(call.kind, 'point');
+    assert.equal(call.team, entry.winner);
+    // Home plays the near half (negative y): the arm goes out over the winners' half.
+    const side = entry.winner === 0 ? -1 : 1;
+    const out = Math.max(...handsOf(m.referee).map((h) => side * (h.y - REFEREE_STAND.y)));
+    assert.ok(out > 0.6, `the arm points to the winners (${out.toFixed(2)} m out)`);
+  }
+});
+
+test('a time-out is signalled once the rally in play is over, and no serve is waved on until play restarts', () => {
+  const { calls, run, setup, rally, stoppage } = refereeing(16);
+  setup();
+  run(1800);
+  const before = calls.length;
+  rally(() => stoppage(1, true));
+  run(4000);
+  const after = calls.slice(before).map((c) => `${c.kind}${c.kind === 'timeout' ? c.team : ''}`);
+  assert.deepEqual(after.slice(0, 2), ['point', 'timeout1'], 'the point first, then the time-out');
+  setup();
+  run(3000);
+  assert.ok(!calls.slice(before).some((c) => c.kind === 'serve'), 'no serve during the time-out');
+  stoppage(null, false);
+  run(1200);
+  assert.equal(calls[calls.length - 1].kind, 'serve', 'play back on: the serve is waved on');
+});
+
+test('a serve waved on before a stoppage is waved on again once play is back on', () => {
+  const { calls, run, setup, stoppage } = refereeing(17);
+  setup();
+  run(1200);
+  assert.equal(calls[calls.length - 1]?.kind, 'serve');
+  stoppage(0, true);
+  run(3000);
+  const waved = calls.filter((c) => c.kind === 'serve').length;
+  stoppage(null, false);
+  run(1000);
+  assert.equal(calls.filter((c) => c.kind === 'serve').length, waved + 1);
 });

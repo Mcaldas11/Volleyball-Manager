@@ -465,13 +465,15 @@ function LiveMatchView(): JSX.Element {
     // over each other on the one court.
     const cancelled = { current: false };
     const run = async (): Promise<void> => {
-      // A moment before the first serve — which also stops a throwaway mount
-      // before it has played a single rally.
-      await sleep(350);
+      // A moment before the first serve, for the referee to wave it on — which
+      // also stops a throwaway mount before it has played a single rally.
+      await sleep(1200 / (g.matchday?.speed ?? 1));
+      let stopped = false;
       while (!cancelled.current) {
         const current = g.matchday;
         if (current === null) break;
         if (current.paused) {
+          stopped = true;
           // A substitution stoppage ends by itself once its wall-clock time is
           // up — but never while a timeout is open, which only the clock or
           // the Resume button may close.
@@ -480,6 +482,12 @@ function LiveMatchView(): JSX.Element {
             continue;
           }
           await sleep(150);
+          continue;
+        }
+        if (stopped) {
+          // Play back on: a moment for the referee to wave the serve on.
+          stopped = false;
+          await sleep(1100 / current.speed);
           continue;
         }
         // A set won while this view was away (it unmounted mid-pause) still
@@ -508,9 +516,10 @@ function LiveMatchView(): JSX.Element {
           if (!cancelled.current) g.openSetBreak();
           break;
         }
-        // Everyone walks into position for the next serve — rotating on a side-out.
+        // Everyone walks into position for the next serve — rotating on a
+        // side-out — while the referee gives the point and waves the serve on.
         setScene(sceneFor(g.matchday?.snapshot ?? null, store, nearTeam));
-        await sleep(900 / current.speed);
+        await sleep(1800 / current.speed);
       }
     };
     void run();
@@ -671,7 +680,15 @@ function LiveMatchView(): JSX.Element {
 
         <div className="court-col">
           <div className="card court-panel">
-            <LiveCourt scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels} />
+            <LiveCourt
+              scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
+              // The referee sees a stoppage — and signals a time-out — once
+              // the rally it followed has been shown.
+              timeout={pending === null ? md.timeoutActive : null}
+              paused={pending === null && md.paused}
+              speed={md.speed}
+              teamNames={[homeClub?.shortName ?? 'Home', awayClub?.shortName ?? 'Away']}
+            />
 
             {/* Who plays which half — the user's side is always on the left. */}
             <span className="court-tag far">

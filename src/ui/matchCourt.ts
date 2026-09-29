@@ -69,6 +69,8 @@ export interface Scene {
   aim?: Ball3 | null;
   /** The rally ends as this flight lands, won by this side (0 home, 1 away). */
   point?: 0 | 1 | null;
+  /** …and it lands out, for the referee to call. */
+  out?: boolean;
   /** How long the flight (and the players' moves) to this scene take, ms. */
   ms: number;
   /** Changes with every beat, so a renderer can tell repeat scenes apart. */
@@ -682,6 +684,9 @@ export function rallyBeats(
     b.aim = b.actor !== null ? beats[i + 1]?.ball ?? null : null;
   });
   const last = beats[beats.length - 1];
-  if (last !== undefined) last.point = winner;
+  if (last !== undefined) {
+    last.point = winner;
+    last.out = contacts[contacts.length - 1]?.kind === 'attackError';
+  }
   return beats;
 }

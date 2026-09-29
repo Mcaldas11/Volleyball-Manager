@@ -20,7 +20,7 @@ import {
   SphereGeometry, SRGBColorSpace, Vector2, Vector3, WebGLRenderer, type Material,
 } from 'three';
 import { fitCamera } from './courtCamera.ts';
-import type { Body, CourtMotion } from './courtMotion.ts';
+import { REFEREE_STAND, type Body, type CourtMotion } from './courtMotion.ts';
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
 import { BONES } from './playerRig.ts';
 
@@ -43,7 +43,15 @@ export interface Look {
   hair: string;
   /** 0 cropped, 1 short, 2 shaved. */
   hairStyle: number;
+  /** Long trousers and dark shoes, for the referee. */
+  trousers?: boolean;
 }
+
+/** The first referee: light polo, dark collar and trousers, no number. */
+const REFEREE_LOOK: Look = {
+  kit: { shirt: '#eef1f5', shorts: '#1b2130', libero: '#eef1f5' },
+  libero: false, trim: '#1b2130', number: 0, skin: '#d9a97c', hair: '#2b1d14', hairStyle: 0, trousers: true,
+};
 
 /** A perspective camera that sees exactly what the painted hall's projector
  *  does for a `width` × `height` box. */
@@ -153,10 +161,12 @@ function shirtTexture(look: Look): CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '800 80px "Segoe UI", system-ui, sans-serif';
-  // The back is where the wrap starts and ends, so it is drawn at both edges.
-  for (const x of [0, 256]) ctx.fillText(String(look.number), x, 128);
-  ctx.font = '800 36px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(String(look.number), 128, 100);
+  if (look.number > 0) {
+    // The back is where the wrap starts and ends, so it is drawn at both edges.
+    for (const x of [0, 256]) ctx.fillText(String(look.number), x, 128);
+    ctx.font = '800 36px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(String(look.number), 128, 100);
+  }
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
   tex.anisotropy = 4;
@@ -189,7 +199,9 @@ class Figure {
     const hair = mat(look.hair, 0.85);
     const pad = mat(look.number % 2 === 0 ? '#1b1f27' : '#e9ecf1', 0.8);
     const sock = mat('#f2f4f7', 0.8);
-    const shoe = mat('#f5f6f8', 0.45);
+    const shoe = mat(look.trousers === true ? '#15181e' : '#f5f6f8', 0.45);
+    // Bare legs, or trousers down to the shoes.
+    const legs = look.trousers === true ? this.shorts : skin;
     const eye = mat('#1a1410', 0.4);
     this.materials = [this.shirt, this.shorts, skin, hair, pad, sock, shoe, eye];
     this.kitKey = JSON.stringify(look.kit);
@@ -231,13 +243,13 @@ class Figure {
       hip.position.x = side * BONES.hipOut;
       this.pelvis.add(hip);
       part(g.shortsLeg, this.shorts, hip, 0, 0, 0.03);
-      part(g.thigh, skin, hip);
+      part(g.thigh, legs, hip);
       const knee = this.knees[i];
       knee.position.z = -BONES.thigh;
       hip.add(knee);
-      part(g.pad, pad, knee, 0, 0.012, -0.03);
-      part(g.shin, skin, knee);
-      part(g.sock, sock, knee, 0, 0, -BONES.shin + 0.17);
+      if (look.trousers !== true) part(g.pad, pad, knee, 0, 0.012, -0.03);
+      part(g.shin, legs, knee);
+      part(g.sock, look.trousers === true ? legs : sock, knee, 0, 0, -BONES.shin + 0.17);
       const ankle = this.ankles[i];
       ankle.position.z = -BONES.shin;
       knee.add(ankle);
@@ -366,6 +378,58 @@ function buildNet(): Group {
   return net;
 }
 
+/** A tube from `a` to `b`. */
+function tube(a: [number, number, number], b: [number, number, number], r: number, m: Material): Mesh {
+  const from = new Vector3(...a);
+  const dir = new Vector3(...b).sub(from);
+  const mesh = new Mesh(new CylinderGeometry(r, r, dir.length(), 8), m);
+  mesh.position.copy(from).addScaledVector(dir, 0.5);
+  mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), dir.normalize());
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/** The first referee's stand: a platform on four legs, padded on the court
+ *  side, a ladder up the back and a rail round the top. */
+function buildRefereeStand(): Group {
+  const stand = new Group();
+  const h = REFEREE_STAND.height;
+  stand.position.set(REFEREE_STAND.x, REFEREE_STAND.y, 0);
+  const steel = new MeshStandardMaterial({ color: '#b8c2cf', roughness: 0.35, metalness: 0.6 });
+  const padding = new MeshStandardMaterial({ color: '#1f5c9f', roughness: 0.8 });
+  const deck = new Mesh(new BoxGeometry(0.66, 0.66, 0.06), new MeshStandardMaterial({ color: '#2a3342', roughness: 0.6 }));
+  deck.position.z = h - 0.03;
+  deck.castShadow = true;
+  stand.add(deck);
+  const w = 0.29;
+  for (const x of [-w, w]) {
+    for (const y of [-w, w]) stand.add(tube([x, y, 0], [x, y, h - 0.06], 0.025, steel));
+    // Braces across each side.
+    stand.add(tube([x, -w, 0.45], [x, w, 0.45], 0.015, steel));
+  }
+  for (const y of [-w, w]) stand.add(tube([-w, y, 0.45], [w, y, 0.45], 0.015, steel));
+  // Padding on the legs facing the court.
+  for (const y of [-w, w]) {
+    const pad = new Mesh(new CylinderGeometry(0.06, 0.06, 1.0, 12).rotateX(Math.PI / 2), padding);
+    pad.position.set(w, y, 0.5);
+    pad.castShadow = true;
+    stand.add(pad);
+  }
+  // The ladder up the back, away from the court.
+  const lx = -w - 0.08;
+  for (const y of [-0.17, 0.17]) stand.add(tube([lx - 0.25, y, 0], [lx, y, h + 0.9], 0.018, steel));
+  for (let z = 0.3; z < h; z += 0.3) {
+    const x = lx - 0.25 + (0.25 * z) / (h + 0.9);
+    stand.add(tube([x, -0.17, z], [x, 0.17, z], 0.014, steel));
+  }
+  // A rail round the top at waist height.
+  const top = h + 0.95;
+  for (const x of [-w, w]) for (const y of [-w, w]) stand.add(tube([x, y, h], [x, y, top], 0.016, steel));
+  stand.add(tube([w, -w, top], [w, w, top], 0.02, steel));
+  for (const y of [-w, w]) stand.add(tube([-w, y, top], [w, y, top], 0.02, steel));
+  return stand;
+}
+
 /** A volleyball's panels: three bands of curved stripes, blue and yellow on white. */
 function ballTexture(): CanvasTexture {
   const c = document.createElement('canvas');
@@ -397,6 +461,7 @@ export class Court3D {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera();
   private readonly figures = new Map<number, Figure>();
+  private readonly referee = new Figure(REFEREE_LOOK);
   private readonly ball: Mesh;
   private readonly trail: Mesh[] = [];
   private readonly actorRing: Mesh;
@@ -444,6 +509,8 @@ export class Court3D {
     this.scene.add(floor);
 
     this.scene.add(buildNet());
+    this.scene.add(buildRefereeStand());
+    this.scene.add(this.referee.root);
 
     this.ball = new Mesh(
       new SphereGeometry(0.13, 28, 18),
@@ -539,13 +606,23 @@ export class Court3D {
       this.landing.scale.setScalar(0.35 + 0.15 * Math.sin(now / 90));
     }
 
+    this.referee.pose(motion.referee);
+
     this.renderer.render(this.scene, this.camera);
   }
 
   /** Where a player's head is on screen, CSS px — for the labels over them. */
   headOnScreen(p: number): { X: number; Y: number; s: number } | null {
     const f = this.figures.get(p);
-    if (f === undefined) return null;
+    return f === undefined ? null : this.onScreen(f);
+  }
+
+  /** Where the referee's head is on screen, for their call over it. */
+  refereeOnScreen(): { X: number; Y: number; s: number } {
+    return this.onScreen(this.referee);
+  }
+
+  private onScreen(f: Figure): { X: number; Y: number; s: number } {
     f.head.getWorldPosition(this.tmp);
     this.tmp.z += 0.12;
     const d = this.tmp.distanceTo(this.camera.position);
@@ -556,6 +633,7 @@ export class Court3D {
 
   dispose(): void {
     for (const f of this.figures.values()) f.dispose();
+    this.referee.dispose();
     this.figures.clear();
     this.scene.traverse((o) => {
       if (!(o instanceof Mesh)) return;

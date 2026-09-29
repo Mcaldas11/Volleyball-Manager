@@ -117,6 +117,31 @@ const HIPS = shape(STAND, { lean: 0.06, nod: 0.45, ...arms(-0.25, 0.55, 1.9, 0.6
 /** Running flat out: tall, leaning into it, elbows bent and the arms pumping. */
 const RUN = shape(STAND, { crouch: 0.05, tilt: 0.1, lean: 0.14, nod: -0.05, stance: 0.1, stride: 0, ...arms(0.1, 0.12, 1.5) });
 
+// ---- The referee's signals, as the FIVB rules give them ----------------------------------
+//
+// The arms are worked out so the hands land where the signal puts them: the
+// whistle at the mouth, an arm straight out at shoulder height, the palm of
+// one hand across the fingers of the other for a time-out.
+
+/** Up on the stand between calls, hands together in front. */
+const REF_REST = shape(STAND, {
+  nod: 0.05, stance: 0.14, stride: 0,
+  hFlex: 0.13, hAbd: -0.69, hTwist: -1.14, hElbow: 0.9, oFlex: 0.13, oAbd: -0.69, oTwist: -1.14, oElbow: 0.9,
+});
+const WHISTLE = shape(REF_REST, { nod: -0.05, hFlex: 0.36, hAbd: -0.94, hTwist: 0.92, hElbow: 2.41 });
+/** An arm straight out towards a side: the hitting (right) arm, or the other. */
+const POINT_H = shape(REF_REST, { hFlex: 1.25, hAbd: 1.5, hTwist: 0.14, hElbow: 0.2 });
+const POINT_O = shape(REF_REST, { oFlex: 1.25, oAbd: 1.5, oTwist: 0.14, oElbow: 0.2 });
+/** The serve waved on: the arm swept across, from the server's side towards the other. */
+const SWEEP_H = shape(REF_REST, { hFlex: 1.51, hAbd: -0.75, hTwist: -1.45, hElbow: 0 });
+const SWEEP_O = shape(REF_REST, { oFlex: 1.51, oAbd: -0.75, oTwist: -1.45, oElbow: 0 });
+/** Time-out: one hand flat across the fingers of the other, a T. */
+const TIME_OUT = shape(REF_REST, {
+  nod: -0.05, hFlex: 0.24, hAbd: -0.11, hTwist: 0.65, hElbow: 2.19, oFlex: 1.72, oAbd: 0.44, oTwist: 1.47, oElbow: 2.17,
+});
+/** Ball out: both forearms raised, palms towards the body. */
+const BALL_OUT = shape(REF_REST, { ...arms(0.93, 0.23, 2.4, -0.09) });
+
 /** The posture each pose settles into between contacts. */
 function postureOf(pose: Pose): Shape {
   switch (pose) {
@@ -323,6 +348,26 @@ function reach(s: Shape, hand: 1 | -1, which: 'hit' | 'both', scale: number): V3
   return [h[0] * scale, h[1] * scale, h[2] * scale];
 }
 
+/** Where the first referee's stand is: off the far sideline beside the post, a
+ *  little towards the near end so the post doesn't hide them; and how high
+ *  the platform is, putting their eyes well above the tape. */
+export const REFEREE_STAND = { x: -5.85, y: -0.6, height: 1.25 } as const;
+
+/** What the referee is signalling: the serve waved on, the point to a side, a time-out. */
+export type Call = 'serve' | 'point' | 'timeout';
+
+export interface Signal {
+  kind: Call;
+  /** The side it is for: who serves, who won the point, who called the time-out. */
+  team: 0 | 1;
+  /** The point came from a ball out, signalled before the point. */
+  out: boolean;
+  /** When it began and ends, and when the whistle blows, ms on the animation clock. */
+  t0: number;
+  end: number;
+  whistle: [number, number];
+}
+
 /** The side of the net a player is on: +1 for the near half (negative y), which faces +y. */
 function netYaw(y: number): number {
   return y <= 0 ? 0 : Math.PI;
@@ -359,12 +404,51 @@ export class CourtMotion {
   actor: number | null = null;
   private actorPose: Pose | null = null;
   private first = true;
-  private point: { team: 0 | 1; at: number } | null = null;
+  private point: { team: 0 | 1; at: number; out: boolean } | null = null;
+
+  /** The first referee, up on the stand, facing the court. */
+  readonly referee: Body;
+  /** What they are signalling now, if anything. */
+  signal: Signal | null = null;
+  /** How fast the match is being shown: the referee's signals keep pace. */
+  pace = 1;
+  /** Calls waiting for the referee: a point, a time-out. */
+  private calls: Array<Pick<Signal, 'kind' | 'team' | 'out'>> = [];
+  /** A rally is being played: the referee keeps their calls until it is over. */
+  private live = false;
+  /** The next serve still has to be waved on — from when, and for which side. */
+  private needServe = true;
+  private serveDue: number | null = null;
+  private serveTeam: 0 | 1 | null = null;
+  private stoppage: { timeout: 0 | 1 | null; paused: boolean } = { timeout: null, paused: false };
 
   constructor(
     private readonly figure: (p: number) => Figure,
     private readonly teamOf: (p: number) => 0 | 1,
-  ) {}
+  ) {
+    const r = REFEREE_STAND;
+    this.referee = {
+      x: r.x, y: r.y, tx: r.x, ty: r.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: -Math.PI / 2, lift: r.height, vz: 0,
+      pose: 'stand', posture: REF_REST, shape: REF_REST, gait: 0, running: 0, action: null, reaction: null, fade: null,
+      alpha: 1, leaving: false, scale: 1.85 / REF_HEIGHT, hand: 1, seed: 7,
+      rig: buildRig(REF_REST, STILL),
+    };
+  }
+
+  /** Play stopped or not, and a time-out called: the referee signals the
+   *  time-out once the rally in play is over, and waves no serve on until
+   *  play is back on — and then waves it on again, even if it had been. */
+  setStoppage(timeout: 0 | 1 | null, paused: boolean, now: number): void {
+    if (timeout !== null && timeout !== this.stoppage.timeout) this.calls.push({ kind: 'timeout', team: timeout, out: false });
+    const stopped = timeout !== null || paused;
+    const was = this.stoppage.timeout !== null || this.stoppage.paused;
+    if (stopped && !this.live) {
+      this.needServe = true;
+      this.serveDue = null;
+    }
+    if (!stopped && was && this.needServe) this.serveDue = now + 300 / this.pace;
+    this.stoppage = { timeout, paused };
+  }
 
   /** Hand over a new scene: new marks, postures and contacts, and a new flight. */
   scene(sc: Scene, now: number): void {
@@ -380,7 +464,20 @@ export class CourtMotion {
     }
     this.actor = sc.actor;
     this.actorPose = sc.actor !== null ? sc.poses.get(sc.actor) ?? null : null;
-    if (sc.point !== null && sc.point !== undefined) this.point = { team: sc.point, at: now + sc.ms };
+    if (sc.point !== null && sc.point !== undefined) this.point = { team: sc.point, at: now + sc.ms, out: sc.out === true };
+    for (const [p, pose] of sc.poses) {
+      if (pose !== 'hold') continue;
+      // Ball in the server's hands: the serve gets waved on shortly.
+      this.serveTeam = this.teamOf(p);
+      if (this.needServe && this.serveDue === null) this.serveDue = now + 450 / this.pace;
+    }
+    if (this.actorPose === 'serve' || this.actorPose === 'float') {
+      // A point still unsignalled is history by the next serve.
+      this.calls = this.calls.filter((c) => c.kind !== 'point');
+      // Tossed already: if the whistle hasn't gone, it goes now.
+      if (this.needServe && sc.actor !== null) this.whistle({ kind: 'serve', team: this.teamOf(sc.actor), out: false }, now);
+      this.live = true;
+    }
 
     for (const [p, g] of sc.positions) {
       const pose = sc.poses.get(p) ?? 'stand';
@@ -567,6 +664,49 @@ export class CourtMotion {
     }
   }
 
+  /** Which side of the net a team is playing on: -1 the near half, +1 the far. */
+  private sideOf(team: 0 | 1): number {
+    for (const [p, b] of this.bodies) if (!b.leaving && this.teamOf(p) === team) return Math.sign(b.ty) || -1;
+    return team === 0 ? -1 : 1;
+  }
+
+  /** The referee blows and signals a call. Facing the court from the far side,
+   *  their right hand is towards the near half. */
+  private whistle(call: Pick<Signal, 'kind' | 'team' | 'out'>, now: number): void {
+    const toNear = this.sideOf(call.team) < 0;
+    const point = toNear ? POINT_H : POINT_O;
+    const k = 1 / this.pace;
+    const at = (list: Array<[number, Shape]>): Array<[number, Shape]> => list.map(([t, s]) => [t * k, s]);
+    let keys: Array<[number, Shape]>;
+    let blow: [number, number] = [130, 380];
+    if (call.kind === 'serve') {
+      keys = at([[130, WHISTLE], [360, WHISTLE], [560, point], [700, point], [980, toNear ? SWEEP_H : SWEEP_O],
+        [1150, toNear ? SWEEP_H : SWEEP_O], [1450, REF_REST]]);
+      blow = [130, 360];
+      this.needServe = false;
+      this.serveDue = null;
+    } else if (call.kind === 'timeout') {
+      keys = at([[130, WHISTLE], [400, WHISTLE], [620, TIME_OUT], [1300, TIME_OUT], [1500, point], [2100, point],
+        [2400, REF_REST]]);
+      blow = [130, 400];
+    } else {
+      const before: Array<[number, Shape]> = call.out ? [[560, BALL_OUT], [900, BALL_OUT]] : [];
+      const lag = call.out ? 520 : 0;
+      keys = at([[130, WHISTLE], [380, WHISTLE], ...before, [560 + lag, point], [1180 + lag, point], [1440 + lag, REF_REST]]);
+    }
+    const r = this.referee;
+    const list = timeline(0, [[0, r.shape], ...keys]);
+    const end = list[list.length - 1].t + 60;
+    r.reaction = { kind: 'stand', t0: now, tc: now, keys: list, jump: null, yaw: null, path: null, end };
+    this.signal = { ...call, t0: now, end: now + end, whistle: [now + blow[0] * k, now + blow[1] * k] };
+  }
+
+  /** Free for the next call: the last one is winding down. */
+  private refereeFree(now: number): boolean {
+    const r = this.referee.reaction;
+    return r === null || now - r.tc > r.end - 250 / this.pace;
+  }
+
   /** The end of a point: the winners celebrate, the losers take it in. */
   private react(now: number, winner: 0 | 1): void {
     for (const [p, b] of this.bodies) {
@@ -602,9 +742,25 @@ export class CourtMotion {
   step(dt: number, now: number): void {
     if (this.point !== null && now >= this.point.at) {
       this.react(now, this.point.team);
+      // The ball is down: whistle, and the point to the side that won it.
+      this.calls.unshift({ kind: 'point', team: this.point.team, out: this.point.out });
+      this.live = false;
+      this.needServe = true;
+      this.serveDue = null;
       this.point = null;
     }
+    if (!this.live && this.refereeFree(now)) {
+      const next = this.calls.shift();
+      if (next !== undefined) {
+        this.whistle(next, now);
+      } else if (this.needServe && this.serveDue !== null && now >= this.serveDue && this.serveTeam !== null
+        && this.stoppage.timeout === null && !this.stoppage.paused) {
+        this.whistle({ kind: 'serve', team: this.serveTeam, out: false }, now);
+      }
+    }
+    if (this.signal !== null && now > this.signal.end) this.signal = null;
     const ball = this.ballAt(now);
+    this.stepReferee(now, ball);
     for (const [p, b] of this.bodies) {
       this.stepBody(b, dt, now, ball);
       if (b.leaving && b.alpha < 0.02) this.bodies.delete(p);
@@ -613,6 +769,25 @@ export class CourtMotion {
       this.trail.push(ball);
       if (this.trail.length > 7) this.trail.shift();
     }
+  }
+
+  /** The referee stays put on the stand, following the ball with their eyes
+   *  between signals. */
+  private stepReferee(now: number, ball: Ball3 | null): void {
+    const r = this.referee;
+    if (r.reaction !== null && now - r.reaction.tc > r.reaction.end) r.reaction = null;
+    let s = r.posture;
+    if (r.reaction !== null) s = mixShape(s, sample(r.reaction.keys, now - r.reaction.tc), weight(r.reaction, now));
+    r.shape = s;
+    let lookYaw = 0;
+    let lookPitch = 0;
+    if (ball !== null) {
+      const dx = ball.x - r.x;
+      const dy = ball.y - r.y;
+      lookYaw = wrap(yawTo(dx, dy) - r.yaw);
+      lookPitch = 0.5 * Math.atan2(ball.z - r.lift - 1.7, Math.max(0.5, Math.hypot(dx, dy)));
+    }
+    r.rig = buildRig(s, { ...STILL, lookYaw, lookPitch });
   }
 
   private stepBody(b: Body, dt: number, now: number, ball: Ball3 | null): void {
