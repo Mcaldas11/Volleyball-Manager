@@ -31,6 +31,10 @@ import {
   type Fixture, type GameMessage, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
+import { defaultTactics } from '../engine/match/tactics.ts';
+import {
+  answerOffers, applyForJobs, countHolidayDay, DEFAULT_HOLIDAY, returnDay, type HolidayPlan,
+} from '../engine/world/holiday.ts';
 import {
   acceptIncomingOffer, closeTalks, counterIncomingOffer, counterLoanOffer, openTalks, submitOffer, type Talks,
 } from '../engine/world/deals.ts';
@@ -178,9 +182,8 @@ const NAV_HISTORY_LIMIT = 50;
  *  long enough to watch the date tick over, short enough that a quiet month
  *  passes in a second or two. */
 const DAY_TICK_MS = 45;
-
-/** The furthest a single Continue runs without anything happening. */
-const MAX_CONTINUE_DAYS = 62;
+/** A holiday runs a little quicker — the days are the assistant's. */
+const HOLIDAY_TICK_MS = 30;
 
 /** Rallies the AI lets a substitution settle before it considers another. */
 const AI_SUB_COOLDOWN_RALLIES = 4;
@@ -273,6 +276,13 @@ class Game {
   inboxSelected: number | null = null;
   /** True while Continue is running the calendar on, day by day. */
   processing = false;
+  /** The holiday options dialog, open — with the return date it offers first. */
+  holidayDialog: { returnDay: number | null } | null = null;
+  /** The instructions left last time, offered again next time. */
+  holidayPlan: HolidayPlan = DEFAULT_HOLIDAY;
+  /** Away on holiday: since when, until when (null for indefinitely), and a
+   *  request to come back early. */
+  holiday: { since: number; until: number | null; cutShort: boolean } | null = null;
   /** The user's match that has just finished: its result stays on screen
    *  until they continue, which brings in the rest of the matchday. */
   postMatch: number | null = null;
@@ -884,12 +894,12 @@ class Game {
   // ---- Time -------------------------------------------------------------
 
   /**
-   * The big button: run the calendar on, a day at a time, until something
-   * happens — news in the inbox, or one of the user's own matches (time never
-   * skips past a fixture). New post opens in the Inbox, the way a manager's
-   * day starts with the desk. `maxDays` caps a single run.
+   * The big button: on to the next day. New post opens in the Inbox, the way
+   * a manager's day starts with the desk. Longer jumps — to a match, to a
+   * date — are a holiday (see goOnHoliday). `maxDays` runs on further, a day
+   * at a time, until something happens: news, or one of the user's matches.
    */
-  async continueGame(maxDays = MAX_CONTINUE_DAYS): Promise<void> {
+  async continueGame(maxDays = 1): Promise<void> {
     const world = this.world;
     if (world === null || this.processing || this.matchday !== null || this.activeInterviewFixtureId !== null) return;
     if (this.postMatch !== null) {
@@ -922,6 +932,101 @@ class Game {
       this.openMessage((fresh.find((m) => m.category === 'career') ?? fresh[0]).id);
     }
     this.emit();
+  }
+
+  // ---- Holidays -----------------------------------------------------------
+
+  /** Open the holiday options, offering `day` as the return date. */
+  openHoliday(day: number | null = null): void {
+    if (this.world === null || this.processing || this.matchday !== null || this.postMatch !== null) return;
+    this.holidayDialog = { returnDay: day };
+    this.emit();
+  }
+
+  closeHoliday(): void {
+    this.holidayDialog = null;
+    this.emit();
+  }
+
+  /**
+   * Go on holiday: day after day runs on without the manager until the date
+   * he set — or, sooner, until something needs him: a job offer, the sack,
+   * the season's end. Each day his assistant answers the bids for his players
+   * and applies for jobs as instructed, and plays any match that comes up,
+   * with the manager's own tactics and team or his own. The news that came
+   * in waits in the inbox.
+   */
+  async goOnHoliday(plan: HolidayPlan): Promise<void> {
+    const world = this.world;
+    if (world === null || this.processing || this.matchday !== null || this.postMatch !== null) return;
+    const until = returnDay(world, plan.until);
+    if (until !== null && until <= world.day) return;
+    this.holidayPlan = plan;
+    this.holidayDialog = null;
+    this.holiday = { since: world.day, until, cutShort: false };
+    this.processing = true;
+    this.emit();
+
+    const before = world.messages.length;
+    const clubId = world.userClubId;
+    const season = world.season;
+    const offers = world.career.offers.length;
+    let why: string | null = null;
+    while (until === null || world.day < until) {
+      if (this.holiday.cutShort) { why = 'you cut it short'; break; }
+      this.holidayDay(plan);
+      if (this.world !== world) break;
+      if (world.userClubId !== clubId) { why = world.userClubId < 0 ? 'the board has let you go' : 'you have a new job'; break; }
+      if (world.career.offers.length > offers) { why = 'a club has offered you a job'; break; }
+      if (world.season !== season) { why = 'the season is over'; break; }
+      this.emit();
+      await sleep(HOLIDAY_TICK_MS);
+      if (this.world !== world) break;
+    }
+    const away = world.day - this.holiday.since;
+    this.holiday = null;
+    this.processing = false;
+    const news = world.messages.length - before;
+    this.notice = `Back from holiday after ${away} day${away === 1 ? '' : 's'}${why !== null ? ` — ${why}` : ''}.` +
+      (news > 0 ? ` ${news} new message${news === 1 ? '' : 's'} in the inbox.` : '');
+    // The season's review keeps the screen; otherwise, back to the desk.
+    if (this.selectedReview === null && news > 0) this.go('inbox');
+    this.emit();
+  }
+
+  /** Come back early — the holiday ends at the end of the day in progress. */
+  returnFromHoliday(): void {
+    if (this.holiday === null) return;
+    this.holiday.cutShort = true;
+    this.emit();
+  }
+
+  /** One day away: the bids and the job market dealt with as instructed, and
+   *  any match played by the assistant. */
+  private holidayDay(plan: HolidayPlan): void {
+    const world = this.world;
+    if (world === null) return;
+    answerOffers(world, plan.offers, plan.onlyListed);
+    if (plan.jobs !== null) applyForJobs(world, plan.jobs);
+    countHolidayDay(world);
+    const match = this.ownFixtureToday();
+    const club = this.club;
+    if (match === null || club === null) {
+      this.stepDay();
+      return;
+    }
+    // The assistant's own tactics and team, unless told to keep the manager's.
+    const tactics = club.tactics;
+    const lineup = club.preferredLineup;
+    if (!plan.useTactics) club.tactics = defaultTactics();
+    if (!plan.useSelection) club.preferredLineup = [];
+    try {
+      this.stepDay();
+    } finally {
+      club.tactics = tactics;
+      club.preferredLineup = lineup;
+    }
+    if (match.played) this.checkChampionshipWin(world, match);
   }
 
   /** One day of the world — or, once the season is over, the rollover into the next. */
@@ -1098,15 +1203,17 @@ class Game {
 
   // ---- Matchday -----------------------------------------------------------
 
-  /** Fast-forward to the user's next fixture and open the pre-match lineup screen. */
+  /** Open the pre-match lineup screen for today's match. A match further
+   *  off is reached by going on holiday until its day. */
   openMatchday(): void {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return;
     const next = this.nextFixture();
     if (next === null) return;
-    while (world.day < next.day) {
-      advanceDay(world, this.ctx, { detailedClubs: new Set([world.userClubId]) });
+    if (world.day < next.day) {
+      this.openHoliday(next.day);
+      return;
     }
 
     const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, club);

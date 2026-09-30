@@ -83,6 +83,9 @@ export function CalendarScreen(): JSX.Element {
             <button className="cal-today-btn" onClick={() => setMonthStart(firstOf(today))}>Today</button>
           )}
           <span className="flex-spacer" />
+          <button className="cal-full" disabled={g.processing} onClick={() => g.openHoliday()}>
+            <Icon name="calendar" size={14} /> Go on holiday
+          </button>
           <button className="cal-full" onClick={() => g.go('fixtures')}>Full schedule</button>
         </header>
         <div className="cal-weekdays">
@@ -97,7 +100,10 @@ export function CalendarScreen(): JSX.Element {
             return (
               <div
                 key={day}
-                className={`cal-cell${inMonth ? '' : ' out'}${day === today ? ' today' : ''}${day < today ? ' past' : ''}`}
+                className={`cal-cell${inMonth ? '' : ' out'}${day === today ? ' today' : ''}${day < today ? ' past' : ''}${day > today ? ' ahead' : ''}`}
+                // A day ahead: go on holiday until it.
+                title={day > today ? `Go on holiday until ${g.dateLabelForDay(day)}` : undefined}
+                onClick={day > today ? () => g.openHoliday(day) : undefined}
               >
                 <span className="cal-day">
                   {date?.getUTCDate()}
@@ -193,7 +199,14 @@ function FixtureChip({ fixture: f }: { fixture: Fixture }): JSX.Element {
     );
   }
   return (
-    <button className={`cal-chip ${kind}`} title={`${comp?.name ?? ''}: ${opp?.name ?? ''}`} onClick={() => opp !== undefined && g.selectClub(opp.id)}>
+    <button
+      className={`cal-chip ${kind}`}
+      title={`${comp?.name ?? ''}: ${opp?.name ?? ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (opp !== undefined) g.selectClub(opp.id);
+      }}
+    >
       {name}
     </button>
   );

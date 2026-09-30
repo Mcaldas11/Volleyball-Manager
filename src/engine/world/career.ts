@@ -84,6 +84,8 @@ export interface ManagerCareer {
   blockedUntil: Map<number, number>;
   /** Day a club last approached him unprompted, -1 if never. */
   lastApproach: number;
+  /** Days on holiday this season (see holiday.ts). Absent until he first takes one. */
+  holiday?: { season: number; days: number };
 }
 
 /** Where a new coach's board starts: the benefit of the doubt. */

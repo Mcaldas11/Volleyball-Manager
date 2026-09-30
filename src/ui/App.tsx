@@ -5,6 +5,7 @@ import {
   ClubCrest, clubThemeStyle, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
 import { Icon, type IconName } from './icons.tsx';
+import { HolidayDialog, HolidayProgress } from './holiday.tsx';
 import { CLUBLESS_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
@@ -203,6 +204,8 @@ function GameShell(): JSX.Element {
       </div>
       <Toast />
       <TrophyOverlay />
+      <HolidayDialog />
+      <HolidayProgress />
     </div>
   );
 }
@@ -463,11 +466,12 @@ function Header(): JSX.Element {
 }
 
 /**
- * The big button in the corner, and the one way time moves on. It reads what
- * the day needs: the next unread message while you are working through the
- * inbox, the match on a match day, the aftermath once a match is over — and
- * otherwise Continue, which runs the calendar on until something happens.
- * The chevron beside it keeps the finer controls.
+ * The big button in the corner, and the way time moves on. It reads what the
+ * day needs: the next unread message while you are working through the inbox,
+ * the match on a match day, the aftermath once a match is over — and
+ * otherwise Continue, which moves on a single day. Jumping further, to the
+ * next match or a date, is a holiday; the chevron beside it keeps that and
+ * the other finer controls.
  */
 function ContinueButton(): JSX.Element {
   const g = useGame();
@@ -522,16 +526,16 @@ function ContinueButton(): JSX.Element {
       {open && (
         <div className="menu-pop menu-pop-right">
           <button disabled={matchToday} onClick={() => { setOpen(false); void g.continueGame(); }}>
-            <Icon name="playOutline" size={15} /> Continue
+            <Icon name="playOutline" size={15} /> Continue to the next day
             {unread > 0 && <span className="menu-pop-note">{unread} unread</span>}
           </button>
-          <button disabled={matchToday} onClick={() => { setOpen(false); void g.continueGame(1); }}>
-            <Icon name="forward" size={15} /> Advance one day
+          <button onClick={() => { setOpen(false); g.openHoliday(); }}>
+            <Icon name="calendar" size={15} /> Go on holiday…
           </button>
           <button disabled={next === null} onClick={() => { g.openMatchday(); setOpen(false); }}>
             <Icon name="fastForward" size={15} />
             <span className="menu-pop-stack">
-              <span>{next === null ? 'No fixture scheduled' : matchToday ? 'Play match' : 'Skip to next match'}</span>
+              <span>{next === null ? 'No fixture scheduled' : matchToday ? 'Play match' : 'Holiday until the next match…'}</span>
               {next !== null && opponent !== undefined && (
                 <span className="faint">
                   {next.home === world.userClubId ? 'vs' : 'at'} {opponent.shortName} · {g.dateLabelForDay(next.day)}
