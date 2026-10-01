@@ -13,6 +13,8 @@ import { ClubCrest } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { notesOn, shortCompName } from './screens/Calendar.tsx';
 import { CATEGORY_META, MessageAvatar } from './screens/Inbox.tsx';
+import { NEWS_KIND, NewsVisual, useNewsDate } from './screens/News.tsx';
+import type { NewsItem } from '../engine/world/news.ts';
 import { useGame } from './state.ts';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -36,10 +38,12 @@ export function ProcessingWindow(): JSX.Element | null {
 
   if (world === null || view === null) return null;
   const fresh = world.messages.slice(view.firstMessage).filter((m) => m.archived !== true).reverse();
-  // The news: the latest of what came in, the newsworthy first — or, before
-  // anything has, the latest there was.
+  // The news: the latest story from around the world, or from the post — the
+  // newsworthy first — or, before anything has come in, the latest there was.
+  const story = [...world.news].reverse().find((n) => n.id >= view.firstNews);
   const featured = fresh.find((m) => NEWSWORTHY.has(messageCategory(m))) ?? fresh[0]
     ?? [...world.messages].reverse().find((m) => m.archived !== true);
+  const lastStory = world.news[world.news.length - 1];
   const holiday = g.holiday;
 
   return (
@@ -79,7 +83,10 @@ export function ProcessingWindow(): JSX.Element | null {
           </aside>
 
           <div className="proc-right">
-            {featured !== undefined ? <NewsCard message={featured} /> : <div className="proc-news proc-news-empty" />}
+            {story !== undefined ? <StoryCard item={story} />
+              : fresh.length > 0 && featured !== undefined ? <NewsCard message={featured} />
+                : lastStory !== undefined ? <StoryCard item={lastStory} />
+                  : featured !== undefined ? <NewsCard message={featured} /> : <div className="proc-news proc-news-empty" />}
             <Fortnight />
           </div>
         </div>
@@ -161,6 +168,22 @@ function NewsCard({ message: m }: { message: GameMessage }): JSX.Element {
         <span className="proc-news-meta">{messageSender(m)} <i>|</i> {when}</span>
       </div>
       <div className="proc-news-face"><MessageAvatar message={m} size={118} /></div>
+    </article>
+  );
+}
+
+/** A story from the world's news, as the front page has it. */
+function StoryCard({ item: n }: { item: NewsItem }): JSX.Element {
+  const when = useNewsDate();
+  return (
+    <article key={n.id} className="proc-news" style={{ '--cat': NEWS_KIND[n.kind].color } as CSSProperties}>
+      <div className="proc-news-text">
+        <span className="proc-news-kicker"><Icon name={NEWS_KIND[n.kind].icon} size={13} /> {NEWS_KIND[n.kind].label}</span>
+        <h3 className="proc-news-title">{n.headline}</h3>
+        <p className="proc-news-body">{n.body}</p>
+        <span className="proc-news-meta">World News <i>|</i> {when(n.day)}</span>
+      </div>
+      <div className="proc-news-face"><NewsVisual item={n} size={104} /></div>
     </article>
   );
 }

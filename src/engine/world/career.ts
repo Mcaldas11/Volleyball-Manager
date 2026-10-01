@@ -14,6 +14,7 @@
  * calendar keeps running until somebody takes him on.
  */
 
+import { newsCoachAppointed, newsCoachSacked } from './news.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { StaffRole, type Staff } from '../model/staff.ts';
@@ -202,6 +203,7 @@ function openVacancy(world: World, club: Club): void {
 function sackCoach(world: World, club: Club): void {
   const coach = headCoachOf(world, club);
   if (coach !== undefined) coach.reputation = Math.round(coach.reputation * 0.9);
+  newsCoachSacked(world, club, coach);
   openVacancy(world, club);
 }
 
@@ -231,6 +233,7 @@ function fillVacancy(world: World, v: Vacancy): void {
   club.staff.push(coach.id);
   club.coachSince = world.day;
   club.boardConfidence = CONFIDENCE_START;
+  newsCoachAppointed(world, club, coach);
 }
 
 // ---- Taking a job, and leaving one ----------------------------------------------

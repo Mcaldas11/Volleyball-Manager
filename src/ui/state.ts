@@ -66,12 +66,12 @@ import {
 export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
-  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs';
+  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
-  'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame',
+  'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news',
 ]);
 
 export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
@@ -181,6 +181,19 @@ const NAV_HISTORY_LIMIT = 50;
 /** How long each day stays on screen while Continue runs the calendar on —
  *  long enough to watch the date tick over, short enough that a quiet month
  *  passes in a second or two. */
+/** Something to answer before the day moves on — see GameState.pendingDecision. */
+export interface PendingDecision {
+  kind: 'interview' | 'offer';
+  /** What the Continue button says while it waits. */
+  label: string;
+  /** Why the day can't move on yet. */
+  reason: string;
+  fixtureId: number | null;
+  offerId: number | null;
+  /** The inbox message to answer it from. */
+  messageId: number | null;
+}
+
 const DAY_TICK_MS = 45;
 /** A holiday runs a little quicker — the days are the assistant's. */
 const HOLIDAY_TICK_MS = 110;
@@ -286,7 +299,7 @@ class Game {
   holidayPlan: HolidayPlan = DEFAULT_HOLIDAY;
   /** The processing window, up while days pass — one on Continue, many on
    *  holiday — with the inbox as it stood when it opened. */
-  processingView: { kind: 'day' | 'holiday'; firstMessage: number } | null = null;
+  processingView: { kind: 'day' | 'holiday'; firstMessage: number; firstNews: number } | null = null;
   /** Away on holiday: since when, until when (null for indefinitely), and a
    *  request to come back early. */
   holiday: { since: number; until: number | null; cutShort: boolean } | null = null;
@@ -917,13 +930,14 @@ class Game {
       this.openMatchday();
       return;
     }
+    if (this.openPendingDecision()) return;
 
     this.processing = true;
     const before = world.messages.length;
     const opened = Date.now();
     // The processing window: the day as it stands, then turning over, and
     // whatever came in with it, before it closes on its own.
-    this.processingView = { kind: 'day', firstMessage: before };
+    this.processingView = { kind: 'day', firstMessage: before, firstNews: world.nextNewsId };
     this.emit();
     await this.processingPause(PROCESS_LEAD_MS);
     for (let d = 0; d < maxDays; d++) {
@@ -946,6 +960,49 @@ class Game {
       this.openMessage((fresh.find((m) => m.category === 'career') ?? fresh[0]).id);
     }
     this.emit();
+  }
+
+  /**
+   * What must be answered before the day can move on or a match be played,
+   * the way a manager can't walk past the press or leave a bid sitting on
+   * the desk: a press conference neither faced nor declined, or a bid for one
+   * of the players not yet accepted, countered or turned down. The press
+   * conference comes first — it is for the next match.
+   */
+  pendingDecision(): PendingDecision | null {
+    const world = this.world;
+    if (world === null) return null;
+    for (const s of world.pendingInterviews) {
+      if (s.finished || world.fixtures[s.fixtureId]?.played !== false) continue;
+      const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === s.fixtureId);
+      return {
+        kind: 'interview', label: 'Press conference', fixtureId: s.fixtureId, offerId: null, messageId: msg?.id ?? null,
+        reason: 'The press are waiting — attend the press conference or decline it before you go on.',
+      };
+    }
+    for (const o of world.incomingOffers) {
+      if ((o.status ?? 'open') !== 'open') continue;
+      const msg = world.messages.find((m) => m.offerId === o.id);
+      const club = world.clubs[o.buyingClubId]?.name ?? 'A club';
+      return {
+        kind: 'offer', label: 'Respond to offer', fixtureId: null, offerId: o.id, messageId: msg?.id ?? null,
+        reason: `${club} want an answer about ${world.players.fullName(o.playerIdx)} — accept, counter or reject the offer before you go on.`,
+      };
+    }
+    return null;
+  }
+
+  /** Take the manager to what needs answering, and say why he can't go on
+   *  yet. False if nothing does. */
+  openPendingDecision(): boolean {
+    const d = this.pendingDecision();
+    if (d === null) return false;
+    if (d.messageId !== null) this.openMessage(d.messageId);
+    else if (d.fixtureId !== null) this.openInterview(d.fixtureId);
+    else if (d.offerId !== null) this.openOffer(d.offerId);
+    this.notice = d.reason;
+    this.emit();
+    return true;
   }
 
   /** Wait up to `ms` with the processing window up — less if it is closed. */
@@ -995,7 +1052,7 @@ class Game {
     this.holidayPlan = plan;
     this.holidayDialog = null;
     this.holiday = { since: world.day, until, cutShort: false };
-    this.processingView = { kind: 'holiday', firstMessage: world.messages.length };
+    this.processingView = { kind: 'holiday', firstMessage: world.messages.length, firstNews: world.nextNewsId };
     this.processing = true;
     this.emit();
 
@@ -1041,6 +1098,12 @@ class Game {
     if (world === null) return;
     answerOffers(world, plan.offers, plan.onlyListed);
     if (plan.jobs !== null) applyForJobs(world, plan.jobs);
+    // The press get the assistant instead.
+    for (const s of [...world.pendingInterviews]) {
+      if (s.finished || !declineInterviewSession(world, s.fixtureId)) continue;
+      const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === s.fixtureId);
+      if (msg !== undefined) msg.body = 'Your assistant faced the press while you were on holiday.';
+    }
     countHolidayDay(world);
     const match = this.ownFixtureToday();
     const club = this.club;
@@ -1097,6 +1160,7 @@ class Game {
     const world = this.world;
     const f = this.ownFixtureToday();
     if (world === null || f === null || this.processing) return;
+    if (this.openPendingDecision()) return;
     playFixture(world, this.ctx, f, true);
     this.captureWatched(f);
     this.checkChampionshipWin(world, f);
@@ -1248,6 +1312,7 @@ class Game {
       this.openHoliday(next.day);
       return;
     }
+    if (this.openPendingDecision()) return;
 
     const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, club);
     this.matchday = {

@@ -11,6 +11,7 @@
  * too generous, the world will have visibly drifted by season twenty.
  */
 
+import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, SQUAD_TARGET } from '../model/positions.ts';
@@ -161,7 +162,7 @@ function awardTitles(world: World, report: RolloverReport, record: SeasonRecord)
   }
 
   // Cup winners were crowned — and paid — the day of their final; the season
-  // record and the trophy cabinets catch up here.
+  // record and the trophy cabinets catch up here — and the papers report the lot.
   for (const comp of world.competitions) {
     const bracket = comp.cup?.bracket;
     if (!isCupCompetition(comp) || comp.cup?.season !== world.season || bracket == null || !bracket.resolved) continue;
@@ -176,6 +177,7 @@ function awardTitles(world: World, report: RolloverReport, record: SeasonRecord)
       report.champions.push({ competition: comp.name, winner: club.name });
     }
   }
+  newsChampions(world, record.champions);
 }
 
 // ---- Finances -------------------------------------------------------------
@@ -385,6 +387,9 @@ function runTransferWindow(world: World): number {
   // Expire contracts: every one that runs out on 30 June this season.
   const freeAgents: number[] = [];
   const userLeavers: number[] = [];
+  // Where each player let go came from, and who signed whom — for the papers.
+  const leftFrom = new Map<number, number>();
+  const signings: Array<{ playerIdx: number; from: number; to: number }> = [];
   const lastDay = seasonEndDay(world.season);
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i) || store.hasFlag(i, PlayerFlag.Youth)) continue;
@@ -415,10 +420,12 @@ function runTransferWindow(world: World): number {
         if (club !== undefined) club.players = club.players.filter((p) => p !== i);
         // Leaving at the end of the contract is part of the season just ended.
         logTransfer(world, i, store.clubId[i], -1, 0);
+        leftFrom.set(i, store.clubId[i]);
         store.clubId[i] = -1;
         freeAgents.push(i);
       } else {
         store.contractUntil[i] = seasonEndDay(world.season + world.rng.int(1, 3));
+        if (club !== undefined) newsExtension(world, club, i);
       }
     }
   }
@@ -466,6 +473,7 @@ function runTransferWindow(world: World): number {
         store.contractUntil[p] = seasonEndDay(world.season + world.rng.int(1, 4));
         // A summer signing belongs to the season about to start.
         logTransfer(world, p, -1, club.id, 0, world.season + 1);
+        signings.push({ playerIdx: p, from: leftFrom.get(p) ?? -1, to: club.id });
         available.delete(p);
         wageRoom -= store.wage[p];
         need--;
@@ -477,6 +485,7 @@ function runTransferWindow(world: World): number {
     refreshPreferredLineup(world, club);
   }
 
+  newsSignings(world, signings);
   return moves;
 }
 

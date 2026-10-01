@@ -14,6 +14,7 @@
  * is worth paying for.
  */
 
+import { newsInjury } from './news.ts';
 import type { Rng } from '../core/rng.ts';
 import {
   AGE_DECAY_WEIGHT, ATTRIBUTES, LATE_GROWTH_WEIGHT, type AttributeName,
@@ -96,6 +97,7 @@ export function rollInjuries(world: World): void {
     store.injuryType[i] = def.type;
     store.setFlag(i, PlayerFlag.Injured, true);
     store.morale[i] = Math.max(10, store.morale[i] - rng.int(5, 20));
+    newsInjury(world, i, def.type, days);
     if (club === world.userClubId) {
       injuryNotice(world, i, def.type, days);
     } else if (world.loans.length > 0 && world.userClubId >= 0 && loanOf(world, i)?.parentClubId === world.userClubId) {

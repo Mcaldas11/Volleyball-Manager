@@ -197,6 +197,9 @@ export function reviveWorld(raw: World): World {
   // Saves from before loans, and deals done while the window was shut, existed.
   raw.loans ??= [];
   raw.pendingMoves ??= [];
+  // Saves from before the world's news.
+  raw.news ??= [];
+  raw.nextNewsId ??= 0;
   // Saves from before the manager had a career: the club being managed
   // becomes the first job on record.
   backfillCareer(raw);

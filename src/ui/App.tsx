@@ -16,6 +16,7 @@ import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
 import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
+import { NewsScreen } from './screens/News.tsx';
 import { HomeScreen } from './screens/Home.tsx';
 import { InboxScreen } from './screens/Inbox.tsx';
 import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
@@ -98,6 +99,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'World',
     sections: [
+      { id: 'news', label: 'News', icon: 'news', tabs: [['news', 'World News']] },
       {
         id: 'calendar',
         label: 'Calendar',
@@ -232,6 +234,7 @@ function Screen(): JSX.Element {
     case 'career': return <CareerScreen />;
     case 'jobs': return <JobCentreScreen />;
     case 'calendar': return <CalendarScreen />;
+    case 'news': return <NewsScreen />;
     case 'competitions': return <CompetitionsScreen />;
     case 'squad': return <SquadScreen />;
     case 'lineup': return <LineupScreen />;
@@ -483,6 +486,8 @@ function ContinueButton(): JSX.Element {
   const unread = g.unreadMessages().length;
   const matchToday = g.ownFixtureToday() !== null;
   const inMatch = g.matchday !== null;
+  // A press conference or a bid to answer holds the day up.
+  const decision = g.pendingDecision();
   const blocked = inMatch || g.activeInterviewFixtureId !== null || g.processing;
   const inInbox = g.screen === 'inbox' && g.selectedPlayer === null && g.selectedClub === null &&
     g.selectedReview === null && g.negotiation === null && g.incomingOffer === null;
@@ -500,6 +505,10 @@ function ContinueButton(): JSX.Element {
       : g.matchday?.stage === 'setBreak' ? 'Set break' : 'Match in progress';
   } else if (g.postMatch !== null) {
     action = () => g.finishPostMatch();
+  } else if (decision !== null) {
+    label = decision.label;
+    icon = decision.kind === 'interview' ? 'press' : 'offer';
+    action = () => { g.openPendingDecision(); };
   } else if (inInbox && unread > 0) {
     label = 'Next unread';
     icon = 'inbox';
@@ -526,9 +535,15 @@ function ContinueButton(): JSX.Element {
       </button>
       {open && (
         <div className="menu-pop menu-pop-right">
-          <button disabled={matchToday} onClick={() => { setOpen(false); void g.continueGame(); }}>
+          <button
+            disabled={matchToday || decision !== null}
+            title={decision?.reason}
+            onClick={() => { setOpen(false); void g.continueGame(); }}
+          >
             <Icon name="playOutline" size={15} /> Continue to the next day
-            {unread > 0 && <span className="menu-pop-note">{unread} unread</span>}
+            {decision !== null
+              ? <span className="menu-pop-note">{decision.label}</span>
+              : unread > 0 && <span className="menu-pop-note">{unread} unread</span>}
           </button>
           <button onClick={() => { setOpen(false); g.openHoliday(); }}>
             <Icon name="calendar" size={15} /> Go on holiday…

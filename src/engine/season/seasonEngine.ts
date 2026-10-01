@@ -13,6 +13,7 @@
  * a match took.
  */
 
+import { newsDay } from '../world/news.ts';
 import type { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
 import { awardLeaguePoints, type Club, type LeagueTableRow } from '../model/club.ts';
@@ -384,6 +385,9 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     // Every result weighs on its clubs' boards — the user's may act on it.
     boardResults(world, todays);
   }
+
+  // What the papers make of the day.
+  newsDay(world, (todays ?? []).map((id) => world.fixtures[id]));
 
   // Any press conference for a match just played goes stale unfinished; line
   // up tomorrow's, if the user's club has one, before the day rolls over.

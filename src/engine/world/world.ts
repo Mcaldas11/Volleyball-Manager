@@ -17,6 +17,7 @@ import type { IncomingOffer } from './negotiation.ts';
 import type { Talks } from './deals.ts';
 import type { Loan, LoanReport } from './loans.ts';
 import type { PendingMove } from './moves.ts';
+import type { NewsItem } from './news.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -545,6 +546,18 @@ export interface World {
   pendingMoves: PendingMove[];
   /** The user's own career: jobs held, reputation, offers and applications — see career.ts. */
   career: ManagerCareer;
+  /** The world's news, most recent last — see news.ts. */
+  news: NewsItem[];
+  nextNewsId: number;
+  /** Who led each league at the last look, so the news can tell a new leader. */
+  newsLeaders?: Map<number, number>;
+  /** The award leagues' numbers on the 1st of the month: each player's
+   *  [competition, apps, rating sum, points] and each club's [played, won]. */
+  newsMonth?: {
+    season: number;
+    lines: Map<number, [number, number, number, number]>;
+    records: Map<number, [number, number]>;
+  };
   /** Clubs without a head coach, looking for one. */
   vacancies: Vacancy[];
 }
@@ -601,6 +614,8 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     pendingMoves: [],
     career: newCareer(),
     vacancies: [],
+    news: [],
+    nextNewsId: 0,
   };
 }
 
