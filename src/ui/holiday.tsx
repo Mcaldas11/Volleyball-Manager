@@ -2,8 +2,8 @@
  * Going on holiday, the way Football Manager does it: the one way to jump
  * the calendar on — to the next match, a week, a date of your choosing —
  * since Continue only ever moves on a day. The dialog takes the return date
- * and the instructions the assistant runs the club by meanwhile; while away,
- * a card shows the days passing and brings the manager back early on request.
+ * and the instructions the assistant runs the club by meanwhile; the days
+ * away then pass in the processing window (processing.tsx).
  */
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
@@ -251,34 +251,6 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
           <button onClick={() => g.closeHoliday()}>Cancel</button>
           <button className="primary" disabled={!valid} onClick={confirm}>Confirm holiday</button>
         </footer>
-      </div>
-    </div>
-  );
-}
-
-/** While away: the days passing, and the way back. */
-export function HolidayProgress(): JSX.Element | null {
-  const g = useGame();
-  const world = g.world;
-  const h = g.holiday;
-  if (world === null || h === null) return null;
-  const away = world.day - h.since;
-  const total = h.until === null ? null : h.until - h.since;
-  return (
-    <div className="hol-overlay hol-away">
-      <div className="hol-progress" role="status">
-        <span className="hol-kicker">On holiday</span>
-        <strong className="hol-date">{g.longDateLabel(world.day)}</strong>
-        <span className="faint">
-          {h.until === null ? 'Until something needs you' : `Back on ${g.longDateLabel(h.until)}`}
-          {' · '}{away} day{away === 1 ? '' : 's'} away
-        </span>
-        {total !== null && (
-          <div className="hol-bar"><span style={{ width: `${Math.min(100, (away / Math.max(1, total)) * 100)}%` }} /></div>
-        )}
-        <button disabled={h.cutShort} onClick={() => g.returnFromHoliday()}>
-          <Icon name="back" size={14} /> {h.cutShort ? 'Returning…' : 'Return from holiday'}
-        </button>
       </div>
     </div>
   );

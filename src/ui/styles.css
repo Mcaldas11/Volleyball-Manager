@@ -3615,24 +3615,119 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .hol-note { margin: 2px 0 0; padding: 8px 11px; border-radius: 8px; background: var(--gold-soft); font-size: 12.5px; color: var(--text-dim); }
 .hol-foot { display: flex; justify-content: center; gap: 10px; padding: 12px; border-top: 1px solid var(--line); }
 
-.hol-away { cursor: progress; }
-.hol-progress {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-width: min(340px, 100%);
-  padding: 22px 30px;
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
-  border: 1px solid rgba(215, 167, 63, 0.35);
-  border-radius: 12px;
-  box-shadow: var(--shadow-pop);
-  cursor: default;
-}
-.hol-kicker { font: 700 11px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
-.hol-date { font: 800 21px/1.2 var(--font-display); }
 .hol-bar { width: 100%; height: 6px; margin: 6px 0; overflow: hidden; border-radius: 3px; background: var(--surface-3); }
 .hol-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright)); }
+
+/* ============================================================
+   Processing — the window up while the days pass
+   ============================================================ */
+
+.proc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 7, 10, 0.6);
+  backdrop-filter: blur(2px);
+  animation: trophy-backdrop-in 0.15s ease;
+}
+.proc-window {
+  display: flex;
+  flex-direction: column;
+  width: min(1140px, 100%);
+  height: min(760px, 100%);
+  padding: 12px 14px 14px;
+  background: linear-gradient(180deg, var(--surface-2), var(--bg-deep));
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+}
+.proc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.proc-title { font: 700 13px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+.proc-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(250px, 330px) 1fr; gap: 14px; }
+.proc-left, .proc-right { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.proc-h { margin: 0 0 8px; font: 700 15px/1.2 var(--font-display); letter-spacing: 0.02em; }
+
+/* The day, in gold, with the next match under it. */
+.proc-day {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px 15px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--gold-deep), #7a5a17 70%, #4d3a12);
+  border: 1px solid rgba(240, 195, 90, 0.45);
+  color: #fff8e6;
+}
+.proc-day-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.proc-day-date { font: 800 30px/1 var(--font-display); letter-spacing: 0.01em; }
+.proc-day-date.turning { animation: proc-turn 0.35s ease; }
+@keyframes proc-turn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.proc-day .spinner { border-color: rgba(255, 248, 230, 0.35); border-top-color: #fff8e6; }
+.proc-day-kicker { margin-top: 6px; font: 800 17px/1.1 var(--font-display); }
+.proc-day-line { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.proc-day-when { margin-left: 2px; opacity: 0.8; }
+
+.proc-holiday { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; color: var(--text-dim); }
+.proc-holiday .hol-bar { margin: 2px 0; }
+.proc-holiday button { align-self: flex-start; }
+
+.proc-msgs { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.proc-empty { margin: 0; font-size: 12.5px; color: var(--text-faint); }
+.proc-msg-list { flex: 1; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.proc-msg { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--line-soft); animation: proc-turn 0.3s ease; }
+.proc-msg-text { display: flex; flex-direction: column; min-width: 0; }
+.proc-msg-text small { font-size: 11px; color: var(--text-faint); }
+.proc-msg-text b { overflow: hidden; font-size: 13px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+
+/* The front page. */
+.proc-news {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 20px;
+  min-height: 210px;
+  padding: 22px 26px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(ellipse 60% 90% at 85% 50%, color-mix(in srgb, var(--cat) 22%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--surface), var(--bg-deep));
+  animation: proc-turn 0.35s ease;
+}
+.proc-news-empty { background: var(--surface); }
+.proc-news-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.proc-news-kicker { display: inline-flex; align-items: center; gap: 6px; font: 700 11px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--cat); }
+.proc-news-title { margin: 0; font: 800 26px/1.15 var(--font-display); }
+.proc-news-body { display: -webkit-box; margin: 0; overflow: hidden; -webkit-line-clamp: 4; -webkit-box-orient: vertical; font-size: 13px; line-height: 1.5; color: var(--text-dim); }
+.proc-news-meta { font-size: 12px; color: var(--text); }
+.proc-news-meta i { margin: 0 6px; font-style: normal; color: var(--text-faint); }
+.proc-news-face { display: grid; place-items: center; width: 132px; height: 132px; border-radius: 50%; background: rgba(255, 255, 255, 0.04); }
+
+/* This week and next. */
+.proc-cal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.proc-cal-title { color: var(--gold-bright); }
+.proc-cal-week, .proc-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.proc-cal-week span { padding: 0 6px 5px; font-size: 11.5px; font-weight: 600; color: var(--text-dim); }
+.proc-cal-grid { flex: 1; min-height: 0; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.proc-cell { display: flex; flex-direction: column; gap: 5px; min-width: 0; min-height: 0; padding: 7px; overflow: hidden; border-radius: 6px; background: #09111b; border: 1px solid var(--line-soft); }
+.proc-cell.past { opacity: 0.6; }
+.proc-cell.today { background: var(--gold-soft); border-color: var(--gold-deep); opacity: 1; }
+.proc-cell-day { font: 700 14px/1 var(--font-display); }
+.proc-cell.today .proc-cell-day { color: var(--gold-bright); }
+.proc-match { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; max-width: 100%; padding: 3px 6px; border-radius: 5px; background: var(--surface-3); font-size: 11.5px; }
+.proc-match em { font-style: normal; font-size: 10px; color: var(--text-dim); }
+.proc-match.win { background: var(--good-soft); }
+.proc-match.loss { background: var(--bad-soft); }
+.proc-match-score { font-weight: 700; }
+.proc-match.win .proc-match-score { color: var(--good); }
+.proc-match.loss .proc-match-score { color: var(--bad); }
+.proc-note { font-size: 10.5px; color: var(--warn); }
+.proc-note.deadline { color: var(--bad); }
 
 /* Any day ahead on the calendar can be the end of a holiday. */
 .cal-cell.ahead { cursor: pointer; }

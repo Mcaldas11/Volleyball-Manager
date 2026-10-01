@@ -183,7 +183,11 @@ const NAV_HISTORY_LIMIT = 50;
  *  passes in a second or two. */
 const DAY_TICK_MS = 45;
 /** A holiday runs a little quicker — the days are the assistant's. */
-const HOLIDAY_TICK_MS = 30;
+const HOLIDAY_TICK_MS = 110;
+/** The processing window: how long the day stands before it turns, and the
+ *  least time the window stays up for a single day. */
+const PROCESS_LEAD_MS = 380;
+const PROCESS_MIN_MS = 1250;
 
 /** Rallies the AI lets a substitution settle before it considers another. */
 const AI_SUB_COOLDOWN_RALLIES = 4;
@@ -280,6 +284,9 @@ class Game {
   holidayDialog: { returnDay: number | null } | null = null;
   /** The instructions left last time, offered again next time. */
   holidayPlan: HolidayPlan = DEFAULT_HOLIDAY;
+  /** The processing window, up while days pass — one on Continue, many on
+   *  holiday — with the inbox as it stood when it opened. */
+  processingView: { kind: 'day' | 'holiday'; firstMessage: number } | null = null;
   /** Away on holiday: since when, until when (null for indefinitely), and a
    *  request to come back early. */
   holiday: { since: number; until: number | null; cutShort: boolean } | null = null;
@@ -912,16 +919,23 @@ class Game {
     }
 
     this.processing = true;
-    this.emit();
     const before = world.messages.length;
+    const opened = Date.now();
+    // The processing window: the day as it stands, then turning over, and
+    // whatever came in with it, before it closes on its own.
+    this.processingView = { kind: 'day', firstMessage: before };
+    this.emit();
+    await this.processingPause(PROCESS_LEAD_MS);
     for (let d = 0; d < maxDays; d++) {
+      if (this.world !== world) break;
       this.stepDay();
       this.emit();
       if (this.world !== world) break;
       if (world.messages.length > before || this.ownFixtureToday() !== null || this.trophyCelebration !== null) break;
       await sleep(DAY_TICK_MS);
-      if (this.world !== world) break;
     }
+    await this.processingPause(PROCESS_MIN_MS - (Date.now() - opened));
+    this.processingView = null;
     this.processing = false;
 
     // A season review opened by the rollover keeps the screen; otherwise the
@@ -931,6 +945,23 @@ class Game {
       const fresh = world.messages.slice(before);
       this.openMessage((fresh.find((m) => m.category === 'career') ?? fresh[0]).id);
     }
+    this.emit();
+  }
+
+  /** Wait up to `ms` with the processing window up — less if it is closed. */
+  private async processingPause(ms: number): Promise<void> {
+    const until = Date.now() + ms;
+    while (this.processingView !== null && Date.now() < until) await sleep(Math.min(50, until - Date.now()));
+  }
+
+  /** Close the processing window: at once on Continue; on holiday, by coming
+   *  back at the end of the day in progress. */
+  closeProcessing(): void {
+    if (this.holiday !== null) {
+      this.returnFromHoliday();
+      return;
+    }
+    this.processingView = null;
     this.emit();
   }
 
@@ -964,6 +995,7 @@ class Game {
     this.holidayPlan = plan;
     this.holidayDialog = null;
     this.holiday = { since: world.day, until, cutShort: false };
+    this.processingView = { kind: 'holiday', firstMessage: world.messages.length };
     this.processing = true;
     this.emit();
 
@@ -985,6 +1017,7 @@ class Game {
     }
     const away = world.day - this.holiday.since;
     this.holiday = null;
+    this.processingView = null;
     this.processing = false;
     const news = world.messages.length - before;
     this.notice = `Back from holiday after ${away} day${away === 1 ? '' : 's'}${why !== null ? ` — ${why}` : ''}.` +

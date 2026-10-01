@@ -13,7 +13,7 @@ interface DayNote {
 }
 
 /** Transfer windows opening and closing — the dates a manager plans around. */
-function notesOn(day: number): DayNote[] {
+export function notesOn(day: number): DayNote[] {
   const d = ((day % DAYS_PER_SEASON) + DAYS_PER_SEASON) % DAYS_PER_SEASON;
   const out: DayNote[] = [];
   for (const w of TRANSFER_WINDOWS) {
@@ -167,7 +167,7 @@ export function CalendarScreen(): JSX.Element {
 }
 
 /** A short tag for a chip — empty for the league, whose matches are most of the calendar. */
-function shortCompName(comp: Competition | undefined): string {
+export function shortCompName(comp: Competition | undefined): string {
   if (comp === undefined || comp.kind === 'league') return '';
   if (comp.key === 'cont:CEV:1') return 'CL';
   if (comp.key === 'cont:CEV:2') return 'CEV Cup';

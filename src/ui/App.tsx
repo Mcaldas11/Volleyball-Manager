@@ -5,7 +5,8 @@ import {
   ClubCrest, clubThemeStyle, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
 import { Icon, type IconName } from './icons.tsx';
-import { HolidayDialog, HolidayProgress } from './holiday.tsx';
+import { HolidayDialog } from './holiday.tsx';
+import { ProcessingWindow } from './processing.tsx';
 import { CLUBLESS_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
@@ -205,7 +206,7 @@ function GameShell(): JSX.Element {
       <Toast />
       <TrophyOverlay />
       <HolidayDialog />
-      <HolidayProgress />
+      <ProcessingWindow />
     </div>
   );
 }
