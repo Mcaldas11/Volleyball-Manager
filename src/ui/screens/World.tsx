@@ -197,6 +197,7 @@ export function RankingsScreen(): JSX.Element {
   const store = world.players;
   const userNation = g.club !== null ? g.club.nation : -1;
 
+  // The world ranking: points won and lost on the court, tournament by tournament.
   const ranked = world.nationalTeams
     .map((t) => {
       const squad = t.squad.filter((p) => store.isActive(p));
@@ -206,19 +207,22 @@ export function RankingsScreen(): JSX.Element {
       return { team: t, strength, squad };
     })
     .filter((r) => r.squad.length >= 8)
-    .sort((a, b) => b.strength - a.strength);
+    .sort((a, b) => b.team.rankingPoints - a.team.rankingPoints);
 
   return (
     <>
-      <p className="page-intro">Ranked by the average ability of each nation's current best fourteen.</p>
+      <p className="page-intro">
+        The world ranking: points won and lost in every international match, more for an upset and on the bigger stages.
+      </p>
       <Card title="National Teams" icon="world" flush>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th className="num">#</th><th>Nation</th><th>Confederation</th>
+                <th className="num">#</th><th>Nation</th><th>Confederation</th><th className="num">Points</th>
                 <th>Squad strength</th><th>Best player</th>
-                <th className="num">Olympic golds</th>
+                <th className="num">Olympic golds</th><th className="num">World titles</th>
+                <th className="num">Continental</th><th className="num">Nations League</th>
               </tr>
             </thead>
             <tbody>
@@ -226,6 +230,9 @@ export function RankingsScreen(): JSX.Element {
                 const best = [...r.squad].sort(
                   (a, b) => store.currentAbility[b] - store.currentAbility[a],
                 )[0];
+                const titles = (n: number | undefined, gold = false): JSX.Element => (n ?? 0) > 0
+                  ? <span className={gold ? 'gold-text' : 'strong'}><Icon name="trophy" size={13} /> {n}</span>
+                  : <span className="faint">0</span>;
                 return (
                   <tr key={r.team.nation} className={r.team.nation === userNation ? 'me' : ''}>
                     <td className="num">
@@ -233,6 +240,7 @@ export function RankingsScreen(): JSX.Element {
                     </td>
                     <td className="strong"><Flag nation={r.team.nation} /> {NATIONS[r.team.nation].name}</td>
                     <td className="dim">{NATIONS[r.team.nation].confederation}</td>
+                    <td className="num strong">{r.team.rankingPoints}</td>
                     <td>
                       <span className="ability-cell">
                         <StarMeter value={r.strength} size={11} />
@@ -240,11 +248,10 @@ export function RankingsScreen(): JSX.Element {
                       </span>
                     </td>
                     <td className="dim">{best !== undefined ? <PlayerLink idx={best} /> : '—'}</td>
-                    <td className="num">
-                      {r.team.olympicGolds > 0
-                        ? <span className="gold-text"><Icon name="trophy" size={13} /> {r.team.olympicGolds}</span>
-                        : <span className="faint">0</span>}
-                    </td>
+                    <td className="num">{titles(r.team.olympicGolds, true)}</td>
+                    <td className="num">{titles(r.team.worldTitles, true)}</td>
+                    <td className="num">{titles(r.team.continentalTitles)}</td>
+                    <td className="num">{titles(r.team.nationsLeagueTitles)}</td>
                   </tr>
                 );
               })}

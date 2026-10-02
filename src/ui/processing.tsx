@@ -6,6 +6,7 @@
  * around today on the calendar, results filling in as matches are played.
  */
 
+import { internationalNotes } from '../engine/world/internationals.ts';
 import { useEffect, type CSSProperties, type JSX } from 'react';
 import { messageSender } from '../engine/world/inbox.ts';
 import { messageCategory, type Fixture, type GameMessage, type MessageCategory } from '../engine/world/world.ts';
@@ -216,6 +217,9 @@ function Fortnight(): JSX.Element {
               {ownOn(day).map((f) => <MatchTag key={f.id} fixture={f} />)}
               {notesOn(day).map((n) => (
                 <span key={n.label} className={`proc-note ${n.kind}`}>{n.kind === 'deadline' ? 'Deadline' : 'Window opens'}</span>
+              ))}
+              {internationalNotes(world, day).map((n) => (
+                <span key={n.label} className="proc-note intl">{n.label}</span>
               ))}
             </div>
           );

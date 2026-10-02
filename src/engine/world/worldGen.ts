@@ -13,6 +13,7 @@
  * still makes sense forty seasons later after all of it has drifted.
  */
 
+import { planInternationals } from './internationals.ts';
 import { Rng } from '../core/rng.ts';
 import {
   newClub, newFinances, newTableRow, type Club,
@@ -105,6 +106,8 @@ export function generateWorld(opts: WorldGenOptions): World {
 
   createNationalTeams(world);
   ensureCupCompetitions(world);
+  // The national teams' first summer, on the calendar from day one.
+  planInternationals(world);
 
   return world;
 }

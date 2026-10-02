@@ -18,6 +18,7 @@ import type { Talks } from './deals.ts';
 import type { Loan, LoanReport } from './loans.ts';
 import type { PendingMove } from './moves.ts';
 import type { NewsItem } from './news.ts';
+import type { Internationals } from './internationals.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -158,6 +159,9 @@ export interface NationalTeam {
   managedByUser: boolean;
   olympicGolds: number;
   worldTitles: number;
+  /** Continental and Nations League titles; absent on saves from before they were played. */
+  continentalTitles?: number;
+  nationsLeagueTitles?: number;
 }
 
 /** One line in the permanent record book. */
@@ -284,7 +288,7 @@ export interface SeasonReview {
  *  approaches from other clubs, job applications, leaving a club. */
 export type MessageCategory =
   | 'news' | 'task' | 'offer' | 'interview' | 'contract'
-  | 'medical' | 'matchday' | 'finance' | 'board' | 'career';
+  | 'medical' | 'matchday' | 'finance' | 'board' | 'career' | 'international';
 
 /** The finance office's month-end snapshot of the club's books. */
 export interface FinanceStatement {
@@ -546,6 +550,8 @@ export interface World {
   pendingMoves: PendingMove[];
   /** The user's own career: jobs held, reputation, offers and applications — see career.ts. */
   career: ManagerCareer;
+  /** The national teams' tournaments — see internationals.ts. Absent until first planned. */
+  internationals?: Internationals;
   /** The world's news, most recent last — see news.ts. */
   news: NewsItem[];
   nextNewsId: number;

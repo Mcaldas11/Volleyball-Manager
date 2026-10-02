@@ -11,7 +11,7 @@ import {
 import { hashString } from '../engine/core/rng.ts';
 import type { Club } from '../engine/model/club.ts';
 import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
-import { INJURY_NAMES, type PlayerStore } from '../engine/model/players.ts';
+import { INJURY_NAMES, PlayerFlag, type PlayerStore } from '../engine/model/players.ts';
 import type { ManagerProfile } from '../engine/world/world.ts';
 import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/nations.ts';
 import { playerFaceUrl, portraitUrl } from './faces.ts';
@@ -385,6 +385,7 @@ export function Status({ store, i }: { store: PlayerStore; i: number }): JSX.Ele
       </span>
     );
   }
+  if (store.hasFlag(i, PlayerFlag.OnDuty)) return <span className="status-tag status-duty">International duty</span>;
   if (store.condition[i] < 60) return <span className="status-tag status-tired">Tired</span>;
   return <span className="faint">Fit</span>;
 }

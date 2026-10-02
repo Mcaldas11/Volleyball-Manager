@@ -915,6 +915,7 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .status-tag { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11.5px; font-weight: 600; }
 .status-injured { background: var(--bad-soft); color: #ff8a86; }
 .status-tired { background: var(--warn-soft); color: var(--warn); }
+.status-duty { background: var(--accent-soft); color: var(--accent-bright); }
 .status-loan { background: var(--accent-soft); color: var(--accent-bright); }
 .free-tag { color: var(--good); font-weight: 600; font-size: 12px; }
 .scouted-tag {
@@ -3617,6 +3618,84 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 
 .hol-bar { width: 100%; height: 6px; margin: 6px 0; overflow: hidden; border-radius: 3px; background: var(--surface-3); }
 .hol-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright)); }
+
+/* ============================================================
+   International — the national teams' tournaments
+   ============================================================ */
+
+.intl {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.intl-side { display: flex; flex-direction: column; min-height: 0; padding: 14px 12px; gap: 8px; border-right: 1px solid var(--line); }
+.intl-title { margin: 0 0 4px; font: 800 22px/1 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; }
+.intl-list { display: flex; flex-direction: column; gap: 4px; }
+.intl-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px; text-align: left; white-space: normal; background: transparent; border-color: var(--line); }
+.intl-pick b { font-size: 13px; }
+.intl-pick small { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-dim); }
+.intl-pick.on { background: var(--gold-soft); border-color: var(--gold-deep); }
+.intl-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; font: 700 14px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+.intl-side .intl-h { margin-top: 10px; }
+.intl-honours { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.intl-honour { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; font-size: 12.5px; border-bottom: 1px solid var(--line-soft); }
+.intl-none { margin: 0; font-size: 12.5px; color: var(--text-faint); }
+.intl-nation { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.intl-nation.won { font-weight: 700; color: var(--text); }
+
+.intl-main { min-height: 0; overflow-y: auto; }
+.intl-view { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 22px; }
+.intl-head { display: flex; flex-direction: column; gap: 6px; }
+.intl-kicker { display: inline-flex; align-items: center; gap: 6px; font: 700 12px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-bright); }
+.intl-name { margin: 0; font: 800 32px/1.05 var(--font-display); }
+.intl-status { color: var(--gold-bright); }
+.intl-podium { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 4px; }
+.intl-medal { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); }
+.intl-medal.gold { border-color: rgba(240, 195, 90, 0.6); color: var(--gold-bright); }
+.intl-medal.silver { border-color: rgba(200, 210, 225, 0.5); color: #d7dde6; }
+.intl-medal.bronze { border-color: rgba(205, 127, 50, 0.6); color: #d99a5b; }
+.intl-mvp { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); }
+
+.intl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.intl-card { min-width: 0; padding: 12px 14px; border-radius: 10px; background: var(--bg-deep); border: 1px solid var(--line); }
+.intl-ours, .intl-pools, .intl-bracket-card, .intl-results, .intl-squad { grid-column: 1 / -1; }
+.intl-pool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.intl-pool tr.intl-through td:first-child { box-shadow: inset 3px 0 0 var(--good); }
+.intl-bracket { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 12px; overflow-x: auto; }
+.intl-round { display: flex; flex-direction: column; justify-content: space-around; gap: 8px; }
+.intl-match {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.intl-match.bronze { border-style: dashed; }
+.intl-match-stage { grid-column: 1 / -1; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
+.intl-match .intl-nation:last-child { justify-self: end; }
+.intl-score { font-variant-numeric: tabular-nums; color: var(--gold-bright); }
+.intl-days { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+.intl-day { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
+.intl-day .intl-day-label { grid-column: 1 / -1; }
+.intl-day-label { font-size: 11.5px; font-weight: 700; color: var(--text-dim); }
+.intl-squad .data-table td, .intl-ours .data-table td { white-space: nowrap; }
+.intl-honours-list { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.intl-medal-tag { padding: 1px 6px; border-radius: 4px; font-size: 11.5px; background: var(--surface-3); }
+.intl-medal-tag.gold { color: var(--gold-bright); }
+.intl-medal-tag.silver { color: #d7dde6; }
+.intl-medal-tag.bronze { color: #d99a5b; }
+.cal-note.intl { color: var(--accent-bright); }
+.proc-note.intl { color: var(--accent-bright); }
 
 /* ============================================================
    World News

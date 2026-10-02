@@ -200,6 +200,8 @@ export function reviveWorld(raw: World): World {
   // Saves from before the world's news.
   raw.news ??= [];
   raw.nextNewsId ??= 0;
+  // Saves from before international duty needed a ninth player flag.
+  if (!(raw.players.flags instanceof Uint16Array)) raw.players.flags = Uint16Array.from(raw.players.flags);
   // Saves from before the manager had a career: the club being managed
   // becomes the first job on record.
   backfillCareer(raw);

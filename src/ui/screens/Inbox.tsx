@@ -29,10 +29,11 @@ export const CATEGORY_META: Readonly<Record<MessageCategory, { label: string; ic
   board: { label: 'Board', icon: 'board', color: '#4f8dff' },
   finance: { label: 'Finance', icon: 'coin', color: '#d9b43c' },
   career: { label: 'Career', icon: 'career', color: '#2fbf9b' },
+  international: { label: 'International', icon: 'world', color: '#5fb8ff' },
 };
 
 const FOLDER_ORDER: readonly MessageCategory[] = [
-  'career', 'offer', 'contract', 'task', 'medical', 'matchday', 'interview', 'news', 'board', 'finance',
+  'career', 'offer', 'contract', 'task', 'medical', 'matchday', 'international', 'interview', 'news', 'board', 'finance',
 ];
 
 type Folder = 'inbox' | 'starred' | 'archive' | MessageCategory;

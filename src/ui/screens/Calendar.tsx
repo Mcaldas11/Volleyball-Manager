@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react';
+import { internationalNotes } from '../../engine/world/internationals.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
 import { DAYS_PER_SEASON, TRANSFER_WINDOWS, type Competition, type Fixture } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
@@ -96,7 +97,7 @@ export function CalendarScreen(): JSX.Element {
             const date = g.calendarDate(day);
             const inMonth = date !== null && date.getUTCMonth() === month;
             const fixtures = day >= 0 ? ownOn(day) : [];
-            const notes = day >= 0 ? notesOn(day) : [];
+            const notes = day >= 0 ? [...notesOn(day), ...internationalNotes(world, day)] : [];
             return (
               <div
                 key={day}

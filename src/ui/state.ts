@@ -66,12 +66,12 @@ import {
 export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
-  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news';
+  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
-  'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news',
+  'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news', 'internationals',
 ]);
 
 export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
@@ -312,6 +312,8 @@ class Game {
   selectedReview: number | null = null;
   /** Competition whose page is open over the current screen, if any. */
   selectedCompetition: number | null = null;
+  /** Tournament the International screen should open on. */
+  focusTournament: number | null = null;
   /** Player the Scouting screen should jump to next time it opens; consumed once. */
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
@@ -716,6 +718,14 @@ class Game {
 
   /** Open a competition's page: its groups, bracket and results. */
   openCompetition(compId: number): void {
+    // A national teams' competition opens on its latest tournament.
+    const comp = this.world?.competitions[compId];
+    if (comp?.kind === 'international') {
+      const latest = [...(this.world?.internationals?.tournaments ?? [])].reverse().find((t) => t.competitionId === compId);
+      this.focusTournament = latest?.id ?? null;
+      this.go('internationals');
+      return;
+    }
     this.pushHistory({
       screen: this.screen, selectedPlayer: null, selectedClub: null, selectedReview: null, selectedCompetition: compId,
     });

@@ -13,6 +13,7 @@
  * a match took.
  */
 
+import { internationalDay } from '../world/internationals.ts';
 import { newsDay } from '../world/news.ts';
 import type { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
@@ -73,10 +74,12 @@ export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
  */
 export function pickLineup(
   store: PlayerStore,
-  club: Club,
+  club: Pick<Club, 'players' | 'preferredLineup' | 'preferredLibero' | 'preferredDefensiveLibero'>,
   mustStart?: ReadonlySet<number>,
+  /** Who can play — a club's fit players by default; a national team's own. */
+  canPlay: (p: number) => boolean = (p) => store.isAvailable(p),
 ): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[] } {
-  const available = club.players.filter((p) => store.isAvailable(p));
+  const available = club.players.filter(canPlay);
   const availableSet = new Set(available);
   const byPos = (pos: Position): number[] =>
     available
@@ -386,7 +389,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     boardResults(world, todays);
   }
 
-  // What the papers make of the day.
+  // The national teams' tournaments, and what the papers make of the day.
+  internationalDay(world);
   newsDay(world, (todays ?? []).map((id) => world.fixtures[id]));
 
   // Any press conference for a match just played goes stale unfinished; line

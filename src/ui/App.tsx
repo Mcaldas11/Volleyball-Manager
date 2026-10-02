@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
 import {
@@ -110,7 +111,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         id: 'competitions',
         label: 'Competitions',
         icon: 'trophy',
-        tabs: [['competitions', 'Overview'], ['table', 'League Table']],
+        tabs: [['competitions', 'Overview'], ['table', 'League Table'], ['internationals', 'International']],
       },
       {
         id: 'stats',
@@ -244,6 +245,7 @@ function Screen(): JSX.Element {
     case 'youth': return <YouthScreen />;
     case 'fixtures': return <FixturesScreen />;
     case 'table': return <TableScreen />;
+    case 'internationals': return <InternationalsScreen />;
     case 'stats': return <StatsScreen />;
     case 'transfers': return <TransfersScreen />;
     case 'scouting': return <ScoutingScreen />;

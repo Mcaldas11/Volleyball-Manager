@@ -30,6 +30,7 @@ export const CATEGORY_SENDER: Readonly<Record<MessageCategory, string>> = {
   finance: 'Finance Office',
   board: 'Board of Directors',
   career: 'Your Agent',
+  international: 'International Desk',
 };
 
 /** Who a message is from. */

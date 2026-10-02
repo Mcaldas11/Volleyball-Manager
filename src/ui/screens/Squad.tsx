@@ -638,6 +638,7 @@ export function PlayerDetail(): JSX.Element | null {
             <KV k="Blocks">{store.careerBlocks[p].toLocaleString()}</KV>
             <KV k="Titles">{store.careerTitles[p]}</KV>
             <KV k="International caps">{store.nationalCaps[p]}</KV>
+            <InternationalHonours p={p} />
           </Card>
           <Card title="Contract" icon="finances">
             <KV k="Club">{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</KV>
@@ -842,6 +843,37 @@ export function YouthScreen(): JSX.Element {
             </div>
           )}
       </Card>
+    </>
+  );
+}
+
+/** The medals a player has won with his country — and his country's call, if he is with it now. */
+function InternationalHonours({ p }: { p: number }): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  const I = world.internationals;
+  if (I === undefined) return null;
+  const medals = I.history.flatMap((h) => {
+    const at = h.medallists.findIndex(([, squad]) => squad.includes(p));
+    return at < 0 ? [] : [{ name: h.name, medal: ['Gold', 'Silver', 'Bronze'][at], mvp: h.mvp === p }];
+  });
+  const away = I.tournaments.find((t) => t.status !== 'done' && t.status !== 'planned'
+    && t.squads.some(([n, squad]) => squad.includes(p) && !t.out.includes(n)));
+  if (medals.length === 0 && away === undefined) return null;
+  return (
+    <>
+      {away !== undefined && <KV k="International duty" cls="accent-text">At the {away.name}</KV>}
+      {medals.length > 0 && (
+        <KV k="International honours">
+          <span className="intl-honours-list">
+            {medals.map((m) => (
+              <span key={m.name} className={`intl-medal-tag ${m.medal.toLowerCase()}`}>
+                {m.medal} · {m.name}{m.mvp ? ' · MVP' : ''}
+              </span>
+            ))}
+          </span>
+        </KV>
+      )}
     </>
   );
 }

@@ -36,6 +36,8 @@ export const enum PlayerFlag {
   HallOfFame = 1 << 6,
   /** Offered out on loan: other clubs are invited to borrow him. */
   LoanListed = 1 << 7,
+  /** Away with his national team at a tournament: not available to his club. */
+  OnDuty = 1 << 8,
 }
 
 /** Injury categories, ordered roughly by severity of long-term consequence. */
@@ -149,7 +151,7 @@ export class PlayerStore {
   form!: Int8Array;
   injuryDaysLeft!: Uint16Array;
   injuryType!: Uint8Array;
-  flags!: Uint8Array;
+  flags!: Uint16Array;
   /** How much he has been playing lately, 0-100: a rolling share of his
    *  club's recent matches spent on court. 50 until he has a record. */
   playingTime!: Uint8Array;
@@ -205,7 +207,7 @@ export class PlayerStore {
     this.form = new Int8Array(cap);
     this.injuryDaysLeft = new Uint16Array(cap);
     this.injuryType = new Uint8Array(cap);
-    this.flags = new Uint8Array(cap);
+    this.flags = new Uint16Array(cap);
     this.playingTime = new Uint8Array(cap).fill(PLAYING_TIME_UNKNOWN);
     this.contractUntil = new Int32Array(cap);
     this.wage = new Float64Array(cap);
@@ -342,8 +344,9 @@ export class PlayerStore {
     return (this.flags[i] & PlayerFlag.Retired) === 0;
   }
 
+  /** Fit and with his club — not injured, not away on international duty. */
   isAvailable(i: number): boolean {
-    return this.isActive(i) && this.injuryDaysLeft[i] === 0;
+    return this.isActive(i) && this.injuryDaysLeft[i] === 0 && (this.flags[i] & PlayerFlag.OnDuty) === 0;
   }
 
   /** Ergonomic wrapper. Allocates — never call this inside the rally loop. */
