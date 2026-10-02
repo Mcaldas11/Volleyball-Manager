@@ -33,6 +33,10 @@ import {
 import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
 import { defaultTactics, type Formation, type TeamTactics } from '../engine/match/tactics.ts';
 import {
+  activeTactic, deleteTactic as deleteTacticSlot, loadTactic as loadTacticSlot, MAX_TACTICS,
+  newTactic as newTacticSlot, renameTactic as renameTacticSlot, tacticSlots, type SavedTactic,
+} from '../engine/model/tacticSlots.ts';
+import {
   acceptNationalOffer, applyForNationalJob, applyIntlResult, askForSquad, canPlayForCountry, declineNationalOffer,
   leaveNationalJob, matchImportance, nameSquad,
   nationalApplicationBlock, nationName, nationSetup, postMatchReport, squadDue, squadOf, startNationalCareer, suggestSquad,
@@ -2268,11 +2272,18 @@ class Game {
   /** The system the user's side plays in today's match — a club's or a nation's —
    *  with the six re-picked for it before kickoff. */
   setMatchdayFormation(formation: Formation): void {
+    const tactics = this.matchTactics();
+    if (this.matchday?.stage !== 'lineup' || tactics === null) return;
+    tactics.formation = formation;
+    this.repickMatchdaySix();
+  }
+
+  /** Pick the six again before kickoff, for the system and team sheet now loaded. */
+  private repickMatchdaySix(): void {
     const world = this.world;
     const md = this.matchday;
     const tactics = this.matchTactics();
     if (world === null || md === null || md.stage !== 'lineup' || tactics === null) return;
-    tactics.formation = formation;
     const mine = md.sides[md.userIsHome ? 0 : 1];
     const club = this.club;
     const pick = md.national !== null || club === null
@@ -2287,6 +2298,51 @@ class Game {
     md.homeLibero = pick.libero;
     md.homeDefensiveLibero = pick.defensiveLibero;
     md.homeBench = pick.bench;
+    this.emit();
+  }
+
+  // ---- Saved tactics ------------------------------------------------------
+
+  /** The club's saved tactics, and which one is loaded. */
+  savedTactics(): { slots: SavedTactic[]; active: number } | null {
+    const club = this.club;
+    if (club === null) return null;
+    return { slots: tacticSlots(club), active: activeTactic(club) };
+  }
+
+  /** Load a saved tactic — before kickoff, the six is picked again for it. */
+  loadTactic(index: number): void {
+    const club = this.club;
+    if (club === null || (this.matchday !== null && this.matchday.stage !== 'lineup')) return;
+    if (!loadTacticSlot(club, index)) return;
+    this.notice = `${tacticSlots(club)[index].name} loaded.`;
+    if (this.matchday !== null && this.matchday.national === null) this.repickMatchdaySix();
+    this.emit();
+  }
+
+  /** A new tactic, copied from the loaded one, and loaded. */
+  newTactic(): void {
+    const club = this.club;
+    if (club === null) return;
+    const i = newTacticSlot(club);
+    this.notice = i === null
+      ? `You can keep ${MAX_TACTICS} tactics — delete one to make room.`
+      : `${tacticSlots(club)[i].name} created from the loaded tactic — change it as you like.`;
+    this.emit();
+  }
+
+  renameTactic(index: number, name: string): void {
+    const club = this.club;
+    if (club === null) return;
+    renameTacticSlot(club, index, name);
+    this.emit();
+  }
+
+  deleteTactic(index: number): void {
+    const club = this.club;
+    if (club === null || this.matchday !== null) return;
+    const name = tacticSlots(club)[index]?.name;
+    if (deleteTacticSlot(club, index)) this.notice = `${name} deleted.`;
     this.emit();
   }
 

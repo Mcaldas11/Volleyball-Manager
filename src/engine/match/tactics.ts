@@ -12,8 +12,9 @@ import { Position } from '../model/positions.ts';
 /**
  * The team's system: how many setters, and so who sets. In a 5-1 one setter
  * runs the offence from wherever he stands, with an opposite diagonal to him;
- * in a 4-2 two setters stand diagonal and whichever is in the front row sets —
- * always three blockers' worth of front row, but only two front-row hitters.
+ * in a 4-2 two setters stand diagonal and whichever is in the back row comes
+ * up to set, while the one at the net hits on the right — three front-row
+ * attackers in every rotation, but the right side is a setter's arm.
  */
 export enum Formation {
   FiveOne = 0,

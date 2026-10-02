@@ -8,6 +8,7 @@ import {
 import { NATIONS } from '../engine/world/nations.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { HolidayDialog } from './holiday.tsx';
+import { TacticPicker } from './tacticPicker.tsx';
 import { ProcessingWindow } from './processing.tsx';
 import { CLUBLESS_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
@@ -464,17 +465,21 @@ function Header(): JSX.Element {
       </div>
 
       {info.tabs !== null && (
-        <nav className="hdr-tabs">
-          {info.tabs.map(([id, label]) => (
-            <button
-              key={id}
-              className={`hdr-tab${g.screen === id && g.selectedClub === null && g.selectedPlayer === null && g.selectedCompetition === null ? ' active' : ''}`}
-              onClick={() => g.go(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        <div className="hdr-tabs-row">
+          <nav className="hdr-tabs">
+            {info.tabs.map(([id, label]) => (
+              <button
+                key={id}
+                className={`hdr-tab${g.screen === id && g.selectedClub === null && g.selectedPlayer === null && g.selectedCompetition === null ? ' active' : ''}`}
+                onClick={() => g.go(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          {/* The tactic loaded, and the others saved — over every Lineup screen, as in FM. */}
+          {sectionFor(g.screen).id === 'lineup' && club !== null && !takeover && <TacticPicker />}
+        </div>
       )}
     </header>
   );

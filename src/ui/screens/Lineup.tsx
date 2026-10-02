@@ -41,7 +41,7 @@ export function LineupScreen(): JSX.Element {
             match day. Anyone injured or sold is swapped for the next best fit until you pick a replacement.
           </span>
         </div>
-        <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — whoever is in the front row sets.">
+        <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
           <span className="faint">Formation</span>
           <Segmented<Formation>
             size="sm"

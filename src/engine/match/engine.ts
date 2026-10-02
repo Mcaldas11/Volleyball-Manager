@@ -24,6 +24,7 @@ import { selectionScore } from '../model/ability.ts';
 import type { PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import {
+  BACK_ROW_ZONES,
   effectivePlayerAt,
   receptionUnit,
   rotate,
@@ -190,6 +191,11 @@ const FORM_FLOOR = 5.5;
 /** ...and how much of their value each rating point under it costs them. */
 const FORM_PENALTY = 0.1;
 
+/** A pass or dig this far off the net (quality below it) may be too far for the setter… */
+const BAD_BALL = 0.22;
+/** …and this often the libero goes for it instead. */
+const BAD_BALL_LIBERO = 0.55;
+
 /** Per-team mutable state for the duration of one match. */
 class TeamRuntime {
   court = new Int32Array(6);
@@ -263,13 +269,19 @@ class TeamRuntime {
     return rotationOf(this.court, this.setterIdx);
   }
 
+  /** True when the team plays a 4-2. */
+  get fourTwo(): boolean {
+    return formationOf(this.setup.tactics) === Formation.FourTwo;
+  }
+
   /**
    * Who sets this rally. In a 5-1, the setter. In a 4-2, whichever setter is
-   * in the front row — the one in the back row defends like anyone else.
+   * in the back row — he comes up to the net to set, and the one already at
+   * the net attacks on the right, as an opposite would.
    */
   settingIdx(): number {
-    if (formationOf(this.setup.tactics) !== Formation.FourTwo) return this.setterIdx;
-    for (let z = 1; z <= 3; z++) {
+    if (!this.fourTwo) return this.setterIdx;
+    for (const z of BACK_ROW_ZONES) {
       if (this.positions[this.court[z]] === Position.Setter) return this.court[z];
     }
     return this.setterIdx;
@@ -787,7 +799,10 @@ export class MatchSimulator {
     else rcv.stats.rotations[rcvRot].sideOutsWon++;
 
     this.totalRallies++;
-    this.applyFatigue(this.contacts.length || 4);
+    // Logged sets aren't extra work: every attack already implies one.
+    let touches = 0;
+    for (const c of this.contacts) if (c.kind !== 'set') touches++;
+    this.applyFatigue(touches || 4);
 
     const entry: RallyLogEntry = {
       set: this.currentSet,
@@ -892,15 +907,18 @@ export class MatchSimulator {
     // but transition balls reassign this from the full range.
     let grd: Grade = grade;
     let transition = false;
+    // Who played the ball first — the passer, then each digger — since he can't play it twice.
+    let firstTouch = receiver;
 
     for (let contact = 0; contact < 24; contact++) {
-      const outcome = this.resolveOffense(attacking, quality, grd, transition);
+      const outcome = this.resolveOffense(attacking, quality, grd, transition, firstTouch);
       if (outcome.point !== -1) return outcome.point as 0 | 1;
       // Ball was dug; the other side now attacks off a transition ball.
       attacking = (1 - attacking) as 0 | 1;
       quality = outcome.nextQuality;
       grd = gradeOf(quality);
       transition = true;
+      firstTouch = outcome.toucher;
     }
     // Absurdly long rally: award to whoever is fresher.
     return this.freshestTeam();
@@ -915,7 +933,8 @@ export class MatchSimulator {
     quality: number,
     grade: Grade,
     transition: boolean,
-  ): { point: number; nextQuality: number } {
+    firstTouch: number,
+  ): { point: number; nextQuality: number; toucher: number } {
     const atk = this.teams[attacking];
     const def = this.teams[1 - attacking];
     const rng = this.rng;
@@ -923,7 +942,7 @@ export class MatchSimulator {
     const tempo = TEMPO_PROFILE[atk.tactics.tempo];
 
     // ---- Setting ----
-    const setter = atk.settingIdx();
+    const setter = this.secondTouch(atk, firstTouch, quality);
     const setRatings = atk.rate(setter);
     const setterStats = statsFor(atk.stats, setter);
 
@@ -940,16 +959,17 @@ export class MatchSimulator {
     if (rng.chance(setErrorProb * tempo.executionDifficulty)) {
       setterStats.setErrors++;
       this.push({ kind: 'setError', team: attacking, player: setter });
-      return { point: 1 - attacking, nextQuality: 0 };
+      return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     setterStats.setsMade++;
+    this.push({ kind: 'set', team: attacking, player: setter });
 
     // ---- Attack lane selection ----
-    const lane = this.chooseLane(atk, grade, rotTac, setQuality);
+    const lane = this.chooseLane(atk, grade, rotTac, setQuality, setter);
     if (lane === -1) {
       // No attacker available: send a free ball over and concede the initiative.
       this.push({ kind: 'freeball', team: attacking, player: setter });
-      return { point: -1, nextQuality: 0.86 };
+      return { point: -1, nextQuality: 0.86, toucher: -1 };
     }
     const attacker = this.laneAttacker[lane];
     const ar = atk.rate(attacker);
@@ -1010,19 +1030,19 @@ export class MatchSimulator {
       const blocker = this.pickBlocker(def, lane);
       statsFor(def.stats, blocker).blockPoints++;
       this.push({ kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
-      return { point: 1 - attacking, nextQuality: 0 };
+      return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError) {
       aStats.attackErrors++;
       def.stats.opponentErrors++;
       this.push({ kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
-      return { point: 1 - attacking, nextQuality: 0 };
+      return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError + pKill) {
       aStats.attackKills++;
       setterStats.setAssists++;
       this.push({ kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
-      return { point: attacking, nextQuality: 0 };
+      return { point: attacking, nextQuality: 0, toucher: -1 };
     }
 
     // ---- Dug: the rally continues ----
@@ -1045,10 +1065,39 @@ export class MatchSimulator {
       0.95,
     );
     this.push({ kind: 'dig', team: (1 - attacking) as 0 | 1, player: digger, quality: digQuality });
-    return { point: -1, nextQuality: digQuality };
+    return { point: -1, nextQuality: digQuality, toucher: digger };
   }
 
   // ---- Selection helpers --------------------------------------------------
+
+  /**
+   * Who takes the second ball. The setter — unless he played the first one:
+   * then, in a 4-2, the other setter; in a 5-1, the libero. And on a ball
+   * passed or dug well off the net he may not get there at all: the libero
+   * goes for it instead. Failing a libero on court, the right-side hitter or
+   * whoever else is free.
+   */
+  private secondTouch(atk: TeamRuntime, firstTouch: number, quality: number): number {
+    const setter = atk.settingIdx();
+    const pos = this.store.position;
+    const onCourt: number[] = [];
+    for (let z = 0; z < 6; z++) onCourt.push(effectivePlayerAt(atk.court, z, pos, atk.liberoIdx));
+    const free = (p: number): boolean => p >= 0 && p !== firstTouch && onCourt.includes(p);
+    const libero = free(atk.liberoIdx) ? atk.liberoIdx : -1;
+
+    if (setter === firstTouch) {
+      if (atk.fourTwo) {
+        const other = onCourt.find((p) => pos[p] === Position.Setter && free(p));
+        if (other !== undefined) return other;
+      }
+      if (libero >= 0) return libero;
+      return onCourt.find((p) => pos[p] === Position.Opposite && free(p))
+        ?? onCourt.find((p) => free(p)) ?? setter;
+    }
+    // A ball well off the net: the setter can't always reach it, and the libero takes it.
+    if (quality < BAD_BALL && libero >= 0 && this.rng.chance(BAD_BALL_LIBERO)) return libero;
+    return setter;
+  }
 
   /**
    * Choose which receiver the serve is aimed at.
@@ -1110,6 +1159,8 @@ export class MatchSimulator {
     grade: Grade,
     rotTac: { preferredAttacker: Position | -1; setterTempoBias: number; transitionBackRow: number },
     setQuality: number,
+    /** Whoever is setting this ball — he can't hit it too. */
+    setter: number,
   ): number {
     const weights = this.laneWeights;
     const attackers = this.laneAttacker;
@@ -1119,7 +1170,6 @@ export class MatchSimulator {
     const base = OFFENSE_LANE_WEIGHTS[atk.tactics.offense];
     const pos = this.store.position;
     const fastBias = 0.6 + (rotTac.setterTempoBias / 100) * 0.8;
-    const setter = atk.settingIdx();
 
     for (let z = 0; z < 6; z++) {
       const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx);
@@ -1141,7 +1191,8 @@ export class MatchSimulator {
           weights[AttackLane.SecondTempoOutside] =
             base[AttackLane.SecondTempoOutside] * qual(r.attackControl);
           attackers[AttackLane.SecondTempoOutside] = p;
-        } else if (role === Position.Opposite) {
+        } else if (role === Position.Opposite || (role === Position.Setter && atk.fourTwo)) {
+          // In a 4-2 the setter at the net is the right-side hitter.
           weights[AttackLane.OppositeRight] = base[AttackLane.OppositeRight] * qual(r.attackPower);
           attackers[AttackLane.OppositeRight] = p;
         } else {

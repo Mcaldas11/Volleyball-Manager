@@ -10,6 +10,7 @@
  */
 
 import { defaultTactics, type TeamTactics } from '../match/tactics.ts';
+import type { SavedTactic } from './tacticSlots.ts';
 
 export interface Finances {
   /** Cash in hand. Negative for long enough and the club is in trouble. */
@@ -78,6 +79,11 @@ export interface Club {
   /** Optional second libero who replaces the first whenever the team serves,
    *  to dig rather than pass. -1 to play one libero throughout. */
   preferredDefensiveLibero: number;
+  /** The manager's saved tactics, up to three — see tacticSlots.ts. The loaded
+   *  one is the fields above; absent until he first saves one. */
+  tacticSlots?: SavedTactic[];
+  /** Which saved tactic is loaded. */
+  activeTactic?: number;
 
   /** History. */
   titlesWon: number;

@@ -207,8 +207,8 @@ function buildTeam(near: boolean, court: number[], libero: number, positions: Ui
   return {
     near,
     zones,
-    // Two setters on court is a 4-2: the one in the front row sets.
-    setter: zones.find((p, z) => z >= 1 && z <= 3 && role(p) === Position.Setter)
+    // Two setters on court is a 4-2: the one in the back row sets, the one at the net hits.
+    setter: zones.find((p, z) => (z === 0 || z >= 4) && role(p) === Position.Setter)
       ?? zones.find((p) => role(p) === Position.Setter) ?? -1,
     passers: out.slice(0, n),
     role,
@@ -513,6 +513,9 @@ export function rallyBeats(
   let pass: { spot: ReturnType<typeof passSpot>; ms: number } | null = null;
   let firstTouch = -1;
   let setFrom: { p: number; at: Local } | null = null;
+  // Who the engine says set the ball — the setter, the other setter in a 4-2,
+  // or the libero when the setter played the first ball or couldn't reach it.
+  let engineSetter: number | null = null;
   // The setter takes the second ball, unless they made the first touch: then
   // the libero, or failing that the opposite, steps in.
   const setterFor = (t: 0 | 1, busy: number[]): number => {
@@ -526,7 +529,8 @@ export function rallyBeats(
     const before = forms[t];
     forms[t] = offenceFormation(teams[t]);
     const { spot, ms } = pass ?? { spot: passSpot(1, 0), ms: 680 };
-    const setter = setterFor(t, [firstTouch, attacker]);
+    const setter = engineSetter ?? setterFor(t, [firstTouch, attacker]);
+    engineSetter = null;
     // A setter who dug the ball stays down where they dug it.
     const own = teams[t].setter;
     if (own >= 0 && own !== setter) forms[t].set(own, before.get(own) ?? { u: 0.5, v: 0.5 });
@@ -602,7 +606,11 @@ export function rallyBeats(
         }
         break;
       }
+      case 'set':
+        engineSetter = c.player;
+        break;
       case 'setError': {
+        engineSetter = c.player;
         setBall(t);
         const from = setFrom?.at ?? TARGET;
         push(air(t, { u: from.u, v: Math.max(0.3, from.v + 0.15) }, 0), null, 460, 0.4);

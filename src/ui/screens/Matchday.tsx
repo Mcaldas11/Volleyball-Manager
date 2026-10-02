@@ -187,7 +187,8 @@ function LineupSetup(): JSX.Element {
               <strong className={abilityClass(oppAvg)}>{oppAvg}</strong>
             </div>
           </div>
-          <div className="md-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — whoever is in the front row sets.">
+          {md.national === null && <MatchdayTacticSelect />}
+          <div className="md-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
             <span className="faint">Formation</span>
             <Segmented<Formation>
               size="sm"
@@ -213,6 +214,21 @@ function LineupSetup(): JSX.Element {
         onSetLibero={(p) => g.setMatchdayLibero(p)}
         onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
       />
+    </div>
+  );
+}
+
+/** The saved tactic to play today — loading another picks the six again for it. */
+function MatchdayTacticSelect(): JSX.Element | null {
+  const g = useGame();
+  const saved = g.savedTactics();
+  if (saved === null || saved.slots.length < 2) return null;
+  return (
+    <div className="md-formation">
+      <span className="faint">Tactic</span>
+      <select className="md-tactic-select" value={saved.active} onChange={(e) => g.loadTactic(Number(e.target.value))}>
+        {saved.slots.map((t, i) => <option key={i} value={i}>{i + 1}. {t.name}</option>)}
+      </select>
     </div>
   );
 }

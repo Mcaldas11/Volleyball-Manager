@@ -4466,3 +4466,36 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .nat-in-paper .nat-pick-table .bar { width: 44px; }
 .nat-in-paper .nat-pick-table { font-size: 12.5px; }
 .nat-in-paper .nat-pick-table td, .nat-in-paper .nat-pick-table th { padding-left: 5px; padding-right: 5px; }
+
+/* ============================================================
+   Saved tactics — the switcher over the Lineup screens
+   ============================================================ */
+
+.hdr-tabs-row { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line-soft); padding-right: 18px; }
+.hdr-tabs-row .hdr-tabs { flex: 1; min-width: 0; border-top: none; }
+.tactic-picker { position: relative; display: flex; align-items: center; gap: 6px; flex: none; }
+.tactic-current {
+  display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 4px;
+  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 7px; font-size: 13px;
+}
+.tactic-current.open, .tactic-current:hover:not(:disabled) { border-color: var(--gold-deep); background: var(--surface-3); }
+.tactic-num {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex: none;
+  border-radius: 5px; background: var(--gold); color: #14161c; font: 800 12px/1 var(--font-display);
+}
+.tactic-name { font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tactic-form { padding: 1px 6px; border-radius: 4px; background: var(--bg-deep); border: 1px solid var(--line); font: 700 11.5px/1.4 var(--font-display); color: var(--accent-bright); }
+.tactic-add { width: 30px; height: 30px; padding: 0; justify-content: center; font: 700 18px/1 var(--font-display); }
+.tactic-menu { right: 0; width: 340px; padding: 8px; }
+.tactic-menu-head { display: flex; justify-content: space-between; padding: 2px 6px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+.tactic-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 7px; }
+.tactic-row.on { background: var(--gold-soft); }
+.tactic-row .tactic-num { background: var(--surface-3); color: var(--text); }
+.tactic-row.on .tactic-num { background: var(--gold); color: #14161c; }
+.menu-pop .tactic-load { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 6px; }
+.tactic-loaded { margin-left: auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-bright); }
+.menu-pop .tactic-icon { width: 28px; flex: none; justify-content: center; padding: 6px 0; font-size: 11.5px; font-weight: 700; color: var(--text-dim); }
+.tactic-rename { flex: 1; min-width: 0; height: 30px; }
+.menu-pop .tactic-new { margin-top: 6px; padding: 8px 10px; border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; font-weight: 600; color: var(--gold-bright); }
+.tactic-note { margin: 6px 6px 2px; font-size: 11.5px; line-height: 1.45; color: var(--text-faint); }
+.md-tactic-select { max-width: 150px; height: 28px; font-size: 12.5px; }

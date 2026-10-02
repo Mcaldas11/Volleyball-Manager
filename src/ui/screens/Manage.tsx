@@ -102,7 +102,7 @@ export function TacticsScreen(): JSX.Element {
             label="Formation"
             value={formationOf(t)}
             onChange={(v) => g.setFormation(v)}
-            hint="5-1: one setter runs the offence, with an opposite diagonal to him. 4-2: two setters diagonal — whoever is in the front row sets, so the front row always has a setter's block but only two hitters."
+            hint="5-1: one setter runs the offence, with an opposite diagonal to him. 4-2: two setters diagonal — the one in the back row comes up to set, and the one at the net attacks on the right."
             options={FORMATION_OPTIONS}
           />
           <InstructionTiles
