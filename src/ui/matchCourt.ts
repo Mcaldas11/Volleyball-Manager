@@ -207,7 +207,9 @@ function buildTeam(near: boolean, court: number[], libero: number, positions: Ui
   return {
     near,
     zones,
-    setter: zones.find((p) => role(p) === Position.Setter) ?? -1,
+    // Two setters on court is a 4-2: the one in the front row sets.
+    setter: zones.find((p, z) => z >= 1 && z <= 3 && role(p) === Position.Setter)
+      ?? zones.find((p) => role(p) === Position.Setter) ?? -1,
     passers: out.slice(0, n),
     role,
     zoneOf: (p) => zones.indexOf(p),

@@ -1,6 +1,6 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import {
-  BlockAssignment, DefensiveShape, DefensiveSystem, OffensiveSystem,
+  BlockAssignment, DefensiveShape, DefensiveSystem, Formation, formationOf, OffensiveSystem,
   ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
 import {
@@ -15,6 +15,11 @@ import {
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
+
+export const FORMATION_OPTIONS: Array<[Formation, string]> = [
+  [Formation.FiveOne, '5-1 (one setter)'],
+  [Formation.FourTwo, '4-2 (two setters)'],
+];
 
 /** The team-instruction choices, shared by the Tactics screen and the
  *  in-match timeout panel so both always offer exactly the same options. */
@@ -93,6 +98,13 @@ export function TacticsScreen(): JSX.Element {
 
       <div className="grid2">
         <Card title="In Possession" icon="ball">
+          <InstructionTiles
+            label="Formation"
+            value={formationOf(t)}
+            onChange={(v) => g.setFormation(v)}
+            hint="5-1: one setter runs the offence, with an opposite diagonal to him. 4-2: two setters diagonal — whoever is in the front row sets, so the front row always has a setter's block but only two hitters."
+            options={FORMATION_OPTIONS}
+          />
           <InstructionTiles
             label="Offensive system"
             value={t.offense}

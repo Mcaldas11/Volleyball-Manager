@@ -45,7 +45,9 @@ import { postMessage } from './inbox.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from './nations.ts';
 import { postNews } from './news.ts';
 import { recordFixture } from './records.ts';
-import { dayOfSeason, DAYS_PER_SEASON, type Competition, type Fixture, type World } from './world.ts';
+import {
+  dayOfSeason, DAYS_PER_SEASON, type Competition, type Fixture, type GameMessage, type World,
+} from './world.ts';
 
 export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics';
 
@@ -116,6 +118,17 @@ export interface TournamentRecord {
   medallists: Array<[number, number[]]>;
 }
 
+/** A federation's offer of its head coach's job, waiting on the manager's answer in the inbox. */
+export interface NationalOffer {
+  id: number;
+  nation: number;
+  madeOn: number;
+  /** The last day it can be accepted. */
+  expiresOn: number;
+  /** The answer to an application of his, rather than an approach. */
+  applied: boolean;
+}
+
 /** A national team without a head coach, and when it means to have one. */
 export interface NationalVacancy {
   nation: number;
@@ -138,6 +151,13 @@ export interface Internationals {
   chosen: { tournamentId: number; players: number[] } | null;
   /** Players below this store index have been looked at for a second nationality. */
   dualFrom: number;
+  /** Federations' offers of their job, waiting on the manager. */
+  offers: NationalOffer[];
+  nextOfferId: number;
+  /** Day a federation last approached him unprompted, -1 if never. */
+  lastApproach: number;
+  /** Tournaments the manager has been sent the squad message for. */
+  squadAsked: number[];
 }
 
 // ---- What the manager is told: the reports behind the messages ----------------------------
@@ -189,7 +209,7 @@ export interface IntlTournamentLine {
 
 /** The structured part of an international message, which the inbox draws. */
 export interface IntlReport {
-  kind: 'callup' | 'matchday' | 'homecoming';
+  kind: 'callup' | 'matchday' | 'homecoming' | 'squad';
   tournamentId: number;
   tournament: string;
   callUps?: Array<{ p: number; nation: number; caps: number }>;
@@ -240,6 +260,7 @@ export function internationals(world: World): Internationals {
   const I = world.internationals ??= {
     tournaments: [], history: [], plannedSeason: -1, nextTournamentId: 0, nextMatchId: 0,
     tiedTo: new Map(), vacancies: [], applications: [], chosen: null, dualFrom: 0,
+    offers: [], nextOfferId: 0, lastApproach: -1, squadAsked: [],
   };
   // Saves from before national jobs and dual nationals.
   I.tiedTo ??= new Map();
@@ -247,6 +268,10 @@ export function internationals(world: World): Internationals {
   I.applications ??= [];
   I.chosen ??= null;
   I.dualFrom ??= 0;
+  I.offers ??= [];
+  I.nextOfferId ??= 0;
+  I.lastApproach ??= -1;
+  I.squadAsked ??= [];
   return I;
 }
 
@@ -1078,18 +1103,20 @@ export function appointNationalCoach(world: World, nation: number): void {
   if (team !== undefined) team.managedByUser = true;
   I.vacancies = I.vacancies.filter((v) => v.nation !== nation);
   I.applications = I.applications.filter((a) => a.nation !== nation);
+  I.offers = I.offers.filter((o) => o.nation !== nation);
   const next = nextTournamentFor(world, nation);
   postMessage(world, {
     subject: `You are the new head coach of ${nationName(nation)}`,
     body: `The ${nationName(nation)} Volleyball Federation has appointed you head coach of the national team` +
       `${world.userClubId >= 0 ? `, alongside your job at ${world.clubs[world.userClubId]?.name ?? 'your club'}` : ''}. ` +
       (next !== undefined
-        ? `Your first tournament is the ${next.name}: name your fourteen by ${dateLabel(world, next.callUpDay)} — ` +
-          'the National Team screen has the players to choose from.'
+        ? `Your first tournament is the ${next.name}, and your fourteen are due by ${dateLabel(world, next.callUpDay)}. ` +
+          'A week before, the federation will send you the players to choose from — you name the squad in that message.'
         : 'Your nation has no tournament coming up just yet.'),
     from: `${nationName(nation)} Volleyball Federation`,
     category: 'career',
   });
+  askForSquad(world);
   postNews(world, {
     kind: 'coach',
     headline: `${nationName(nation)} appoint ${world.manager.firstName} ${world.manager.lastName}`,
@@ -1162,12 +1189,13 @@ function ordinal(n: number): string {
 /** The job market's day: applications answered, vacancies filled once they have waited long enough. */
 function nationalJobsDay(world: World): void {
   const I = internationals(world);
+  I.offers = I.offers.filter((o) => o.expiresOn >= world.day);
   for (const a of [...I.applications]) {
     if (a.answerOn > world.day) continue;
     I.applications = I.applications.filter((x) => x !== a);
     if (!I.vacancies.some((v) => v.nation === a.nation)) continue;
     if (world.rng.chance(nationalHiringChance(world, a.nation))) {
-      appointNationalCoach(world, a.nation);
+      offerNationalJob(world, a.nation, true);
     } else {
       postMessage(world, {
         subject: `${nationName(a.nation)}: thank you for your application`,
@@ -1177,8 +1205,10 @@ function nationalJobsDay(world: World): void {
       });
     }
   }
+  nationalApproaches(world);
   for (const v of [...I.vacancies]) {
     if (v.fillsOn > world.day || I.applications.some((a) => a.nation === v.nation)) continue;
+    if (I.offers.some((o) => o.nation === v.nation)) continue;
     I.vacancies = I.vacancies.filter((x) => x !== v);
     postNews(world, {
       kind: 'coach',
@@ -1186,6 +1216,82 @@ function nationalJobsDay(world: World): void {
       body: `The ${nationName(v.nation)} Volleyball Federation has filled the head coach's job.`,
       nation: v.nation,
     });
+  }
+}
+
+/** How long a federation's offer stands. */
+const NATIONAL_OFFER_DAYS = 10;
+/** A federation approaches him at most this often. */
+const NATIONAL_APPROACH_GAP = 56;
+
+/** A federation offers the manager its job — in the inbox, to accept or turn down. */
+export function offerNationalJob(world: World, nation: number, applied: boolean): NationalOffer {
+  const I = internationals(world);
+  const offer: NationalOffer = {
+    id: I.nextOfferId++, nation, madeOn: world.day, expiresOn: world.day + NATIONAL_OFFER_DAYS, applied,
+  };
+  I.offers.push(offer);
+  const next = nextTournamentFor(world, nation);
+  const rank = worldRanking(world).indexOf(nation) + 1;
+  const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
+  postMessage(world, {
+    subject: applied ? `${nationName(nation)} offer you the national team job` : `${nationName(nation)} want you as their head coach`,
+    body: (applied
+      ? `The ${nationName(nation)} Volleyball Federation has considered your application and would like you to coach the national team.`
+      : `The ${nationName(nation)} Volleyball Federation is looking for a head coach for the national team, and would like it to be you.`) +
+      ` ${nationName(nation)} are ${ordinal(rank)} in the world ranking` +
+      `${next !== undefined ? `, and their next tournament is the ${next.name}, starting on ${dateLabel(world, next.startDay)}` : ''}.` +
+      `${club !== undefined ? ` The job goes alongside your work at ${club.name}.` : ''}` +
+      `${userNation(world) >= 0 ? ` Accepting it means leaving ${nationName(userNation(world))}.` : ''}` +
+      ` The offer stands until ${dateLabel(world, offer.expiresOn)}.`,
+    from: `${nationName(nation)} Volleyball Federation`,
+    nationalOffer: { id: offer.id, nation },
+    category: 'career',
+  });
+  return offer;
+}
+
+/** The manager takes a federation's offer. False if it has lapsed. */
+export function acceptNationalOffer(world: World, offerId: number): boolean {
+  const I = internationals(world);
+  const offer = I.offers.find((o) => o.id === offerId);
+  if (offer === undefined) return false;
+  I.offers = I.offers.filter((o) => o !== offer);
+  appointNationalCoach(world, offer.nation);
+  return true;
+}
+
+/** The manager turns a federation down; it looks elsewhere, and soon. */
+export function declineNationalOffer(world: World, offerId: number): void {
+  const I = internationals(world);
+  const offer = I.offers.find((o) => o.id === offerId);
+  if (offer === undefined) return;
+  I.offers = I.offers.filter((o) => o !== offer);
+  const v = I.vacancies.find((x) => x.nation === offer.nation);
+  if (v !== undefined) v.fillsOn = Math.min(v.fillsOn, world.day + 7);
+}
+
+/**
+ * Federations looking for a coach call the manager when his name fits theirs:
+ * one that would be keen to have him, now and then — or, if he already has a
+ * nation, one well above it in the world.
+ */
+function nationalApproaches(world: World): void {
+  const I = internationals(world);
+  if (world.day % 7 !== 5 || I.offers.length > 0) return;
+  if (I.lastApproach >= 0 && world.day - I.lastApproach < NATIONAL_APPROACH_GAP) return;
+  const mine = userNation(world);
+  const ranking = worldRanking(world);
+  const rng = new Rng(`napp:${world.seed}:${world.day}`);
+  const candidates = I.vacancies
+    .map((v) => v.nation)
+    .filter((n) => !I.applications.some((a) => a.nation === n) && nationalHiringChance(world, n) >= 0.55)
+    .filter((n) => mine < 0 || ranking.indexOf(n) + 8 <= ranking.indexOf(mine));
+  for (const n of candidates) {
+    if (!rng.chance(mine < 0 ? 0.12 : 0.05)) continue;
+    offerNationalJob(world, n, false);
+    I.lastApproach = world.day;
+    return;
   }
 }
 
@@ -1357,19 +1463,29 @@ export function userMatchToday(world: World): { t: Tournament; m: IntlMatch } | 
 /** A week before squads are due, the federation reminds the manager to name his. */
 const SQUAD_REMINDER_DAYS = 7;
 
-function remindOfSquad(world: World): void {
+/**
+ * A week before squads are due — or the day he takes over, if that is later —
+ * the federation sends the manager the players to choose from: the message is
+ * where he names his fourteen. Sent once a tournament; returns it, if there is one.
+ */
+export function askForSquad(world: World): GameMessage | undefined {
   const nation = userNation(world);
   const t = nation >= 0 ? nextTournamentFor(world, nation) : undefined;
-  if (t === undefined || t.status !== 'planned' || world.day !== t.callUpDay - SQUAD_REMINDER_DAYS) return;
-  if (internationals(world).chosen?.tournamentId === t.id) return;
-  postMessage(world, {
+  if (t === undefined || t.status !== 'planned' || world.day < t.callUpDay - SQUAD_REMINDER_DAYS) return undefined;
+  const I = internationals(world);
+  if (I.squadAsked.includes(t.id)) {
+    return [...world.messages].reverse().find((m) => m.intl?.kind === 'squad' && m.intl.tournamentId === t.id);
+  }
+  I.squadAsked.push(t.id);
+  return postMessage(world, {
     subject: `${nationName(nation)}: name your squad for the ${t.name}`,
     body: `The ${t.name} starts on ${dateLabel(world, t.startDay)}${t.host >= 0 ? ` in ${nationName(t.host)}` : ''}, ` +
-      `and the federation needs your fourteen by ${dateLabel(world, t.callUpDay)} — two setters, two opposites, ` +
-      'four outside hitters, four middles and two liberos is the usual shape. Pick them on the National Team screen; ' +
-      'until you do, the day squads are due will wait for you.',
+      `and the federation needs your fourteen by ${dateLabel(world, t.callUpDay)}. Here are the players you can call — ` +
+      'two setters, two opposites, four outside hitters, four middles and two liberos is the usual shape. ' +
+      'Until you confirm your squad, the day squads are due will wait for you.',
     from: `${nationName(nation)} Volleyball Federation`,
     category: 'international',
+    intl: { kind: 'squad', tournamentId: t.id, tournament: t.name },
   });
 }
 
@@ -1377,7 +1493,7 @@ function remindOfSquad(world: World): void {
 export function internationalDay(world: World): void {
   planInternationals(world);
   const I = internationals(world);
-  remindOfSquad(world);
+  askForSquad(world);
   for (const t of I.tournaments) {
     if (t.status === 'done' || t.season !== world.season) continue;
     if (t.status === 'planned') {

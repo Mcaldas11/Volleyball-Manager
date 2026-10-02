@@ -10,11 +10,13 @@ import {
   type LoanStats,
 } from '../../engine/world/loans.ts';
 import {
-  ClubCrest, initials, money, PlayerFace, RatingBadge, StarMeter,
+  ClubCrest, Flag, initials, money, PlayerFace, RatingBadge, StarMeter,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
 import { IntlReportSheet } from '../intlReport.tsx';
+import { nextTournamentFor, worldRanking } from '../../engine/world/internationals.ts';
+import { NATIONS } from '../../engine/world/nations.ts';
 import { useGame } from '../state.ts';
 
 /** How each kind of message is filed and badged — the folder it lives in,
@@ -339,6 +341,25 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
+  if (m.nationalOffer !== undefined) {
+    const offer = world.internationals?.offers.find((o) => o.id === m.nationalOffer!.id);
+    const nation = m.nationalOffer.nation;
+    const next = nextTournamentFor(world, nation);
+    const accepted = offer === undefined && world.career.nationalJobs?.some((j) => j.nation === nation && j.startDay >= m.day) === true;
+    return (
+      <div className="paper-report">
+        <div className="paper-label">The national team job</div>
+        <ReportRow k="Nation"><Flag nation={nation} /> {NATIONS[nation]?.name}</ReportRow>
+        <ReportRow k="World ranking">{worldRanking(world).indexOf(nation) + 1}</ReportRow>
+        <ReportRow k="Next tournament">{next !== undefined ? `${next.name} · ${g.longDateLabel(next.startDay)}` : '—'}</ReportRow>
+        <ReportRow k="Status" tone={offer !== undefined || accepted ? 'good' : undefined}>
+          {offer !== undefined ? 'Awaiting your answer' : accepted ? 'Accepted' : 'Closed'}
+        </ReportRow>
+        {offer !== undefined && <ReportRow k="Offer stands until">{g.longDateLabel(offer.expiresOn)}</ReportRow>}
+      </div>
+    );
+  }
+
   if (cat === 'medical' && m.playerIdx !== undefined) {
     const p = m.playerIdx;
     const out = store.injuryDaysLeft[p];
@@ -661,6 +682,18 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
         </button>,
       );
     }
+  }
+
+  const nationalOffer = m.nationalOffer !== undefined
+    ? world.internationals?.offers.find((o) => o.id === m.nationalOffer!.id)
+    : undefined;
+  if (nationalOffer !== undefined) {
+    out.push(
+      <button key="accept-nation" className="paper-btn primary-dark" onClick={() => g.acceptNationalOffer(nationalOffer.id)}>
+        <Icon name="check" size={15} /> Accept job
+      </button>,
+      <button key="decline-nation" className="paper-btn" onClick={() => g.declineNationalOffer(nationalOffer.id)}>Decline</button>,
+    );
   }
 
   const jobOffer = m.jobOfferId !== undefined ? world.career.offers.find((o) => o.id === m.jobOfferId) : undefined;

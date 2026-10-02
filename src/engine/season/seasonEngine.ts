@@ -21,6 +21,7 @@ import { awardLeaguePoints, type Club, type LeagueTableRow } from '../model/club
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import { simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
+import { Formation, formationOf, type TeamTactics } from '../match/tactics.ts';
 import { addToSeason, newSeasonLine, type PlayerMatchStats, type SeasonStatLine } from '../match/stats.ts';
 import { DAYS_PER_SEASON, currentPhase, dayOfSeason, SeasonPhase, type Fixture, type World } from '../world/world.ts';
 import { PLAYOFF_ROUND_BASE, scheduleLeagueSeason } from './schedule.ts';
@@ -64,6 +65,17 @@ export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
   Position.Opposite, Position.OutsideHitter, Position.MiddleBlocker,
 ];
 
+/** The 4-2: a second setter where the opposite stands, diagonal to the first. */
+export const LINEUP_SLOT_POSITIONS_42: readonly Position[] = [
+  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
+  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
+];
+
+/** The six slots' positions for a system. */
+export function lineupSlotPositions(formation: Formation): readonly Position[] {
+  return formation === Formation.FourTwo ? LINEUP_SLOT_POSITIONS_42 : LINEUP_SLOT_POSITIONS;
+}
+
 /**
  * Choose a starting seven, respecting the coach's preferred lineup but
  * replacing anyone injured, sold or otherwise unavailable with the best fit
@@ -74,11 +86,13 @@ export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
  */
 export function pickLineup(
   store: PlayerStore,
-  club: Pick<Club, 'players' | 'preferredLineup' | 'preferredLibero' | 'preferredDefensiveLibero'>,
+  club: Pick<Club, 'players' | 'preferredLineup' | 'preferredLibero' | 'preferredDefensiveLibero'>
+    & { tactics?: Pick<TeamTactics, 'formation'> },
   mustStart?: ReadonlySet<number>,
   /** Who can play — a club's fit players by default; a national team's own. */
   canPlay: (p: number) => boolean = (p) => store.isAvailable(p),
 ): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[] } {
+  const SLOTS = lineupSlotPositions(formationOf(club.tactics));
   const available = club.players.filter(canPlay);
   const availableSet = new Set(available);
   const byPos = (pos: Position): number[] =>
@@ -96,7 +110,7 @@ export function pickLineup(
   };
 
   const used = new Set<number>();
-  const lineup: number[] = LINEUP_SLOT_POSITIONS.map(() => -1);
+  const lineup: number[] = SLOTS.map(() => -1);
 
   // Anyone who must start takes the first slot in his position.
   let forcedLibero = -1;
@@ -106,14 +120,14 @@ export function pickLineup(
       if (forcedLibero < 0) { forcedLibero = p; used.add(p); }
       continue;
     }
-    const slot = LINEUP_SLOT_POSITIONS.findIndex((pos, s) => pos === store.position[p] && lineup[s] === -1);
+    const slot = SLOTS.findIndex((pos, s) => pos === store.position[p] && lineup[s] === -1);
     if (slot >= 0) { lineup[slot] = p; used.add(p); }
   }
 
   // Honour whichever named starters are still fit to play their slot; an
   // empty or stale preference (nobody has set one, or the player named for
   // it left, got injured, or changed position) just falls through below.
-  LINEUP_SLOT_POSITIONS.forEach((pos, slot) => {
+  SLOTS.forEach((pos, slot) => {
     if (lineup[slot] !== -1) return;
     const preferred = club.preferredLineup[slot];
     if (
@@ -130,7 +144,7 @@ export function pickLineup(
   // position — the auto-pick rule this has always used.
   for (let slot = 0; slot < lineup.length; slot++) {
     if (lineup[slot] !== -1) continue;
-    const pick = pools[LINEUP_SLOT_POSITIONS[slot]]?.find((p) => !used.has(p));
+    const pick = pools[SLOTS[slot]]?.find((p) => !used.has(p));
     if (pick !== undefined) { lineup[slot] = pick; used.add(pick); }
   }
 

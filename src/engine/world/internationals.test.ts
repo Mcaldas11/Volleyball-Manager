@@ -4,10 +4,11 @@ import { PlayerFlag } from '../model/players.ts';
 import { advanceDay, newSeasonContext, startSeason, type SeasonContext } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
 import { appointManager, lastJobEnded } from './career.ts';
+import { messageNeedsAction } from './inbox.ts';
 import { MatchFormat, simulateMatch } from '../match/engine.ts';
 import { Position } from '../model/positions.ts';
 import {
-  appointNationalCoach, applyForNationalJob, leaveNationalJob, applyIntlResult, eligibleFor, internationalDay, internationals,
+  acceptNationalOffer, appointNationalCoach, applyForNationalJob, askForSquad, declineNationalOffer, leaveNationalJob, applyIntlResult, eligibleFor, internationalDay, internationals,
   matchImportance, nameSquad, nationSetup, pickSquad, poolTable, secondNation, selectionScore, squadDue, squadOf,
   startNationalCareer, suggestSquad, userMatchToday, worldRanking, type Tournament,
 } from './internationals.ts';
@@ -252,7 +253,7 @@ test("coaching a nation: the squad is the manager's to name, the day waits for i
   assert.ok(squad.every((p) => store.nationalCaps[p] === caps.get(p)), 'no second cap for the same match');
 });
 
-test('national jobs: always a few going, and an application is answered within a week', () => {
+test('national jobs: always a few going, and an application is answered within a week — with an offer to accept in the inbox', () => {
   const { world, ctx } = start(51);
   const I = internationals(world);
   assert.ok(I.vacancies.length >= 3);
@@ -263,8 +264,46 @@ test('national jobs: always a few going, and an application is answered within a
   assert.equal(applyForNationalJob(world, nation), null, 'one application at a time');
   runTo(world, ctx, answerOn + 1);
   const name = NATIONS[nation].name;
-  assert.ok(world.career.nationalTeam === nation ||
-    world.messages.some((m) => m.subject === `${name}: thank you for your application`));
+  const offer = world.messages.find((m) => m.nationalOffer?.nation === nation);
+  if (offer === undefined) {
+    assert.ok(world.messages.some((m) => m.subject === `${name}: thank you for your application`));
+    return;
+  }
+  assert.equal(world.career.nationalTeam, undefined, 'nothing is decided until he answers');
+  assert.equal(messageNeedsAction(world, offer), true);
+  assert.equal(acceptNationalOffer(world, offer.nationalOffer!.id), true);
+  assert.equal(world.career.nationalTeam, nation);
+  assert.equal(messageNeedsAction(world, offer), false);
+});
+
+test('federations call a manager whose name fits theirs; an offer turned down is gone', () => {
+  const { world, ctx } = start(55);
+  world.career.reputation = 9800;
+  runTo(world, ctx, 150);
+  const calls = world.messages.filter((m) => m.nationalOffer !== undefined);
+  assert.ok(calls.length > 0, 'a federation has called');
+  assert.ok(calls.every((m) => m.category === 'career'));
+  const open = internationals(world).offers[0];
+  if (open !== undefined) {
+    declineNationalOffer(world, open.id);
+    assert.equal(internationals(world).offers.some((o) => o.id === open.id), false);
+  }
+});
+
+test("the squad is named in the federation's message: sent a week before squads are due, and needing an answer until then", () => {
+  const { world, ctx } = start(56);
+  const euro = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!;
+  const nation = euro.teams[3];
+  appointNationalCoach(world, nation);
+  runTo(world, ctx, euro.callUpDay - 7);
+  assert.ok(!world.messages.some((m) => m.intl?.kind === 'squad'), 'not before');
+  advanceDay(world, ctx, { detailedClubs: new Set([world.userClubId]) });
+  const msg = world.messages.find((m) => m.intl?.kind === 'squad' && m.intl.tournamentId === euro.id);
+  assert.ok(msg !== undefined);
+  assert.equal(messageNeedsAction(world, msg), true);
+  assert.equal(askForSquad(world)?.id, msg.id, 'sent once');
+  assert.equal(nameSquad(world, suggestSquad(world, nation)), null);
+  assert.equal(messageNeedsAction(world, msg), false);
 });
 
 test('a save that comes to the internationals mid-season gets the Nations League, not a summer already gone', () => {

@@ -19,7 +19,6 @@ import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { NewsScreen } from './screens/News.tsx';
-import { NationalScreen } from './screens/National.tsx';
 import { HomeScreen } from './screens/Home.tsx';
 import { InboxScreen } from './screens/Inbox.tsx';
 import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
@@ -69,7 +68,6 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
       { id: 'home', label: 'Home', icon: 'home', tabs: [['home', 'Home']] },
       { id: 'inbox', label: 'Inbox', icon: 'inbox', tabs: [['inbox', 'Inbox']] },
       { id: 'career', label: 'Career', icon: 'career', tabs: [['career', 'Profile'], ['jobs', 'Job Centre']] },
-      { id: 'national', label: 'National Team', icon: 'world', tabs: [['national', 'National Team']] },
     ],
   },
   {
@@ -251,7 +249,6 @@ function Screen(): JSX.Element {
     case 'fixtures': return <FixturesScreen />;
     case 'table': return <TableScreen />;
     case 'internationals': return <InternationalsScreen />;
-    case 'national': return <NationalScreen />;
     case 'stats': return <StatsScreen />;
     case 'transfers': return <TransfersScreen />;
     case 'scouting': return <ScoutingScreen />;
@@ -283,7 +280,7 @@ function Sidebar({
   const unread = g.unreadMessages().length;
   const takeover = inTakeover(g);
   const clubInfoActive = club !== null && g.selectedClub === club.id;
-  const offers = world.career.offers.length;
+  const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null ||
     g.negotiation !== null || g.incomingOffer !== null || g.coachTalk !== null;
   const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;

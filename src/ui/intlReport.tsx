@@ -15,6 +15,7 @@ import { NATIONS } from '../engine/world/nations.ts';
 import { Flag, PlayerFace, POSITION_ACCENT, RatingBadge } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
+import { NationalTactics, PlayerTable, SquadPicker } from './screens/National.tsx';
 
 function nationName(n: number): string {
   return NATIONS[n]?.name ?? '?';
@@ -30,7 +31,37 @@ export function IntlReportSheet({ report }: { report: IntlReport }): JSX.Element
     return <div className="ir">{report.matches.map((m, i) => <MatchCard key={i} card={m} />)}</div>;
   }
   if (report.kind === 'homecoming' && report.lines !== undefined) return <Homecoming report={report} />;
+  if (report.kind === 'squad') return <SquadCall report={report} />;
   return null;
+}
+
+/**
+ * The federation's message: the players to choose from, for the manager to
+ * name his fourteen and say how they will play — or, once the squad is in,
+ * the fourteen who went.
+ */
+function SquadCall({ report }: { report: IntlReport }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const t = world.internationals?.tournaments.find((x) => x.id === report.tournamentId);
+  const nation = world.career.nationalTeam;
+  if (t === undefined || nation === undefined || !t.teams.includes(nation)) {
+    return <div className="paper-report"><p className="paper-muted">This squad is no longer yours to name.</p></div>;
+  }
+  if (t.status === 'planned') {
+    return (
+      <div className="paper-embed nat-in-paper">
+        <NationalTactics />
+        <SquadPicker key={t.id} t={t} nation={nation} compact />
+      </div>
+    );
+  }
+  return (
+    <div className="paper-embed nat-in-paper">
+      <h3 className="nat-h">The fourteen at the {t.name}</h3>
+      <PlayerTable players={[...(t.squads.find(([n]) => n === nation)?.[1] ?? [])]} t={t} />
+    </div>
+  );
 }
 
 /** A player's face, name and position, linked to his profile. */

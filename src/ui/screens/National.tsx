@@ -1,20 +1,20 @@
 /**
- * The national team. Coaching one: its standing and honours down the side,
- * how it plays, and — the main of it — the fourteen for its next tournament,
- * picked from everyone who can play for it, or, once the tournament is on,
- * the squad at it and the matches to come. Not coaching one: the national
- * jobs going, how keen each federation would be, and a way to apply.
+ * The national team, wherever it turns up outside a section of its own: the
+ * fourteen to name for a tournament — drawn in the federation's message —
+ * how the team plays, its matches, a list of its players, and the landing
+ * page of a career spent at a national team alone.
  */
 
 import { useMemo, useState, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
+import { Formation, FORMATION_NAMES } from '../../engine/match/tactics.ts';
 import {
-  championsTitle, eligibleFor, nationalHiringChance, nextTournamentFor, recentForm, selectionScore, squadOf,
-  squadProblem, SQUAD_SHAPE, SQUAD_SIZE, userNation, worldRanking, type IntlMatch, type Tournament,
+  eligibleFor, nextTournamentFor, recentForm, selectionScore, squadOf, squadProblem, SQUAD_SHAPE, SQUAD_SIZE,
+  userNation, worldRanking, type IntlMatch, type Tournament,
 } from '../../engine/world/internationals.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import {
-  abilityClass, Bar, ChoiceField, ClubLink, Empty, Flag, PlayerLink, Pos, RatingBadge, Segmented, SortTh, sortBy,
+  abilityClass, Bar, ChoiceField, ClubLink, Flag, PlayerLink, Pos, RatingBadge, Segmented, SortTh, sortBy,
   useSort,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
@@ -25,185 +25,45 @@ function nationName(n: number): string {
   return NATIONS[n]?.name ?? '?';
 }
 
-/** How a federation feels about the manager, in words. */
-function interest(chance: number): { label: string; cls: string } {
-  if (chance >= 0.6) return { label: 'Keen', cls: 'good' };
-  if (chance >= 0.35) return { label: 'Interested', cls: '' };
-  if (chance >= 0.15) return { label: 'Doubtful', cls: 'warn' };
-  return { label: 'Unlikely', cls: 'bad' };
-}
-
-export function NationalScreen(): JSX.Element {
+/** How the national team plays: its system and its instructions. */
+export function NationalTactics(): JSX.Element | null {
   const g = useGame();
-  const nation = userNation(g.world!);
-  return nation < 0 ? <NationalJobs /> : <NationalTeamView nation={nation} />;
-}
-
-/** Not coaching a nation: the national jobs going. */
-function NationalJobs(): JSX.Element {
-  const g = useGame();
-  const world = g.world!;
-  const I = world.internationals;
-  const ranking = worldRanking(world);
-  const vacancies = [...(I?.vacancies ?? [])].sort((a, b) => ranking.indexOf(a.nation) - ranking.indexOf(b.nation));
-  const home = world.manager.nation;
-
-  return (
-    <div className="nat nat-solo">
-      <section className="nat-card nat-jobs">
-        <header className="nat-head">
-          <span className="nat-kicker"><Icon name="world" size={14} /> National teams</span>
-          <h1 className="nat-title">Coach a national team</h1>
-          <p className="faint nat-intro">
-            A national job goes alongside your club: you name the squad for every tournament and play its matches
-            yourself. A federation weighs your reputation against its place in the world — the stronger the nation,
-            the bigger the name it wants — and your own country, {nationName(home)}, looks on you more kindly.
-          </p>
-        </header>
-        {vacancies.length === 0 ? <Empty>No national team is looking for a coach right now.</Empty> : (
-          <div className="nat-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Nation</th><th className="num">World rank</th><th className="num">Points</th>
-                  <th>Next tournament</th><th>Looking since</th><th>Their interest</th><th />
-                </tr>
-              </thead>
-              <tbody>
-                {vacancies.map((v) => {
-                  const team = world.nationalTeams.find((t) => t.nation === v.nation);
-                  const next = nextTournamentFor(world, v.nation);
-                  const it = interest(nationalHiringChance(world, v.nation));
-                  const applied = I?.applications.find((a) => a.nation === v.nation);
-                  return (
-                    <tr key={v.nation} className={v.nation === home ? 'me' : ''}>
-                      <td><span className="intl-nation"><Flag nation={v.nation} /> <b>{nationName(v.nation)}</b></span></td>
-                      <td className="num">{ranking.indexOf(v.nation) + 1}</td>
-                      <td className="num">{team?.rankingPoints ?? '—'}</td>
-                      <td>{next !== undefined ? <>{next.name} <span className="faint">· {g.dateLabelForDay(next.startDay)}</span></> : <span className="faint">None planned</span>}</td>
-                      <td className="dim">{g.dateLabelForDay(v.since)}</td>
-                      <td><span className={`nat-interest ${it.cls}`}>{it.label}</span></td>
-                      <td className="num">
-                        {applied !== undefined
-                          ? <span className="faint">Applied · answer by {g.dateLabelForDay(applied.answerOn)}</span>
-                          : <button className="sm primary" onClick={() => g.applyForNationalJob(v.nation)}>Apply</button>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function NationalTeamView({ nation }: { nation: number }): JSX.Element {
-  const g = useGame();
-  const world = g.world!;
-  const team = world.nationalTeams.find((t) => t.nation === nation);
-  const rank = worldRanking(world).indexOf(nation) + 1;
-  const t = nextTournamentFor(world, nation);
-  const today = g.nationalMatchToday();
   const tactics = g.nationalTactics();
-  const honours: Array<[string, number]> = [
-    ['Olympic gold', team?.olympicGolds ?? 0],
-    ['World titles', team?.worldTitles ?? 0],
-    ['Continental', team?.continentalTitles ?? 0],
-    ['Nations League', team?.nationsLeagueTitles ?? 0],
-  ];
-  const last = [...(world.internationals?.history ?? [])].reverse()
-    .filter((h) => h.podium.includes(nation) || h.medallists.some(([n]) => n === nation)).slice(0, 4);
-
+  if (tactics === null) return null;
   return (
-    <div className="nat">
-      <aside className="nat-card nat-side">
-        <div className="nat-flag"><Flag nation={nation} /></div>
-        <h1 className="nat-title">{nationName(nation)}</h1>
-        <span className="faint">Head coach · {world.manager.firstName} {world.manager.lastName}</span>
-        <div className="nat-rank">
-          <span><b>#{rank}</b> world ranking</span>
-          <span className="faint">{team?.rankingPoints ?? 0} points</span>
-        </div>
-        <div className="nat-honours">
-          {honours.map(([label, n]) => (
-            <span key={label} className={n > 0 ? 'won' : ''}><b>{n}</b> {label}</span>
-          ))}
-        </div>
-        {last.length > 0 && (
-          <div className="nat-medals">
-            {last.map((h) => {
-              const place = h.podium.indexOf(nation);
-              return (
-                <span key={h.name} className={`intl-medal ${['gold', 'silver', 'bronze'][place] ?? ''}`}>
-                  <Icon name="trophy" size={12} /> {h.name}
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {today !== null && (
-          <button className="primary nat-play" onClick={() => g.openNationalMatchday()}>
-            <Icon name="ball" size={15} /> Play {nationName(today.m.home === nation ? today.m.away : today.m.home)} · {today.m.stage}
-          </button>
-        )}
-
-        {tactics !== null && (
-          <div className="nat-tactics">
-            <h3 className="nat-h">How we play</h3>
-            <ChoiceField label="Offensive system" value={tactics.offense} options={OFFENSE_OPTIONS}
-              onChange={(v) => { tactics.offense = v; g.touch(); }} />
-            <ChoiceField label="Tempo" value={tactics.tempo} options={TEMPO_OPTIONS}
-              onChange={(v) => { tactics.tempo = v; g.touch(); }} />
-            <ChoiceField label="Defensive system" value={tactics.defense} options={DEFENSE_OPTIONS}
-              onChange={(v) => { tactics.defense = v; g.touch(); }} />
-            <ChoiceField label="Serve strategy" value={tactics.serve} options={SERVE_OPTIONS}
-              onChange={(v) => { tactics.serve = v; g.touch(); }} />
-          </div>
-        )}
-
-        <span className="flex-spacer" />
-        <button className="sm danger" onClick={() => g.resignNationalJob()}>Step down as head coach</button>
-      </aside>
-
-      <section className="nat-main">
-        {t === undefined
-          ? <NoTournament nation={nation} />
-          : t.status === 'planned'
-            ? <SquadPicker key={t.id} t={t} nation={nation} />
-            : <AtTournament t={t} nation={nation} />}
-      </section>
-    </div>
-  );
-}
-
-function NoTournament({ nation }: { nation: number }): JSX.Element {
-  const g = useGame();
-  const best = g.suggestedNationalSquad();
-  return (
-    <section className="nat-card nat-fill">
-      <header className="nat-picker-head">
-        <div>
-          <h3 className="nat-h">No tournament coming up</h3>
-          <span className="faint">
-            {nationName(nation)} have not qualified for anything this season. Your assistant's fourteen, as things stand:
-          </span>
-        </div>
-      </header>
-      <div className="nat-scroll">
-        <PlayerTable players={best} />
+    <div className="nat-tactics">
+      <div className="nat-tactics-head">
+        <h3 className="nat-h">How we play</h3>
+        <Segmented<Formation>
+          size="sm"
+          options={[[Formation.FiveOne, FORMATION_NAMES[Formation.FiveOne]], [Formation.FourTwo, FORMATION_NAMES[Formation.FourTwo]]]}
+          value={tactics.formation ?? Formation.FiveOne}
+          onChange={(f) => { tactics.formation = f; g.touch(); }}
+        />
       </div>
-    </section>
+      <div className="nat-tactics-grid">
+        <ChoiceField label="Offensive system" value={tactics.offense} options={OFFENSE_OPTIONS}
+          onChange={(v) => { tactics.offense = v; g.touch(); }} />
+        <ChoiceField label="Tempo" value={tactics.tempo} options={TEMPO_OPTIONS}
+          onChange={(v) => { tactics.tempo = v; g.touch(); }} />
+        <ChoiceField label="Defensive system" value={tactics.defense} options={DEFENSE_OPTIONS}
+          onChange={(v) => { tactics.defense = v; g.touch(); }} />
+        <ChoiceField label="Serve strategy" value={tactics.serve} options={SERVE_OPTIONS}
+          onChange={(v) => { tactics.serve = v; g.touch(); }} />
+      </div>
+    </div>
   );
 }
 
 type PickSort = 'score' | 'name' | 'pos' | 'age' | 'ca' | 'form' | 'caps' | 'club';
 
 /** Name the fourteen for the next tournament. */
-function SquadPicker({ t, nation }: { t: Tournament; nation: number }): JSX.Element {
+export function SquadPicker({ t, nation, compact = false }: {
+  t: Tournament;
+  nation: number;
+  /** Fewer columns, for the narrow width of a message. */
+  compact?: boolean;
+}): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
@@ -283,13 +143,13 @@ function SquadPicker({ t, nation }: { t: Tournament; nation: number }): JSX.Elem
               <th />
               <SortTh k="name" sort={sort} onSort={onSort}>Player</SortTh>
               <SortTh k="pos" sort={sort} onSort={onSort}>Pos</SortTh>
-              <SortTh k="age" sort={sort} onSort={onSort} num>Age</SortTh>
+              {!compact && <SortTh k="age" sort={sort} onSort={onSort} num>Age</SortTh>}
               <SortTh k="club" sort={sort} onSort={onSort}>Club</SortTh>
               <SortTh k="ca" sort={sort} onSort={onSort} num>Ability</SortTh>
               <SortTh k="form" sort={sort} onSort={onSort} num title="Average rating over his last matches">Form</SortTh>
-              <SortTh k="caps" sort={sort} onSort={onSort} num>Caps</SortTh>
-              <th>Fitness</th>
-              <SortTh k="score" sort={sort} onSort={onSort} num title="How the assistant rates him for a place">Rating</SortTh>
+              {!compact && <SortTh k="caps" sort={sort} onSort={onSort} num>Caps</SortTh>}
+              <th title="Fitness">{compact ? 'Fit' : 'Fitness'}</th>
+              {!compact && <SortTh k="score" sort={sort} onSort={onSort} num title="How the assistant rates him for a place">Rating</SortTh>}
             </tr>
           </thead>
           <tbody>
@@ -310,15 +170,15 @@ function SquadPicker({ t, nation }: { t: Tournament; nation: number }): JSX.Elem
                     )}
                   </td>
                   <td><Pos pos={store.position[p] as Position} /></td>
-                  <td className="num">{age(p)}</td>
-                  <td>{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
+                  {!compact && <td className="num">{age(p)}</td>}
+                  <td className="nat-club">{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
                   <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
                   <td className="num"><RatingBadge value={recentForm(world, p)} size="sm" /></td>
-                  <td className="num">{store.nationalCaps[p]}</td>
+                  {!compact && <td className="num">{store.nationalCaps[p]}</td>}
                   <td>{store.injuryDaysLeft[p] > 0
                     ? <span className="bad">Injured · {store.injuryDaysLeft[p]}d</span>
                     : <Bar value={store.condition[p]} />}</td>
-                  <td className="num dim">{Math.round(selectionScore(world, p))}</td>
+                  {!compact && <td className="num dim">{Math.round(selectionScore(world, p))}</td>}
                 </tr>
               );
             })}
@@ -329,47 +189,7 @@ function SquadPicker({ t, nation }: { t: Tournament; nation: number }): JSX.Elem
   );
 }
 
-/** The tournament under way: the squad at it, and the matches. */
-function AtTournament({ t, nation }: { t: Tournament; nation: number }): JSX.Element {
-  const g = useGame();
-  const squad = squadOf(t, nation);
-  const matches = t.matches.filter((m) => m.home === nation || m.away === nation).sort((a, b) => a.day - b.day);
-  const out = t.out.includes(nation);
-  return (
-    <div className="nat-tour">
-      <section className="nat-card nat-fixtures">
-        <header className="nat-picker-head">
-          <div>
-            <h3 className="nat-h">{t.name}</h3>
-            <span className="faint">
-              {t.status === 'called' && g.world!.day < t.startDay ? `Starts ${g.dateLabelForDay(t.startDay)}`
-                : out ? 'Out of the tournament' : t.status === 'knockout' ? 'Knockout rounds' : 'Pool stage'}
-              {t.host >= 0 && <> · hosted by {nationName(t.host)}</>}
-              {t.status === 'done' && <> · {nationName(t.placings[0])} {championsTitle(t)}</>}
-            </span>
-          </div>
-          <button className="sm ghost" onClick={() => g.openTournament(t.id)}>
-            <Icon name="trophy" size={13} /> Tournament
-          </button>
-        </header>
-        <div className="nat-scroll nat-match-list">
-          {matches.map((m) => <NationMatch key={m.id} m={m} nation={nation} host={t.host} />)}
-          {matches.length === 0 && <p className="faint">The draw is made — the matches come soon.</p>}
-        </div>
-      </section>
-      <section className="nat-card nat-fill">
-        <header className="nat-picker-head">
-          <h3 className="nat-h">The squad</h3>
-        </header>
-        <div className="nat-scroll">
-          <PlayerTable players={squad} t={t} />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function NationMatch({ m, nation, host }: { m: IntlMatch; nation: number; host: number }): JSX.Element {
+export function NationMatch({ m, nation, host }: { m: IntlMatch; nation: number; host: number }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const opp = m.home === nation ? m.away : m.home;
@@ -391,7 +211,7 @@ function NationMatch({ m, nation, host }: { m: IntlMatch; nation: number; host: 
 }
 
 /** A list of players with what matters for a national team. */
-function PlayerTable({ players, t }: { players: number[]; t?: Tournament }): JSX.Element {
+export function PlayerTable({ players, t }: { players: number[]; t?: Tournament }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
@@ -454,6 +274,8 @@ export function NationalHome(): JSX.Element {
   const players = t !== undefined && t.status !== 'planned' ? squadOf(t, nation) : g.suggestedNationalSquad();
   const store = world.players;
   const news = [...world.news].reverse().slice(0, 10);
+  // The federation's squad message is out: the fourteen are his to name.
+  const squadOpen = t !== undefined && t.status === 'planned' && world.day >= t.callUpDay - 7;
   const top = ranking.slice(0, 12);
   if (!top.includes(nation)) top.push(nation);
 
@@ -492,9 +314,11 @@ export function NationalHome(): JSX.Element {
                 <Icon name="playOutline" size={14} /> Play match
               </button>
             </div>
-          ) : (
-            <button className="primary" onClick={() => g.go('national')}><Icon name="world" size={14} /> National Team</button>
-          )}
+          ) : squadOpen ? (
+            <button className="primary" onClick={() => g.openSquadMessage()}><Icon name="world" size={14} /> Name your squad</button>
+          ) : t !== undefined ? (
+            <button className="primary" onClick={() => g.openTournament(t.id)}><Icon name="trophy" size={14} /> {t.name}</button>
+          ) : null}
         </div>
       </section>
 
@@ -552,7 +376,7 @@ export function NationalHome(): JSX.Element {
         <section className="hm-card">
           <header className="hm-card-head">
             <h3>{t !== undefined && t.status !== 'planned' ? 'The squad' : 'Your assistant’s fourteen'}</h3>
-            <button className="hm-link" onClick={() => g.go('national')}>National Team <Icon name="arrowRight" size={13} /></button>
+            {squadOpen && <button className="hm-link" onClick={() => g.openSquadMessage()}>Name the squad <Icon name="arrowRight" size={13} /></button>}
           </header>
           <div className="hm-scroll">
             <table className="data-table">
@@ -571,14 +395,11 @@ export function NationalHome(): JSX.Element {
           </div>
         </section>
         <section className="hm-card">
-          <header className="hm-card-head"><h3>A club as well?</h3></header>
-          <div className="hm-scroll">
-            <p className="hm-empty nat-home-note">
-              The national team plays in the summer and the spring. You can take a club job alongside it — apply for any
-              vacancy in the Job Centre, and clubs will hear of you as your name grows.
-            </p>
-            <button className="primary block" onClick={() => g.go('jobs')}><Icon name="search" size={14} /> Job Centre</button>
-          </div>
+          <header className="hm-card-head">
+            <h3>Tactics</h3>
+            <button className="hm-link" onClick={() => g.go('jobs')}>A club as well? <Icon name="arrowRight" size={13} /></button>
+          </header>
+          <div className="hm-scroll"><NationalTactics /></div>
         </section>
       </div>
     </div>

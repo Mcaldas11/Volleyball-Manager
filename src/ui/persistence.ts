@@ -206,6 +206,10 @@ export function reviveWorld(raw: World): World {
     raw.internationals.applications ??= [];
     raw.internationals.chosen ??= null;
     raw.internationals.dualFrom ??= 0;
+    raw.internationals.offers ??= [];
+    raw.internationals.nextOfferId ??= 0;
+    raw.internationals.lastApproach ??= -1;
+    raw.internationals.squadAsked ??= [];
   }
   raw.nextNewsId ??= 0;
   // Saves from before international duty needed a ninth player flag.

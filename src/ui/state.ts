@@ -31,9 +31,10 @@ import {
   type Fixture, type GameMessage, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
-import { defaultTactics, type TeamTactics } from '../engine/match/tactics.ts';
+import { defaultTactics, type Formation, type TeamTactics } from '../engine/match/tactics.ts';
 import {
-  applyForNationalJob, applyIntlResult, canPlayForCountry, leaveNationalJob, matchImportance, nameSquad,
+  acceptNationalOffer, applyForNationalJob, applyIntlResult, askForSquad, canPlayForCountry, declineNationalOffer,
+  leaveNationalJob, matchImportance, nameSquad,
   nationalApplicationBlock, nationName, nationSetup, postMatchReport, squadDue, squadOf, startNationalCareer, suggestSquad,
   userMatchToday, userNation, type IntlMatch, type Tournament,
 } from '../engine/world/internationals.ts';
@@ -71,13 +72,12 @@ import {
 export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
-  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals' | 'national';
+  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
   'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news', 'internationals',
-  'national',
 ]);
 
 export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
@@ -1110,8 +1110,11 @@ class Game {
   openPendingDecision(): boolean {
     const d = this.pendingDecision();
     if (d === null) return false;
-    if (d.kind === 'squad') this.go('national');
-    else if (d.messageId !== null) this.openMessage(d.messageId);
+    if (d.kind === 'squad') {
+      // The squad is named in the federation's message.
+      const m = this.world === null ? undefined : askForSquad(this.world);
+      if (m !== undefined) this.openMessage(m.id);
+    } else if (d.messageId !== null) this.openMessage(d.messageId);
     else if (d.fixtureId !== null) this.openInterview(d.fixtureId);
     else if (d.offerId !== null) this.openOffer(d.offerId);
     this.notice = d.reason;
@@ -1174,6 +1177,8 @@ class Game {
     const clubId = world.userClubId;
     const season = world.season;
     const offers = world.career.offers.length;
+    const nationalOffers = (): number => world.internationals?.offers?.length ?? 0;
+    const nationalBefore = nationalOffers();
     let why: string | null = null;
     while (until === null || world.day < until) {
       if (this.holiday.cutShort) { why = 'you cut it short'; break; }
@@ -1181,6 +1186,7 @@ class Game {
       if (this.world !== world) break;
       if (world.userClubId !== clubId) { why = world.userClubId < 0 ? 'the board has let you go' : 'you have a new job'; break; }
       if (world.career.offers.length > offers) { why = 'a club has offered you a job'; break; }
+      if (nationalOffers() > nationalBefore) { why = 'a national team has offered you its job'; break; }
       if (world.season !== season) { why = 'the season is over'; break; }
       this.emit();
       await sleep(HOLIDAY_TICK_MS);
@@ -2074,7 +2080,10 @@ class Game {
     const squad = squadOf(t, nation);
     const { lineup, libero, defensiveLibero, bench } = pickLineup(
       world.players,
-      { players: squad, preferredLineup: [], preferredLibero: -1, preferredDefensiveLibero: -1 },
+      {
+        players: squad, preferredLineup: [], preferredLibero: -1, preferredDefensiveLibero: -1,
+        tactics: this.nationalTactics() ?? undefined,
+      },
       undefined,
       (p) => canPlayForCountry(world, p),
     );
@@ -2220,6 +2229,67 @@ class Game {
     this.emit();
   }
 
+  /** Open the federation's message where the squad for the next tournament is named. False if there is none yet. */
+  openSquadMessage(): boolean {
+    const m = this.world === null ? undefined : askForSquad(this.world);
+    if (m === undefined) return false;
+    this.openMessage(m.id);
+    return true;
+  }
+
+  /** Take a federation's offer of its national team job. */
+  acceptNationalOffer(offerId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const nation = world.internationals?.offers.find((o) => o.id === offerId)?.nation;
+    this.notice = acceptNationalOffer(world, offerId) && nation !== undefined
+      ? `You are the new head coach of ${nationName(nation)}.`
+      : 'That offer has lapsed.';
+    this.emit();
+  }
+
+  /** Turn a federation down. */
+  declineNationalOffer(offerId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    declineNationalOffer(world, offerId);
+    this.notice = 'Offer declined.';
+    this.emit();
+  }
+
+  /** The system the user's club plays; its team sheet follows it (see pickLineup). */
+  setFormation(formation: Formation): void {
+    const club = this.club;
+    if (club === null) return;
+    club.tactics.formation = formation;
+    this.emit();
+  }
+
+  /** The system the user's side plays in today's match — a club's or a nation's —
+   *  with the six re-picked for it before kickoff. */
+  setMatchdayFormation(formation: Formation): void {
+    const world = this.world;
+    const md = this.matchday;
+    const tactics = this.matchTactics();
+    if (world === null || md === null || md.stage !== 'lineup' || tactics === null) return;
+    tactics.formation = formation;
+    const mine = md.sides[md.userIsHome ? 0 : 1];
+    const club = this.club;
+    const pick = md.national !== null || club === null
+      ? pickLineup(
+        world.players,
+        { players: mine.players, preferredLineup: [], preferredLibero: -1, preferredDefensiveLibero: -1, tactics },
+        undefined,
+        (p) => this.matchAvailable(p),
+      )
+      : pickLineup(world.players, club);
+    md.homeLineup = pick.lineup;
+    md.homeLibero = pick.libero;
+    md.homeDefensiveLibero = pick.defensiveLibero;
+    md.homeBench = pick.bench;
+    this.emit();
+  }
+
   /** Step down as national team coach. */
   resignNationalJob(): void {
     const world = this.world;
@@ -2227,7 +2297,6 @@ class Game {
     const nation = userNation(world);
     if (nation < 0) return;
     leaveNationalJob(world, false);
-    if (this.screen === 'national') this.screen = 'career';
     this.notice = `You have stepped down as head coach of ${nationName(nation)}.`;
     this.emit();
   }

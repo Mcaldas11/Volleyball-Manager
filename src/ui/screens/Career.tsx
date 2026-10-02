@@ -4,6 +4,9 @@ import {
   applicationBlock, boardMood, currentJob, hiringChance, lastJobEnded, type JobExit, type ManagerJob,
 } from '../../engine/world/career.ts';
 import { ordinal } from '../../engine/world/inbox.ts';
+import {
+  nationalApplicationBlock, nationalHiringChance, nextTournamentFor, worldRanking,
+} from '../../engine/world/internationals.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import {
   Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, PersonFace, Segmented, StarMeter, StatTile,
@@ -263,16 +266,9 @@ function CurrentJobCard(): JSX.Element {
   if (club === null && nationalTeam !== undefined) {
     return (
       <Card title="Current Job" icon="world">
-        <div className="coach-row career-job-head">
-          <Flag nation={nationalTeam} />
-          <div className="coach-row-text">
-            <strong>{NATIONS[nationalTeam]?.name} national team</strong>
-            <span className="faint">Head coach</span>
-          </div>
-        </div>
+        <NationalJobBlock nation={nationalTeam} />
         <p className="career-note">No club job alongside it. Clubs looking for a head coach are listed in the Job Centre — apply, or wait for one to call.</p>
-        <button className="primary block" onClick={() => g.go('national')}><Icon name="world" size={14} /> National Team</button>
-        <button className="block career-resign" onClick={() => g.go('jobs')}><Icon name="search" size={14} /> Job Centre</button>
+        <button className="primary block" onClick={() => g.go('jobs')}><Icon name="search" size={14} /> Job Centre</button>
       </Card>
     );
   }
@@ -313,7 +309,42 @@ function CurrentJobCard(): JSX.Element {
           </div>
         </div>
       )}
+      {nationalTeam !== undefined && <NationalJobBlock nation={nationalTeam} />}
     </Card>
+  );
+}
+
+/** The national team he coaches, and the way out of it. */
+function NationalJobBlock({ nation }: { nation: number }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const [confirming, setConfirming] = useState(false);
+  const busy = g.processing || g.matchday !== null || g.postMatch !== null;
+  const rank = worldRanking(world).indexOf(nation) + 1;
+  const since = world.career.nationalJobs?.find((j) => j.nation === nation && j.endDay < 0)?.startDay;
+  return (
+    <div className="career-national">
+      <div className="coach-row career-job-head">
+        <Flag nation={nation} />
+        <div className="coach-row-text">
+          <strong>{NATIONS[nation]?.name} national team</strong>
+          <span className="faint">Head coach{since !== undefined ? ` since ${g.dateLabelForDay(since)}` : ''} · #{rank} in the world</span>
+        </div>
+      </div>
+      {!confirming ? (
+        <button className="danger block career-resign" disabled={busy} onClick={() => setConfirming(true)}>
+          <Icon name="exit" size={14} /> Step down as national coach
+        </button>
+      ) : (
+        <div className="career-confirm">
+          <p>Step down as head coach of <b>{NATIONS[nation]?.name}</b>? The federation will look for someone else.</p>
+          <div className="career-confirm-actions">
+            <button className="danger" disabled={busy} onClick={() => { setConfirming(false); g.resignNationalJob(); }}>Step down</button>
+            <button className="ghost" onClick={() => setConfirming(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -332,6 +363,7 @@ export function JobCentreScreen(): JSX.Element {
   const [scope, setScope] = useState<Scope>('suitable');
   const [conf, setConf] = useState<Confederation | 'all'>('all');
   const [query, setQuery] = useState('');
+  const [kind, setKind] = useState<'clubs' | 'national'>('clubs');
 
   const q = query.trim().toLowerCase();
   const rep = career.reputation;
@@ -349,11 +381,13 @@ export function JobCentreScreen(): JSX.Element {
         <div className="comp-bar-title">
           <span className="comp-bar-name">Job Centre</span>
           <span className="faint">
-            {world.vacancies.length} club{world.vacancies.length === 1 ? ' is' : 's are'} looking for a head coach
+            {world.vacancies.length} club{world.vacancies.length === 1 ? ' is' : 's are'} and {world.internationals?.vacancies.length ?? 0} national
+            team{(world.internationals?.vacancies.length ?? 0) === 1 ? ' is' : 's are'} looking for a head coach
           </span>
         </div>
         <div className="jobs-filters">
-          <Segmented options={[['suitable', 'Suited to you'], ['all', 'All vacancies']] as const} value={scope} onChange={setScope} />
+          <Segmented options={[['clubs', 'Clubs'], ['national', 'National teams']] as const} value={kind} onChange={setKind} />
+          {kind === 'clubs' && <Segmented options={[['suitable', 'Suited to you'], ['all', 'All vacancies']] as const} value={scope} onChange={setScope} />}
           <select value={conf} onChange={(e) => setConf(e.target.value as Confederation | 'all')}>
             {CONTINENTS.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
           </select>
@@ -365,6 +399,7 @@ export function JobCentreScreen(): JSX.Element {
       </div>
 
       <div className="club-grid">
+        {kind === 'national' ? <NationalVacancies /> : (
         <Card title={`Vacancies (${rows.length})`} icon="career" flush>
           {rows.length === 0 ? <Empty>No vacancies match — try all vacancies, or another continent.</Empty> : (
             <div className="table-wrap">
@@ -406,6 +441,7 @@ export function JobCentreScreen(): JSX.Element {
             </div>
           )}
         </Card>
+        )}
 
         <div className="stack club-side">
           <Card title="Your Standing" icon="user">
@@ -421,6 +457,53 @@ export function JobCentreScreen(): JSX.Element {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The national teams looking for a head coach — an offer, if one comes, arrives in the inbox. */
+function NationalVacancies(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const I = world.internationals;
+  const ranking = worldRanking(world);
+  const rows = [...(I?.vacancies ?? [])].sort((a, b) => ranking.indexOf(a.nation) - ranking.indexOf(b.nation));
+  return (
+    <Card title={`National teams (${rows.length})`} icon="world" flush>
+      {rows.length === 0 ? <Empty>No national team is looking for a coach right now.</Empty> : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Nation</th><th className="num">World rank</th><th>Next tournament</th><th>Vacant since</th><th>Interest</th><th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((v) => {
+                const interest = interestOf(nationalHiringChance(world, v.nation));
+                const next = nextTournamentFor(world, v.nation);
+                const block = nationalApplicationBlock(world, v.nation);
+                const applied = I?.applications.find((a) => a.nation === v.nation);
+                const offered = I?.offers.some((o) => o.nation === v.nation) ?? false;
+                return (
+                  <tr key={v.nation}>
+                    <td><span className="name-cell"><Flag nation={v.nation} /> <span className="strong">{NATIONS[v.nation]?.name}</span></span></td>
+                    <td className="num">{ranking.indexOf(v.nation) + 1}</td>
+                    <td className="dim">{next !== undefined ? `${next.name} · ${g.dateLabelForDay(next.startDay)}` : '—'}</td>
+                    <td className="dim">{g.dateLabelForDay(v.since)}</td>
+                    <td className={interest.cls}>{interest.label}</td>
+                    <td className="num">
+                      {offered ? <span className="good">Offer in your inbox</span>
+                        : applied !== undefined ? <span className="faint">Applied · answer by {g.dateLabelForDay(applied.answerOn)}</span>
+                          : <button className="sm primary" disabled={block !== null} title={block ?? undefined} onClick={() => g.applyForNationalJob(v.nation)}>Apply</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 

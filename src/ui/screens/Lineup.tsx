@@ -1,5 +1,7 @@
 import type { JSX } from 'react';
-import { abilityClass, Empty, StarMeter } from '../components.tsx';
+import { Formation, FORMATION_NAMES, formationOf } from '../../engine/match/tactics.ts';
+import { lineupSlotPositions } from '../../engine/season/seasonEngine.ts';
+import { abilityClass, Empty, Segmented, StarMeter } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { TeamSheet } from '../teamSheet.tsx';
 import { useGame } from '../state.ts';
@@ -27,6 +29,7 @@ export function LineupScreen(): JSX.Element {
     : 0;
   const hasPreference = club.preferredLineup.some((p) => p >= 0) || club.preferredLibero >= 0
     || club.preferredDefensiveLibero >= 0;
+  const formation = formationOf(club.tactics);
 
   return (
     <div className="lineup-page">
@@ -37,6 +40,15 @@ export function LineupScreen(): JSX.Element {
             Used automatically for every match, and the starting point whenever you rearrange it on
             match day. Anyone injured or sold is swapped for the next best fit until you pick a replacement.
           </span>
+        </div>
+        <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — whoever is in the front row sets.">
+          <span className="faint">Formation</span>
+          <Segmented<Formation>
+            size="sm"
+            options={[[Formation.FiveOne, FORMATION_NAMES[Formation.FiveOne]], [Formation.FourTwo, FORMATION_NAMES[Formation.FourTwo]]]}
+            value={formation}
+            onChange={(f) => g.setFormation(f)}
+          />
         </div>
         <div className="lineup-bar-rating">
           <span className="faint">Starting six</span>
@@ -59,6 +71,7 @@ export function LineupScreen(): JSX.Element {
         onSetLibero={(p) => g.setPreferredLibero(p)}
         onSetDefensiveLibero={(p) => g.setPreferredDefensiveLibero(p)}
         restrictSwapsByPosition
+        slotPositions={lineupSlotPositions(formation)}
       />
     </div>
   );

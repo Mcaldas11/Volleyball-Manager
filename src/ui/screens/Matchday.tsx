@@ -13,6 +13,7 @@ import { kitsFor, LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { rallyBeats, setupScene, type Scene } from '../matchCourt.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
+import { Formation, FORMATION_NAMES, formationOf } from '../../engine/match/tactics.ts';
 import { RallyTicker } from './Match.tsx';
 import { useGame, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 
@@ -185,6 +186,15 @@ function LineupSetup(): JSX.Element {
               <StarMeter value={oppAvg} size={13} />
               <strong className={abilityClass(oppAvg)}>{oppAvg}</strong>
             </div>
+          </div>
+          <div className="md-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — whoever is in the front row sets.">
+            <span className="faint">Formation</span>
+            <Segmented<Formation>
+              size="sm"
+              options={[[Formation.FiveOne, FORMATION_NAMES[Formation.FiveOne]], [Formation.FourTwo, FORMATION_NAMES[Formation.FourTwo]]]}
+              value={formationOf(g.matchTactics() ?? undefined)}
+              onChange={(f) => g.setMatchdayFormation(f)}
+            />
           </div>
           <button className="primary lg" onClick={() => g.kickOff()}>
             <Icon name="whistle" size={18} /> Kick off

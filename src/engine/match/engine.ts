@@ -40,6 +40,8 @@ import {
   SERVE_PROFILE,
   ServeTarget,
   TEMPO_PROFILE,
+  Formation,
+  formationOf,
   type TeamTactics,
 } from './tactics.ts';
 import {
@@ -239,10 +241,13 @@ class TeamRuntime {
     for (let i = 0; i < 6; i++) this.court[i] = this.startLineup[i];
     for (let r = 0; r < this.startRotation; r++) rotate(this.court);
     // Picked afresh every set: last set's setter may have been substituted,
-    // or left out of this set's six altogether.
+    // or left out of this set's six altogether. In a 4-2 it is the first of
+    // the two — the one the rotations are named for.
     this.setterIdx = -1;
+    const fourTwo = formationOf(this.setup.tactics) === Formation.FourTwo;
     for (const p of this.startLineup) {
-      if (this.positions[p] === Position.Setter) this.setterIdx = p;
+      if (this.positions[p] !== Position.Setter) continue;
+      if (!fourTwo || this.setterIdx < 0) this.setterIdx = p;
     }
     if (this.setterIdx < 0) this.setterIdx = this.startLineup[0];
     this.score = 0;
@@ -256,6 +261,18 @@ class TeamRuntime {
 
   rotation(): number {
     return rotationOf(this.court, this.setterIdx);
+  }
+
+  /**
+   * Who sets this rally. In a 5-1, the setter. In a 4-2, whichever setter is
+   * in the front row — the one in the back row defends like anyone else.
+   */
+  settingIdx(): number {
+    if (formationOf(this.setup.tactics) !== Formation.FourTwo) return this.setterIdx;
+    for (let z = 1; z <= 3; z++) {
+      if (this.positions[this.court[z]] === Position.Setter) return this.court[z];
+    }
+    return this.setterIdx;
   }
 }
 
@@ -906,7 +923,7 @@ export class MatchSimulator {
     const tempo = TEMPO_PROFILE[atk.tactics.tempo];
 
     // ---- Setting ----
-    const setter = atk.setterIdx;
+    const setter = atk.settingIdx();
     const setRatings = atk.rate(setter);
     const setterStats = statsFor(atk.stats, setter);
 
@@ -1061,7 +1078,7 @@ export class MatchSimulator {
 
     if (target === ServeTarget.Setter) {
       // Serving the setter disrupts the offense but they are usually hidden.
-      return this.rng.chance(0.3) ? rcv.setterIdx : this.recvUnit[this.rng.int(0, n - 1)];
+      return this.rng.chance(0.3) ? rcv.settingIdx() : this.recvUnit[this.rng.int(0, n - 1)];
     }
 
     if (target === ServeTarget.BestAttacker) {
@@ -1102,10 +1119,11 @@ export class MatchSimulator {
     const base = OFFENSE_LANE_WEIGHTS[atk.tactics.offense];
     const pos = this.store.position;
     const fastBias = 0.6 + (rotTac.setterTempoBias / 100) * 0.8;
+    const setter = atk.settingIdx();
 
     for (let z = 0; z < 6; z++) {
       const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx);
-      if (p === atk.setterIdx) continue;
+      if (p === setter) continue;
       const role = pos[p] as Position;
       const front = z >= 1 && z <= 3;
       const r = atk.rate(p);

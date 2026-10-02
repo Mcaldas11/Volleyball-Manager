@@ -53,6 +53,15 @@ export function postMessage(world: World, msg: Omit<GameMessage, 'id' | 'day' | 
  */
 export function messageNeedsAction(world: World, m: GameMessage): boolean {
   if (m.jobOfferId !== undefined && world.career.offers.some((o) => o.id === m.jobOfferId)) return true;
+  const I = world.internationals;
+  if (m.nationalOffer !== undefined && (I?.offers ?? []).some((o) => o.id === m.nationalOffer!.id)) return true;
+  // The squad to name for the manager's nation, until it is named.
+  if (m.intl?.kind === 'squad' && I !== undefined) {
+    const t = I.tournaments.find((x) => x.id === m.intl!.tournamentId);
+    const nation = world.career.nationalTeam;
+    if (t !== undefined && t.status === 'planned' && nation !== undefined && t.teams.includes(nation)
+      && I.chosen?.tournamentId !== t.id) return true;
+  }
   if (m.offerId !== undefined) {
     const offer = world.incomingOffers.find((o) => o.id === m.offerId);
     if (offer !== undefined && (offer.status ?? 'open') === 'open') return true;

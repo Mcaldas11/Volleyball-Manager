@@ -351,6 +351,8 @@ export interface GameMessage {
   fixtureId?: number;
   /** A club's offer of its head coach's job — see `World.career.offers`. */
   jobOfferId?: number;
+  /** A federation's offer of its national team job — see `Internationals.offers`. */
+  nationalOffer?: { id: number; nation: number };
   /** News of one of the user's players out on loan: the inbox offers to
    *  compile his matches there. */
   loanOut?: boolean;

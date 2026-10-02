@@ -783,7 +783,7 @@ export function NationSelect(): JSX.Element {
               )}
             <span className="nation-foot-actions">
               {both && (
-                <button className="ghost" onClick={() => g.skipNationStep()} title="Start with the club alone — national jobs are in the National Team screen later">
+                <button className="ghost" onClick={() => g.skipNationStep()} title="Start with the club alone — national teams can still offer you their job later, in your inbox">
                   Club only
                 </button>
               )}

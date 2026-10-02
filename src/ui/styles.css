@@ -4440,3 +4440,29 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .nat-home-story { display: flex; flex-direction: column; gap: 2px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
 .nat-home-story b { font-weight: 600; line-height: 1.35; }
 .nat-home-note { margin-bottom: 12px; line-height: 1.5; font-size: 13px; }
+
+/* ============================================================
+   Formation (5-1 / 4-2), the squad in the federation's message, the national job
+   ============================================================ */
+
+.lineup-formation, .md-formation { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 11.5px; }
+.md-formation { align-items: center; }
+
+.paper-scroll > .nat-in-paper { max-width: none; }
+.nat-in-paper { display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; }
+.nat-in-paper .nat-tactics { padding: 0 0 12px; border-top: none; border-bottom: 1px solid var(--line); }
+.nat-in-paper .nat-card { padding: 0; border: none; background: transparent; }
+.nat-in-paper .nat-scroll { max-height: 440px; }
+.nat-tactics-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.nat-tactics-head .nat-h { margin: 0; }
+.nat-tactics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; }
+.hm-card .nat-tactics { border-top: none; padding-top: 0; }
+.hm-card .nat-tactics-grid { grid-template-columns: minmax(0, 1fr); }
+
+.career-national { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.career-national .flag-img { width: 30px; height: 20px; }
+.nat-in-paper .nat-club { max-width: 128px; overflow: hidden; text-overflow: ellipsis; }
+.nat-in-paper .nat-club .club-link { max-width: 128px; }
+.nat-in-paper .nat-pick-table .bar { width: 44px; }
+.nat-in-paper .nat-pick-table { font-size: 12.5px; }
+.nat-in-paper .nat-pick-table td, .nat-in-paper .nat-pick-table th { padding-left: 5px; padding-right: 5px; }

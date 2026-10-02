@@ -165,6 +165,8 @@ export interface TeamSheetProps {
    *  on: a saved preference for a mismatched position is silently ignored by
    *  `pickLineup` anyway, so offering it here would just be a dead end. */
   restrictSwapsByPosition?: boolean;
+  /** Each slot's position for the team's system — the 5-1 unless told otherwise. */
+  slotPositions?: readonly Position[];
 }
 
 /**
@@ -181,14 +183,14 @@ export interface TeamSheetProps {
  */
 export function TeamSheet({
   lineup, libero, defensiveLibero, bench, store, onSetPlayer, onSwapPlayers, onSetLibero,
-  onSetDefensiveLibero, restrictSwapsByPosition = false,
+  onSetDefensiveLibero, restrictSwapsByPosition = false, slotPositions = LINEUP_SLOT_POSITIONS,
 }: TeamSheetProps): JSX.Element {
   const [dragOverZone, setDragOverZone] = useState<number | null>(null);
   const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
 
   const dropOnZone = (targetZone: number, draggedPlayerIdx: number): void => {
     if (draggedPlayerIdx === lineup[targetZone]) return;
-    if (restrictSwapsByPosition && store.position[draggedPlayerIdx] !== LINEUP_SLOT_POSITIONS[targetZone]) return;
+    if (restrictSwapsByPosition && store.position[draggedPlayerIdx] !== slotPositions[targetZone]) return;
     const sourceZone = lineup.indexOf(draggedPlayerIdx);
     if (sourceZone === -1) onSetPlayer(targetZone, draggedPlayerIdx);
     else if (sourceZone !== targetZone) onSwapPlayers(sourceZone, targetZone);
@@ -215,7 +217,7 @@ export function TeamSheet({
       );
     }
     const swapOptions = restrictSwapsByPosition
-      ? bench.filter((b) => store.position[b] === LINEUP_SLOT_POSITIONS[z])
+      ? bench.filter((b) => store.position[b] === slotPositions[z])
       : bench;
     return (
       <LineupCard
