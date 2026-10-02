@@ -3,16 +3,45 @@ import { Position } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact } from '../../engine/match/engine.ts';
 import {
-  abilityClass, Bar, Card, ChoiceField, ClubCrest, clubHue, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
+  abilityClass, Bar, Card, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
   Segmented, StarMeter,
 } from '../components.tsx';
+import { NATIONS } from '../../engine/world/nations.ts';
+import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { kitsFor, LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { rallyBeats, setupScene, type Scene } from '../matchCourt.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
 import { RallyTicker } from './Match.tsx';
-import { useGame, type MatchdayLogEntry, type MatchdaySnapshot } from '../state.ts';
+import { useGame, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
+
+/** National teams play in something like their flag's colour. */
+const NATION_HUES: Readonly<Record<string, number>> = {
+  POL: 352, ITA: 214, FRA: 224, BRA: 50, USA: 222, JPN: 0, SLO: 135, SRB: 356, ARG: 198, GER: 0, NED: 28, CUB: 0,
+  CAN: 356, IRI: 130, TUR: 357, BEL: 4, CHN: 358, BUL: 130, UKR: 50, CZE: 220, FIN: 210, KOR: 220, EGY: 0,
+  POR: 140, ESP: 2, SWE: 48, GRE: 210, AUS: 50, MEX: 145, QAT: 335, TUN: 0, CRO: 0, SVK: 220, ROU: 52, NOR: 0,
+  AUT: 0, SUI: 0, DEN: 0, CHI: 0, COL: 50, VEN: 350, PUR: 210, DOM: 220, IND: 28, THA: 220, KAZ: 190,
+};
+
+/** The hue a side's kit is made from. */
+function sideHue(world: World, side: MatchSide): number {
+  if (side.clubId >= 0) {
+    const club = world.clubs[side.clubId];
+    return club !== undefined ? clubHue(club) : 210;
+  }
+  return NATION_HUES[NATIONS[side.nation]?.code ?? ''] ?? (side.nation * 137.508) % 360;
+}
+
+/** A side's badge: the club's crest, or the nation's flag. */
+function SideCrest({ side, size }: { side: MatchSide; size: number }): JSX.Element | null {
+  const g = useGame();
+  if (side.clubId < 0) {
+    return <span className="side-flag" style={{ width: size * 1.3, height: size * 0.88 }}><Flag nation={side.nation} /></span>;
+  }
+  const club = g.world?.clubs[side.clubId];
+  return club !== undefined ? <ClubCrest club={club} size={size} /> : null;
+}
 
 /** Beat counter shared by every rally, so each flight gets a fresh animation. */
 let beatSeq = 0;
@@ -95,9 +124,9 @@ export function MatchdayScreen(): JSX.Element | null {
 }
 
 /** Average current ability of a squad's best six — a quick read of how strong a side is. */
-function bestSixAverage(players: readonly number[], store: PlayerStore): number {
+function bestSixAverage(players: readonly number[], store: PlayerStore, canPlay: (p: number) => boolean): number {
   const top = [...players]
-    .filter((p) => store.isAvailable(p))
+    .filter(canPlay)
     .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
     .slice(0, 6);
   return top.length > 0 ? Math.round(top.reduce((s, p) => s + store.currentAbility[p], 0) / top.length) : 0;
@@ -106,15 +135,13 @@ function bestSixAverage(players: readonly number[], store: PlayerStore): number 
 function LineupSetup(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
   const md = g.matchday!;
   const store = world.players;
 
-  const opponent = world.clubs[md.userIsHome ? md.fixture.away : md.fixture.home];
-  const home = world.clubs[md.fixture.home];
-  const away = world.clubs[md.fixture.away];
-  const comp = world.competitions[md.fixture.competitionId];
-  const available = club.players.filter((p) => store.isAvailable(p));
+  const [home, away] = md.sides;
+  const mine = md.sides[md.userIsHome ? 0 : 1];
+  const opponent = md.sides[md.userIsHome ? 1 : 0];
+  const available = mine.players.filter((p) => g.matchAvailable(p));
   const bench = available.filter((p) =>
     !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
 
@@ -122,29 +149,29 @@ function LineupSetup(): JSX.Element {
   const teamAvg = starters.length > 0
     ? Math.round(starters.reduce((s, p) => s + store.currentAbility[p], 0) / starters.length)
     : 0;
-  const oppAvg = opponent !== undefined ? bestSixAverage(opponent.players, store) : 0;
+  const oppAvg = bestSixAverage(opponent.players, store, (p) => g.matchAvailable(p));
 
   return (
     <div className="md-setup">
       <div className="md-banner">
         <div className="md-banner-team">
-          {home !== undefined && <ClubCrest club={home} size={46} />}
+          <SideCrest side={home} size={46} />
           <div className="md-banner-team-text">
-            <span className="md-banner-name">{home?.name ?? '—'}</span>
+            <span className="md-banner-name">{home.name}</span>
             <span className="md-banner-tag">Home{md.userIsHome ? ' · Your team' : ''}</span>
           </div>
         </div>
         <div className="md-banner-mid">
-          <span className="md-banner-comp">{comp?.name ?? 'Match'}</span>
+          <span className="md-banner-comp">{md.title}</span>
           <span className="md-banner-vs">VS</span>
           <span className="md-banner-date">{g.weekdayLabelForDay(md.fixture.day)} {g.dateLabelForDay(md.fixture.day)}</span>
         </div>
         <div className="md-banner-team right">
           <div className="md-banner-team-text">
-            <span className="md-banner-name">{away?.name ?? '—'}</span>
+            <span className="md-banner-name">{away.name}</span>
             <span className="md-banner-tag">Away{!md.userIsHome ? ' · Your team' : ''}</span>
           </div>
-          {away !== undefined && <ClubCrest club={away} size={46} />}
+          <SideCrest side={away} size={46} />
         </div>
         <div className="md-banner-side">
           <div className="md-strength">
@@ -153,13 +180,11 @@ function LineupSetup(): JSX.Element {
               <StarMeter value={teamAvg} size={13} />
               <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
             </div>
-            {opponent !== undefined && (
-              <div className="lineup-bar-rating">
-                <span className="faint">{opponent.shortName} best six</span>
-                <StarMeter value={oppAvg} size={13} />
-                <strong className={abilityClass(oppAvg)}>{oppAvg}</strong>
-              </div>
-            )}
+            <div className="lineup-bar-rating">
+              <span className="faint">{opponent.shortName} best six</span>
+              <StarMeter value={oppAvg} size={13} />
+              <strong className={abilityClass(oppAvg)}>{oppAvg}</strong>
+            </div>
           </div>
           <button className="primary lg" onClick={() => g.kickOff()}>
             <Icon name="whistle" size={18} /> Kick off
@@ -190,16 +215,14 @@ function LineupSetup(): JSX.Element {
 function SetBreak(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
   const md = g.matchday!;
   const store = world.players;
 
-  const home = world.clubs[md.fixture.home];
-  const away = world.clubs[md.fixture.away];
+  const [home, away] = md.sides;
   const setsPlayed = md.snapshot?.set ?? 0;
   const setScores = completedSets(md.log, setsPlayed, false);
-  const bench = club.players.filter((p) =>
-    store.isAvailable(p) && !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
+  const bench = md.sides[md.userIsHome ? 0 : 1].players.filter((p) =>
+    g.matchAvailable(p) && !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
   const teamAvg = Math.round(
     md.homeLineup.reduce((s, p) => s + store.currentAbility[p], 0) / Math.max(1, md.homeLineup.length));
   const last = g.lastSetSheet();
@@ -222,9 +245,9 @@ function SetBreak(): JSX.Element {
     <div className="md-setup">
       <div className="md-banner">
         <div className="md-banner-team">
-          {home !== undefined && <ClubCrest club={home} size={46} />}
+          <SideCrest side={home} size={46} />
           <div className="md-banner-team-text">
-            <span className="md-banner-name">{home?.name ?? '—'}</span>
+            <span className="md-banner-name">{home.name}</span>
             <span className="md-banner-tag">Home{md.userIsHome ? ' · Your team' : ''}</span>
             {!md.userIsHome && opponentNote}
           </div>
@@ -236,11 +259,11 @@ function SetBreak(): JSX.Element {
         </div>
         <div className="md-banner-team right">
           <div className="md-banner-team-text">
-            <span className="md-banner-name">{away?.name ?? '—'}</span>
+            <span className="md-banner-name">{away.name}</span>
             <span className="md-banner-tag">Away{!md.userIsHome ? ' · Your team' : ''}</span>
             {md.userIsHome && opponentNote}
           </div>
-          {away !== undefined && <ClubCrest club={away} size={46} />}
+          <SideCrest side={away} size={46} />
         </div>
         <div className="md-banner-side">
           <div className="md-strength">
@@ -290,10 +313,10 @@ function TimeoutPanel({
 }: {
   secondsLeft: number;
   calledBy?: string;
-}): JSX.Element {
+}): JSX.Element | null {
   const g = useGame();
-  const club = g.club!;
-  const t = club.tactics;
+  const t = g.matchTactics();
+  if (t === null) return null;
   return (
     <div className="timeout-panel">
       <div className="timeout-head">
@@ -445,8 +468,7 @@ function LiveMatchView(): JSX.Element {
   useEffect(() => {
     const sub = md.lastSubstitution;
     if (sub === null) return;
-    const teamName = (sub.team === 0 ? world.clubs[md.fixture.home] : world.clubs[md.fixture.away])
-      ?.shortName ?? '';
+    const teamName = md.sides[sub.team].shortName;
     const text = sub.libero !== undefined
       ? `${teamName}: ${store.shortName(sub.inPlayerIdx)} in as ${sub.libero === 'reception' ? 'reception' : 'defensive'} libero`
       : `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}${
@@ -544,14 +566,10 @@ function LiveMatchView(): JSX.Element {
     if (!animatingRef.current) setScene(sceneFor(md.snapshot, store, nearTeam));
   }, [md.snapshot]);
 
-  const homeClub = world.clubs[md.fixture.home];
-  const awayClub = world.clubs[md.fixture.away];
+  const [homeClub, awayClub] = md.sides;
   const userTeamIdx: 0 | 1 = md.userIsHome ? 0 : 1;
-  const kits = kitsFor(
-    homeClub !== undefined ? clubHue(homeClub) : 210,
-    awayClub !== undefined ? clubHue(awayClub) : 30,
-  );
-  const teamOf = (p: number): 0 | 1 => (store.clubId[p] === md.fixture.home ? 0 : 1);
+  const kits = kitsFor(sideHue(world, homeClub), sideHue(world, awayClub));
+  const teamOf = (p: number): 0 | 1 => (homeClub.players.includes(p) ? 0 : 1);
   const farClub = nearTeam === 0 ? awayClub : homeClub;
   const nearClub = nearTeam === 0 ? homeClub : awayClub;
   // What the scoreboard shows: the state before the rally still being
@@ -596,8 +614,8 @@ function LiveMatchView(): JSX.Element {
     <>
       <Card title="Match Stats" icon="stats" className="live-stats-card">
         <div className="cmp-head">
-          <span>{homeClub?.shortName ?? 'Home'}</span>
-          <span>{awayClub?.shortName ?? 'Away'}</span>
+          <span>{homeClub.shortName}</span>
+          <span>{awayClub.shortName}</span>
         </div>
         {STAT_ROWS.map(([key, label]) => {
           const h = stats[0][key];
@@ -637,9 +655,9 @@ function LiveMatchView(): JSX.Element {
     <div className="live">
       <div className="scoreboard">
         <div className={`sb-team${view.serving === 0 ? ' serving' : ''}`}>
-          {homeClub !== undefined && <ClubCrest club={homeClub} size={42} />}
+          <SideCrest side={homeClub} size={42} />
           <div className="sb-team-text">
-            <span className="sb-name">{homeClub?.name ?? '—'}</span>
+            <span className="sb-name">{homeClub.name}</span>
             <span className="sb-tag">Home{userTeamIdx === 0 ? ' · You' : ''}</span>
           </div>
           <span className="sb-serve" title="Serving"><Icon name="ball" size={17} /></span>
@@ -668,10 +686,10 @@ function LiveMatchView(): JSX.Element {
         <div className={`sb-team right${view.serving === 1 ? ' serving' : ''}`}>
           <span className="sb-serve" title="Serving"><Icon name="ball" size={17} /></span>
           <div className="sb-team-text">
-            <span className="sb-name">{awayClub?.name ?? '—'}</span>
+            <span className="sb-name">{awayClub.name}</span>
             <span className="sb-tag">Away{userTeamIdx === 1 ? ' · You' : ''}</span>
           </div>
-          {awayClub !== undefined && <ClubCrest club={awayClub} size={42} />}
+          <SideCrest side={awayClub} size={42} />
         </div>
       </div>
 
@@ -687,18 +705,18 @@ function LiveMatchView(): JSX.Element {
               timeout={pending === null ? md.timeoutActive : null}
               paused={pending === null && md.paused}
               speed={md.speed}
-              teamNames={[homeClub?.shortName ?? 'Home', awayClub?.shortName ?? 'Away']}
+              teamNames={[homeClub.shortName, awayClub.shortName]}
             />
 
             {/* Who plays which half — the user's side is always on the left. */}
             <span className="court-tag far">
-              {farClub !== undefined && <ClubCrest club={farClub} size={16} />}
-              <span className="court-tag-name">{farClub?.shortName ?? '—'}</span>
+              <SideCrest side={farClub} size={16} />
+              <span className="court-tag-name">{farClub.shortName}</span>
               <span className="court-tag-sets">{farSets}</span>
             </span>
             <span className="court-tag near">
-              {nearClub !== undefined && <ClubCrest club={nearClub} size={16} />}
-              <span className="court-tag-name">{nearClub?.shortName ?? '—'}</span>
+              <SideCrest side={nearClub} size={16} />
+              <span className="court-tag-name">{nearClub.shortName}</span>
               <span className="court-tag-sets">{nearSets}</span>
             </span>
             <div className="court-labels" title="What to show beside each player">
@@ -726,7 +744,7 @@ function LiveMatchView(): JSX.Element {
             {md.timeoutActive !== null && (
               <TimeoutPanel
                 secondsLeft={timeoutSecondsLeft}
-                calledBy={md.timeoutActive === 0 ? homeClub?.shortName : awayClub?.shortName}
+                calledBy={md.timeoutActive === 0 ? homeClub.shortName : awayClub.shortName}
               />
             )}
           </div>
@@ -805,8 +823,8 @@ function LiveMatchView(): JSX.Element {
                   <RallyTicker
                     entries={shownLog.map((l) => l.entry)}
                     store={store}
-                    homeCode={homeClub?.shortName ?? '—'}
-                    awayCode={awayClub?.shortName ?? '—'}
+                    homeCode={homeClub.shortName}
+                    awayCode={awayClub.shortName}
                   />
                 )
                 : <div className="ticker-entry dim">Kicking off…</div>}
@@ -882,14 +900,14 @@ function LiveRatingsCard({
   const md = g.matchday!;
   const store = world.players;
   const [team, setTeam] = useState<0 | 1>(defaultTeam);
-  const clubId = team === 0 ? md.fixture.home : md.fixture.away;
+  const players = md.sides[team].players;
   const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
   const libero = (team === 0 ? md.snapshot?.homeLibero : md.snapshot?.awayLibero) ?? -1;
   const rows = [...ratings.entries()]
-    .filter(([p]) => store.clubId[p] === clubId)
+    .filter(([p]) => players.includes(p))
     .sort((a, b) => b[1] - a[1]);
-  const homeName = world.clubs[md.fixture.home]?.shortName ?? 'Home';
-  const awayName = world.clubs[md.fixture.away]?.shortName ?? 'Away';
+  const homeName = md.sides[0].shortName;
+  const awayName = md.sides[1].shortName;
 
   return (
     <Card
@@ -977,7 +995,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const md = g.matchday!;
-  const club = g.club!;
+  const squad = md.sides[teamIdx].players;
   const store = world.players;
   const [outPlayer, setOutPlayer] = useState<number | null>(null);
   const [inPlayer, setInPlayer] = useState<number | null>(null);
@@ -986,12 +1004,12 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   const onCourt = (teamIdx === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
   // Liberos are changed in their own section below — they can never take an
   // ordinary rotation spot, so they never appear on this bench.
-  const bench = club.players.filter((p) =>
-    !onCourt.includes(p) && store.isAvailable(p) && store.position[p] !== Position.Libero);
+  const bench = squad.filter((p) =>
+    !onCourt.includes(p) && g.matchAvailable(p) && store.position[p] !== Position.Libero);
   const ratings = g.liveRatings();
   const liberos = g.liveLiberos();
-  const spareLiberos = club.players.filter((p) =>
-    store.position[p] === Position.Libero && store.isAvailable(p) && !onCourt.includes(p)
+  const spareLiberos = squad.filter((p) =>
+    store.position[p] === Position.Libero && g.matchAvailable(p) && !onCourt.includes(p)
     && p !== liberos.reception && p !== liberos.defence);
   const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
   // Reads the engine's own per-set counter — it resets every set, unlike a

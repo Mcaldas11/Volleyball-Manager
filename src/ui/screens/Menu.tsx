@@ -1,4 +1,8 @@
-import { useEffect, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
+import { PlayerFlag } from '../../engine/model/players.ts';
+import {
+  pickSquad, secondNation, SQUAD_SIZE, worldRanking, type Tournament,
+} from '../../engine/world/internationals.ts';
 import type { Position } from '../../engine/model/positions.ts';
 import type { Competition, ManagerProfile } from '../../engine/world/world.ts';
 import { NATIONS, nationsIn, type Confederation } from '../../engine/world/nations.ts';
@@ -6,7 +10,7 @@ import {
   abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
-import { useGame } from '../state.ts';
+import { useGame, type CareerMode } from '../state.ts';
 
 const MIN_BIRTH_DATE = '1946-01-01';
 const MAX_BIRTH_DATE = '2008-07-01';
@@ -70,7 +74,7 @@ export function MainMenu(): JSX.Element {
             <span className="start-item-icon"><Icon name="ball" size={22} /></span>
             <span className="start-item-text">
               <span className="start-item-title">Start New Career</span>
-              <span className="start-item-meta">Create a manager and take charge of a club.</span>
+              <span className="start-item-meta">Create a manager and take charge of a club, a national team, or both.</span>
             </span>
             <Icon name="chevronRight" size={20} className="start-item-chev" />
           </button>
@@ -106,7 +110,12 @@ export function MainMenu(): JSX.Element {
   );
 }
 
-const STEPS = ['Manager', 'World', 'Club'] as const;
+/** The new-career steps for each kind of career. */
+const STEPS: Readonly<Record<CareerMode, readonly string[]>> = {
+  club: ['Manager', 'World', 'Club'],
+  national: ['Manager', 'World', 'National team'],
+  both: ['Manager', 'World', 'Club', 'National team'],
+};
 
 /** The new-career flow's frame: the step you're on, then that step's content. */
 function Wizard({
@@ -118,6 +127,7 @@ function Wizard({
   children: ReactNode;
   wide?: boolean;
 }): JSX.Element {
+  const g = useGame();
   return (
     <div className="wizard-page">
       <div className={`wizard${wide ? ' wizard-wide' : ''}`}>
@@ -125,7 +135,7 @@ function Wizard({
           <Wordmark />
           {step >= 0 && (
             <ol className="wizard-steps">
-              {STEPS.map((s, i) => (
+              {STEPS[g.careerMode].map((s, i) => (
                 <li key={s} className={i === step ? 'current' : i < step ? 'done' : ''}>
                   <span className="wizard-step-num">{i < step ? <Icon name="check" size={12} /> : i + 1}</span>
                   {s}
@@ -300,6 +310,12 @@ export function CreateManager(): JSX.Element {
   );
 }
 
+const CAREER_MODES: ReadonlyArray<{ id: CareerMode; title: string; text: string; icon: 'club' | 'world' | 'trophy' }> = [
+  { id: 'club', icon: 'club', title: 'Club', text: 'Head coach, general manager and sporting director of a club.' },
+  { id: 'national', icon: 'world', title: 'National team', text: 'Name the squads and coach a nation at the Nations League, the continental championships, the Worlds and the Olympics.' },
+  { id: 'both', icon: 'trophy', title: 'Club & national team', text: 'Both at once: the club through the season, the nation in the summer and the spring.' },
+];
+
 const WORLD_SCALES: ReadonlyArray<{ id: 'small' | 'standard' | 'large'; title: string; text: string }> = [
   { id: 'small', title: 'Small', text: 'Top divisions only — the fastest to simulate.' },
   { id: 'standard', title: 'Standard', text: 'Full pyramids in the major nations.' },
@@ -322,8 +338,25 @@ export function WorldSetup(): JSX.Element {
   };
 
   return (
-    <Wizard step={1} title="Set up the world" subtitle="Choose how large a world to generate before picking a club.">
-      <Card title="World Size" icon="world">
+    <Wizard step={1} title="Set up the world" subtitle="Choose what you will manage and how large a world to generate.">
+      <Card title="Your Career" icon="career">
+        <div className="scale-options">
+          {CAREER_MODES.map((m) => (
+            <button
+              key={m.id}
+              className={`scale-option${g.careerMode === m.id ? ' active' : ''}`}
+              onClick={() => g.setCareerMode(m.id)}
+              disabled={building}
+            >
+              <span className="scale-option-title">
+                <Icon name={g.careerMode === m.id ? 'check' : m.icon} size={14} /> {m.title}
+              </span>
+              <span className="scale-option-text">{m.text}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+      <Card title="World Size" icon="world" style={{ marginTop: 14 }}>
         <div className="scale-options">
           {WORLD_SCALES.map((s) => (
             <button
@@ -453,7 +486,9 @@ export function ClubSelect(): JSX.Element {
       step={2}
       wide
       title="Choose a club"
-      subtitle="You are the head coach, general manager and sporting director. Pick a continent, a country and a division — starting at a smaller club is harder and more interesting."
+      subtitle={g.careerMode === 'both'
+        ? 'First the club — the national team comes next. Pick a continent, a country and a division — starting at a smaller club is harder and more interesting.'
+        : 'You are the head coach, general manager and sporting director. Pick a continent, a country and a division — starting at a smaller club is harder and more interesting.'}
     >
       <div className="club-select">
         <section className="card club-browser">
@@ -581,6 +616,220 @@ export function ClubSelect(): JSX.Element {
                 </div>
               ))}
               {bestPlayers.length === 0 && <p className="empty">No players registered.</p>}
+            </div>
+          )}
+        </Card>
+      </div>
+    </Wizard>
+  );
+}
+
+// ---- The national team ---------------------------------------------------------------------
+
+/** What a nation's standing in the world leads its federation to expect. */
+function expectationOf(rank: number): { label: string; text: string } {
+  if (rank <= 4) return { label: 'Favourites', text: 'Expected to win medals at every major.' };
+  if (rank <= 10) return { label: 'Contenders', text: 'Expected to reach the knockout rounds and push for the podium.' };
+  if (rank <= 20) return { label: 'Outsiders', text: 'Expected to qualify for the majors and make life hard for the big names.' };
+  return { label: 'Building', text: 'A nation to build — qualifying for a major would be a success.' };
+}
+
+interface NationRow {
+  nation: number;
+  rank: number;
+  points: number;
+  /** The assistant's fourteen, and their average ability. */
+  squad: number[];
+  strength: number;
+  pool: number;
+}
+
+/**
+ * Take charge of a national team — the whole career, or the second half of
+ * club and country. Every nation with a squad's worth of players, by world
+ * ranking, narrowed by continent or a search; the one picked in full on the
+ * right: what its federation expects, the summer and spring ahead, and the
+ * players it would call.
+ */
+export function NationSelect(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const both = g.careerMode === 'both';
+
+  const rows = useMemo<NationRow[]>(() => {
+    // Everyone each nation could call, in one pass over the players.
+    const pools = new Map<number, number[]>();
+    for (let i = 0; i < store.count; i++) {
+      if (!store.isActive(i) || store.hasFlag(i, PlayerFlag.Youth)) continue;
+      for (const n of [store.nation[i], secondNation(world, i)]) {
+        if (n < 0) continue;
+        const list = pools.get(n) ?? [];
+        list.push(i);
+        pools.set(n, list);
+      }
+    }
+    const ranking = worldRanking(world);
+    return ranking.flatMap((nation, i): NationRow[] => {
+      const pool = pools.get(nation) ?? [];
+      if (pool.length < SQUAD_SIZE) return [];
+      const squad = pickSquad(world, pool);
+      const strength = squad.reduce((s, p) => s + store.currentAbility[p], 0) / squad.length;
+      const team = world.nationalTeams.find((t) => t.nation === nation);
+      return [{ nation, rank: i + 1, points: team?.rankingPoints ?? 0, squad, strength, pool: pool.length }];
+    });
+  }, [world]);
+
+  const home = world.manager.nation;
+  const [conf, setConf] = useState<Confederation | 'all'>('all');
+  const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState<number | null>(() => rows.find((r) => r.nation === home)?.nation ?? rows[0]?.nation ?? null);
+  const q = query.trim().toLowerCase();
+  const shown = rows.filter((r) => (conf === 'all' || NATIONS[r.nation].confederation === conf)
+    && (q.length < 2 || NATIONS[r.nation].name.toLowerCase().includes(q)));
+  const row = rows.find((r) => r.nation === picked);
+  const tournaments = (world.internationals?.tournaments ?? []).filter((t) => t.status !== 'done');
+  const playsIn = (n: number): Tournament[] => tournaments.filter((t) => t.teams.includes(n)).sort((a, b) => a.startDay - b.startDay);
+  const team = row !== undefined ? world.nationalTeams.find((t) => t.nation === row.nation) : undefined;
+  const steps = both ? 3 : 2;
+
+  return (
+    <Wizard
+      step={steps}
+      wide
+      title="Choose a national team"
+      subtitle={both
+        ? 'Your club is set — now the country. You name the squad for every tournament and coach its matches yourself, in the summer and the spring.'
+        : 'You name the squad for every tournament — the Nations League, the continental championships, the World Championship and the Olympic Games — and coach its matches yourself.'}
+    >
+      <div className="club-select">
+        <section className="card club-browser">
+          <div className="club-filters">
+            <label className="pick-field">
+              <span className="pick-label">Continent</span>
+              <span className="pick-control">
+                <span className="pick-icon"><Icon name="world" size={15} /></span>
+                <select value={conf} onChange={(e) => setConf(e.target.value as Confederation | 'all')}>
+                  <option value="all">The whole world</option>
+                  {CONTINENTS.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
+                </select>
+              </span>
+            </label>
+            <span className="flex-spacer" />
+            <label className="pick-field">
+              <span className="pick-label">Search nations</span>
+              <span className="search-mini">
+                <Icon name="search" size={14} />
+                <input placeholder="Nation" value={query} onChange={(e) => setQuery(e.target.value)} />
+              </span>
+            </label>
+          </div>
+
+          <div className="club-browser-head">
+            <span><strong>{shown.length}</strong> <span className="dim">national teams, by world ranking</span></span>
+            <span className="faint">Click to preview · double-click to take charge</span>
+          </div>
+
+          <div className="nation-table">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="num">#</th><th>Nation</th><th className="num">Points</th><th>Squad</th>
+                  <th>Best player</th><th>This summer</th><th className="num" title="Olympic gold · World titles">Titles</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => {
+                  const best = [...r.squad].sort((a, b) => store.currentAbility[b] - store.currentAbility[a])[0];
+                  const summer = playsIn(r.nation).find((t) => t.kind !== 'nationsLeague');
+                  const nt = world.nationalTeams.find((t) => t.nation === r.nation);
+                  return (
+                    <tr
+                      key={r.nation}
+                      className={`clickable${picked === r.nation ? ' nation-on' : ''}${r.nation === home ? ' me' : ''}`}
+                      onClick={() => setPicked(r.nation)}
+                      onDoubleClick={() => g.takeChargeOfNation(r.nation)}
+                    >
+                      <td className="num faint">{r.rank}</td>
+                      <td><span className="intl-nation"><Flag nation={r.nation} /> <b>{NATIONS[r.nation].name}</b></span></td>
+                      <td className="num">{r.points}</td>
+                      <td>
+                        <span className="nation-strength">
+                          <StarMeter value={r.strength} size={12} />
+                          <span className={abilityClass(r.strength)}>{Math.round(r.strength)}</span>
+                        </span>
+                      </td>
+                      <td className="dim">{best !== undefined ? store.fullName(best) : '—'}</td>
+                      <td>{summer !== undefined
+                        ? <>{summer.name.replace(/ \d{4}$/, '')}{summer.host === r.nation && <span className="nation-host">Hosts</span>}</>
+                        : <span className="faint">—</span>}</td>
+                      <td className="num">{(nt?.olympicGolds ?? 0) + (nt?.worldTitles ?? 0) || <span className="faint">—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {shown.length === 0 && <p className="empty">No nations match.</p>}
+          </div>
+
+          <div className="club-browser-foot">
+            {row === undefined
+              ? <span className="faint">Select a nation to continue.</span>
+              : (
+                <span className="club-browser-picked">
+                  <Flag nation={row.nation} />
+                  <span><strong>{NATIONS[row.nation].name}</strong><span className="faint"> · #{row.rank} in the world</span></span>
+                </span>
+              )}
+            <span className="nation-foot-actions">
+              {both && (
+                <button className="ghost" onClick={() => g.skipNationStep()} title="Start with the club alone — national jobs are in the National Team screen later">
+                  Club only
+                </button>
+              )}
+              <button className="primary lg" disabled={row === undefined} onClick={() => { if (row !== undefined) g.takeChargeOfNation(row.nation); }}>
+                Take charge <Icon name="forward" size={16} />
+              </button>
+            </span>
+          </div>
+        </section>
+
+        <Card title="National Team" icon="world" className="club-preview">
+          {row === undefined ? <p className="empty">Select a nation to see its details.</p> : (
+            <div className="club-preview-inner">
+              <div className="club-preview-head">
+                <span className="nation-preview-flag"><Flag nation={row.nation} /></span>
+                <div>
+                  <strong className="club-preview-name">{NATIONS[row.nation].name}</strong>
+                  <span className="faint">{CONTINENTS.find(([c]) => c === NATIONS[row.nation].confederation)?.[1]} · #{row.rank} in the world</span>
+                </div>
+              </div>
+              <KV k="Expectation"><span className="gold">{expectationOf(row.rank).label}</span></KV>
+              <p className="nation-expect faint">{expectationOf(row.rank).text}</p>
+              <KV k="Ranking points">{row.points}</KV>
+              <KV k="Squad strength"><StarMeter value={row.strength} size={13} /></KV>
+              <KV k="Players to choose from">{row.pool}</KV>
+              <KV k="Honours">
+                {team === undefined ? '—' : `${team.olympicGolds} Olympic · ${team.worldTitles} World · ${team.continentalTitles ?? 0} continental`}
+              </KV>
+              <KV k="Coming up">
+                {playsIn(row.nation).length === 0 ? <span className="faint">Not qualified for anything yet</span> : (
+                  <span className="nation-coming">
+                    {playsIn(row.nation).map((t) => (
+                      <span key={t.id}>{t.name}{t.host === row.nation ? ' (hosts)' : ''} · {g.dateLabelForDay(t.startDay)}</span>
+                    ))}
+                  </span>
+                )}
+              </KV>
+              <h4 className="section-label">Key players</h4>
+              {[...row.squad].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 6).map((p) => (
+                <div className="mini-player" key={p}>
+                  <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={26} />
+                  <span className="mini-player-name">{store.fullName(p)}</span>
+                  <Pos pos={store.position[p] as Position} />
+                  <span className={abilityClass(store.currentAbility[p])}>{store.currentAbility[p]}</span>
+                </div>
+              ))}
             </div>
           )}
         </Card>

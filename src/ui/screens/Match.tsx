@@ -10,7 +10,7 @@ import type { Competition, PlayoffGroup, PlayoffTie, World } from '../../engine/
 import {
   Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerLink, RatingBadge, Segmented, StatTile,
 } from '../components.tsx';
-import { useGame } from '../state.ts';
+import { useGame, type WatchedMatch } from '../state.ts';
 
 type NameLookup = { shortName: (i: number) => string };
 
@@ -326,14 +326,16 @@ function MvpRating(): JSX.Element | null {
  * stats switch between the teams — so the table always has the panel's full
  * width, however narrow the report is.
  */
-export function BoxScore(): JSX.Element {
+export function BoxScore({ watched: shown }: { watched?: WatchedMatch } = {}): JSX.Element {
   const g = useGame();
-  const watched = g.reviewLast()!;
+  const watched = shown ?? g.reviewLast()!;
   const world = g.world!;
   const store = world.players;
-  const [side, setSide] = useState<0 | 1>(watched.fixture.away === world.userClubId ? 1 : 0);
-  const homeCode = world.clubs[watched.fixture.home]?.shortName ?? watched.homeName;
-  const awayCode = world.clubs[watched.fixture.away]?.shortName ?? watched.awayName;
+  const national = watched.national !== undefined;
+  const mine = national ? watched.national!.nation : world.userClubId;
+  const [side, setSide] = useState<0 | 1>(watched.fixture.away === mine ? 1 : 0);
+  const homeCode = (national ? undefined : world.clubs[watched.fixture.home]?.shortName) ?? watched.homeName;
+  const awayCode = (national ? undefined : world.clubs[watched.fixture.away]?.shortName) ?? watched.awayName;
 
   const table = (
     teamStats: typeof watched.result.stats.home,

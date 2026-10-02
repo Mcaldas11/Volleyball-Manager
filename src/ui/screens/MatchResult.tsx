@@ -4,7 +4,8 @@ import { aggregateTeam, type PlayerMatchStats } from '../../engine/match/stats.t
 import type { Position } from '../../engine/model/positions.ts';
 import { POSITION_SHORT } from '../../engine/model/positions.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
-import { ClubCrest, PlayerFace, RatingBadge } from '../components.tsx';
+import { userNation } from '../../engine/world/internationals.ts';
+import { ClubCrest, Flag, PlayerFace, RatingBadge } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { BoxScore } from './Match.tsx';
@@ -32,16 +33,17 @@ export function MatchResultScreen(): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
-  const watched = g.reviewLast();
-  const fixture = g.postMatch !== null ? world.fixtures[g.postMatch] : undefined;
-  if (fixture === undefined || watched === null || watched.fixture.id !== fixture.id) return null;
+  const watched = g.resultShown();
+  if (watched === null || g.postMatch === null || watched.fixture.id !== g.postMatch) return null;
+  const fixture = watched.fixture;
+  const national = watched.national !== undefined;
 
   const { result } = watched;
-  const home = world.clubs[fixture.home];
-  const away = world.clubs[fixture.away];
+  const home = national ? undefined : world.clubs[fixture.home];
+  const away = national ? undefined : world.clubs[fixture.away];
   const comp = world.competitions[fixture.competitionId];
   const homeWon = result.homeSets > result.awaySets;
-  const me = world.userClubId;
+  const me = national ? userNation(world) : world.userClubId;
   const userWon = (fixture.home === me) === homeWon;
 
   const mvpHome = result.stats.home.players.get(result.mvp);
@@ -65,14 +67,14 @@ export function MatchResultScreen(): JSX.Element | null {
 
   const homeSide = fixture.home === me ? 'mine' : 'theirs';
   const awaySide = fixture.away === me ? 'mine' : 'theirs';
-  const round = stageLabel(world, fixture);
+  const heading = watched.national?.title ?? `${comp?.name ?? 'Match'} · ${stageLabel(world, fixture)}`;
 
   const teamRow = (clubId: number, sets: number, won: boolean, side: 0 | 1): JSX.Element => {
-    const c = world.clubs[clubId];
+    const c = national ? undefined : world.clubs[clubId];
     return (
       <div className={`mr-team${won ? ' won' : ''}${clubId === me ? ' mine' : ''}`}>
-        {c !== undefined && <ClubCrest club={c} size={40} />}
-        <span className="mr-team-name">{c?.name ?? '—'}</span>
+        {national ? <span className="side-flag mr-flag"><Flag nation={clubId} /></span> : c !== undefined && <ClubCrest club={c} size={40} />}
+        <span className="mr-team-name">{side === 0 ? watched.homeName : watched.awayName}</span>
         <span className="mr-sets-list">
           {result.setScores.map(([x, y], i) => {
             const mine = side === 0 ? x : y;
@@ -90,7 +92,7 @@ export function MatchResultScreen(): JSX.Element | null {
       <div className="mr-top">
         <section className="mr-card mr-score">
           <header className="mr-head">
-            <span>{comp?.name ?? 'Match'} · {round}</span>
+            <span>{heading}</span>
             <span className={`mr-final ${userWon ? 'good' : 'bad'}`}><span className="mr-dot" />Final</span>
           </header>
           {teamRow(fixture.home, result.homeSets, homeWon, 0)}
@@ -109,7 +111,7 @@ export function MatchResultScreen(): JSX.Element | null {
             </div>
           )}
           <footer className="mr-foot">
-            <span>The rest of the matchday's results come in with yours.</span>
+            <span>{national ? "The rest of the day's matches at the tournament come in with yours." : "The rest of the matchday's results come in with yours."}</span>
             <button className="primary" onClick={() => g.finishPostMatch()}>
               Continue <Icon name="arrowRight" size={15} />
             </button>
@@ -122,8 +124,8 @@ export function MatchResultScreen(): JSX.Element | null {
             <span>Points <b>{pointsH}–{pointsA}</b></span>
           </header>
           <div className="mr-stats-names">
-            <span className={fixture.home === me ? 'gold' : ''}>{home?.name ?? '—'}</span>
-            <span className={fixture.away === me ? 'gold' : ''}>{away?.name ?? '—'}</span>
+            <span className={fixture.home === me ? 'gold' : ''}>{home?.name ?? watched.homeName}</span>
+            <span className={fixture.away === me ? 'gold' : ''}>{away?.name ?? watched.awayName}</span>
           </div>
           {bars.map(([label, x, y]) => {
             const max = Math.max(1, x, y);
@@ -144,7 +146,7 @@ export function MatchResultScreen(): JSX.Element | null {
 
       <section className="mr-card mr-box">
         <header className="mr-head"><span>Box score</span></header>
-        <div className="mr-box-body"><BoxScore /></div>
+        <div className="mr-box-body"><BoxScore watched={watched} /></div>
       </section>
     </div>
   );

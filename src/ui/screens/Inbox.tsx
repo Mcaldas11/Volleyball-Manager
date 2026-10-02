@@ -14,6 +14,7 @@ import {
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
+import { IntlReportSheet } from '../intlReport.tsx';
 import { useGame } from '../state.ts';
 
 /** How each kind of message is filed and badged — the folder it lives in,
@@ -262,14 +263,21 @@ function MessageSheet({ message: m }: { message: GameMessage }): JSX.Element {
           <span className="paper-date">{g.longDateLabel(m.day)}</span>
         </div>
 
-        <PlayerContext message={m} />
-        <p className="paper-text">{m.body}</p>
+        {m.intl === undefined && <PlayerContext message={m} />}
+        {/* A drawn report says the player-by-player part better than the text. */}
+        <p className="paper-text">{m.intl !== undefined ? intlIntro(m.body) : m.body}</p>
         <MessageDetail message={m} />
       </div>
 
       <MessageActions message={m} />
     </article>
   );
+}
+
+/** An international message's text without its player-by-player lines,
+ *  which the drawn report shows instead. */
+function intlIntro(body: string): string {
+  return body.split('\n').filter((l) => !l.startsWith('• ')).join('\n').replace(/:\n/g, '.\n').replace(/:$/, '.');
 }
 
 /** "Current player context" — who the message is about, as he stands today. */
@@ -328,6 +336,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   const world = g.world!;
   const store = world.players;
   const cat = messageCategory(m);
+
+  if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
   if (cat === 'medical' && m.playerIdx !== undefined) {
     const p = m.playerIdx;
@@ -668,6 +678,13 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
   }
   if (cat === 'career' && jobOffer === undefined && g.unemployed) {
     out.push(<button key="jobs" className="paper-btn" onClick={() => g.go('jobs')}>Job Centre</button>);
+  }
+  if (m.intl !== undefined && world.internationals?.tournaments.some((t) => t.id === m.intl!.tournamentId)) {
+    out.push(
+      <button key="tournament" className="paper-btn" onClick={() => g.openTournament(m.intl!.tournamentId)}>
+        <Icon name="trophy" size={15} /> View tournament
+      </button>,
+    );
   }
 
   if (m.offerId !== undefined && world.incomingOffers.some((o) => o.id === m.offerId)) {

@@ -87,6 +87,10 @@ export interface ManagerCareer {
   lastApproach: number;
   /** Days on holiday this season (see holiday.ts). Absent until he first takes one. */
   holiday?: { season: number; days: number };
+  /** The nation whose national team he coaches as well, if any (see internationals.ts). */
+  nationalTeam?: number;
+  /** Every spell in charge of a national team, oldest first; endDay -1 while current. */
+  nationalJobs?: Array<{ nation: number; startDay: number; endDay: number }>;
 }
 
 /** Where a new coach's board starts: the benefit of the doubt. */
@@ -145,7 +149,8 @@ export function isUnemployed(world: World): boolean {
 /** The day the user's last job ended, -1 if he has never left one. */
 export function lastJobEnded(world: World): number {
   const last = world.career.jobs[world.career.jobs.length - 1];
-  return last === undefined ? -1 : last.endDay;
+  const national = world.career.nationalJobs?.[world.career.nationalJobs.length - 1];
+  return Math.max(last === undefined ? -1 : last.endDay, national === undefined ? -1 : national.endDay);
 }
 
 export function vacancyAt(world: World, clubId: number): Vacancy | undefined {
@@ -485,17 +490,20 @@ function approachable(world: World, clubId: number): boolean {
  */
 function approaches(world: World): void {
   const career = world.career;
-  if (career.jobs.length === 0) return;
   const own = userClubOf(world);
+  // A national coach who has never had a club hears from one now and then,
+  // the way a coach in work does — he is not out of work.
+  const nationalOnly = own === undefined && career.jobs.length === 0 && career.nationalTeam !== undefined;
+  if (career.jobs.length === 0 && !nationalOnly && (career.nationalJobs?.length ?? 0) === 0) return;
   if (own !== undefined && currentJob(world) === undefined) return;
-  const employed = own !== undefined;
+  const employed = own !== undefined || nationalOnly;
   if (career.offers.length >= (employed ? 1 : 3)) return;
-  if (employed && own.boardConfidence < 50) return;
+  if (own !== undefined && own.boardConfidence < 50) return;
   if (career.lastApproach >= 0 && world.day - career.lastApproach < (employed ? 42 : 7)) return;
 
   const rep = career.reputation;
   const outFor = employed ? 0 : world.day - lastJobEnded(world);
-  const lower = employed ? own.reputation * 1.1 : outFor > 90 ? 0 : rep * 0.35;
+  const lower = own !== undefined ? own.reputation * 1.1 : employed ? rep * 0.5 : outFor > 90 ? 0 : rep * 0.35;
   const upper = rep * (employed ? 1.35 : 1.2);
   const candidates = world.vacancies
     .map((v) => world.clubs[v.clubId])

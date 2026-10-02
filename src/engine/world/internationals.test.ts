@@ -3,8 +3,14 @@ import assert from 'node:assert/strict';
 import { PlayerFlag } from '../model/players.ts';
 import { advanceDay, newSeasonContext, startSeason, type SeasonContext } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
-import { appointManager } from './career.ts';
-import { internationals, poolTable, type Tournament } from './internationals.ts';
+import { appointManager, lastJobEnded } from './career.ts';
+import { MatchFormat, simulateMatch } from '../match/engine.ts';
+import { Position } from '../model/positions.ts';
+import {
+  appointNationalCoach, applyForNationalJob, leaveNationalJob, applyIntlResult, eligibleFor, internationalDay, internationals,
+  matchImportance, nameSquad, nationSetup, pickSquad, poolTable, secondNation, selectionScore, squadDue, squadOf,
+  startNationalCareer, suggestSquad, userMatchToday, worldRanking, type Tournament,
+} from './internationals.ts';
 import { NATIONS } from './nations.ts';
 import { generateWorld } from './worldGen.ts';
 import { stubManager, type World } from './world.ts';
@@ -83,7 +89,7 @@ test('called-up players are away from their clubs until their team goes out, and
   for (const [nation, squad] of squads) {
     assert.equal(squad.length, 14);
     for (const p of squad) {
-      assert.equal(store.nation[p], nation);
+      assert.ok(store.nation[p] === nation || store.nation2[p] === nation, 'eligible: his nation, or his second');
       assert.ok(!store.isAvailable(p), 'away on duty: not available to his club');
     }
   }
@@ -122,4 +128,179 @@ test('the cycle: a World Championship in 2027 and the Olympic Games in 2028, pla
   const olympics = byKind(world, 'olympics')[0];
   assert.equal(olympics.name, 'Olympic Games 2028');
   assert.equal(olympics.teams.length, 12);
+});
+
+test("the match-day message carries every one of his players' numbers, for the inbox to draw", () => {
+  const { world, ctx } = start(44);
+  const euro = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!;
+  const before = world.messages.length;
+  runTo(world, ctx, euro.knockoutDays[euro.knockoutDays.length - 1] + 1);
+  const reports = world.messages.slice(before).filter((m) => m.intl?.kind === 'matchday');
+  const ours = world.clubs[world.userClubId].players.filter((p) => euro.squads.some(([, s]) => s.includes(p)));
+  if (ours.length === 0) return;
+  assert.ok(reports.length > 0);
+  for (const m of reports) {
+    for (const card of m.intl!.matches!) {
+      assert.equal(card.homeSets === 3 || card.awaySets === 3, true, 'a finished match');
+      assert.equal(card.setScores.length, card.homeSets + card.awaySets);
+      for (const l of card.players) {
+        assert.ok([card.home, card.away].includes(l.nation));
+        if (l.absent === undefined) {
+          assert.ok(l.rating > 0, 'a rating for everyone who played');
+          assert.equal(l.points, l.kills + l.aces + l.blocks);
+          assert.ok(l.kills <= l.attacks && l.goodReceptions <= l.receptions);
+        }
+      }
+    }
+  }
+  const home = world.messages.slice(before).find((m) => m.intl?.kind === 'homecoming');
+  assert.ok(home !== undefined && home.intl!.lines!.every((l) => l.place >= -1 && l.apps >= 0));
+  assert.ok(world.messages.slice(before).some((m) => m.intl?.kind === 'callup' && m.intl.callUps!.length > 0));
+});
+
+test('a few players hold a second nationality, and the first nation they play for keeps them', () => {
+  const { world, ctx } = start(47);
+  const store = world.players;
+  let duals = 0;
+  for (let i = 0; i < store.count; i++) if (secondNation(world, i) >= 0) duals++;
+  assert.ok(duals > store.count * 0.01 && duals < store.count * 0.12, `${duals} of ${store.count}`);
+  const euro = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!;
+  runTo(world, ctx, euro.knockoutDays[euro.knockoutDays.length - 1] + 1);
+  const I = internationals(world);
+  assert.ok(I.tiedTo.size > 100, 'everyone capped is tied to his nation');
+  for (const [p, n] of I.tiedTo) assert.ok(store.nation[p] === n || store.nation2[p] === n);
+  // A dual national who has played is no longer on the other nation's list.
+  for (const [p, n] of I.tiedTo) {
+    const other = store.nation[p] === n ? secondNation(world, p) : store.nation[p];
+    if (other < 0 || other === n) continue;
+    assert.ok(!eligibleFor(world, other).includes(p));
+  }
+});
+
+test('the call-up weighs form: a player on a hot streak takes the place of a better one in a slump', () => {
+  const { world } = start(48);
+  const store = world.players;
+  const nation = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!.teams[0];
+  const pool = eligibleFor(world, nation);
+  const outsides = pool.filter((p) => store.position[p] === Position.OutsideHitter)
+    .sort((a, b) => selectionScore(world, b) - selectionScore(world, a));
+  const [fourth, fifth] = [outsides[3], outsides[4]];
+  assert.ok(pickSquad(world, pool).includes(fourth));
+  world.ratingForm.set(fourth, [4.9, 5.1, 5.0, 5.2, 4.8]);
+  world.ratingForm.set(fifth, [8.6, 8.4, 8.8, 8.5, 8.7]);
+  const squad = pickSquad(world, pool);
+  assert.ok(squad.includes(fifth), 'in form, in the squad');
+  assert.ok(!squad.includes(fourth), 'out of form, out of it');
+});
+
+test('a major has a host: in the field, and at home for every match it plays', () => {
+  const { world, ctx } = start(49);
+  for (const t of byKind(world, 'continental')) {
+    assert.ok(t.host >= 0 && t.teams.includes(t.host));
+  }
+  const vnl = byKind(world, 'nationsLeague')[0];
+  assert.equal(vnl.host, -1, 'the Nations League travels');
+  const euro = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!;
+  runTo(world, ctx, euro.knockoutDays[euro.knockoutDays.length - 1] + 1);
+  const hostGames = euro.matches.filter((m) => m.home === euro.host || m.away === euro.host);
+  assert.ok(hostGames.length >= 3);
+  assert.ok(hostGames.every((m) => m.home === euro.host));
+});
+
+test("coaching a nation: the squad is the manager's to name, the day waits for it, and his matches are his to play", () => {
+  const { world, ctx } = start(50);
+  const euro = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!;
+  const nation = euro.teams[2];
+  appointNationalCoach(world, nation);
+  assert.equal(world.career.nationalTeam, nation);
+  assert.ok(world.messages.some((m) => m.subject === `You are the new head coach of ${NATIONS[nation].name}`));
+
+  runTo(world, ctx, euro.callUpDay);
+  assert.equal(squadDue(world), euro, 'squads are due today');
+  // His fourteen: the assistant's, with the best setter left out for the next one.
+  const store = world.players;
+  const suggested = suggestSquad(world, nation);
+  const setters = eligibleFor(world, nation).filter((p) => store.position[p] === Position.Setter && !suggested.includes(p));
+  const mine = [...suggested];
+  const best = mine.find((p) => store.position[p] === Position.Setter)!;
+  mine[mine.indexOf(best)] = setters[0];
+  assert.match(nameSquad(world, mine.slice(0, 13)) ?? '', /Pick 14/);
+  assert.equal(nameSquad(world, mine), null);
+  assert.equal(squadDue(world), undefined);
+
+  advanceDay(world, ctx, { detailedClubs: new Set([world.userClubId]) });
+  const squad = squadOf(euro, nation);
+  assert.ok(squad.includes(setters[0]) || store.injuryDaysLeft[setters[0]] > 0, 'his pick went');
+  assert.ok(!squad.includes(best), 'and the one he left out stayed home');
+
+  // Match day: his to play — here, through the engine, as the match screen does.
+  const first = euro.matches.filter((m) => m.home === nation || m.away === nation).sort((a, b) => a.day - b.day)[0];
+  runTo(world, ctx, first.day);
+  const today = userMatchToday(world);
+  assert.ok(today !== null && today.m === first);
+  const result = simulateMatch(store, {
+    home: nationSetup(world, euro, first.home), away: nationSetup(world, euro, first.away),
+    format: MatchFormat.BestOf5, importance: matchImportance(first), neutralVenue: first.home !== euro.host,
+    collectLog: false, seed: 7,
+  });
+  applyIntlResult(world, euro, first, result);
+  assert.ok(first.played);
+  assert.equal(userMatchToday(world), null);
+  const caps = new Map(squad.map((p) => [p, store.nationalCaps[p]]));
+  advanceDay(world, ctx, { detailedClubs: new Set([world.userClubId]) });
+  assert.equal(first.homeSets, result.homeSets, 'not played again');
+  assert.ok(squad.every((p) => store.nationalCaps[p] === caps.get(p)), 'no second cap for the same match');
+});
+
+test('national jobs: always a few going, and an application is answered within a week', () => {
+  const { world, ctx } = start(51);
+  const I = internationals(world);
+  assert.ok(I.vacancies.length >= 3);
+  world.career.reputation = 9500;
+  const nation = I.vacancies[0].nation;
+  const answerOn = applyForNationalJob(world, nation);
+  assert.ok(answerOn !== null && answerOn - world.day >= 3 && answerOn - world.day <= 7);
+  assert.equal(applyForNationalJob(world, nation), null, 'one application at a time');
+  runTo(world, ctx, answerOn + 1);
+  const name = NATIONS[nation].name;
+  assert.ok(world.career.nationalTeam === nation ||
+    world.messages.some((m) => m.subject === `${name}: thank you for your application`));
+});
+
+test('a save that comes to the internationals mid-season gets the Nations League, not a summer already gone', () => {
+  const { world } = start(52);
+  world.internationals = undefined;
+  world.day += 120;
+  internationalDay(world);
+  const I = internationals(world);
+  assert.deepEqual(I.tournaments.map((t) => t.kind), ['nationsLeague']);
+  assert.ok(I.vacancies.length >= 3);
+});
+
+test('a career can begin at a national team alone: his name from its standing, and a club calls now and then', () => {
+  const world = generateWorld({ seed: 53, startYear: 2026, scale: 'small', manager: stubManager() });
+  const ctx = newSeasonContext();
+  startSeason(world, ctx);
+  const nation = worldRanking(world)[2];
+  startNationalCareer(world, nation);
+  assert.equal(world.userClubId, -1);
+  assert.equal(world.career.nationalTeam, nation);
+  assert.ok(world.career.reputation >= 3000, `${world.career.reputation}`);
+  runTo(world, ctx, 250);
+  assert.ok(world.messages.some((m) => m.jobOfferId !== undefined), 'a club has offered him its job');
+  // Stepping down leaves him out of work — a career, not one still to begin.
+  leaveNationalJob(world, false);
+  assert.equal(world.career.nationalTeam, undefined);
+  assert.deepEqual(world.career.nationalJobs?.map((j) => [j.nation, j.endDay]), [[nation, world.day]]);
+  assert.equal(lastJobEnded(world), world.day);
+});
+
+test('club and country: the club sets his name, and the nation comes on top', () => {
+  const { world } = start(54);
+  const rep = world.career.reputation;
+  const nation = worldRanking(world)[30];
+  startNationalCareer(world, nation);
+  assert.ok(world.userClubId >= 0);
+  assert.equal(world.career.nationalTeam, nation);
+  assert.equal(world.career.reputation, rep, "a weak nation does not lower a club coach's name");
 });

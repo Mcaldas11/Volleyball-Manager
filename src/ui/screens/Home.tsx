@@ -13,6 +13,7 @@ import {
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { UnemployedHome } from './Career.tsx';
+import { NationalHome } from './National.tsx';
 
 function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
@@ -36,7 +37,7 @@ const KEY_ATTRS: Readonly<Record<Position, readonly AttributeName[]>> = {
  */
 export function HomeScreen(): JSX.Element {
   const g = useGame();
-  if (g.club === null) return <UnemployedHome />;
+  if (g.club === null) return g.world!.career.nationalTeam !== undefined ? <NationalHome /> : <UnemployedHome />;
   return (
     <div className="home">
       <NowManaging />

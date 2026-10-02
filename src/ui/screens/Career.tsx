@@ -198,7 +198,12 @@ export function CareerScreen(): JSX.Element {
           <span className="club-hero-sub">
             {club !== null
               ? <><span className="your-club-tag">Head coach</span><span>{club.name}</span></>
-              : <><span className="career-out-tag">Out of work</span><span>since {g.dateLabelForDay(lastJobEnded(world))}</span></>}
+              : career.nationalTeam === undefined
+                ? <><span className="career-out-tag">Out of work</span><span>since {g.dateLabelForDay(lastJobEnded(world))}</span></>
+                : null}
+            {career.nationalTeam !== undefined && (
+              <><span className="your-club-tag">National coach</span><span><Flag nation={career.nationalTeam} /> {NATIONS[career.nationalTeam]?.name}</span></>
+            )}
           </span>
         </div>
         <div className="club-hero-rep">
@@ -253,6 +258,24 @@ function CurrentJobCard(): JSX.Element {
   const job = currentJob(world);
   const [confirming, setConfirming] = useState(false);
   const busy = g.processing || g.matchday !== null || g.postMatch !== null;
+
+  const nationalTeam = world.career.nationalTeam;
+  if (club === null && nationalTeam !== undefined) {
+    return (
+      <Card title="Current Job" icon="world">
+        <div className="coach-row career-job-head">
+          <Flag nation={nationalTeam} />
+          <div className="coach-row-text">
+            <strong>{NATIONS[nationalTeam]?.name} national team</strong>
+            <span className="faint">Head coach</span>
+          </div>
+        </div>
+        <p className="career-note">No club job alongside it. Clubs looking for a head coach are listed in the Job Centre — apply, or wait for one to call.</p>
+        <button className="primary block" onClick={() => g.go('national')}><Icon name="world" size={14} /> National Team</button>
+        <button className="block career-resign" onClick={() => g.go('jobs')}><Icon name="search" size={14} /> Job Centre</button>
+      </Card>
+    );
+  }
 
   if (club === null) {
     return (

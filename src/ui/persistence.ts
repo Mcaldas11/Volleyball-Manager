@@ -199,6 +199,14 @@ export function reviveWorld(raw: World): World {
   raw.pendingMoves ??= [];
   // Saves from before the world's news.
   raw.news ??= [];
+  // National jobs and dual nationals came later than the tournaments.
+  if (raw.internationals !== undefined) {
+    raw.internationals.tiedTo ??= new Map();
+    raw.internationals.vacancies ??= [];
+    raw.internationals.applications ??= [];
+    raw.internationals.chosen ??= null;
+    raw.internationals.dualFrom ??= 0;
+  }
   raw.nextNewsId ??= 0;
   // Saves from before international duty needed a ninth player flag.
   if (!(raw.players.flags instanceof Uint16Array)) raw.players.flags = Uint16Array.from(raw.players.flags);

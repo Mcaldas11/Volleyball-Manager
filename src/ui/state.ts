@@ -10,8 +10,8 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  MatchSimulator, type MatchResult, type RallyLogEntry, type SubstitutionPlan, type SubstitutionReason,
-  type TeamSetup,
+  MatchFormat, MatchSimulator, simulateMatch, type MatchResult, type RallyLogEntry, type SubstitutionPlan,
+  type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
@@ -31,7 +31,12 @@ import {
   type Fixture, type GameMessage, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
-import { defaultTactics } from '../engine/match/tactics.ts';
+import { defaultTactics, type TeamTactics } from '../engine/match/tactics.ts';
+import {
+  applyForNationalJob, applyIntlResult, canPlayForCountry, leaveNationalJob, matchImportance, nameSquad,
+  nationalApplicationBlock, nationName, nationSetup, postMatchReport, squadDue, squadOf, startNationalCareer, suggestSquad,
+  userMatchToday, userNation, type IntlMatch, type Tournament,
+} from '../engine/world/internationals.ts';
 import {
   answerOffers, applyForJobs, countHolidayDay, DEFAULT_HOLIDAY, returnDay, type HolidayPlan,
 } from '../engine/world/holiday.ts';
@@ -66,21 +71,49 @@ import {
 export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
-  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals';
+  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals' | 'national';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
   'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news', 'internationals',
+  'national',
 ]);
 
 export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
+
+/** What a new career takes charge of: a club, a national team, or both. */
+export type CareerMode = 'club' | 'national' | 'both';
 
 export interface WatchedMatch {
   fixture: Fixture;
   result: MatchResult;
   homeName: string;
   awayName: string;
+  /** A national team's match: the fixture's sides are nations, not clubs. */
+  national?: NationalMatchRef;
+}
+
+/** One of the manager's national team's matches, at a tournament. */
+export interface NationalMatchRef {
+  tournamentId: number;
+  matchId: number;
+  /** The manager's nation. */
+  nation: number;
+  /** "EuroVolley 2026 · Quarter-final". */
+  title: string;
+}
+
+/** One side of the match on the matchday screens: a club, or a nation. */
+export interface MatchSide {
+  /** Club id, or -1 for a national team. */
+  clubId: number;
+  /** Nation index for a national team, or -1. */
+  nation: number;
+  name: string;
+  shortName: string;
+  /** Everyone who could play for it today and their bench: the club's squad or the nation's fourteen. */
+  players: number[];
 }
 
 /** The user's own club has just been crowned champion of something —
@@ -183,7 +216,7 @@ const NAV_HISTORY_LIMIT = 50;
  *  passes in a second or two. */
 /** Something to answer before the day moves on — see GameState.pendingDecision. */
 export interface PendingDecision {
-  kind: 'interview' | 'offer';
+  kind: 'interview' | 'offer' | 'squad';
   /** What the Continue button says while it waits. */
   label: string;
   /** Why the day can't move on yet. */
@@ -242,6 +275,12 @@ export interface MatchdayLogEntry {
 
 export interface MatchdayState {
   fixture: Fixture;
+  /** Home and away, as the screens show them. */
+  sides: [MatchSide, MatchSide];
+  /** The competition, as the banner shows it. */
+  title: string;
+  /** Set when the match is the manager's national team's. */
+  national: NationalMatchRef | null;
   /** Team selection before kickoff, the match itself, or the break between
    *  two sets, where the user picks the six to start the next one. */
   stage: 'lineup' | 'live' | 'setBreak';
@@ -331,6 +370,8 @@ class Game {
   /** Index into matchday.log at the AI's last substitution, so it lets a change settle before the next. */
   private lastAISubAtRally = -Infinity;
   watched: WatchedMatch | null = null;
+  /** The manager's national team's last match, for its result screen. */
+  private lastNational: WatchedMatch | null = null;
   lastRollover: RolloverReport | null = null;
   /** Set right after a rollover the user's own club won a league title in —
    *  cleared once the celebration has been shown. */
@@ -344,6 +385,10 @@ class Game {
 
   // ---- Menu / save-game flow --------------------------------------------
   menuStage: MenuStage = 'main';
+  /** What the career being created takes charge of. */
+  careerMode: CareerMode = 'club';
+  /** Club and country: the club is taken, the nation still to pick. */
+  private nationStepPending = false;
   pendingManager: ManagerProfile | null = null;
   currentScale: WorldScale | null = null;
   saves: SaveMeta[] = [];
@@ -392,6 +437,7 @@ class Game {
     this.matchday = null;
     this.liveSim = null;
     this.pendingManager = null;
+    this.nationStepPending = false;
     this.currentScale = scale;
     this.currentSaveId = newSaveId();
     this.saveCreatedAt = Date.now();
@@ -446,6 +492,7 @@ class Game {
       this.matchday = null;
       this.liveSim = null;
       this.currentSaveId = id;
+      this.nationStepPending = false;
       const meta = this.saves.find((s) => s.id === id);
       this.currentScale = meta?.scale ?? null;
       this.saveCreatedAt = meta?.createdAt ?? Date.now();
@@ -461,6 +508,7 @@ class Game {
     const world = this.world;
     if (world === null) return;
     if (this.currentSaveId === null) this.currentSaveId = newSaveId();
+    const nationalTeam = world.career.nationalTeam ?? -1;
     this.busy = true;
     this.emit();
     try {
@@ -468,8 +516,8 @@ class Game {
         id: this.currentSaveId,
         managerName: `${world.manager.firstName} ${world.manager.lastName}`,
         nationCode: NATIONS[world.manager.nation]?.code ?? '???',
-        clubName: this.club?.name ?? 'Unemployed',
-        clubNationCode: this.club ? NATIONS[this.club.nation].code : '',
+        clubName: this.club?.name ?? (nationalTeam >= 0 ? `${NATIONS[nationalTeam].name} national team` : 'Unemployed'),
+        clubNationCode: this.club ? NATIONS[this.club.nation].code : nationalTeam >= 0 ? NATIONS[nationalTeam].code : '',
         scale: this.currentScale ?? 'standard',
         inGameDate: this.dateLabel(),
         season: world.season,
@@ -507,11 +555,48 @@ class Game {
     await this.refreshSaves();
   }
 
+  setCareerMode(mode: CareerMode): void {
+    this.careerMode = mode;
+    this.emit();
+  }
+
+  /** The step of a new career still to take — its club, or its nation — or
+   *  null once it has begun. A career between jobs has begun. */
+  setupStep(): 'club' | 'nation' | null {
+    const world = this.world;
+    if (world === null) return null;
+    if (this.nationStepPending) return 'nation';
+    // Begun: a club, a nation, or one of them once — out of work now is still a career.
+    const begun = world.userClubId >= 0 || this.unemployed || world.career.nationalTeam !== undefined ||
+      (world.career.nationalJobs?.length ?? 0) > 0;
+    if (begun) return null;
+    return this.careerMode === 'national' ? 'nation' : 'club';
+  }
+
   takeCharge(clubId: number): void {
     if (this.world === null) return;
     appointManager(this.world, clubId);
+    // Club and country: the nation is next.
+    this.nationStepPending = this.careerMode === 'both' && this.world.career.nationalTeam === undefined;
     this.screen = 'home';
     this.resetHistory();
+    this.emit();
+  }
+
+  /** Take over a national team as the career begins — on its own, or after the club. */
+  takeChargeOfNation(nation: number): void {
+    const world = this.world;
+    if (world === null) return;
+    startNationalCareer(world, nation);
+    this.nationStepPending = false;
+    this.screen = 'home';
+    this.resetHistory();
+    this.emit();
+  }
+
+  /** Club and country after all — just the club. */
+  skipNationStep(): void {
+    this.nationStepPending = false;
     this.emit();
   }
 
@@ -714,6 +799,12 @@ class Game {
       this.coachTalk = null;
     }
     this.emit();
+  }
+
+  /** Open the International screen on one tournament. */
+  openTournament(id: number): void {
+    this.focusTournament = id;
+    this.go('internationals');
   }
 
   /** Open a competition's page: its groups, bracket and results. */
@@ -940,6 +1031,10 @@ class Game {
       this.openMatchday();
       return;
     }
+    if (userMatchToday(world) !== null) {
+      this.openNationalMatchday();
+      return;
+    }
     if (this.openPendingDecision()) return;
 
     this.processing = true;
@@ -955,7 +1050,8 @@ class Game {
       this.stepDay();
       this.emit();
       if (this.world !== world) break;
-      if (world.messages.length > before || this.ownFixtureToday() !== null || this.trophyCelebration !== null) break;
+      if (world.messages.length > before || this.ownFixtureToday() !== null || userMatchToday(world) !== null ||
+        this.trophyCelebration !== null) break;
       await sleep(DAY_TICK_MS);
     }
     await this.processingPause(PROCESS_MIN_MS - (Date.now() - opened));
@@ -999,6 +1095,13 @@ class Game {
         reason: `${club} want an answer about ${world.players.fullName(o.playerIdx)} — accept, counter or reject the offer before you go on.`,
       };
     }
+    const due = squadDue(world);
+    if (due !== undefined) {
+      return {
+        kind: 'squad', label: 'Name your squad', fixtureId: null, offerId: null, messageId: null,
+        reason: `${nationName(userNation(world))} need your fourteen for the ${due.name} — name the squad before you go on.`,
+      };
+    }
     return null;
   }
 
@@ -1007,7 +1110,8 @@ class Game {
   openPendingDecision(): boolean {
     const d = this.pendingDecision();
     if (d === null) return false;
-    if (d.messageId !== null) this.openMessage(d.messageId);
+    if (d.kind === 'squad') this.go('national');
+    else if (d.messageId !== null) this.openMessage(d.messageId);
     else if (d.fixtureId !== null) this.openInterview(d.fixtureId);
     else if (d.offerId !== null) this.openOffer(d.offerId);
     this.notice = d.reason;
@@ -1115,6 +1219,8 @@ class Game {
       if (msg !== undefined) msg.body = 'Your assistant faced the press while you were on holiday.';
     }
     countHolidayDay(world);
+    // The national squad, if it is due: the assistant's fourteen.
+    if (squadDue(world) !== undefined) nameSquad(world, suggestSquad(world, userNation(world)));
     const match = this.ownFixtureToday();
     const club = this.club;
     if (match === null || club === null) {
@@ -1169,6 +1275,10 @@ class Game {
   instantResult(): void {
     const world = this.world;
     const f = this.ownFixtureToday();
+    if (world !== null && f === null && !this.processing && userMatchToday(world) !== null) {
+      this.instantNationalResult();
+      return;
+    }
     if (world === null || f === null || this.processing) return;
     if (this.openPendingDecision()) return;
     playFixture(world, this.ctx, f, true);
@@ -1200,9 +1310,18 @@ class Game {
     const world = this.world;
     if (world === null || this.postMatch === null) return;
     this.postMatch = null;
+    // The club's and the nation's matches on the one day: the other one next.
+    if (this.ownFixtureToday() !== null) {
+      this.openMatchday();
+      return;
+    }
+    if (userMatchToday(world) !== null) {
+      this.openNationalMatchday();
+      return;
+    }
     const before = world.messages.length;
     const clubId = world.userClubId;
-    advanceDay(world, this.ctx, { detailedClubs: new Set([clubId]) });
+    advanceDay(world, this.ctx, { detailedClubs: clubId >= 0 ? new Set([clubId]) : undefined });
     if (world.userClubId !== clubId) this.employmentChanged();
     const fresh = world.messages.slice(before);
     // The sack, if that result was one too many; otherwise the round-up.
@@ -1325,8 +1444,15 @@ class Game {
     if (this.openPendingDecision()) return;
 
     const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, club);
+    const side = (id: number): MatchSide => {
+      const c = world.clubs[id];
+      return { clubId: id, nation: -1, name: c?.name ?? '—', shortName: c?.shortName ?? '—', players: c?.players ?? [] };
+    };
     this.matchday = {
       fixture: next,
+      sides: [side(next.home), side(next.away)],
+      title: world.competitions[next.competitionId]?.name ?? 'Match',
+      national: null,
       stage: 'lineup',
       setBreakPending: false,
       opponentChanges: [],
@@ -1456,6 +1582,10 @@ class Game {
   kickOff(): void {
     const world = this.world;
     const md = this.matchday;
+    if (md?.national != null) {
+      this.kickOffNational();
+      return;
+    }
     const club = this.club;
     if (world === null || md === null || club === null) return;
     const homeClub = world.clubs[md.fixture.home];
@@ -1490,6 +1620,13 @@ class Game {
       collectLog: true,
       seed: world.rng.next(),
     });
+    this.startLive();
+  }
+
+  /** The match under way, from the first serve. */
+  private startLive(): void {
+    const md = this.matchday;
+    if (md === null || this.liveSim === null) return;
     md.stage = 'live';
     md.log = [];
     md.timeoutsUsed = [0, 0];
@@ -1832,6 +1969,10 @@ class Game {
     if (world === null || md === null || sim === null) return;
 
     const result = sim.buildResult();
+    if (md.national !== null) {
+      this.finishNationalMatch(md.national, md.fixture, result);
+      return;
+    }
     applyMatchResult(world, this.ctx, md.fixture, result);
     this.ctx.detailedResults.set(md.fixture.id, result);
     this.watched = {
@@ -1868,6 +2009,227 @@ class Game {
     if (winnerClubId === world.userClubId) {
       this.trophyCelebration = { clubId: world.userClubId, competitionName: comp.name };
     }
+  }
+
+  // ---- The national team --------------------------------------------------
+
+  /** The manager's nation's match today and its tournament, if it is still to be played. */
+  nationalMatchToday(): { t: Tournament; m: IntlMatch } | null {
+    return this.world === null ? null : userMatchToday(this.world);
+  }
+
+  /** Whether a player can play in the match on the matchday screens: fit and
+   *  at the club — or, for a national team, fit. */
+  matchAvailable(p: number): boolean {
+    const world = this.world;
+    if (world === null) return false;
+    return this.matchday?.national != null ? canPlayForCountry(world, p) : world.players.isAvailable(p);
+  }
+
+  /** The tactics the user's side plays in the match on screen — the very
+   *  object the live engine reads, so a change at a timeout applies at once. */
+  matchTactics(): TeamTactics | null {
+    const md = this.matchday;
+    if (md?.national != null) return this.nationalTactics();
+    return this.club?.tactics ?? null;
+  }
+
+  /** The national team's tactics, made from the defaults the first time. */
+  nationalTactics(): TeamTactics | null {
+    const world = this.world;
+    const nation = world === null ? -1 : userNation(world);
+    const team = world?.nationalTeams.find((t) => t.nation === nation);
+    if (team === undefined) return null;
+    team.tactics ??= defaultTactics();
+    return team.tactics;
+  }
+
+  /** The result screen's match: the national team's, if that was the last one played. */
+  resultShown(): WatchedMatch | null {
+    if (this.postMatch !== null && this.postMatch < 0) return this.lastNational;
+    return this.watched;
+  }
+
+  private nationalSide(t: Tournament, nation: number): MatchSide {
+    return { clubId: -1, nation, name: nationName(nation), shortName: NATIONS[nation]?.code ?? '?', players: squadOf(t, nation) };
+  }
+
+  /** The national team's match as a fixture, for the matchday screens. */
+  private nationalFixture(t: Tournament, m: IntlMatch): Fixture {
+    return {
+      id: -1 - m.id, competitionId: t.competitionId, day: m.day, home: m.home, away: m.away, round: m.round,
+      format: MatchFormat.BestOf5, importance: matchImportance(m), neutralVenue: m.home !== t.host,
+      played: false, homeSets: 0, awaySets: 0, setScores: [], mvp: -1,
+    };
+  }
+
+  /** Open the team sheet for the national team's match today. */
+  openNationalMatchday(): void {
+    const world = this.world;
+    const found = this.nationalMatchToday();
+    if (world === null || found === null || this.processing || this.matchday !== null) return;
+    if (this.openPendingDecision()) return;
+    const { t, m } = found;
+    const nation = userNation(world);
+    const squad = squadOf(t, nation);
+    const { lineup, libero, defensiveLibero, bench } = pickLineup(
+      world.players,
+      { players: squad, preferredLineup: [], preferredLibero: -1, preferredDefensiveLibero: -1 },
+      undefined,
+      (p) => canPlayForCountry(world, p),
+    );
+    const fixture = this.nationalFixture(t, m);
+    const title = `${t.name} · ${m.stage}`;
+    this.matchday = {
+      fixture,
+      sides: [this.nationalSide(t, m.home), this.nationalSide(t, m.away)],
+      title,
+      national: { tournamentId: t.id, matchId: m.id, nation, title },
+      stage: 'lineup',
+      setBreakPending: false,
+      opponentChanges: [],
+      userIsHome: m.home === nation,
+      homeLineup: lineup,
+      homeLibero: libero,
+      homeDefensiveLibero: defensiveLibero,
+      homeBench: bench,
+      speed: 1,
+      paused: false,
+      pauseUntil: null,
+      log: [],
+      snapshot: null,
+      timeoutsUsed: [0, 0],
+      timeoutActive: null,
+      lastSubstitution: null,
+    };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedReview = null;
+    this.selectedCompetition = null;
+    this.negotiation = null;
+    this.incomingOffer = null;
+    this.coachTalk = null;
+    this.emit();
+  }
+
+  /** The tournament and match a national matchday refers to. */
+  private nationalMatch(ref: NationalMatchRef): { t: Tournament; m: IntlMatch } | null {
+    const t = this.world?.internationals?.tournaments.find((x) => x.id === ref.tournamentId);
+    const m = t?.matches.find((x) => x.id === ref.matchId);
+    return t !== undefined && m !== undefined ? { t, m } : null;
+  }
+
+  private kickOffNational(): void {
+    const world = this.world;
+    const md = this.matchday;
+    const found = md?.national != null ? this.nationalMatch(md.national) : null;
+    const tactics = this.nationalTactics();
+    if (world === null || md === null || md.national === null || found === null || tactics === null) return;
+    const { t, m } = found;
+    const nation = md.national.nation;
+    const liberos = new Set([md.homeLibero, md.homeDefensiveLibero].filter((p) => p >= 0));
+    md.homeBench = squadOf(t, nation).filter((p) =>
+      canPlayForCountry(world, p) && !md.homeLineup.includes(p) && !liberos.has(p));
+    const userSetup: TeamSetup = {
+      clubId: -1,
+      name: nationName(nation),
+      lineup: md.homeLineup,
+      libero: md.homeLibero,
+      defensiveLibero: md.homeDefensiveLibero,
+      bench: md.homeBench,
+      tactics,
+    };
+    const opponent = nationSetup(world, t, md.userIsHome ? m.away : m.home);
+    this.liveSim = new MatchSimulator(world.players, {
+      home: md.userIsHome ? userSetup : opponent,
+      away: md.userIsHome ? opponent : userSetup,
+      format: MatchFormat.BestOf5,
+      importance: matchImportance(m),
+      neutralVenue: m.home !== t.host,
+      collectLog: true,
+      seed: world.rng.next(),
+    });
+    this.startLive();
+  }
+
+  /** A national team's match is over: into the tournament, and on to the result. */
+  private finishNationalMatch(ref: NationalMatchRef, fixture: Fixture, result: MatchResult): void {
+    const world = this.world;
+    const found = this.nationalMatch(ref);
+    if (world === null || found === null) return;
+    const { t, m } = found;
+    const stats = applyIntlResult(world, t, m, result);
+    postMatchReport(world, t, [m], stats);
+    fixture.played = true;
+    fixture.homeSets = result.homeSets;
+    fixture.awaySets = result.awaySets;
+    fixture.setScores = result.setScores;
+    fixture.mvp = result.mvp;
+    this.lastNational = {
+      fixture, result, homeName: nationName(m.home), awayName: nationName(m.away), national: ref,
+    };
+    this.showPostMatch(fixture);
+  }
+
+  /** The national team's match today, played without watching it. */
+  private instantNationalResult(): void {
+    const world = this.world;
+    const found = this.nationalMatchToday();
+    if (world === null || found === null) return;
+    if (this.openPendingDecision()) return;
+    const { t, m } = found;
+    const nation = userNation(world);
+    const result = simulateMatch(world.players, {
+      home: nationSetup(world, t, m.home),
+      away: nationSetup(world, t, m.away),
+      format: MatchFormat.BestOf5,
+      importance: matchImportance(m),
+      neutralVenue: m.home !== t.host,
+      collectLog: false,
+      seed: world.rng.next(),
+    });
+    const title = `${t.name} · ${m.stage}`;
+    this.finishNationalMatch({ tournamentId: t.id, matchId: m.id, nation, title }, this.nationalFixture(t, m), result);
+  }
+
+  /** Name the national squad for the next tournament. */
+  nameNationalSquad(players: readonly number[]): boolean {
+    const world = this.world;
+    if (world === null) return false;
+    const problem = nameSquad(world, players);
+    this.notice = problem ?? 'Squad named — the players will be told on call-up day.';
+    this.emit();
+    return problem === null;
+  }
+
+  /** The assistant's fourteen for the manager's nation. */
+  suggestedNationalSquad(): number[] {
+    const world = this.world;
+    return world === null || userNation(world) < 0 ? [] : suggestSquad(world, userNation(world));
+  }
+
+  /** Apply for a national team's head coach's job. */
+  applyForNationalJob(nation: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const problem = nationalApplicationBlock(world, nation);
+    const answerOn = problem === null ? applyForNationalJob(world, nation) : null;
+    this.notice = answerOn !== null
+      ? `Application sent to the ${nationName(nation)} Volleyball Federation — expect an answer by ${this.dateLabelForDay(answerOn)}.`
+      : problem ?? 'You cannot apply for that job.';
+    this.emit();
+  }
+
+  /** Step down as national team coach. */
+  resignNationalJob(): void {
+    const world = this.world;
+    if (world === null || this.matchday !== null || this.postMatch !== null || this.processing) return;
+    const nation = userNation(world);
+    if (nation < 0) return;
+    leaveNationalJob(world, false);
+    if (this.screen === 'national') this.screen = 'career';
+    this.notice = `You have stepped down as head coach of ${nationName(nation)}.`;
+    this.emit();
   }
 
   // ---- Squad ------------------------------------------------------------

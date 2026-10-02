@@ -3,14 +3,15 @@ import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
 import {
-  ClubCrest, clubThemeStyle, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
+  ClubCrest, clubThemeStyle, Flag, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
+import { NATIONS } from '../engine/world/nations.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { HolidayDialog } from './holiday.tsx';
 import { ProcessingWindow } from './processing.tsx';
 import { CLUBLESS_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import {
-  CreateManager, ClubSelect, LoadGameList, MainMenu, WorldSetup,
+  CreateManager, ClubSelect, LoadGameList, MainMenu, NationSelect, WorldSetup,
 } from './screens/Menu.tsx';
 import { CalendarScreen } from './screens/Calendar.tsx';
 import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
@@ -18,6 +19,7 @@ import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { NewsScreen } from './screens/News.tsx';
+import { NationalScreen } from './screens/National.tsx';
 import { HomeScreen } from './screens/Home.tsx';
 import { InboxScreen } from './screens/Inbox.tsx';
 import { IncomingOfferScreen } from './screens/IncomingOffer.tsx';
@@ -67,6 +69,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
       { id: 'home', label: 'Home', icon: 'home', tabs: [['home', 'Home']] },
       { id: 'inbox', label: 'Inbox', icon: 'inbox', tabs: [['inbox', 'Inbox']] },
       { id: 'career', label: 'Career', icon: 'career', tabs: [['career', 'Profile'], ['jobs', 'Job Centre']] },
+      { id: 'national', label: 'National Team', icon: 'world', tabs: [['national', 'National Team']] },
     ],
   },
   {
@@ -149,8 +152,10 @@ export function App(): JSX.Element {
   const g = useGame();
 
   if (g.world === null) return <MenuScreen />;
-  // A career still to begin picks its first club; one between jobs carries on.
-  if (g.world.userClubId < 0 && !g.unemployed) return <ClubSelect />;
+  // A career still to begin picks its club, its nation or both; one between jobs carries on.
+  const step = g.setupStep();
+  if (step === 'club') return <ClubSelect />;
+  if (step === 'nation') return <NationSelect />;
   return <GameShell />;
 }
 
@@ -246,6 +251,7 @@ function Screen(): JSX.Element {
     case 'fixtures': return <FixturesScreen />;
     case 'table': return <TableScreen />;
     case 'internationals': return <InternationalsScreen />;
+    case 'national': return <NationalScreen />;
     case 'stats': return <StatsScreen />;
     case 'transfers': return <TransfersScreen />;
     case 'scouting': return <ScoutingScreen />;
@@ -417,6 +423,7 @@ function Header(): JSX.Element {
   const takeover = inTakeover(g);
   const league = club !== null ? world.competitions[club.leagueId] : undefined;
   const manager = `${world.manager.firstName} ${world.manager.lastName}`;
+  const nationalTeam = world.career.nationalTeam ?? -1;
 
   return (
     <header className="hdr">
@@ -426,7 +433,10 @@ function Header(): JSX.Element {
             <ClubCrest club={club} size={36} />
             <span className="hdr-club-text">
               <strong>{club.name}</strong>
-              <span>{league?.name ?? ''}<span className="hdr-role">Head coach</span></span>
+              <span>
+                {league?.name ?? ''}<span className="hdr-role">Head coach</span>
+                {nationalTeam >= 0 && <span className="hdr-role hdr-nat"><Flag nation={nationalTeam} /> {NATIONS[nationalTeam]?.code}</span>}
+              </span>
             </span>
           </button>
         ) : (
@@ -434,7 +444,9 @@ function Header(): JSX.Element {
             <PersonFace photoUrl={managerPhotoUrl(world.manager)} name={manager} size={36} />
             <span className="hdr-club-text">
               <strong>{manager}</strong>
-              <span>Out of work<span className="hdr-role">Free agent</span></span>
+              {nationalTeam >= 0
+                ? <span>{NATIONS[nationalTeam]?.name} national team<span className="hdr-role">Head coach</span></span>
+                : <span>Out of work<span className="hdr-role">Free agent</span></span>}
             </span>
           </button>
         )}
@@ -486,7 +498,9 @@ function ContinueButton(): JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
   const unread = g.unreadMessages().length;
-  const matchToday = g.ownFixtureToday() !== null;
+  const clubMatchToday = g.ownFixtureToday() !== null;
+  const nationalToday = g.nationalMatchToday();
+  const matchToday = clubMatchToday || nationalToday !== null;
   const inMatch = g.matchday !== null;
   // A press conference or a bid to answer holds the day up.
   const decision = g.pendingDecision();
@@ -509,16 +523,20 @@ function ContinueButton(): JSX.Element {
     action = () => g.finishPostMatch();
   } else if (decision !== null) {
     label = decision.label;
-    icon = decision.kind === 'interview' ? 'press' : 'offer';
+    icon = decision.kind === 'interview' ? 'press' : decision.kind === 'squad' ? 'world' : 'offer';
     action = () => { g.openPendingDecision(); };
   } else if (inInbox && unread > 0) {
     label = 'Next unread';
     icon = 'inbox';
     action = () => g.nextUnread();
-  } else if (matchToday) {
+  } else if (clubMatchToday) {
     label = 'Play match';
     icon = 'ball';
     action = () => g.openMatchday();
+  } else if (nationalToday !== null) {
+    label = 'Play match';
+    icon = 'world';
+    action = () => g.openNationalMatchday();
   }
 
   return (

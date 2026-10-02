@@ -18,7 +18,8 @@ import type { Talks } from './deals.ts';
 import type { Loan, LoanReport } from './loans.ts';
 import type { PendingMove } from './moves.ts';
 import type { NewsItem } from './news.ts';
-import type { Internationals } from './internationals.ts';
+import type { Internationals, IntlReport } from './internationals.ts';
+import type { TeamTactics } from '../match/tactics.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -162,6 +163,8 @@ export interface NationalTeam {
   /** Continental and Nations League titles; absent on saves from before they were played. */
   continentalTitles?: number;
   nationsLeagueTitles?: number;
+  /** The tactics it plays — set by the manager when he coaches it; the defaults otherwise. */
+  tactics?: TeamTactics;
 }
 
 /** One line in the permanent record book. */
@@ -356,6 +359,9 @@ export interface GameMessage {
   loanRecall?: boolean;
   /** A compiled account of a loan: games, statistics, development. */
   loanReport?: LoanReport;
+  /** International news of the user's players — call-ups, match days with
+   *  each player's numbers, the way home — drawn as a report in the inbox. */
+  intl?: IntlReport;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
    *  tabs existed still load — {@link messageCategory} derives it from the
    *  older fields when absent. */

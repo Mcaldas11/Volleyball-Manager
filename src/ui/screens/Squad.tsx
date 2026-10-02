@@ -8,6 +8,7 @@ import {
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { secondNation, tiedNation } from '../../engine/world/internationals.ts';
 import { canRecall, coachTalkBlock, PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
@@ -461,7 +462,10 @@ export function PlayerDetail(): JSX.Element | null {
           </div>
           <h2 className="profile-name">{store.fullName(p)}</h2>
           <div className="profile-sub">
-            <span><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</span>
+            <span>
+              <Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}
+              {secondNation(world, p) >= 0 && <> · <Flag nation={secondNation(world, p)} /> {NATIONS[secondNation(world, p)].name}</>}
+            </span>
             <span>{age} years old</span>
             <span>{store.heightCm[p]} cm</span>
             <span>{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</span>
@@ -655,6 +659,14 @@ export function PlayerDetail(): JSX.Element | null {
             <KV k="Market value">{money(store.value[p])}</KV>
             <KV k="Wage">{money(store.wage[p])}</KV>
             <KV k="Nationality"><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</KV>
+            {secondNation(world, p) >= 0 && (
+              <KV k="Second nationality">
+                <Flag nation={secondNation(world, p)} /> {NATIONS[secondNation(world, p)].name}
+                {tiedNation(world, p) !== undefined && (
+                  <span className="faint"> · committed to {NATIONS[tiedNation(world, p)!].name}</span>
+                )}
+              </KV>
+            )}
             {store.fivbId[p] > 0 && <KV k="FIVB ID" cls="mono faint">{store.fivbId[p]}</KV>}
           </Card>
         </div>
