@@ -41,6 +41,7 @@ import { compareTableRows, newTableRow, type LeagueTableRow } from '../model/clu
 import { PlayerFlag } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import { pickLineup } from '../season/seasonEngine.ts';
+import { ensureManagerAttributes } from './career.ts';
 import { postMessage } from './inbox.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from './nations.ts';
 import { postNews } from './news.ts';
@@ -1099,6 +1100,7 @@ export function appointNationalCoach(world: World, nation: number): void {
   const old = userNation(world);
   if (old >= 0) leaveNationalJob(world, false);
   world.career.nationalTeam = nation;
+  ensureManagerAttributes(world);
   (world.career.nationalJobs ??= []).push({ nation, startDay: world.day, endDay: -1 });
   const team = teamOf(world, nation);
   if (team !== undefined) team.managedByUser = true;

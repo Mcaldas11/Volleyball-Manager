@@ -23,7 +23,9 @@
 import { newsCoachAppointed, newsCoachSacked } from './news.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
-import { StaffRole, type CoachSpell, type Staff } from '../model/staff.ts';
+import {
+  StaffRole, VISIBLE_STAFF_ATTRIBUTES, type CoachSpell, type Staff, type StaffAttributes,
+} from '../model/staff.ts';
 import { entryNotices, isCupCompetition } from '../season/cups.ts';
 import { finalStandingsOrder } from '../season/playoffs.ts';
 import { formatDay, MONTH_STARTS, ordinal, postMessage, welcomeMessages } from './inbox.ts';
@@ -126,6 +128,8 @@ export interface ManagerCareer {
   contractAskedOn?: number;
   /** The season his board last raised his contract itself — it does so once a season at most. */
   contractTalks?: number;
+  /** What he is like as a coach, on the staff's 1-20 scale — see ensureManagerAttributes. */
+  attributes?: StaffAttributes;
 }
 
 /** Where a new coach's board starts: the benefit of the doubt. */
@@ -333,6 +337,57 @@ function fillVacancy(world: World, v: Vacancy): void {
   openSpell(coach, club);
   newsCoachAppointed(world, club, coach);
 }
+
+// ---- The manager as a coach ---------------------------------------------------------
+
+/**
+ * The manager's own attributes, rolled the first time they are needed around
+ * the level his name is at — a newcomer to a small club starts modest — on
+ * the same 1-20 scale as any coach's. They train his club's players as a
+ * head coach's do, and grow with every season he coaches.
+ */
+export function ensureManagerAttributes(world: World): StaffAttributes {
+  const career = world.career;
+  if (career.attributes !== undefined) return career.attributes;
+  const level = 4 + (Math.max(600, career.reputation) / 10000) * 11;
+  const a = (): number => Math.round(Math.min(20, Math.max(1, world.rng.gaussian(level, 2.4))));
+  career.attributes = {
+    coachAttacking: a(), coachBlocking: a(), coachServing: a(), coachReception: a(),
+    coachSetting: a(), coachTactical: a(), coachMental: a(), coachFitness: a(),
+    judgingAbility: a(), potentialAssessment: a(), physiotherapy: a(), sportsScience: a(),
+    manManagement: a(), discipline: a(), motivating: a(), workingWithYouth: a(),
+    adaptability: a(), loyalty: a(), ambition: a(),
+  };
+  return career.attributes;
+}
+
+/**
+ * A season's coaching makes a better coach: a few attributes come on a point
+ * each — more after a good season, and the weaker ones more readily than
+ * those near the top. Returns what improved, for the inbox.
+ */
+function developManager(world: World, goodSeason: boolean, trophies: number): Array<keyof StaffAttributes> {
+  const attrs = ensureManagerAttributes(world);
+  const points = 2 + (goodSeason ? 2 : 0) + Math.min(2, trophies);
+  const grown: Array<keyof StaffAttributes> = [];
+  for (let i = 0; i < points; i++) {
+    const room = VISIBLE_STAFF_ATTRIBUTES.filter((k) => attrs[k] < 20);
+    if (room.length === 0) break;
+    const weights = room.map((k) => 21 - attrs[k]);
+    const k = room[world.rng.weightedIndex(weights)];
+    attrs[k]++;
+    if (!grown.includes(k)) grown.push(k);
+  }
+  return grown;
+}
+
+const ATTRIBUTE_WORDS: Readonly<Record<keyof StaffAttributes, string>> = {
+  coachAttacking: 'attacking', coachBlocking: 'blocking', coachServing: 'serving', coachReception: 'reception',
+  coachSetting: 'setting', coachTactical: 'tactical', coachMental: 'mental', coachFitness: 'fitness',
+  judgingAbility: 'judging ability', potentialAssessment: 'judging potential', physiotherapy: 'physiotherapy',
+  sportsScience: 'sports science', manManagement: 'man management', discipline: 'discipline', motivating: 'motivating',
+  workingWithYouth: 'working with youth', adaptability: 'adaptability', loyalty: 'loyalty', ambition: 'ambition',
+};
 
 // ---- Contracts -------------------------------------------------------------------
 
@@ -585,6 +640,7 @@ export function appointManager(world: World, clubId: number, contract?: ManagerC
     career.reputation = startingReputation(club);
     openingMarket(world, clubId);
   }
+  ensureManagerAttributes(world);
 
   detachHeadCoaches(world, club, 'replaced');
   world.vacancies = world.vacancies.filter((v) => v.clubId !== clubId);
@@ -1103,6 +1159,19 @@ function userVerdict(world: World, club: Club, finish: SeasonFinish | undefined,
       : 'The board has decided to make a change before the new season.');
     return;
   }
+  // A season in the dugout, whatever comes of it.
+  const grown = developManager(world, finish !== undefined && finish.pos <= target, cups);
+  if (grown.length > 0) {
+    postMessage(world, {
+      subject: 'Your development as a coach',
+      body: `Another season on the training court has made you a better coach: your ` +
+        `${grown.map((k) => ATTRIBUTE_WORDS[k]).join(', ')} ${grown.length === 1 ? 'has' : 'have'} come on. ` +
+        'Your attributes are on your profile.',
+      clubId: club.id,
+      category: 'career',
+    });
+  }
+
   const contract = currentJob(world)?.contract;
   if (contract !== undefined && seasonsLeft(world, contract) <= 0) {
     contractExpires(world, club);
@@ -1191,6 +1260,7 @@ export function backfillCareer(world: World): void {
     });
     detachHeadCoaches(world, club);
   }
+  ensureManagerAttributes(world);
   // Saves from before contracts: the job runs to the end of next season.
   const job = currentJob(world);
   if (job !== undefined && job.contract === undefined) {

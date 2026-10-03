@@ -12,7 +12,9 @@ import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import {
   Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter, StatTile,
 } from '../components.tsx';
+import { coachingRating } from '../../engine/model/staff.ts';
 import { HonourList, honourOf, type Honour } from '../honours.tsx';
+import { CoachAttributes, coachStrengths } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -226,12 +228,30 @@ export function CareerScreen(): JSX.Element {
         <StatTile label="Win rate" value={won + lost === 0 ? '—' : `${Math.round((won / (won + lost)) * 100)}%`} />
         <StatTile label="Trophies" value={trophies.length} tone={trophies.length > 0 ? 'gold' : undefined} />
         <StatTile label="Sackings" value={jobs.filter((j) => j.exit === 'sacked').length} />
+        {career.attributes !== undefined && (
+          <StatTile
+            label="Coaching"
+            value={coachingRating(career.attributes).toFixed(1)}
+            sub={<Bar value={coachingRating(career.attributes)} max={20} />}
+          />
+        )}
       </div>
 
       <div className="club-grid">
-        <Card title="Career History" icon="career" flush>
-          <HistoryTable />
-        </Card>
+        <div className="stack club-main">
+          {career.attributes !== undefined && (
+            <Card
+              title="Attributes"
+              icon="stats"
+              actions={<span className="faint">Best at {coachStrengths(career.attributes).join(' & ').toLowerCase()}</span>}
+            >
+              <CoachAttributes attributes={career.attributes} />
+            </Card>
+          )}
+          <Card title="Career History" icon="career" flush>
+            <HistoryTable />
+          </Card>
+        </div>
 
         <div className="stack club-side">
           <CurrentJobCard />

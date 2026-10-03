@@ -117,10 +117,7 @@ export function staffRating(s: Staff): number {
   switch (s.role) {
     case StaffRole.HeadCoach:
     case StaffRole.AssistantCoach:
-      return (
-        a.coachAttacking + a.coachBlocking + a.coachServing + a.coachReception +
-        a.coachSetting + a.coachTactical + a.manManagement + a.motivating
-      ) / 8;
+      return coachingRating(a);
     case StaffRole.Scout:
     case StaffRole.HeadScout:
     case StaffRole.RecruitmentAnalyst:
@@ -141,6 +138,21 @@ export function staffRating(s: Staff): number {
       return 10;
   }
 }
+
+/** A coach's worth on the training court, 1-20 — a head coach's, an assistant's, the manager's own. */
+export function coachingRating(a: StaffAttributes): number {
+  return (
+    a.coachAttacking + a.coachBlocking + a.coachServing + a.coachReception +
+    a.coachSetting + a.coachTactical + a.manManagement + a.motivating
+  ) / 8;
+}
+
+/** The attributes a profile shows — everything but the hidden three. */
+export const VISIBLE_STAFF_ATTRIBUTES: ReadonlyArray<keyof StaffAttributes> = [
+  'coachAttacking', 'coachBlocking', 'coachServing', 'coachReception', 'coachSetting', 'coachTactical',
+  'coachMental', 'coachFitness', 'manManagement', 'motivating', 'discipline', 'workingWithYouth',
+  'judgingAbility', 'potentialAssessment', 'sportsScience', 'physiotherapy',
+];
 
 /** How well this scout knows a given nation, 1-20. */
 export function knowledgeOf(s: Staff, nationIdx: number, conf: Confederation): number {

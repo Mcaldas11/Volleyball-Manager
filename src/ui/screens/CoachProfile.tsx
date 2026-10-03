@@ -25,6 +25,33 @@ const KNOWLEDGE: ReadonlyArray<[keyof StaffAttributes, string]> = [
   ['sportsScience', 'Sports science'], ['physiotherapy', 'Physiotherapy'],
 ];
 
+/** A coach's attributes in three columns — any coach's, or the manager's own. */
+export function CoachAttributes({ attributes }: { attributes: StaffAttributes }): JSX.Element {
+  const group = (title: string, attrs: ReadonlyArray<[keyof StaffAttributes, string]>): JSX.Element => (
+    <div className="attr-col">
+      <h4 className="attr-col-title">{title}</h4>
+      {attrs.map(([k, label]) => (
+        <div className="attr" key={k}>
+          <span className="name">{label}</span>
+          <span className={`attr-val ${attrClass(attributes[k])}`}>{attributes[k]}</span>
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <div className="attr-cols">
+      {group('Coaching', COACHING)}
+      {group('People', PEOPLE)}
+      {group('Knowledge', KNOWLEDGE)}
+    </div>
+  );
+}
+
+/** A coach's two best coaching attributes, by name. */
+export function coachStrengths(attributes: StaffAttributes): string[] {
+  return [...COACHING].sort((a, b) => attributes[b[0]] - attributes[a[0]]).slice(0, 2).map(([, l]) => l);
+}
+
 /**
  * A coach's profile, FM-style: who he is and where he works, what he is good
  * at, every club he has coached with his record and trophies there.
@@ -46,19 +73,7 @@ export function CoachProfile(): JSX.Element | null {
       manyClubs ? world.clubs[s.clubId]?.shortName : undefined)))
     .filter((h): h is Honour => h !== null);
   const rating = staffRating(coach);
-  const best = [...COACHING].sort((a, b) => coach.attributes[b[0]] - coach.attributes[a[0]]).slice(0, 2).map(([, l]) => l);
-
-  const group = (title: string, attrs: ReadonlyArray<[keyof StaffAttributes, string]>): JSX.Element => (
-    <div className="attr-col">
-      <h4 className="attr-col-title">{title}</h4>
-      {attrs.map(([k, label]) => (
-        <div className="attr" key={k}>
-          <span className="name">{label}</span>
-          <span className={`attr-val ${attrClass(coach.attributes[k])}`}>{coach.attributes[k]}</span>
-        </div>
-      ))}
-    </div>
-  );
+  const best = coachStrengths(coach.attributes);
 
   return (
     <div className="club-profile coach-profile">
@@ -95,11 +110,7 @@ export function CoachProfile(): JSX.Element | null {
       <div className="club-grid">
         <div className="stack club-main">
           <Card title="Attributes" icon="stats">
-            <div className="attr-cols">
-              {group('Coaching', COACHING)}
-              {group('People', PEOPLE)}
-              {group('Knowledge', KNOWLEDGE)}
-            </div>
+            <CoachAttributes attributes={coach.attributes} />
           </Card>
           <Card title="Career History" icon="career" flush>
             {spells.length === 0 ? <Empty>No clubs coached yet.</Empty> : (

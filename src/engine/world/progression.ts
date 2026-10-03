@@ -23,7 +23,7 @@ import { AGEING_RESISTANCE, abilityFractionAtAge, refreshAbility, weightsFor } f
 import { ATTR_INDEX } from '../model/attributes.ts';
 import { InjuryType, PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
-import { StaffRole, staffRating } from '../model/staff.ts';
+import { coachingRating, StaffRole, staffRating } from '../model/staff.ts';
 import type { SeasonStats } from '../season/seasonEngine.ts';
 import { NATIONS } from './nations.ts';
 import { estimateValue, generatePlayer, rollPotential } from './playerGen.ts';
@@ -194,6 +194,9 @@ function coachingQualityByClub(world: World): Float64Array {
         best = Math.max(best, staffRating(s));
       }
     }
+    // The user is his club's head coach, and trains it as one.
+    const own = world.career?.attributes;
+    if (club.id === world.userClubId && own !== undefined) best = Math.max(best, coachingRating(own));
     out[club.id] = best / 20;
   }
   return out;

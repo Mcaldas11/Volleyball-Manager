@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld } from './worldGen.ts';
 import { DAYS_PER_SEASON, stubManager, type World } from './world.ts';
-import { appointManager, careerDay, coachSpells, headCoachOf, spellTrophies } from './career.ts';
+import { appointManager, careerDay, coachSpells, headCoachOf, seasonReckoning, spellTrophies } from './career.ts';
 import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
 
 function world(seed: number): World {
@@ -65,4 +65,22 @@ test('a coach who makes way for the user is on record as replaced — with the t
   const spell = coachSpells(w, coach).find((s) => s.clubId === club.id)!;
   assert.equal(spell.exit, 'replaced');
   assert.deepEqual(spellTrophies(w, spell), [{ competitionId: league.id, year: 2026 }]);
+});
+
+test('the manager is a coach too: attributes from his first job, better for every season coached', () => {
+  const w = world(504);
+  const club = w.clubs.find((c) => c.tier === 1 && c.players.length >= 12)!;
+  appointManager(w, club.id);
+  const attrs = w.career.attributes!;
+  assert.ok(attrs !== undefined);
+  for (const v of Object.values(attrs)) assert.ok(v >= 1 && v <= 20);
+
+  const before = Object.values(attrs).reduce((s, v) => s + v, 0);
+  seasonReckoning(w, {
+    season: w.season, year: w.year, champions: [], playerOfTheYear: -1, topScorer: { player: -1, points: 0 },
+    youngPlayerOfTheYear: -1, mostImproved: { player: -1, gain: 0 }, youngestPlayer: -1, dissolved: [],
+  }, new Map());
+  const after = Object.values(w.career.attributes!).reduce((s, v) => s + v, 0);
+  assert.ok(after > before, 'a season on the training court');
+  assert.ok(w.messages.some((m) => m.subject === 'Your development as a coach'));
 });
