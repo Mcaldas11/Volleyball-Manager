@@ -4,9 +4,9 @@
  * Alongside its league every club plays for silverware: its national cup, and
  * the super cup between last season's league and cup winners that opens the
  * next one. The best go further — Europe's Champions League and CEV Cup, each
- * other confederation's club championship — and the continental champions
- * meet in December at the Club World Championship, open to clubs from
- * anywhere.
+ * other confederation's club championship — and every fourth year the
+ * continental champions meet in December at the Club World Championship,
+ * open to clubs from anywhere.
  *
  * Every one is the same machine: an optional group stage, then a knockout on
  * the bracket the league playoffs use. Each match is fitted around the
@@ -135,6 +135,21 @@ export function knockoutRoundName(roundIdx: number, totalRounds: number): string
     case 5: return 'Round of 32';
     default: return `Round ${roundIdx + 1}`;
   }
+}
+
+/**
+ * Whether the Club World Championship is played in the season starting in
+ * `year` — every fourth December, from 2026: 2026, 2030, 2034…
+ */
+export function clubWorldYear(year: number): boolean {
+  return ((year - 2026) % 4 + 4) % 4 === 0;
+}
+
+/** The year of the next Club World Championship from the season starting in `year` on, that one included. */
+export function nextClubWorldYear(year: number): number {
+  let y = year;
+  while (!clubWorldYear(y)) y++;
+  return y;
 }
 
 export function isCupCompetition(comp: Competition): boolean {
@@ -453,6 +468,12 @@ export function scheduleCupSeason(world: World): void {
   for (const comp of comps) {
     comp.fixtureIds = [];
     comp.cup = undefined;
+    // The world championship waits for its year; the continental champions
+    // qualified for it go home.
+    if (comp.kind === 'clubworld' && !clubWorldYear(world.startYear + world.season)) {
+      comp.participants = [];
+      continue;
+    }
     const entrants = (comp.kind === 'cup' ? nationalCupEntrants(world, comp.nation) : comp.participants)
       .filter((c) => world.clubs[c] !== undefined && world.clubs[c].players.length >= 7);
     comp.participants = entrants;

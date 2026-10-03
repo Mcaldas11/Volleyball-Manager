@@ -4,7 +4,8 @@ import { generateWorld } from '../world/worldGen.ts';
 import { NATIONS } from '../world/nations.ts';
 import { DAYS_PER_SEASON, stubManager, type World } from '../world/world.ts';
 import {
-  cupGroupTable, cupProgress, ensureCupCompetitions, isCupCompetition, knockoutRoundName, stageLabel,
+  clubWorldYear, cupGroupTable, cupProgress, ensureCupCompetitions, isCupCompetition, knockoutRoundName,
+  nextClubWorldYear, qualifyForCups, stageLabel,
 } from './cups.ts';
 import { endSeason } from './rollover.ts';
 import { advanceDay, newSeasonContext, startSeason } from './seasonEngine.ts';
@@ -93,6 +94,9 @@ test('the rollover records the cup winners and qualifies next season\'s entrants
     return f.played && (f.home === world.userClubId || f.away === world.userClubId);
   }));
   assert.ok(playedIn.length >= 1);
+  const cwc = world.competitions.find((c) => c.kind === 'clubworld')!;
+  qualifyForCups(world);
+  assert.ok(cwc.participants.includes(clWinner), 'the European champions qualify for the world championship');
 
   endSeason(world, ctx);
   // The season review lists every cup the club played in, however far it got.
@@ -104,8 +108,8 @@ test('the rollover records the cup winners and qualifies next season\'s entrants
   const record = world.history[world.history.length - 1];
   assert.ok(record.champions.some((c) => c.competitionId === cl.id && c.winner === clWinner));
 
-  const cwc = world.competitions.find((c) => c.kind === 'clubworld')!;
-  assert.ok(cwc.participants.includes(clWinner), 'the European champions go to the world championship');
+  // …which waits for its year: 2027 has none.
+  assert.equal(cwc.cup, undefined);
   const superCup = world.competitions.find((c) => c.key === 'super:POL')!;
   assert.ok(superCup.participants.includes(polishCupWinner) || superCup.participants.length === 2);
   assert.ok(superCup.participants.every((c) => world.clubs[c].nation === poland));
@@ -128,4 +132,23 @@ test('an old save without cups gets them, adopting its unplayed continental comp
   ensureCupCompetitions(world);
   assert.equal(new Set(world.competitions.map((c) => c.key).filter((k) => k !== undefined)).size,
     world.competitions.filter((c) => c.key !== undefined).length, 'running it twice adds nothing');
+});
+
+test('the Club World Championship is played every fourth year, and only then', () => {
+  assert.deepEqual([2026, 2027, 2028, 2029, 2030, 2034].map(clubWorldYear), [true, false, false, false, true, true]);
+  assert.equal(nextClubWorldYear(2026), 2026);
+  assert.equal(nextClubWorldYear(2027), 2030);
+
+  const on = generateWorld({ seed: 93, startYear: 2026, scale: 'small', manager: stubManager() });
+  startSeason(on, newSeasonContext());
+  const played = on.competitions.find((c) => c.kind === 'clubworld')!;
+  assert.ok(played.cup !== undefined && played.fixtureIds.length > 0 && played.participants.length === 8);
+
+  const off = generateWorld({ seed: 93, startYear: 2027, scale: 'small', manager: stubManager() });
+  startSeason(off, newSeasonContext());
+  const cwc = off.competitions.find((c) => c.kind === 'clubworld')!;
+  assert.equal(cwc.cup, undefined);
+  assert.deepEqual(cwc.fixtureIds, []);
+  assert.deepEqual(cwc.participants, []);
+  assert.ok(off.competitions.find((c) => c.key === 'cont:CEV:1')!.cup !== undefined, 'the rest are played as ever');
 });

@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react';
 import { compareTableRows } from '../../engine/model/club.ts';
-import { cupGroupTable, cupProgress, isCupCompetition, stageLabel } from '../../engine/season/cups.ts';
+import { cupGroupTable, cupProgress, isCupCompetition, nextClubWorldYear, stageLabel } from '../../engine/season/cups.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import type { Competition, Fixture } from '../../engine/world/world.ts';
 import { ClubCrest, ClubLink, Empty, FormGuide, money } from '../components.tsx';
@@ -148,7 +148,7 @@ function SpectatorCard({ comp }: { comp: Competition }): JSX.Element {
   const holder = comp.champion >= 0 ? world.clubs[comp.champion] : undefined;
   const bracket = comp.cup?.bracket;
   const stage = comp.cup === undefined
-    ? 'Not played this season'
+    ? comp.kind === 'clubworld' ? `Next in ${nextClubWorldYear(world.startYear + world.season)}` : 'Not played this season'
     : bracket?.resolved === true ? 'Finished' : bracket !== null && bracket !== undefined ? 'Knockout stage' : 'Group stage';
   return (
     <section className="comp-card spectator">
@@ -268,7 +268,13 @@ export function CompetitionDetail(): JSX.Element | null {
         <button className="icon-btn" title="Close" onClick={() => g.back()}><Icon name="close" size={18} /></button>
       </div>
 
-      {cup === undefined && <Empty>This competition is not being played this season — it starts with the next one.</Empty>}
+      {cup === undefined && (
+        <Empty>
+          {comp.kind === 'clubworld'
+            ? `The Club World Championship is played every four years — the next one is in December ${nextClubWorldYear(world.startYear + world.season)}.`
+            : 'This competition is not being played this season — it starts with the next one.'}
+        </Empty>
+      )}
 
       {cup !== undefined && active === 'groups' && (
         <div className="comp-groups">
