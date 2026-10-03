@@ -10,6 +10,7 @@
  */
 
 import { compareTableRows, type Club } from '../model/club.ts';
+import { bestKnown, readLevel, READ_WARN_STARTING, READ_WARN_WORKED_OUT } from '../model/tacticRead.ts';
 import { INJURY_NAMES } from '../model/players.ts';
 import { compileLoanReport, diffLoanStats, newLoanStats, wageBill } from './loans.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
@@ -219,6 +220,46 @@ export function welcomeMessages(world: World): void {
     clubId: club.id,
     category: 'board',
   });
+}
+
+/** "a, b and c" */
+function listed(items: readonly string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/**
+ * The assistant's word when the opposition are getting to know the tactic:
+ * once when they start to read it, again when they have it worked out —
+ * each time naming what they know best. A change that throws them off resets
+ * it, so he can warn again later.
+ */
+export function tacticReadNotice(world: World, club: Club): void {
+  const read = club.tacticRead;
+  if (read === undefined) return;
+  const level = readLevel(read, club.tactics);
+  const stage = level >= READ_WARN_WORKED_OUT ? 2 : level >= READ_WARN_STARTING ? 1 : 0;
+  const warned = read.warned ?? 0;
+  read.warned = stage;
+  if (stage <= warned) return;
+  const known = listed(bestKnown(read, club.tactics));
+  postMessage(world, stage === 2
+    ? {
+      subject: 'The opposition have us worked out',
+      body: `Teams know exactly how we play now — our ${known} above all — and they are setting up to stop it. ` +
+        'It is costing us points. We need to change things: even a few adjustments to the instructions will ' +
+        'throw them, and the more we change, the longer they will need to catch up.',
+      from: 'Assistant Manager',
+      clubId: club.id,
+      category: 'matchday',
+    }
+    : {
+      subject: 'The opposition are starting to read us',
+      body: `Our opponents have been studying the video, and they are picking up our patterns — our ${known} most ` +
+        'of all. Nothing to panic about yet, but a few small adjustments to the tactic would keep them guessing.',
+      from: 'Assistant Manager',
+      clubId: club.id,
+      category: 'matchday',
+    });
 }
 
 /** How long an injury keeps a player out, in words. */

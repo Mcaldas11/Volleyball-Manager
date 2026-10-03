@@ -19,7 +19,7 @@ import { NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { type Position } from '../engine/model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
-  advanceDay, applyMatchResult, newSeasonContext, pickLineup, playFixture, toTeamSetup,
+  advanceDay, applyMatchResult, newSeasonContext, oppositionRead, pickLineup, playFixture, toTeamSetup,
   type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
@@ -1616,6 +1616,7 @@ class Game {
       defensiveLibero: md.homeDefensiveLibero,
       bench: md.homeBench,
       tactics: club.tactics,
+      read: oppositionRead(world, club),
     };
     // The other side keeps any promise of games it has made a loanee.
     const homeSetup = md.userIsHome ? userSetup : toTeamSetup(world.players, homeClub, loanStarters(world, homeClub));
@@ -1797,10 +1798,16 @@ class Game {
     this.finalizeMatchday();
   }
 
-  /** Skip straight to the result without watching the rest of the match. */
+  /**
+   * Skip straight to the result without watching the rest of the match. The
+   * engine takes both benches from here — the user's changes as the
+   * assistant would make them, the opponent's as its coach would.
+   */
   finishMatchdayNow(): void {
     const md = this.matchday;
     if (md === null || this.liveSim === null) return;
+    this.liveSim.setAutoCoach(0, true);
+    this.liveSim.setAutoCoach(1, true);
     this.liveSim.finish();
     this.finalizeMatchday();
   }
@@ -2200,6 +2207,7 @@ class Game {
       neutralVenue: m.home !== t.host,
       collectLog: false,
       seed: world.rng.next(),
+      autoCoach: [true, true],
     });
     const title = `${t.name} · ${m.stage}`;
     this.finishNationalMatch({ tournamentId: t.id, matchId: m.id, nation, title }, this.nationalFixture(t, m), result);
@@ -2320,14 +2328,15 @@ class Game {
     this.emit();
   }
 
-  /** A new tactic, copied from the loaded one, and loaded. */
+  /** A new tactic, from the defaults, and loaded — before kickoff, the six is picked again for it. */
   newTactic(): void {
     const club = this.club;
-    if (club === null) return;
+    if (club === null || (this.matchday !== null && this.matchday.stage !== 'lineup')) return;
     const i = newTacticSlot(club);
     this.notice = i === null
       ? `You can keep ${MAX_TACTICS} tactics — delete one to make room.`
-      : `${tacticSlots(club)[i].name} created from the loaded tactic — change it as you like.`;
+      : `${tacticSlots(club)[i].name} created from the defaults — make it your own.`;
+    if (i !== null && this.matchday !== null && this.matchday.national === null) this.repickMatchdaySix();
     this.emit();
   }
 

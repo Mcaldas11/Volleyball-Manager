@@ -344,3 +344,82 @@ test('setLibero() swaps liberos freely but only ever to a registered libero', ()
   assert.deepEqual(sim.liberos(0), { reception: defence, defence: -1 });
   assert.equal(sim.subsRemaining(0), 5);
 });
+
+/** Two top-flight sides of one league, the first clearly the stronger. */
+function favouriteAndUnderdog(): { store: PlayerStore; fav: MatchSetup['home']; dog: MatchSetup['home'] } {
+  const world = generateWorld({ seed: 20260728, startYear: 2026, scale: 'small', manager: stubManager() });
+  const store = world.players;
+  const league = world.competitions.find((c) => c.kind === 'league' && c.tier === 1)!;
+  const strength = (s: MatchSetup['home']): number =>
+    [...s.lineup, s.libero].reduce((t, p) => t + store.currentAbility[p], 0) / 7;
+  const sides = league.table.map((r) => toTeamSetup(store, world.clubs[r.clubId])).sort((a, b) => strength(b) - strength(a));
+  const fav = sides[0];
+  const dog = sides.find((s) => strength(fav) - strength(s) >= 150)!;
+  return { store, fav, dog };
+}
+
+test('ability decides most matches, but a clearly weaker side wins some on its night', () => {
+  const { store, fav, dog } = favouriteAndUnderdog();
+  let dogWins = 0;
+  const n = 300;
+  for (let seed = 0; seed < n; seed++) {
+    const r = new MatchSimulator(store, {
+      home: dog, away: fav, format: MatchFormat.BestOf5, importance: 0.5,
+      neutralVenue: true, collectLog: false, seed,
+    }).run();
+    if (r.homeSets > r.awaySets) dogWins++;
+  }
+  assert.ok(dogWins / n > 0.04, `the underdog won only ${dogWins} of ${n}`);
+  assert.ok(dogWins / n < 0.35, `the underdog won ${dogWins} of ${n}`);
+});
+
+test('a side whose tactic the opposition has read wins less often', () => {
+  const { store, fav } = favouriteAndUnderdog();
+  const winRate = (read: number): number => {
+    let wins = 0;
+    for (let seed = 0; seed < 400; seed++) {
+      const r = new MatchSimulator(store, {
+        home: { ...fav, read }, away: fav, format: MatchFormat.BestOf5, importance: 0.5,
+        neutralVenue: true, collectLog: false, seed,
+      }).run();
+      if (r.homeSets > r.awaySets) wins++;
+    }
+    return wins / 400;
+  };
+  const unread = winRate(0);
+  const read = winRate(1);
+  assert.ok(Math.abs(unread - 0.5) < 0.07, `mirror match won ${unread}`);
+  assert.ok(read < unread - 0.06, `read ${read} vs unread ${unread}`);
+});
+
+test('an engine-coached side makes its own changes; one left alone makes none', () => {
+  const benchUsed = (autoCoach: boolean): number => {
+    let used = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { store, setup } = buildMatch(4, seed);
+      const r = new MatchSimulator(store, { ...setup, autoCoach: [autoCoach, autoCoach] }).run();
+      for (const [side, team] of [[setup.home, r.stats.home], [setup.away, r.stats.away]] as const) {
+        for (const p of side.bench) if ((team.players.get(p)?.ralliesPlayed ?? 0) > 0) used++;
+      }
+    }
+    return used;
+  };
+  assert.equal(benchUsed(false), 0);
+  assert.ok(benchUsed(true) > 0);
+});
+
+test('a bench handed to the engine mid-match is coached from then on', () => {
+  let used = 0;
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const { store, setup } = buildMatch(4, seed);
+    const sim = new MatchSimulator(store, setup);
+    for (let i = 0; i < 20; i++) sim.step();
+    sim.setAutoCoach(0, true);
+    sim.setAutoCoach(1, true);
+    sim.finish();
+    const r = sim.buildResult();
+    for (const p of setup.home.bench) if ((r.stats.home.players.get(p)?.ralliesPlayed ?? 0) > 0) used++;
+    for (const p of setup.away.bench) if ((r.stats.away.players.get(p)?.ralliesPlayed ?? 0) > 0) used++;
+  }
+  assert.ok(used > 0);
+});

@@ -785,6 +785,7 @@ function play(world: World, t: Tournament, m: IntlMatch): Map<number, PlayerMatc
     neutralVenue: m.home !== t.host,
     collectLog: false,
     seed: world.rng.next(),
+    autoCoach: [true, true],
   });
   return applyIntlResult(world, t, m, result);
 }

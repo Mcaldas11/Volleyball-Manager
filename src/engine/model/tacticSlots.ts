@@ -9,7 +9,7 @@
  * loaded one is kept when another is loaded, so every tactic remembers itself.
  */
 
-import { FORMATION_NAMES, formationOf, type TeamTactics } from '../match/tactics.ts';
+import { defaultTactics, FORMATION_NAMES, formationOf, type TeamTactics } from '../match/tactics.ts';
 import type { Club } from './club.ts';
 
 export const MAX_TACTICS = 3;
@@ -76,13 +76,25 @@ export function loadTactic(club: TacticFields, index: number): boolean {
   return true;
 }
 
-/** A new tactic, starting from the loaded one, and loaded. Null when all three are taken. */
+/**
+ * A new tactic, and loaded: a blank one, from the defaults — 5-1, balanced
+ * instructions, nothing set for any rotation, and the six picked afresh.
+ * Null when all three are taken.
+ */
 export function newTactic(club: TacticFields, name?: string): number | null {
   const slots = tacticSlots(club);
   if (slots.length >= MAX_TACTICS) return null;
   saveLoadedTactic(club);
-  slots.push(snapshot(club, name ?? `Tactic ${slots.length + 1}`));
+  const blank: SavedTactic = {
+    name: name ?? `Tactic ${slots.length + 1}`,
+    tactics: defaultTactics(),
+    preferredLineup: [],
+    preferredLibero: -1,
+    preferredDefensiveLibero: -1,
+  };
+  slots.push(blank);
   club.activeTactic = slots.length - 1;
+  apply(club, blank);
   return club.activeTactic;
 }
 

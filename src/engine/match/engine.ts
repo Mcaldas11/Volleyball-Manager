@@ -76,6 +76,12 @@ export interface TeamSetup {
   tactics: TeamTactics;
   /** Rotation the team starts each set in, 0-5. */
   startingRotation?: number;
+  /**
+   * How well the opposition has this side's tactic worked out, 0-1 — see
+   * tacticRead.ts. A side that is read gets served where it hurts, blocked
+   * where it attacks and dug where it hits. Absent: not at all.
+   */
+  read?: number;
 }
 
 export interface MatchSetup {
@@ -88,6 +94,13 @@ export interface MatchSetup {
   /** Set true to record a full point-by-point log. Costs memory; off for background sim. */
   collectLog: boolean;
   seed: number;
+  /**
+   * Sides whose bench the engine runs itself, [home, away]: changes during a
+   * set and a new six at each set break, by the same judgement the AI coach
+   * uses live. For matches nobody is watching — an instant result, or the
+   * rest of a match skipped to the end. Off unless asked for.
+   */
+  autoCoach?: readonly [boolean, boolean];
 }
 
 export interface RallyContact {
@@ -176,6 +189,12 @@ const SUB_MARGIN_SCORE_SHIFT = 0.03;
 /** Extra margin to undo a swap already made this set, so a coach doesn't flip-flop. */
 const SUB_MARGIN_REVERSAL = 0.08;
 /**
+ * In a 4-2, the bar moves this much for an opposite to take a setter's place
+ * — up, since it changes the system — and for a setter to take it back, down.
+ * See `crossShift()`.
+ */
+const SYSTEM_CHANGE_MARGIN = 0.05;
+/**
  * The same judgement for the six handed in at a set break — a lower bar than
  * a substitution, since it costs none, shifted up after a set won and down
  * after one lost.
@@ -191,10 +210,42 @@ const FORM_FLOOR = 5.5;
 /** ...and how much of their value each rating point under it costs them. */
 const FORM_PENALTY = 0.1;
 
+/**
+ * What reading a side's tactic completely is worth to the side facing it: its
+ * serve, block and floor defence against that side, each this much stronger.
+ * Together enough to turn an even match into one the reader wins about two
+ * times in three — engine.test.ts pins it.
+ */
+const READ_SERVE = 0.04;
+const READ_BLOCK = 0.06;
+const READ_DIG = 0.06;
+
+/** Rallies an engine-coached side lets a change settle before making another. */
+const AUTO_SUB_COOLDOWN_RALLIES = 4;
+
 /** A pass or dig this far off the net (quality below it) may be too far for the setter… */
 const BAD_BALL = 0.22;
 /** …and this often the libero goes for it instead. */
 const BAD_BALL_LIBERO = 0.55;
+
+/**
+ * Upsets. A side's level on the night is not its ability alone: some nights
+ * everything comes off and some nights nothing does, and a set can turn on a
+ * bad patch. Each side draws a form for the match and a swing for every set,
+ * both multipliers on its players' confidence, and the weaker side plays with
+ * nothing to lose. Big enough that a lesser team can beat a better one on its
+ * night; never so big that ability stops deciding most matches. The curve —
+ * how often the favourite wins at each gap — is pinned by engine.test.ts, and
+ * the background quick sim gives the same one.
+ */
+const DAY_FORM_SD = 0.035;
+const SET_FORM_SD = 0.055;
+/** The underdog's lift per 100 of squad-strength gap, and its ceiling. */
+const UNDERDOG_LIFT = 0.042;
+const UNDERDOG_LIFT_MAX = 0.2;
+/** The home crowd's lift, and the away trip's cost. */
+const HOME_EDGE = 1.01;
+const AWAY_EDGE = 0.999;
 
 /** Per-team mutable state for the duration of one match. */
 class TeamRuntime {
@@ -210,8 +261,23 @@ class TeamRuntime {
   setsWon = 0;
   momentum = 0;
   currentRun = 0;
+  /**
+   * How the side is playing tonight, each a multiplier on every player's
+   * confidence: the venue (home crowd or away trip), the night's form, and
+   * the swing of the set under way — see `DAY_FORM_SD`.
+   */
+  venue = 1;
+  dayForm = 1;
+  setForm = 1;
+
+  /** All three together. */
+  get edge(): number {
+    return this.venue * this.dayForm * this.setForm;
+  }
   /** The six who start each set, in rotational order — the coach may hand in a new sheet between sets. */
   startLineup: number[];
+  /** How well the opposition reads this side's tactic, 0-1. */
+  readonly read: number;
   private readonly startRotation: number;
   private readonly positions: Uint8Array;
 
@@ -221,6 +287,7 @@ class TeamRuntime {
   ) {
     this.positions = store.position;
     this.startLineup = setup.lineup.slice();
+    this.read = Math.min(1, Math.max(0, setup.read ?? 0));
     this.startRotation = setup.startingRotation ?? 0;
     this.liberoIdx = setup.libero;
     this.receptionLibero = setup.libero;
@@ -321,6 +388,10 @@ export class MatchSimulator {
    * Resets each set.
    */
   private readonly subPairing: [Map<number, number>, Map<number, number>] = [new Map(), new Map()];
+  /** Sides whose bench the engine runs — see `MatchSetup.autoCoach`. */
+  private readonly autoCoached: [boolean, boolean];
+  /** The rally each engine-coached side last made a change on. */
+  private readonly lastAutoSub: [number, number] = [-Infinity, -Infinity];
 
   constructor(
     private readonly store: PlayerStore,
@@ -329,12 +400,13 @@ export class MatchSimulator {
     this.rng = new Rng(setup.seed);
     this.teams = [new TeamRuntime(setup.home, store), new TeamRuntime(setup.away, store)];
     this.log = setup.collectLog ? [] : null;
+    this.autoCoached = [setup.autoCoach?.[0] ?? false, setup.autoCoach?.[1] ?? false];
 
     // Home advantage: a real but modest effect, applied as a confidence bump to
     // the home side. Worth roughly 3-4 percentage points of match win rate.
     if (!setup.neutralVenue) {
-      for (const r of this.teams[0].ratings.values()) r.confidence *= 1.025;
-      for (const r of this.teams[1].ratings.values()) r.confidence *= 0.99;
+      this.teams[0].venue = HOME_EDGE;
+      this.teams[1].venue = AWAY_EDGE;
     }
   }
 
@@ -348,6 +420,17 @@ export class MatchSimulator {
   /** Play every remaining rally to completion. */
   finish(): void {
     while (!this.matchOver) this.step();
+  }
+
+  /**
+   * Hand a side's bench to the engine from here on — or take it back. Handed
+   * over at a set break, the engine picks the coming set's six too.
+   */
+  setAutoCoach(team: 0 | 1, on: boolean): void {
+    this.autoCoached[team] = on;
+    const atSetBreak = this.started && !this.matchOver && this.currentSet > 0 &&
+      this.teams[0].score === 0 && this.teams[1].score === 0;
+    if (on && atSetBreak) this.coachSetBreak(team);
   }
 
   /**
@@ -412,10 +495,30 @@ export class MatchSimulator {
         this.matchOver = true;
       } else {
         this.beginSet();
+        for (const t of [0, 1] as const) if (this.autoCoached[t]) this.coachSetBreak(t);
       }
+    } else {
+      for (const t of [0, 1] as const) if (this.autoCoached[t]) this.coachRally(t);
     }
 
     return entry;
+  }
+
+  /** An engine-coached side's change between rallies, if one is warranted and the last has settled. */
+  private coachRally(team: 0 | 1): void {
+    if (this.totalRallies - this.lastAutoSub[team] < AUTO_SUB_COOLDOWN_RALLIES) return;
+    const plan = this.suggestSubstitution(team);
+    if (plan !== null && this.substitute(team, plan.outPlayerIdx, plan.inPlayerIdx).ok) {
+      this.lastAutoSub[team] = this.totalRallies;
+    }
+  }
+
+  /** An engine-coached side's team sheet for the set about to start. */
+  private coachSetBreak(team: 0 | 1): void {
+    const plan = this.suggestStartingLineup(team);
+    if (plan === null) return;
+    const t = this.teams[team];
+    this.setStartingLineup(team, plan.lineup, t.receptionLibero, t.defensiveLibero);
   }
 
   private startIfNeeded(): void {
@@ -426,12 +529,24 @@ export class MatchSimulator {
     this.maxSets = format === MatchFormat.BestOf5 ? 5 : format === MatchFormat.BestOf3 ? 3 : 1;
     // Coin toss for first serve.
     this.serving = this.rng.chance(0.5) ? 0 : 1;
+    this.drawForm();
     this.beginSet();
+  }
+
+  /** Each side's form for the night — the weaker one lifted for having nothing to lose. */
+  private drawForm(): void {
+    const gap = sideStrength(this.store, this.teams[0]) - sideStrength(this.store, this.teams[1]);
+    const lift = Math.min(UNDERDOG_LIFT_MAX, (Math.abs(gap) / 100) * UNDERDOG_LIFT);
+    for (let t = 0; t < 2; t++) {
+      const underdog = t === 0 ? gap < 0 : gap > 0;
+      this.teams[t].dayForm = clamp(this.rng.gaussian(underdog ? 1 + lift : 1, DAY_FORM_SD), 0.82, 1.18);
+    }
   }
 
   private beginSet(): void {
     this.teams[0].resetForSet();
     this.teams[1].resetForSet();
+    for (const t of this.teams) t.setForm = clamp(this.rng.gaussian(1, SET_FORM_SD), 0.85, 1.15);
     const format = this.setup.format;
     const isDecider =
       (format === MatchFormat.BestOf5 && this.currentSet === 4) ||
@@ -477,7 +592,14 @@ export class MatchSimulator {
     const pairing = this.subPairing[team];
     const requiredPartner = pairing.get(outPlayerIdx);
     t.court[zone] = inPlayerIdx;
-    if (t.setterIdx === outPlayerIdx) t.setterIdx = inPlayerIdx;
+    if (t.setterIdx === outPlayerIdx) {
+      // A setter off for someone who isn't one: in a 4-2 the other setter
+      // runs the offence from here — failing one, whoever came on has to.
+      const pos = this.store.position;
+      t.setterIdx = pos[inPlayerIdx] === Position.Setter
+        ? inPlayerIdx
+        : Array.from(t.court).find((p) => pos[p] === Position.Setter) ?? inPlayerIdx;
+    }
     this.subsUsedThisSet[team]++;
     if (requiredPartner === undefined) {
       pairing.set(outPlayerIdx, inPlayerIdx);
@@ -515,11 +637,12 @@ export class MatchSimulator {
    * still the best available. Drives the AI side of a live match.
    *
    * A swap has to be warranted, not merely possible: the replacement must play
-   * the same position and be clearly more effective *at this moment* — a fresh
-   * reserve against a starter who is running on empty, or anyone against a
-   * starter who is having a nightmare. The margin required grows as the set's
-   * five substitutions get used up and while the set is going well, and
-   * shrinks when it is slipping away.
+   * the same position — or, in a 4-2, be an opposite for a setter who has to
+   * come off (see `crossShift()`) — and be clearly more effective *at this
+   * moment*: a fresh reserve against a starter who is running on empty, or
+   * anyone against a starter who is having a nightmare. The margin required
+   * grows as the set's five substitutions get used up and while the set is
+   * going well, and shrinks when it is slipping away.
    */
   suggestSubstitution(team: 0 | 1): SubstitutionPlan | null {
     this.startIfNeeded();
@@ -536,9 +659,10 @@ export class MatchSimulator {
     for (const out of t.court) {
       const outValue = this.currentValue(team, out);
       for (const inc of t.ratings.keys()) {
-        if (this.store.position[inc] !== this.store.position[out]) continue;
+        const shift = this.crossShift(team, out, inc, t.court);
+        if (shift === null) continue;
         if (this.substitutionError(team, out, inc) !== null) continue;
-        const needed = margin + (pairing.get(out) === inc ? SUB_MARGIN_REVERSAL : 0);
+        const needed = margin + shift + (pairing.get(out) === inc ? SUB_MARGIN_REVERSAL : 0);
         const excess = this.currentValue(team, inc) / Math.max(1, outValue) - 1 - needed;
         if (excess <= bestExcess) continue;
         bestExcess = excess;
@@ -551,8 +675,9 @@ export class MatchSimulator {
   /**
    * The six a coach would hand in for the coming set, with the changes from
    * the last set's, or null to keep them. The same judgement as
-   * suggestSubstitution() — like for like, a starter who is tiring or having
-   * a bad night makes way for someone who would do better right now — but a
+   * suggestSubstitution() — like for like (in a 4-2, an opposite for a setter
+   * too), a starter who is tiring or having a bad night makes way for someone
+   * who would do better right now — but a
    * new line-up sheet costs no substitution, so the bar is lower; it is
    * higher after a set won (nobody changes a winning team) and lower after
    * one lost. Only meaningful at a set break, before the first serve.
@@ -572,19 +697,42 @@ export class MatchSimulator {
     const changes: SubstitutionPlan[] = [];
     for (let slot = 0; slot < lineup.length; slot++) {
       const starter = lineup[slot];
+      const starterValue = Math.max(1, this.currentValue(team, starter));
       let pick = -1;
-      let pickValue = this.currentValue(team, starter) * (1 + margin);
+      let pickExcess = 0;
       for (const p of t.ratings.keys()) {
-        if (this.store.position[p] !== this.store.position[starter]) continue;
         if (lineup.includes(p) || p === t.receptionLibero || p === t.defensiveLibero) continue;
-        const value = this.currentValue(team, p);
-        if (value > pickValue) { pick = p; pickValue = value; }
+        const shift = this.crossShift(team, starter, p, lineup);
+        if (shift === null) continue;
+        const excess = this.currentValue(team, p) / starterValue - 1 - margin - shift;
+        if (excess > pickExcess) { pick = p; pickExcess = excess; }
       }
       if (pick === -1) continue;
       lineup[slot] = pick;
       changes.push({ outPlayerIdx: starter, inPlayerIdx: pick, reason: this.reasonToReplace(team, starter) });
     }
     return changes.length > 0 ? { lineup, changes } : null;
+  }
+
+  /**
+   * How far a coach's bar moves for `inc` taking `out`'s place in `six`, or
+   * null if he wouldn't consider it. Like for like, not at all. Across
+   * positions only in a 4-2, and only for a setter: an opposite on for one
+   * who has to come off — tired, or having a bad night, not merely bettered —
+   * so long as the other setter stays on to set (the side plays on as a 5-1);
+   * and a setter back on for that opposite, restoring the 4-2.
+   */
+  private crossShift(team: 0 | 1, out: number, inc: number, six: ArrayLike<number>): number | null {
+    const pos = this.store.position;
+    if (pos[inc] === pos[out]) return 0;
+    if (!this.teams[team].fourTwo) return null;
+    let setters = 0;
+    for (let i = 0; i < six.length; i++) if (pos[six[i]] === Position.Setter) setters++;
+    if (pos[out] === Position.Setter && pos[inc] === Position.Opposite) {
+      return setters >= 2 && this.reasonToReplace(team, out) !== 'upgrade' ? SYSTEM_CHANGE_MARGIN : null;
+    }
+    if (pos[out] === Position.Opposite && pos[inc] === Position.Setter && setters < 2) return -SYSTEM_CHANGE_MARGIN;
+    return null;
   }
 
   /** What a player is worth on court right now, as a coach sees it. */
@@ -867,7 +1015,9 @@ export class MatchSimulator {
     // serve/reception mismatch from swinging the pass grade to an extreme —
     // without it the grade distribution develops fat tails and the same match
     // produces both too many perfect passes and too many aces.
-    const pressure = contest(serveStrength + SERVE_EDGE, recvSkill, 26);
+    // A side whose patterns are known is served where it hurts — no harder,
+    // so no likelier to go long, just aimed better.
+    const pressure = contest(serveStrength * (1 + READ_SERVE * rcv.read) + SERVE_EDGE, recvSkill, 26);
 
     // Ace chance rises sharply with serve pressure but never becomes routine.
     // The high exponent means only a genuinely dominant serve aces; ordinary
@@ -1000,11 +1150,13 @@ export class MatchSimulator {
 
     // ---- Block ----
     const blockCount = this.blockersFor(lane, grade, def, rotTac, transition);
-    const blockRating = this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay);
+    // A block that knows the attack's patterns is there before the ball.
+    const blockRating =
+      this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay) * def.edge * (1 + READ_BLOCK * atk.read);
 
     // ---- Dig ----
     const digRating =
-      this.digStrength(def) * DEFENSE_PROFILE[def.tactics.defense].digCoverage;
+      this.digStrength(def) * DEFENSE_PROFILE[def.tactics.defense].digCoverage * def.edge * (1 + READ_DIG * atk.read);
 
     // ---- Outcome ----
     // Blocked balls and attack errors are resolved first; whatever probability
@@ -1350,11 +1502,12 @@ export class MatchSimulator {
     for (let t = 0; t < 2; t++) {
       const team = this.teams[t];
       const momentumBoost = 1 + team.momentum * 0.006;
+      const edge = team.edge;
       for (let z = 0; z < 6; z++) {
         const p = effectivePlayerAt(team.court, z, this.store.position, team.liberoIdx);
         const r = team.rate(p);
         const clutch = (r.bigMatch - 0.5) * 0.5 + (r.composure - 0.5) * 0.5;
-        r.confidence = clamp(momentumBoost * (1 + clutch * pressure * 0.16), 0.82, 1.18);
+        r.confidence = clamp(edge * momentumBoost * (1 + clutch * pressure * 0.16), 0.72, 1.28);
       }
     }
   }
@@ -1470,6 +1623,22 @@ export class MatchSimulator {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** A side's strength as the background sim reckons it: the six and the libero's average ability. */
+function sideStrength(store: PlayerStore, t: TeamRuntime): number {
+  let total = 0;
+  let n = 0;
+  for (const p of t.startLineup) {
+    if (p < 0) continue;
+    total += store.currentAbility[p];
+    n++;
+  }
+  if (t.receptionLibero >= 0) {
+    total += store.currentAbility[t.receptionLibero];
+    n++;
+  }
+  return n > 0 ? total / n : 0;
 }
 
 /** Convert a rating into a selection weight; better attackers get more sets. */

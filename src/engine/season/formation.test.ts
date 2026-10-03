@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MatchFormat, simulateMatch } from '../match/engine.ts';
+import { MatchFormat, MatchSimulator, simulateMatch, type TeamSetup } from '../match/engine.ts';
 import { Formation } from '../match/tactics.ts';
 import { Position } from '../model/positions.ts';
 import { generateWorld } from '../world/worldGen.ts';
@@ -29,15 +29,24 @@ test('in a 4-2 both setters set — from the back row — and both attack, from 
   const store = world.players;
   a.tactics.formation = Formation.FourTwo;
   const home = toTeamSetup(store, a);
-  const result = simulateMatch(store, {
-    home, away: toTeamSetup(store, b), format: MatchFormat.BestOf5, importance: 0.5,
-    neutralVenue: false, collectLog: false, seed: 9,
-  });
   const setters = [home.lineup[0], home.lineup[3]];
-  for (const s of setters) {
-    const line = result.stats.home.players.get(s);
-    assert.ok(line !== undefined && line.setsMade > 20, 'each sets a share of the match');
-    assert.ok(line.attacksTotal > 3, 'and hits on the right when at the net');
+  // Over a few matches, so one short night doesn't decide it.
+  const sets = [0, 0];
+  const attacks = [0, 0];
+  for (const seed of [9, 10, 11]) {
+    const result = simulateMatch(store, {
+      home, away: toTeamSetup(store, b), format: MatchFormat.BestOf5, importance: 0.5,
+      neutralVenue: false, collectLog: false, seed,
+    });
+    setters.forEach((s, i) => {
+      const line = result.stats.home.players.get(s);
+      sets[i] += line?.setsMade ?? 0;
+      attacks[i] += line?.attacksTotal ?? 0;
+    });
+  }
+  for (let i = 0; i < 2; i++) {
+    assert.ok(sets[i] > 60, 'each sets a share of every match');
+    assert.ok(attacks[i] > 9, 'and hits on the right when at the net');
   }
 });
 
@@ -84,4 +93,76 @@ test('in a 4-2, when one setter plays the first ball, the other sets', () => {
   assert.ok(afterSetter.every((x) => x.second !== x.first));
   assert.ok(afterSetter.filter((x) => store.position[x.second] === Position.Setter).length >= afterSetter.length * 0.7,
     'mostly the other setter');
+});
+
+/** A side with no setter on the bench, its first setter worn out before the first serve. */
+function tiredSetter(formation: Formation) {
+  const { world, a, b } = twoClubs(63);
+  const store = world.players;
+  a.tactics.formation = formation;
+  const setup = toTeamSetup(store, a);
+  const home: TeamSetup = { ...setup, bench: setup.bench.filter((p) => store.position[p] !== Position.Setter) };
+  const sim = new MatchSimulator(store, {
+    home, away: toTeamSetup(store, b), format: MatchFormat.BestOf5, importance: 0.5,
+    neutralVenue: true, collectLog: true, seed: 5,
+  });
+  const setter = home.lineup[0];
+  // Reaching into the engine's live ratings: running a setter into the ground
+  // for real would take most of a match.
+  const runtime = sim as unknown as { teams: Array<{ rate(p: number): { fatigue: number } }> };
+  const tire = (p: number): void => {
+    runtime.teams[0].rate(p).fatigue = 0.74;
+  };
+  return { store, sim, home, setter, tire };
+}
+
+test('in a 4-2, a setter who has to come off can make way for an opposite — the other setter sets on', () => {
+  const { store, sim, home, setter, tire } = tiredSetter(Formation.FourTwo);
+  assert.ok(home.bench.some((p) => store.position[p] === Position.Opposite));
+  const fresh = sim.suggestSubstitution(0);
+  assert.ok(fresh?.outPlayerIdx !== setter, 'not while he is fresh');
+
+  tire(setter);
+  const plan = sim.suggestSubstitution(0);
+  assert.ok(plan !== null);
+  assert.equal(plan.outPlayerIdx, setter);
+  assert.equal(store.position[plan.inPlayerIdx], Position.Opposite);
+  assert.equal(plan.reason, 'fatigue');
+  assert.ok(sim.substitute(0, plan.outPlayerIdx, plan.inPlayerIdx).ok);
+
+  // The last setter is never the one to go, however tired.
+  const other = home.lineup[3];
+  tire(other);
+  const next = sim.suggestSubstitution(0);
+  assert.ok(next?.outPlayerIdx !== other || store.position[next.inPlayerIdx] === Position.Setter);
+
+  const sets = new Map<number, number>();
+  const hits = new Map<number, number>();
+  while (sim.snapshot().set === 0) {
+    for (const c of sim.step()!.contacts) {
+      if (c.team !== 0) continue;
+      if (c.kind === 'set') sets.set(c.player, (sets.get(c.player) ?? 0) + 1);
+      if (c.kind === 'attack' || c.kind === 'kill' || c.kind === 'attackError' || c.kind === 'blocked') {
+        hits.set(c.player, (hits.get(c.player) ?? 0) + 1);
+      }
+    }
+  }
+  const total = [...sets.values()].reduce((x, y) => x + y, 0);
+  assert.equal(sets.get(setter) ?? 0, 0, 'the setter taken off sets nothing more');
+  assert.ok((sets.get(other) ?? 0) > total * 0.75, 'the other setter runs the offence');
+  assert.ok((hits.get(plan.inPlayerIdx) ?? 0) > 0, 'and the opposite hits');
+});
+
+test('in a 4-2, a set break can start an opposite for a worn-out setter; a 5-1 never swaps its setter for one', () => {
+  const fourTwo = tiredSetter(Formation.FourTwo);
+  fourTwo.tire(fourTwo.setter);
+  const sheet = fourTwo.sim.suggestStartingLineup(0);
+  assert.ok(sheet !== null);
+  assert.equal(fourTwo.store.position[sheet.lineup[0]], Position.Opposite);
+  assert.equal(sheet.lineup.filter((p) => fourTwo.store.position[p] === Position.Setter).length, 1);
+
+  const fiveOne = tiredSetter(Formation.FiveOne);
+  fiveOne.tire(fiveOne.setter);
+  assert.ok(fiveOne.sim.suggestSubstitution(0)?.outPlayerIdx !== fiveOne.setter);
+  assert.equal(fiveOne.sim.suggestStartingLineup(0)?.lineup[0] ?? fiveOne.setter, fiveOne.setter);
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Formation, formationOf, OffensiveSystem } from '../match/tactics.ts';
+import { defaultTactics, Formation, formationOf, OffensiveSystem } from '../match/tactics.ts';
 import { generateWorld } from '../world/worldGen.ts';
 import { stubManager } from '../world/world.ts';
 import {
@@ -39,6 +39,24 @@ test('every saved tactic remembers its system, instructions and team sheet', () 
   assert.equal(club.tactics.offense, OffensiveSystem.MiddleFocused);
   assert.deepEqual(club.preferredLineup, []);
   assert.equal(tacticSlots(club)[1].name, 'Two setters');
+});
+
+test('a new tactic starts from the defaults, not as a copy of the loaded one', () => {
+  const club = aClub();
+  club.tactics.formation = Formation.FourTwo;
+  club.tactics.offense = OffensiveSystem.MiddleFocused;
+  club.tactics.rotations[2].setterTempoBias = 90;
+  club.preferredLibero = club.players[0];
+  newTactic(club);
+  assert.deepEqual(club.tactics, defaultTactics());
+  assert.deepEqual(club.preferredLineup, []);
+  assert.equal(club.preferredLibero, -1);
+  assert.equal(club.preferredDefensiveLibero, -1);
+
+  loadTactic(club, 0);
+  assert.equal(formationOf(club.tactics), Formation.FourTwo, 'the one it was made beside is kept as it was');
+  assert.equal(club.tactics.offense, OffensiveSystem.MiddleFocused);
+  assert.equal(club.tactics.rotations[2].setterTempoBias, 90);
 });
 
 test('three at most; deleting the loaded one loads the first left, and the last can never go', () => {

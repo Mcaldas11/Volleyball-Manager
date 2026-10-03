@@ -1,7 +1,7 @@
 /**
  * The tactic switcher over the Lineup screens, the way FM has it: the loaded
  * tactic by number and name, a menu of the others saved — load one, rename
- * it, throw it away — and a way to start a new one from the loaded tactic.
+ * it, throw it away — and a way to start a new one from the defaults.
  */
 
 import { useState, type JSX } from 'react';
@@ -42,7 +42,7 @@ export function TacticPicker(): JSX.Element | null {
       <button
         className="tactic-add"
         disabled={slots.length >= MAX_TACTICS}
-        title={slots.length >= MAX_TACTICS ? `You can keep ${MAX_TACTICS} tactics` : 'New tactic, from the loaded one'}
+        title={slots.length >= MAX_TACTICS ? `You can keep ${MAX_TACTICS} tactics` : 'New tactic, from the defaults'}
         onClick={() => g.newTactic()}
       >
         +
@@ -93,7 +93,7 @@ export function TacticPicker(): JSX.Element | null {
             disabled={slots.length >= MAX_TACTICS}
             onClick={() => { g.newTactic(); setOpen(false); }}
           >
-            + New tactic <span className="faint">— a copy of the loaded one</span>
+            + New tactic <span className="faint">— from the defaults</span>
           </button>
           <p className="tactic-note">
             Each tactic keeps its own formation, instructions, rotations and team sheet. Changes to the loaded one

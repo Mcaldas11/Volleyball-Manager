@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { generateWorld } from './worldGen.ts';
 import { DAYS_PER_SEASON, stubManager, type World } from './world.ts';
 import {
-  injuryDuration, messageNeedsAction, messageSender, monthLabel, postMessage, welcomeMessages,
+  injuryDuration, messageNeedsAction, messageSender, monthLabel, postMessage, tacticReadNotice, welcomeMessages,
 } from './inbox.ts';
+import { studyTactic } from '../model/tacticRead.ts';
 import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
 
 function career(seed: number): World {
@@ -95,4 +96,42 @@ test('injury lengths read naturally', () => {
   assert.equal(injuryDuration(5), '5 days');
   assert.equal(injuryDuration(14), 'about 2 weeks');
   assert.equal(injuryDuration(90), 'about 3 months');
+});
+
+test('the assistant warns once as the opposition start to read the tactic, once more when they have it worked out', () => {
+  const world = career(43);
+  const club = world.clubs[world.userClubId];
+  club.tacticRead = { seen: {} };
+  const warnings = (): string[] => world.messages.filter((m) => m.from === 'Assistant Manager').map((m) => m.subject);
+  for (let i = 0; i < 60; i++) {
+    studyTactic(club.tacticRead, club.tactics);
+    tacticReadNotice(world, club);
+  }
+  assert.deepEqual(warnings(), ['The opposition are starting to read us', 'The opposition have us worked out']);
+  assert.match(world.messages[world.messages.length - 1].body, /offence/);
+
+  // A new plan throws them; play it long enough and he warns again.
+  club.tactics.formation = 1;
+  club.tactics.offense = 5;
+  club.tactics.defense = 2;
+  club.tactics.tempo = 0;
+  club.tactics.serve = 0;
+  tacticReadNotice(world, club);
+  assert.equal(club.tacticRead.warned, 0);
+  for (let i = 0; i < 40; i++) {
+    studyTactic(club.tacticRead, club.tactics);
+    tacticReadNotice(world, club);
+  }
+  assert.equal(warnings().length, 4);
+});
+
+test('the user\'s matches teach the opposition his tactic; nobody else\'s are studied', () => {
+  const world = career(44);
+  const ctx = newSeasonContext();
+  while (world.day < 120) advanceDay(world, ctx, { detailedClubs: new Set([world.userClubId]) });
+  const club = world.clubs[world.userClubId];
+  const played = world.fixtures.filter((f) => f.played && (f.home === club.id || f.away === club.id)).length;
+  assert.ok(played > 0);
+  assert.equal(club.tacticRead?.seen[`offense=${club.tactics.offense}`], played);
+  assert.ok(world.clubs.every((c) => c.id === club.id || c.tacticRead === undefined));
 });

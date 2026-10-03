@@ -38,6 +38,16 @@ const SIDE_OUT_BASE = 0.617;
  */
 const ABILITY_TO_SIDE_OUT = 0.42;
 
+/**
+ * A side's form on the night, as side-out rate — the background twin of the
+ * full engine's day form, so a weaker side can win here on its night just as
+ * often as it can in a match the user watches.
+ */
+const FORM_TO_SIDE_OUT = 0.02;
+
+/** The home crowd's worth, shared between the two sides' side-out rates. */
+const HOME_TO_SIDE_OUT = 0.005;
+
 export interface QuickResult {
   homeSets: number;
   awaySets: number;
@@ -96,11 +106,11 @@ export function quickSimulate(
   // Ability gap expressed as a fraction of the full ability scale, then
   // converted into a side-out edge shared symmetrically between the sides.
   const gap = (sh - sa) / 2000;
-  const edge = gap * ABILITY_TO_SIDE_OUT;
-  const homeBonus = homeAdvantage ? 0.012 : 0;
+  const form = rng.gaussian(0, FORM_TO_SIDE_OUT) - rng.gaussian(0, FORM_TO_SIDE_OUT);
+  const edge = gap * ABILITY_TO_SIDE_OUT + form + (homeAdvantage ? HOME_TO_SIDE_OUT : 0);
 
-  const pHome = clamp(SIDE_OUT_BASE + edge + homeBonus, 0.30, 0.88);
-  const pAway = clamp(SIDE_OUT_BASE - edge - homeBonus, 0.30, 0.88);
+  const pHome = clamp(SIDE_OUT_BASE + edge, 0.30, 0.88);
+  const pAway = clamp(SIDE_OUT_BASE - edge, 0.30, 0.88);
 
   const setsToWin = format === MatchFormat.BestOf5 ? 3 : format === MatchFormat.BestOf3 ? 2 : 1;
   const maxSets = format === MatchFormat.BestOf5 ? 5 : format === MatchFormat.BestOf3 ? 3 : 1;

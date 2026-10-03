@@ -11,6 +11,7 @@
 
 import { defaultTactics, type TeamTactics } from '../match/tactics.ts';
 import type { SavedTactic } from './tacticSlots.ts';
+import type { TacticRead } from './tacticRead.ts';
 
 export interface Finances {
   /** Cash in hand. Negative for long enough and the club is in trouble. */
@@ -84,6 +85,9 @@ export interface Club {
   tacticSlots?: SavedTactic[];
   /** Which saved tactic is loaded. */
   activeTactic?: number;
+  /** What the opposition has learnt of the manager's tactics — see tacticRead.ts.
+   *  Absent until his first match in charge. */
+  tacticRead?: TacticRead;
 
   /** History. */
   titlesWon: number;

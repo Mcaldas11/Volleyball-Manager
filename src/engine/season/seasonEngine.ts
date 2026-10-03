@@ -35,7 +35,8 @@ import { generateLoanOffers, loanOf, loanStarters, reviewLoanPromises } from '..
 import { contractNotices } from '../world/contracts.ts';
 import { processDeals } from '../world/deals.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
-import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices } from '../world/inbox.ts';
+import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices, tacticReadNotice } from '../world/inbox.ts';
+import { readLevel, studyTactic } from '../model/tacticRead.ts';
 import { recordFixture } from '../world/records.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 
@@ -180,6 +181,20 @@ export function pickLineup(
   return { lineup: finalLineup, libero, defensiveLibero, bench };
 }
 
+/** How well the opposition reads a club's tactic: the user's, which every side studies — nobody else's. */
+export function oppositionRead(world: World, club: Club): number {
+  return club.id === world.userClubId ? readLevel(club.tacticRead, club.tactics) : 0;
+}
+
+/** The league has watched the user's club play once more — and the assistant speaks up as they get to know it. */
+function opponentsStudy(world: World, fixture: Fixture): void {
+  const club = world.clubs[world.userClubId];
+  if (club === undefined || (fixture.home !== club.id && fixture.away !== club.id)) return;
+  club.tacticRead ??= { seen: {} };
+  studyTactic(club.tacticRead, club.tactics);
+  tacticReadNotice(world, club);
+}
+
 export function toTeamSetup(store: PlayerStore, club: Club, mustStart?: ReadonlySet<number>): TeamSetup {
   const { lineup, libero, defensiveLibero, bench } = pickLineup(store, club, mustStart);
   return {
@@ -216,13 +231,15 @@ export function playFixture(
 
   if (detailed) {
     const result = simulateMatch(store, {
-      home: toTeamSetup(store, home, homeOwed),
-      away: toTeamSetup(store, away, awayOwed),
+      home: { ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home) },
+      away: { ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away) },
       format: fixture.format,
       importance: fixture.importance,
       neutralVenue: fixture.neutralVenue,
       collectLog: true,
       seed: world.rng.next(),
+      // Nobody is on the bench to make the changes: the engine makes them for both sides.
+      autoCoach: [true, true],
     });
     ctx.detailedResults.set(fixture.id, result);
     applyMatchResult(world, ctx, fixture, result);
@@ -247,6 +264,7 @@ export function playFixture(
 
   updateTable(world, fixture);
   applyMatchFinances(world, home, away, fixture);
+  opponentsStudy(world, fixture);
 }
 
 /**
@@ -279,6 +297,7 @@ export function applyMatchResult(
   const home = world.clubs[fixture.home];
   const away = world.clubs[fixture.away];
   if (home !== undefined && away !== undefined) applyMatchFinances(world, home, away, fixture);
+  opponentsStudy(world, fixture);
 }
 
 function accumulate(
