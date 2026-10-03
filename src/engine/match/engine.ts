@@ -82,6 +82,8 @@ export interface TeamSetup {
    * where it attacks and dug where it hits. Absent: not at all.
    */
   read?: number;
+  /** What the side worked on for this match in the days before it, each 0-1 — see training.ts. */
+  prep?: { reception: number; transition: number; block: number };
 }
 
 export interface MatchSetup {
@@ -142,6 +144,14 @@ export interface MatchResult {
   /** Match MVP: highest scoring impact. Player index, or -1. */
   mvp: number;
 }
+
+/**
+ * A word from the touchline: lift the side, demand more of it, or settle it
+ * down. Each works on its momentum — the swing a run of points gives a side —
+ * and each has its moment: demanding more of a side that is ahead only makes
+ * it tight, and there is nothing to calm in one that is flying.
+ */
+export type ShoutKind = 'encourage' | 'demand' | 'calm';
 
 /** Why a coach made a change: a tired player, a bad night, or simply a better option. */
 export type SubstitutionReason = 'fatigue' | 'form' | 'upgrade';
@@ -222,6 +232,9 @@ const READ_SERVE = 0.04;
 const READ_BLOCK = 0.06;
 const READ_DIG = 0.06;
 
+/** A side fully prepared for a part of the game is this much sharper at it. */
+const PREP_EDGE = 0.03;
+
 /** Rallies an engine-coached side lets a change settle before making another. */
 const AUTO_SUB_COOLDOWN_RALLIES = 4;
 
@@ -280,6 +293,8 @@ class TeamRuntime {
   startLineup: number[];
   /** How well the opposition reads this side's tactic, 0-1. */
   readonly read: number;
+  /** What it prepared for. */
+  readonly prep: { reception: number; transition: number; block: number };
   private readonly startRotation: number;
   private readonly positions: Uint8Array;
 
@@ -290,6 +305,7 @@ class TeamRuntime {
     this.positions = store.position;
     this.startLineup = setup.lineup.slice();
     this.read = Math.min(1, Math.max(0, setup.read ?? 0));
+    this.prep = setup.prep ?? { reception: 0, transition: 0, block: 0 };
     this.startRotation = setup.startingRotation ?? 0;
     this.liberoIdx = setup.libero;
     this.receptionLibero = setup.libero;
@@ -422,6 +438,30 @@ export class MatchSimulator {
   /** Play every remaining rally to completion. */
   finish(): void {
     while (!this.matchOver) this.step();
+  }
+
+  /** A shout from the touchline, and what it did — for the commentary. */
+  shout(team: 0 | 1, kind: ShoutKind): 'lifted' | 'flat' | 'tense' {
+    this.startIfNeeded();
+    const t = this.teams[team];
+    const behind = t.score < this.teams[1 - team].score;
+    if (kind === 'encourage') {
+      t.momentum = Math.min(6, t.momentum + 1.5);
+      return 'lifted';
+    }
+    if (kind === 'demand') {
+      if (behind) {
+        t.momentum = Math.min(6, t.momentum + 2.5);
+        return 'lifted';
+      }
+      t.momentum = Math.max(-6, t.momentum - 1);
+      return 'tense';
+    }
+    if (t.momentum < 0) {
+      t.momentum *= 0.3;
+      return 'lifted';
+    }
+    return 'flat';
   }
 
   /**
@@ -1011,7 +1051,8 @@ export class MatchSimulator {
     rStats.receptionsTotal++;
 
     const recvSkill =
-      rr.reception * rr.fatigue * rr.confidence * DEFENSE_PROFILE[rcv.tactics.defense].receptionBonus;
+      rr.reception * rr.fatigue * rr.confidence * DEFENSE_PROFILE[rcv.tactics.defense].receptionBonus *
+      (1 + PREP_EDGE * rcv.prep.reception);
     // SERVE_EDGE is the inherent difficulty of handling a professional serve,
     // independent of who is hitting it. The wide contest scale keeps a single
     // serve/reception mismatch from swinging the pass grade to an extreme —
@@ -1147,14 +1188,16 @@ export class MatchSimulator {
         attackBase = ar.attackPower * 0.62 + ar.attackControl * 0.38;
     }
     const attackRating =
-      attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setQuality) +
+      attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setQuality) *
+      (transition ? 1 + PREP_EDGE * atk.prep.transition : 1) +
       rng.gaussian(0, (1 - ar.consistency) * 9);
 
     // ---- Block ----
     const blockCount = this.blockersFor(lane, grade, def, rotTac, transition);
     // A block that knows the attack's patterns is there before the ball.
     const blockRating =
-      this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay) * def.edge * (1 + READ_BLOCK * atk.read);
+      this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay) * def.edge * (1 + READ_BLOCK * atk.read) *
+      (1 + PREP_EDGE * def.prep.block);
 
     // ---- Dig ----
     const digRating =

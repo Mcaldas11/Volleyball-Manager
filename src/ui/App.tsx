@@ -21,6 +21,7 @@ import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
 import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CoachProfile } from './screens/CoachProfile.tsx';
+import { TrainingScreen } from './screens/Training.tsx';
 import { NationProfile } from './screens/NationProfile.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { NewsScreen } from './screens/News.tsx';
@@ -35,7 +36,7 @@ import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
 import {
-  TacticsScreen, RotationsScreen, TrainingScreen, FinancesScreen,
+  TacticsScreen, RotationsScreen, FinancesScreen,
   StaffScreen, ScoutingScreen, TransfersScreen,
 } from './screens/Manage.tsx';
 import { StatsScreen, RankingsScreen, HallOfFameScreen } from './screens/World.tsx';
@@ -84,7 +85,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         icon: 'tactics',
         tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
       },
-      { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Development']] },
+      { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Training']] },
       { id: 'academy', label: 'Academy', icon: 'youth', tabs: [['youth', 'Youth Academy']] },
     ],
   },

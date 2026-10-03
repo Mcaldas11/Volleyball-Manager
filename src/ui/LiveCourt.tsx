@@ -15,6 +15,10 @@
  * just hands it each new scene and draws a frame on every animation tick.
  * Where the browser has no WebGL the players are drawn flat on the top layer
  * instead.
+ *
+ * Or the match from above, in 2D: the court upright, the far team at the top,
+ * every player a disc with their name, the ball and its shadow — the same
+ * motion, so the view can change in the middle of a rally.
  */
 
 import { useEffect, useRef, type JSX } from 'react';
@@ -61,6 +65,9 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 /** What to print by each player: their live rating, name and rating, or nothing. */
 export type CourtLabels = 'ratings' | 'names' | 'off';
 
+/** From the stand in 3D, or from above in 2D. */
+export type CourtView = '3d' | '2d';
+
 interface CourtProps {
   store: PlayerStore;
   kits: [Kit, Kit];
@@ -70,11 +77,12 @@ interface CourtProps {
   labels: CourtLabels;
   /** Short names for the referee's calls: home, away. */
   teamNames: [string, string];
+  view: CourtView;
 }
 
 export function LiveCourt({
   scene, store, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
-  teamNames = ['Home', 'Away'],
+  teamNames = ['Home', 'Away'], view = '3d',
 }: {
   scene: Scene;
   store: PlayerStore;
@@ -89,12 +97,13 @@ export function LiveCourt({
   /** How fast the match is being shown. */
   speed?: number;
   teamNames?: [string, string];
+  view?: CourtView;
 }): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, kits, teamOf, ratings, labels, teamNames });
-  props.current = { store, kits, teamOf, ratings, labels, teamNames };
+  const props = useRef<CourtProps>({ store, kits, teamOf, ratings, labels, teamNames, view });
+  props.current = { store, kits, teamOf, ratings, labels, teamNames, view };
   const motion = useRef<CourtMotion | null>(null);
   if (motion.current === null) {
     motion.current = new CourtMotion(
@@ -153,10 +162,18 @@ export function LiveCourt({
     let cssH = 0;
     let dpr = 1;
     let hallKits = '';
+    let shownView: CourtView = props.current.view;
     const paintHall = (): void => {
       hall.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawHall(hall, cssW, cssH, dpr, project, props.current.kits);
+      if (props.current.view === '2d') {
+        hall.clearRect(0, 0, cssW, cssH);
+        drawTopFloor(hall, topProjector(cssW, cssH));
+      } else {
+        drawHall(hall, cssW, cssH, dpr, project, props.current.kits);
+      }
       hallKits = JSON.stringify(props.current.kits);
+      shownView = props.current.view;
+      glCanvas.style.display = shownView === '2d' ? 'none' : '';
     };
     // The canvases take whatever box the layout gives them — the match screen
     // fits the viewport, so the court shrinks to the space rather than
@@ -188,9 +205,12 @@ export function LiveCourt({
         looks.clear();
         paintHall();
       }
+      if (props.current.view !== shownView) paintHall();
       m.step(dt, now);
       top.clearRect(0, 0, cssW, cssH);
-      if (court !== null) {
+      if (shownView === '2d') {
+        drawTopDown(top, topProjector(cssW, cssH), m, props.current, now);
+      } else if (court !== null) {
         court.render(m, now, dt, lookOf);
         const c = court;
         drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
@@ -215,6 +235,177 @@ export function LiveCourt({
       <canvas ref={topRef} className="live-court-canvas" />
     </div>
   );
+}
+
+// ---- The court from above ---------------------------------------------------------------
+
+/** Court metres to screen pixels, looking straight down, the court upright: the far team at the top. */
+interface TopProjector {
+  X: (x: number) => number;
+  Y: (y: number) => number;
+  /** Pixels per metre. */
+  s: number;
+}
+
+/** The free zone around the court that the view takes in, in metres from the centre. */
+const TOP_HALF_W = 6.4;
+const TOP_HALF_L = 11.8;
+
+function topProjector(w: number, h: number): TopProjector {
+  const s = Math.min((w * 0.94) / (2 * TOP_HALF_W), (h * 0.96) / (2 * TOP_HALF_L));
+  return { X: (x) => w / 2 + x * s, Y: (y) => h / 2 - y * s, s };
+}
+
+/** The floor seen from above: the free zone, the court, its lines, and the net across the middle. */
+function drawTopFloor(ctx: CanvasRenderingContext2D, P: TopProjector): void {
+  const rect = (x0: number, y0: number, x1: number, y1: number, fill: string, radius = 0): void => {
+    const X = P.X(Math.min(x0, x1));
+    const Y = P.Y(Math.max(y0, y1));
+    const W = Math.abs(x1 - x0) * P.s;
+    const H = Math.abs(y1 - y0) * P.s;
+    roundRect(ctx, X, Y, W, H, radius);
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+  // The free zone, and the hall's shade around it.
+  rect(-TOP_HALF_W, -TOP_HALF_L, TOP_HALF_W, TOP_HALF_L, '#235fa3', 10);
+  rect(-COURT_HALF_WIDTH, -COURT_HALF_LENGTH, COURT_HALF_WIDTH, COURT_HALF_LENGTH, FLOOR.court, 6);
+  rect(-COURT_HALF_WIDTH, -3, COURT_HALF_WIDTH, 3, FLOOR.frontZone);
+
+  ctx.strokeStyle = FLOOR.line;
+  ctx.lineWidth = Math.max(1.5, P.s * 0.07);
+  ctx.strokeRect(P.X(-COURT_HALF_WIDTH), P.Y(COURT_HALF_LENGTH), 2 * COURT_HALF_WIDTH * P.s, 2 * COURT_HALF_LENGTH * P.s);
+  for (const y of [-3, 3]) {
+    ctx.beginPath();
+    ctx.moveTo(P.X(-COURT_HALF_WIDTH), P.Y(y));
+    ctx.lineTo(P.X(COURT_HALF_WIDTH), P.Y(y));
+    ctx.stroke();
+    // The attack line carries on, dashed, across the free zone.
+    ctx.save();
+    ctx.setLineDash([P.s * 0.25, P.s * 0.25]);
+    ctx.lineWidth = Math.max(1, P.s * 0.05);
+    for (const [a, b] of [[-TOP_HALF_W, -COURT_HALF_WIDTH], [COURT_HALF_WIDTH, TOP_HALF_W]]) {
+      ctx.beginPath();
+      ctx.moveTo(P.X(a), P.Y(y));
+      ctx.lineTo(P.X(b), P.Y(y));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // The net, post to post across the centre line.
+  const post = COURT_HALF_WIDTH + 0.8;
+  ctx.fillStyle = 'rgba(16, 22, 32, 0.55)';
+  ctx.fillRect(P.X(-post), P.Y(0) - P.s * 0.12, 2 * post * P.s, P.s * 0.24);
+  ctx.fillStyle = '#f3f4f6';
+  ctx.fillRect(P.X(-post), P.Y(0) - P.s * 0.06, 2 * post * P.s, P.s * 0.12);
+  for (const x of [-post, post]) {
+    ctx.beginPath();
+    ctx.arc(P.X(x), P.Y(0), Math.max(3, P.s * 0.16), 0, Math.PI * 2);
+    ctx.fillStyle = '#c9ced8';
+    ctx.fill();
+  }
+}
+
+/** The players and the ball from above: a disc in the kit's colour for each, their name beneath. */
+function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMotion, props: CourtProps, now: number): void {
+  const ball = m.flight !== null ? flightAt(m.flight, now) : null;
+  // Where the ball will come down, while it is on its way.
+  if (m.flight !== null && m.flight.to.z < 1.3) {
+    const t = Math.min(1, (now - m.flight.t0) / Math.max(1, m.flight.ms));
+    if (t < 1) {
+      ctx.beginPath();
+      ctx.arc(P.X(m.flight.to.x), P.Y(m.flight.to.y), P.s * (0.3 + 0.08 * Math.sin(now / 90)), 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  const r = Math.max(7, P.s * 0.36);
+  const { store, kits, teamOf } = props;
+  for (const [p, b] of m.bodies) {
+    const X = P.X(b.x);
+    const Y = P.Y(b.y);
+    const lift = 1 + Math.min(0.35, b.lift * 0.35);
+    const kit = kits[teamOf(p)];
+    const role = store.position[p] as Position;
+    ctx.save();
+    ctx.globalAlpha = b.alpha;
+    // A shadow, wider as the player leaves the floor.
+    ctx.beginPath();
+    ctx.ellipse(X + 1.5, Y + 2.5, r * lift, r * lift * 0.9, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fill();
+    if (m.actor === p) {
+      ctx.beginPath();
+      ctx.arc(X, Y, r * lift + 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 199, 44, 0.35)';
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(X, Y, r * lift, 0, Math.PI * 2);
+    ctx.fillStyle = role === Position.Libero ? kit.libero : kit.shirt;
+    ctx.fill();
+    ctx.lineWidth = m.actor === p ? 3 : 2;
+    ctx.strokeStyle = m.actor === p ? '#ffc72c' : 'rgba(255, 255, 255, 0.9)';
+    ctx.stroke();
+    ctx.restore();
+
+    if (props.labels === 'off') continue;
+    const name = store.shortName(p).split(' ').pop() ?? '';
+    const rating = props.ratings.get(p);
+    ctx.save();
+    ctx.globalAlpha = b.alpha;
+    ctx.font = `700 ${Math.max(10, Math.min(13, P.s * 0.42))}px Archivo, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const ty = Y + r * lift + 3;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(8, 14, 24, 0.85)';
+    ctx.strokeText(name, X, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(name, X, ty);
+    if (props.labels === 'ratings' && rating !== undefined) {
+      const text = rating.toFixed(1);
+      const tw = ctx.measureText(text).width + 8;
+      const by = ty + 15;
+      roundRect(ctx, X - tw / 2, by, tw, 15, 4);
+      ctx.fillStyle = ratingColour(rating);
+      ctx.fill();
+      ctx.fillStyle = '#0b111b';
+      ctx.fillText(text, X, by + 2);
+    }
+    ctx.restore();
+  }
+
+  if (ball !== null) {
+    // Its shadow on the floor, and the ball itself lifted by how high it is.
+    ctx.beginPath();
+    ctx.ellipse(P.X(ball.x), P.Y(ball.y), Math.max(3, P.s * 0.14), Math.max(2, P.s * 0.1), 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0.12, 0.45 - ball.z * 0.06)})`;
+    ctx.fill();
+    const lift = ball.z * P.s * 0.28;
+    m.trail.forEach((t, i) => {
+      ctx.beginPath();
+      ctx.arc(P.X(t.x), P.Y(t.y) - t.z * P.s * 0.28, Math.max(1.5, P.s * 0.08) * (0.4 + (i / m.trail.length) * 0.5), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.06 + (i / m.trail.length) * 0.2})`;
+      ctx.fill();
+    });
+    const br = Math.max(4.5, P.s * (0.17 + ball.z * 0.012));
+    ctx.beginPath();
+    ctx.arc(P.X(ball.x), P.Y(ball.y) - lift, br, 0, Math.PI * 2);
+    ctx.fillStyle = '#fbf8ec';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, br * 0.3);
+    ctx.strokeStyle = 'rgba(59, 99, 214, 0.8)';
+    ctx.beginPath();
+    ctx.arc(P.X(ball.x), P.Y(ball.y) - lift, br * 0.6, -0.4, 1.4);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 199, 44, 0.9)';
+    ctx.beginPath();
+    ctx.arc(P.X(ball.x), P.Y(ball.y) - lift, br * 0.6, 2.4, 4.1);
+    ctx.stroke();
+  }
 }
 
 // ---- How each player looks ------------------------------------------------------------

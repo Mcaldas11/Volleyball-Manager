@@ -25,8 +25,10 @@ interface V3 {
   z: number;
 }
 
-/** In the side stand beyond the `+x` sideline, raised, and nudged towards the near end. */
-export const CAMERA: Readonly<V3> = { x: 13.5, y: -2.4, z: 7.2 };
+/** In the side stand beyond the `+x` sideline, high and close — the broadcast's
+ *  main camera, looking down on the court so it fills the picture — and nudged
+ *  towards the near end. */
+export const CAMERA: Readonly<V3> = { x: 9, y: -1.4, z: 13.5 };
 /** Where it points: just over the middle of the court. */
 const TARGET: Readonly<V3> = { x: 0, y: 0.2, z: 0.6 };
 

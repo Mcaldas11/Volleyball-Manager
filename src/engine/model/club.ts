@@ -12,6 +12,7 @@
 import { defaultTactics, type TeamTactics } from '../match/tactics.ts';
 import type { SavedTactic } from './tacticSlots.ts';
 import type { TacticRead } from './tacticRead.ts';
+import type { TrainingPlan } from '../world/training.ts';
 
 export interface Finances {
   /** Cash in hand. Negative for long enough and the club is in trouble. */
@@ -88,6 +89,8 @@ export interface Club {
   /** What the opposition has learnt of the manager's tactics — see tacticRead.ts.
    *  Absent until his first match in charge. */
   tacticRead?: TacticRead;
+  /** The manager's training plan — see training.ts. Absent until he first sets one. */
+  training?: TrainingPlan;
 
   /** History. */
   titlesWon: number;

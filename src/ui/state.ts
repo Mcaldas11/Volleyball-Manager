@@ -10,7 +10,7 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  MatchFormat, MatchSimulator, simulateMatch, type MatchResult, type RallyLogEntry, type SubstitutionPlan,
+  MatchFormat, MatchSimulator, simulateMatch, type MatchResult, type RallyLogEntry, type ShoutKind, type SubstitutionPlan,
   type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
@@ -19,7 +19,7 @@ import { NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { type Position } from '../engine/model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
-  advanceDay, applyMatchResult, newSeasonContext, oppositionRead, pickLineup, playFixture, toTeamSetup,
+  advanceDay, applyMatchResult, matchPrep, newSeasonContext, oppositionRead, pickLineup, playFixture, toTeamSetup,
   type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
@@ -312,7 +312,7 @@ export interface MatchdayState {
   /** Second libero who plays whenever the team serves, or -1. */
   homeDefensiveLibero: number;
   homeBench: number[];
-  speed: 0.75 | 1 | 1.5;
+  speed: 1 | 1.5 | 2;
   paused: boolean;
   /** Wall-clock ms; once reached the rally loop auto-resumes — a substitution stoppage, not a real pause. */
   pauseUntil: number | null;
@@ -335,7 +335,23 @@ export interface MatchdayState {
     libero?: 'reception' | 'defence';
     reason?: SubstitutionReason;
   } | null;
+  /** The user's last shout from the touchline and how it landed, for the banner;
+   *  `rally` is the log length it was made at, for the wait before the next. */
+  lastShout?: { kind: ShoutKind; effect: 'lifted' | 'flat' | 'tense'; seq: number; rally: number } | null;
 }
+
+const COURT_VIEW_KEY = 'vm.courtView';
+
+function readCourtView(): '3d' | '2d' {
+  try {
+    return window.localStorage.getItem(COURT_VIEW_KEY) === '2d' ? '2d' : '3d';
+  } catch {
+    return '3d';
+  }
+}
+
+/** Rallies between one shout from the touchline and the next. */
+export const SHOUT_COOLDOWN = 6;
 
 class Game {
   world: World | null = null;
@@ -1642,6 +1658,7 @@ class Game {
       timeoutsUsed: [0, 0],
       timeoutActive: null,
       lastSubstitution: null,
+      lastShout: null,
     };
     this.selectedPlayer = null;
     this.selectedClub = null;
@@ -1783,6 +1800,7 @@ class Game {
       tactics: club.tactics,
       // A friendly teaches the opposition nothing.
       read: isFriendly(world, md.fixture) ? 0 : oppositionRead(world, club),
+      prep: matchPrep(world, club, md.fixture.day),
     };
     // The other side keeps any promise of games it has made a loanee.
     const homeSetup = md.userIsHome ? userSetup : toTeamSetup(world.players, homeClub, loanStarters(world, homeClub));
@@ -1815,10 +1833,41 @@ class Game {
     this.emit();
   }
 
-  setSpeed(speed: 0.75 | 1 | 1.5): void {
+  setSpeed(speed: 1 | 1.5 | 2): void {
     const md = this.matchday;
     if (md === null) return;
     md.speed = speed;
+    this.emit();
+  }
+
+  /** Whether the touchline can be heard again yet — and in how many rallies, if not. */
+  shoutWait(): number {
+    const md = this.matchday;
+    if (md === null || md.lastShout == null) return 0;
+    return Math.max(0, SHOUT_COOLDOWN - (md.log.length - md.lastShout.rally));
+  }
+
+  /** A word from the touchline to the user's side. */
+  shout(kind: ShoutKind): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.stage !== 'live' || this.shoutWait() > 0) return;
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const effect = sim.shout(team, kind);
+    md.lastShout = { kind, effect, seq: ++this.subSeq, rally: md.log.length };
+    this.emit();
+  }
+
+  /** How the user watches the court: from the stand in 3D, or from above in 2D — remembered between matches. */
+  courtView: '3d' | '2d' = readCourtView();
+
+  setCourtView(view: '3d' | '2d'): void {
+    this.courtView = view;
+    try {
+      window.localStorage.setItem(COURT_VIEW_KEY, view);
+    } catch {
+      // A private window: the choice lasts the session.
+    }
     this.emit();
   }
 
@@ -2288,6 +2337,7 @@ class Game {
       timeoutsUsed: [0, 0],
       timeoutActive: null,
       lastSubstitution: null,
+      lastShout: null,
     };
     this.selectedPlayer = null;
     this.selectedClub = null;

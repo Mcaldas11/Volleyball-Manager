@@ -30,6 +30,7 @@ import { estimateValue, generatePlayer, rollPotential } from './playerGen.ts';
 import { injuryNotice } from './inbox.ts';
 import { loanOf } from './loans.ts';
 import { seasonEndDay, type World } from './world.ts';
+import { clubWeek, weekEffect, weekInjury, type ClubWeek } from './training.ts';
 
 /** Injuries a player can pick up, with duration in days and severity. */
 interface InjuryDef {
@@ -69,6 +70,7 @@ export function rollInjuries(world: World): void {
   for (const c of world.clubs) medical[c.id] = 1.25 - (c.medicalFacilities / 20) * 0.5;
 
   const weights = INJURIES.map((i) => i.weight);
+  const weeks = new Map<number, ClubWeek>();
 
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i) || store.injuryDaysLeft[i] > 0) continue;
@@ -80,8 +82,15 @@ export function rollInjuries(world: World): void {
     const durability = store.getAttr(i, 'durability') / 20;
     const fatigue = 1 - store.condition[i] / 100;
 
+    // Every player carries the load of the week his club planned for him.
+    let week = weeks.get(club);
+    if (week === undefined) {
+      week = clubWeek(world, world.clubs[club]);
+      weeks.set(club, week);
+    }
+    const planned = weekInjury(world, world.clubs[club], i, week);
     // Base weekly risk, modulated by the things that actually drive it.
-    const risk =
+    const risk = planned *
       0.0075 *
       (0.55 + proneness * 1.1) *
       (1.35 - durability * 0.7) *
@@ -140,6 +149,8 @@ export function weeklyTraining(world: World): void {
   const store = world.players;
   const rng = world.rng;
   const coaching = coachingQualityByClub(world);
+  // Each club's week, worked out once for its whole squad.
+  const weeks = new Map<number, ClubWeek>();
 
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i)) continue;
@@ -165,6 +176,14 @@ export function weeklyTraining(world: World): void {
 
     const facilities = world.clubs[club].trainingFacilities / 20;
     const quality = 0.45 + coaching[club] * 0.6 + facilities * 0.35;
+    // Every club trains to its plan: the week's sessions and the player's own programme.
+    const c = world.clubs[club];
+    let week = weeks.get(club);
+    if (week === undefined) {
+      week = clubWeek(world, c);
+      weeks.set(club, week);
+    }
+    const plan = weekEffect(world, c, i, week);
 
     // Games are where training sticks. A young player who plays comes on far
     // quicker than one watching from the bench — the reason to send him out
@@ -175,10 +194,11 @@ export function weeklyTraining(world: World): void {
     const gap = ceiling - ca;
     // Weekly movement is tiny; a season of it is what shows.
     const rate = gap > 0 ? 0.012 : 0.006;
-    const delta = gap * rate * drive * quality * (gap > 0 ? games : 1) + rng.gaussian(0, 0.7);
+    const planned = gap > 0 ? plan.dev : 1;
+    const delta = gap * rate * drive * quality * planned * (gap > 0 ? games : 1) + rng.gaussian(0, 0.7);
 
     if (Math.abs(delta) < 0.05) continue;
-    applyAbilityDelta(store, i, delta, age, rng);
+    applyAbilityDelta(store, i, delta, age, rng, plan.bias);
   }
 }
 
@@ -217,6 +237,8 @@ function applyAbilityDelta(
   deltaCA: number,
   age: number,
   rng: Rng,
+  /** Training's pull towards some attributes — a multiplier on their weight, by attribute index. */
+  bias?: ArrayLike<number>,
 ): void {
   const pos = store.position[i] as Position;
   const w = weightsFor(pos);
@@ -237,9 +259,11 @@ function applyAbilityDelta(
         // and mental attributes that keep improving past physical peak.
         let weight = w[a];
         if (age >= 28) weight += (LATE_GROWTH_WEIGHT[name] ?? 0) * 1.4;
-        if (weight <= 0) continue;
+        // Training can bring on an attribute the position has no use for.
+        const pull = bias?.[a] ?? 1;
+        if (weight <= 0 && pull <= 1) continue;
         candidates.push(a);
-        weights.push(weight * (20 - value) / 19);
+        weights.push((Math.max(weight, 0.05) * pull) * (20 - value) / 19);
       } else {
         if (value <= 1) continue;
         const decay = AGE_DECAY_WEIGHT[name] ?? 0.12;

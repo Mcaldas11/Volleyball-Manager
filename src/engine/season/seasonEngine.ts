@@ -29,6 +29,7 @@ import { quickSimulate } from './quickSim.ts';
 import { progressPlayoffs } from './playoffs.ts';
 import { progressCups, scheduleCupSeason } from './cups.ts';
 import { friendliesDay, isFriendly } from './friendlies.ts';
+import { prepCoverage, trainingDay } from '../world/training.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
@@ -182,6 +183,11 @@ export function pickLineup(
   return { lineup: finalLineup, libero, defensiveLibero, bench };
 }
 
+/** What a club worked on for a match in the days before it. */
+export function matchPrep(world: World, club: Club, day: number): TeamSetup['prep'] {
+  return prepCoverage(world, club, day);
+}
+
 /** How well the opposition reads a club's tactic: the user's, which every side studies — nobody else's. */
 export function oppositionRead(world: World, club: Club): number {
   return club.id === world.userClubId ? readLevel(club.tacticRead, club.tactics) : 0;
@@ -234,8 +240,8 @@ export function playFixture(
   const friendly = isFriendly(world, fixture);
   if (detailed || friendly) {
     const result = simulateMatch(store, {
-      home: { ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home) },
-      away: { ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away) },
+      home: { ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home), prep: matchPrep(world, home, fixture.day) },
+      away: { ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away), prep: matchPrep(world, away, fixture.day) },
       format: fixture.format,
       importance: fixture.importance,
       neutralVenue: fixture.neutralVenue,
@@ -419,6 +425,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   processDeals(world);
   careerDay(world);
   friendliesDay(world);
+  trainingDay(world);
 
   if (todays !== undefined) {
     for (const fid of todays) {

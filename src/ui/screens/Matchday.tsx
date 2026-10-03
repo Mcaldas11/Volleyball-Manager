@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Position } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
-import type { RallyContact } from '../../engine/match/engine.ts';
+import type { RallyContact, ShoutKind } from '../../engine/match/engine.ts';
 import {
-  abilityClass, Bar, Card, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
-  Segmented, StarMeter,
+  abilityClass, Bar, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
+  Segmented, StarMeter, useDismiss,
 } from '../components.tsx';
 import { NATIONS } from '../../engine/world/nations.ts';
 import type { World } from '../../engine/world/world.ts';
@@ -14,7 +14,7 @@ import { rallyBeats, setupScene, type Scene } from '../matchCourt.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
 import { Formation, FORMATION_NAMES, formationOf } from '../../engine/match/tactics.ts';
-import { RallyTicker } from './Match.tsx';
+import { describeRallyHighlight } from './Match.tsx';
 import { useGame, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 
@@ -102,19 +102,6 @@ async function animateRally(
     }
     await sleep(ms);
   }
-}
-
-/** Whether a CSS media query matches, kept in step as the window resizes. */
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const onChange = (): void => setMatches(mql.matches);
-    mql.addEventListener('change', onChange);
-    onChange();
-    return () => mql.removeEventListener('change', onChange);
-  }, [query]);
-  return matches;
 }
 
 export function MatchdayScreen(): JSX.Element | null {
@@ -432,8 +419,6 @@ function completedSets(log: readonly MatchdayLogEntry[], currentSet: number, mat
   return out;
 }
 
-/** The tabs of the live side panel; 'stats' only on screens too narrow for the stats column. */
-type LivePanelTab = 'commentary' | 'subs' | 'stats';
 
 const STAT_ROWS: ReadonlyArray<[keyof TeamLiveStats, string]> = [
   ['points', 'Points won'],
@@ -442,6 +427,81 @@ const STAT_ROWS: ReadonlyArray<[keyof TeamLiveStats, string]> = [
   ['blocks', 'Blocks'],
   ['errors', 'Errors'],
 ];
+
+/** The players on court for a side, in the order a team sheet lists them: setter, hitters, middles, libero. */
+const ROLE_ORDER: Readonly<Record<Position, number>> = {
+  [Position.Setter]: 0, [Position.OutsideHitter]: 1, [Position.Opposite]: 2, [Position.MiddleBlocker]: 3, [Position.Libero]: 4,
+};
+
+/** What a shout sounded like from the touchline, and how it landed. */
+const SHOUT_LINES: Readonly<Record<ShoutKind, { label: string; hint: string; line: string }>> = {
+  encourage: { label: 'Encourage', hint: 'Lift the side', line: 'Come on — keep going!' },
+  demand: { label: 'Demand more', hint: 'Best when behind', line: 'Is that all you have got?!' },
+  calm: { label: 'Calm down', hint: 'Settle a side in a slump', line: 'Breathe — one point at a time.' },
+};
+const SHOUT_EFFECT: Readonly<Record<'lifted' | 'flat' | 'tense', string>> = {
+  lifted: 'the side responds',
+  flat: 'it changes little',
+  tense: 'they tighten up',
+};
+
+/** A side's six on court and its libero, each with the live rating — the panel down either side of the court. */
+function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolean; ratings: Map<number, number> }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const md = g.matchday!;
+  const store = world.players;
+  const side = md.sides[team];
+  const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
+  const libero = (team === 0 ? md.snapshot?.homeLibero : md.snapshot?.awayLibero) ?? -1;
+  const rows = [...court, ...(libero >= 0 ? [libero] : [])]
+    .filter((p, i, all) => all.indexOf(p) === i)
+    .sort((a, b) => ROLE_ORDER[store.position[a] as Position] - ROLE_ORDER[store.position[b] as Position]);
+  return (
+    <section className="card lv-team">
+      <header className="lv-team-head">
+        <SideCrest side={side} size={22} />
+        <strong>{side.name}</strong>
+        <span className={`lv-serve-dot${serving ? ' on' : ''}`} title={serving ? 'Serving' : undefined} />
+      </header>
+      <div className="lv-team-rows">
+        {rows.map((p) => {
+          const r = ratings.get(p);
+          return (
+            <div key={p} className="lv-team-row" onClick={() => g.select(p)} title={store.fullName(p)}>
+              <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={22} />
+              <span className="lv-team-name">{store.shortName(p).split(' ').pop()}</span>
+              <Pos pos={store.position[p] as Position} />
+              {r !== undefined ? <RatingBadge value={r} size="sm" /> : <span className="lv-rating-none">—</span>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** The tactics, changed between rallies — the same object the engine reads, so a change applies from the next. */
+function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | null {
+  const g = useGame();
+  const t = g.matchTactics();
+  if (t === null) return null;
+  return (
+    <div className="lv-overlay">
+      <header className="lv-overlay-head">
+        <strong><Icon name="tactics" size={16} /> Tactics</strong>
+        <span className="faint">Changes apply from the next rally.</span>
+        <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={16} /></button>
+      </header>
+      <div className="lv-overlay-body grid2 timeout-fields">
+        <ChoiceField label="Offensive system" value={t.offense} onChange={(v) => { t.offense = v; g.touch(); }} options={OFFENSE_OPTIONS} />
+        <ChoiceField label="Tempo" value={t.tempo} onChange={(v) => { t.tempo = v; g.touch(); }} options={TEMPO_OPTIONS} />
+        <ChoiceField label="Defensive system" value={t.defense} onChange={(v) => { t.defense = v; g.touch(); }} options={DEFENSE_OPTIONS} />
+        <ChoiceField label="Serve strategy" value={t.serve} onChange={(v) => { t.serve = v; g.touch(); }} options={SERVE_OPTIONS} />
+      </div>
+    </div>
+  );
+}
 
 function LiveMatchView(): JSX.Element {
   const g = useGame();
@@ -454,10 +514,9 @@ function LiveMatchView(): JSX.Element {
   const nearTeam: 0 | 1 = md.userIsHome ? 0 : 1;
   const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, store, nearTeam));
   const [labels, setLabels] = useState<CourtLabels>('ratings');
-  const [panelTab, setPanelTab] = useState<LivePanelTab>('commentary');
-  // On a narrow screen the stats column folds into the side panel as a tab.
-  const compact = useMediaQuery('(max-width: 1100px)');
-  const tab: LivePanelTab = !compact && panelTab === 'stats' ? 'commentary' : panelTab;
+  const [overlay, setOverlay] = useState<'subs' | 'tactics' | null>(null);
+  const [shoutOpen, setShoutOpen] = useState(false);
+  const shoutRef = useDismiss(shoutOpen, () => setShoutOpen(false));
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
   const [bigPlay, setBigPlay] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
@@ -508,6 +567,17 @@ function LiveMatchView(): JSX.Element {
     if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
   }, [lastSubSeq]);
+
+  // A shout from the touchline goes up on the same banner.
+  const lastShoutSeq = md.lastShout?.seq;
+  useEffect(() => {
+    const s = md.lastShout;
+    if (s == null) return;
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    setSubAnnouncement({ text: `“${SHOUT_LINES[s.kind].line}” — ${SHOUT_EFFECT[s.effect]}`, team, key: s.seq });
+    if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
+    subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
+  }, [lastShoutSeq]);
 
   // Drives the match forward itself: play a rally, animate it, repeat.
   // No timer in state.ts — pacing is entirely a presentation concern here.
@@ -583,13 +653,14 @@ function LiveMatchView(): JSX.Element {
     };
   }, []);
 
+  // The newest point is at the top of the list: keep it in view.
   useEffect(() => {
-    logRef.current?.scrollTo(0, logRef.current.scrollHeight);
-  }, [revealed, tab]);
+    logRef.current?.scrollTo(0, 0);
+  }, [revealed]);
 
   // A timeout is the moment for changes — open the substitutions.
   useEffect(() => {
-    if (md.timeoutActive !== null) setPanelTab('subs');
+    if (md.timeoutActive !== null) setOverlay('subs');
   }, [md.timeoutActive]);
 
   // A substitution or libero change between rallies redraws the set-up.
@@ -601,8 +672,6 @@ function LiveMatchView(): JSX.Element {
   const userTeamIdx: 0 | 1 = md.userIsHome ? 0 : 1;
   const kits = kitsFor(sideHue(world, homeClub), sideHue(world, awayClub));
   const teamOf = (p: number): 0 | 1 => (homeClub.players.includes(p) ? 0 : 1);
-  const farClub = nearTeam === 0 ? awayClub : homeClub;
-  const nearClub = nearTeam === 0 ? homeClub : awayClub;
   // What the scoreboard shows: the state before the rally still being
   // animated, or the live snapshot once every rally has been shown.
   const pending = revealed < md.log.length ? md.log[revealed] : null;
@@ -626,8 +695,6 @@ function LiveMatchView(): JSX.Element {
       serving: snap?.serving ?? 0,
       matchOver: snap?.matchOver ?? false,
     };
-  const farSets = nearTeam === 0 ? view.awaySets : view.homeSets;
-  const nearSets = nearTeam === 0 ? view.homeSets : view.awaySets;
   const stats = liveStats(shownLog);
   const ratings = g.liveRatings();
   const setHistory = completedSets(shownLog, view.set, view.matchOver);
@@ -639,96 +706,73 @@ function LiveMatchView(): JSX.Element {
       : md.paused && md.pauseUntil !== null
         ? 'Substitution'
         : md.paused ? 'Paused' : 'Live';
-
   const remaining = g.subsRemaining();
-  const sideCards = (
-    <>
-      <Card title="Match Stats" icon="stats" className="live-stats-card">
-        <div className="cmp-head">
-          <span>{homeClub.shortName}</span>
-          <span>{awayClub.shortName}</span>
-        </div>
-        {STAT_ROWS.map(([key, label]) => {
-          const h = stats[0][key];
-          const a = stats[1][key];
-          const total = h + a;
-          return (
-            <div className="cmp" key={key}>
-              <div className="cmp-row">
-                <span className="cmp-val">{h}</span>
-                <span className="cmp-label">{label}</span>
-                <span className="cmp-val">{a}</span>
-              </div>
-              <div className="cmp-bar">
-                <span className="cmp-home" style={{ width: `${total > 0 ? (h / total) * 100 : 50}%` }} />
-                <span className="cmp-away" style={{ width: `${total > 0 ? (a / total) * 100 : 50}%` }} />
-              </div>
-            </div>
-          );
-        })}
-        <div className="prob-block">
-          <span className="prob-label">Win probability</span>
-          <div className="prob">
-            <span className="prob-val">{(homeProb * 100).toFixed(0)}%</span>
-            <div className="prob-bar">
-              <span className="cmp-home" style={{ width: `${homeProb * 100}%` }} />
-              <span className="cmp-away" style={{ width: `${(1 - homeProb) * 100}%` }} />
-            </div>
-            <span className="prob-val">{((1 - homeProb) * 100).toFixed(0)}%</span>
-          </div>
-        </div>
-      </Card>
-      <LiveRatingsCard ratings={ratings} defaultTeam={userTeamIdx} />
-    </>
-  );
+  const shoutWait = g.shoutWait();
+  const last = shownLog[shownLog.length - 1]?.entry;
+  const lastText = last !== undefined ? describeRallyHighlight(last, store) : null;
+  const points = [...shownLog].reverse().map((l) => l.entry);
 
   return (
-    <div className="live">
-      <div className="scoreboard">
-        <div className={`sb-team${view.serving === 0 ? ' serving' : ''}`}>
-          <SideCrest side={homeClub} size={42} />
-          <div className="sb-team-text">
-            <span className="sb-name">{homeClub.name}</span>
-            <span className="sb-tag">Home{userTeamIdx === 0 ? ' · You' : ''}</span>
+    <div className="lv" style={{ ["--lv-home" as string]: kits[0].shirt, ["--lv-away" as string]: kits[1].shirt } as CSSProperties}>
+      <div className="lv-top">
+        <div className="lv-score">
+          <div className="lv-score-meta">
+            <span className={`lv-live status-${status.toLowerCase().replace(' ', '-')}`}><i />{status}</span>
+            <span className="faint">{md.title}</span>
           </div>
-          <span className="sb-serve" title="Serving"><Icon name="ball" size={17} /></span>
-        </div>
-        <div className="sb-center">
-          <div className="sb-sets">
-            <span>{view.homeSets}</span>
-            <span className="sb-colon">:</span>
-            <span>{view.awaySets}</span>
+          <div className="lv-score-main">
+            <span className="lv-kitbar" style={{ background: kits[0].shirt }} />
+            <SideCrest side={homeClub} size={26} />
+            <b className="lv-code">{homeClub.shortName}</b>
+            <span className={`lv-serve-dot${view.serving === 0 ? ' on' : ''}`} />
+            <span className="lv-points">{view.homeScore}</span>
+            <span className="lv-dash">–</span>
+            <span className="lv-points">{view.awayScore}</span>
+            <span className={`lv-serve-dot${view.serving === 1 ? ' on' : ''}`} />
+            <b className="lv-code">{awayClub.shortName}</b>
+            <SideCrest side={awayClub} size={26} />
+            <span className="lv-kitbar" style={{ background: kits[1].shirt }} />
           </div>
-          <div className="sb-live">
-            <span className="sb-set-label">{view.matchOver ? 'Full time' : `Set ${view.set + 1}`}</span>
-            <span className="sb-points">{view.homeScore} – {view.awayScore}</span>
-            {setHistory.length > 0 && (
-              <span className="set-chips">
-                {setHistory.map(([h, a], i) => (
-                  <span key={i} className="set-chip">
-                    <span className={h > a ? 'won' : ''}>{h}</span>
-                    <span className={a > h ? 'won' : ''}>{a}</span>
-                  </span>
-                ))}
-              </span>
-            )}
+          <div className="lv-score-sets">
+            <span>{view.matchOver ? 'Full time' : `Set ${view.set + 1}`} · Sets {view.homeSets}–{view.awaySets}</span>
+            {setHistory.map(([h, a], i) => (
+              <span key={i} className="lv-set-chip"><b className={h > a ? 'won' : ''}>{h}</b>-<b className={a > h ? 'won' : ''}>{a}</b></span>
+            ))}
           </div>
         </div>
-        <div className={`sb-team right${view.serving === 1 ? ' serving' : ''}`}>
-          <span className="sb-serve" title="Serving"><Icon name="ball" size={17} /></span>
-          <div className="sb-team-text">
-            <span className="sb-name">{awayClub.name}</span>
-            <span className="sb-tag">Away{userTeamIdx === 1 ? ' · You' : ''}</span>
+        <div className="lv-momentum" title="Win probability">
+          <span>{homeClub.name}</span>
+          <div className="lv-momentum-bar">
+            <i style={{ width: `${homeProb * 100}%`, background: kits[0].shirt }} />
+            <i style={{ width: `${(1 - homeProb) * 100}%`, background: kits[1].shirt }} />
           </div>
-          <SideCrest side={awayClub} size={42} />
+          <span>{awayClub.name}</span>
         </div>
       </div>
 
-      <div className={`live-grid${compact ? ' compact' : ''}`}>
-        {!compact && <div className="live-side">{sideCards}</div>}
+      <div className="lv-main">
+        <div className="lv-col">
+          <LiveTeamCard team={0} serving={view.serving === 0} ratings={ratings} />
+          <section className="card lv-points-card">
+            <header className="lv-card-head">Point by point</header>
+            <div className="lv-pbp" ref={logRef}>
+              {points.length === 0 && <div className="lv-pbp-row dim">Kicking off…</div>}
+              {points.map((r, i) => {
+                const won = r.winner;
+                const d = describeRallyHighlight(r, store);
+                return (
+                  <div key={points.length - i} className={`lv-pbp-row ${won === 0 ? 'home' : 'away'}`}>
+                    <span className="lv-pbp-score">{r.scoreBefore[0] + (won === 0 ? 1 : 0)}-{r.scoreBefore[1] + (won === 1 ? 1 : 0)}</span>
+                    <span className="lv-pbp-text">{d.before}{d.player !== '' && <strong>{d.player}</strong>}{d.after}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
 
-        <div className="court-col">
-          <div className="card court-panel">
+        <div className="lv-center">
+          <div className="card court-panel lv-court">
             <LiveCourt
               scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
               // The referee sees a stoppage — and signals a time-out — once
@@ -737,20 +781,10 @@ function LiveMatchView(): JSX.Element {
               paused={pending === null && md.paused}
               speed={md.speed}
               teamNames={[homeClub.shortName, awayClub.shortName]}
+              view={g.courtView}
             />
-
-            {/* Who plays which half — the user's side is always on the left. */}
-            <span className="court-tag far">
-              <SideCrest side={farClub} size={16} />
-              <span className="court-tag-name">{farClub.shortName}</span>
-              <span className="court-tag-sets">{farSets}</span>
-            </span>
-            <span className="court-tag near">
-              <SideCrest side={nearClub} size={16} />
-              <span className="court-tag-name">{nearClub.shortName}</span>
-              <span className="court-tag-sets">{nearSets}</span>
-            </span>
-            <div className="court-labels" title="What to show beside each player">
+            <div className="lv-court-tools">
+              <Segmented<'3d' | '2d'> size="sm" options={[['3d', '3D'], ['2d', '2D']]} value={g.courtView} onChange={(v) => g.setCourtView(v)} />
               <Segmented<CourtLabels>
                 size="sm"
                 options={[['ratings', 'Ratings'], ['names', 'Names'], ['off', 'Off']]}
@@ -772,98 +806,119 @@ function LiveMatchView(): JSX.Element {
                 {subAnnouncement.text}
               </div>
             )}
-            {md.timeoutActive !== null && (
+            {md.timeoutActive !== null && overlay !== 'subs' && (
               <TimeoutPanel
                 secondsLeft={timeoutSecondsLeft}
                 calledBy={md.timeoutActive === 0 ? homeClub.shortName : awayClub.shortName}
               />
             )}
+            {overlay === 'subs' && (
+              <div className="lv-overlay">
+                <header className="lv-overlay-head">
+                  <strong><Icon name="swap" size={16} /> Substitutions</strong>
+                  <span className="faint">{remaining} left this set{md.timeoutActive !== null ? ` · timeout 0:${timeoutSecondsLeft.toString().padStart(2, '0')}` : ''}</span>
+                  {md.timeoutActive !== null && (
+                    <button className="primary sm" onClick={() => g.resumeFromTimeout()}><Icon name="play" size={13} /> Resume play</button>
+                  )}
+                  <button className="icon-btn" onClick={() => setOverlay(null)} title="Close"><Icon name="close" size={16} /></button>
+                </header>
+                <div className="lv-overlay-body"><Substitutions teamIdx={userTeamIdx} /></div>
+              </div>
+            )}
+            {overlay === 'tactics' && <TacticsOverlay onClose={() => setOverlay(null)} />}
           </div>
-
-          <div className="match-bar">
-            <span className={`live-status status-${status.toLowerCase().replace(' ', '-')}`}>
-              <span className="live-dot" />{status}
+          <div className="lv-caption">
+            <span className="lv-caption-text">
+              {lastText === null ? 'Waiting for the first serve' : <>{lastText.before}{lastText.player !== '' && <strong>{lastText.player}</strong>}{lastText.after}</>}
             </span>
-            <Segmented
-              size="sm"
-              options={[[0.75, '0.75×'], [1, '1×'], [1.5, '1.5×']] as const}
-              value={md.speed}
-              onChange={(sp) => g.setSpeed(sp)}
-            />
-            {md.paused
-              ? (
-                <button className="sm" disabled={md.timeoutActive !== null} onClick={() => g.resume()} title="Resume">
-                  <Icon name="play" size={14} /><span className="mb-text">Resume</span>
-                </button>
-              )
-              : (
-                <button className="sm" disabled={md.timeoutActive !== null} onClick={() => g.pause()} title="Pause">
-                  <Icon name="pause" size={14} /><span className="mb-text">Pause</span>
-                </button>
-              )}
-            <button
-              className="sm"
-              disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
-              onClick={() => g.callTimeout()}
-              title="Call a timeout"
-            >
-              <Icon name="whistle" size={14} /><span className="mb-text">Timeout</span>
-              <span className="count-chip">{2 - md.timeoutsUsed[userTeamIdx]}</span>
-            </button>
-            <span className="flex-spacer" />
-            <button className="sm danger" onClick={() => g.finishMatchdayNow()} title="Skip to the result">
-              <Icon name="fastForward" size={14} /><span className="mb-text">Finish match</span>
-            </button>
+            <b>{view.homeScore}-{view.awayScore}</b>
           </div>
         </div>
 
-        <section className="card live-panel">
-          <div className="panel-tabs" role="tablist">
-            <button
-              role="tab"
-              aria-selected={tab === 'commentary'}
-              className={`panel-tab${tab === 'commentary' ? ' active' : ''}`}
-              onClick={() => setPanelTab('commentary')}
-            >
-              <Icon name="press" size={14} /> Commentary
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === 'subs'}
-              className={`panel-tab${tab === 'subs' ? ' active' : ''}`}
-              onClick={() => setPanelTab('subs')}
-            >
-              <Icon name="swap" size={14} /> Subs
-              <span className={`panel-tab-count${remaining <= 0 ? ' bad' : ''}`}>{remaining}</span>
-            </button>
-            {compact && (
-              <button
-                role="tab"
-                aria-selected={tab === 'stats'}
-                className={`panel-tab${tab === 'stats' ? ' active' : ''}`}
-                onClick={() => setPanelTab('stats')}
-              >
-                <Icon name="stats" size={14} /> Stats
-              </button>
-            )}
-          </div>
-          {tab === 'commentary' && (
-            <div className="ticker-scroll" ref={logRef}>
-              {shownLog.length > 0
-                ? (
-                  <RallyTicker
-                    entries={shownLog.map((l) => l.entry)}
-                    store={store}
-                    homeCode={homeClub.shortName}
-                    awayCode={awayClub.shortName}
-                  />
-                )
-                : <div className="ticker-entry dim">Kicking off…</div>}
+        <div className="lv-col">
+          <LiveTeamCard team={1} serving={view.serving === 1} ratings={ratings} />
+          <section className="card lv-stats-card">
+            <header className="lv-card-head">Match stats</header>
+            <div className="lv-stats-names">
+              <span>{homeClub.shortName}</span>
+              <span>{awayClub.shortName}</span>
+            </div>
+            {STAT_ROWS.map(([key, label]) => {
+              const h = stats[0][key];
+              const a = stats[1][key];
+              const total = h + a;
+              return (
+                <div className="lv-stat" key={key}>
+                  <div className="lv-stat-row"><b>{h}</b><span>{label}</span><b>{a}</b></div>
+                  <div className="lv-stat-bar">
+                    <i style={{ width: `${total > 0 ? (h / total) * 100 : 50}%`, background: kits[0].shirt }} />
+                    <i style={{ width: `${total > 0 ? (a / total) * 100 : 50}%`, background: kits[1].shirt }} />
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        </div>
+      </div>
+
+      <div className="lv-coachbar">
+        <span className="lv-coach-label">Coach</span>
+        <button
+          disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
+          onClick={() => g.callTimeout()}
+          title="Call a timeout"
+        >
+          <Icon name="whistle" size={15} /> Timeout <span className="lv-badge">{2 - md.timeoutsUsed[userTeamIdx]}</span>
+        </button>
+        <button className={overlay === 'subs' ? 'on' : ''} onClick={() => setOverlay((o) => (o === 'subs' ? null : 'subs'))}>
+          <Icon name="swap" size={15} /> Substitution <span className={`lv-badge${remaining <= 0 ? ' bad' : ''}`}>{remaining}</span>
+        </button>
+        <div className="lv-shout" ref={shoutRef}>
+          <button
+            className={shoutOpen ? 'on' : ''}
+            disabled={shoutWait > 0 || view.matchOver}
+            title={shoutWait > 0 ? `You can shout again in ${shoutWait} rallies` : 'A word from the touchline'}
+            onClick={() => setShoutOpen((o) => !o)}
+          >
+            <Icon name="press" size={15} /> Shout{shoutWait > 0 && <span className="lv-badge">{shoutWait}</span>}
+          </button>
+          {shoutOpen && (
+            <div className="menu-pop lv-shout-menu">
+              {(Object.keys(SHOUT_LINES) as ShoutKind[]).map((k) => (
+                <button key={k} onClick={() => { g.shout(k); setShoutOpen(false); }}>
+                  <span className="menu-pop-stack">
+                    <span>{SHOUT_LINES[k].label}</span>
+                    <span className="faint">{SHOUT_LINES[k].hint}</span>
+                  </span>
+                </button>
+              ))}
             </div>
           )}
-          {tab === 'subs' && <Substitutions teamIdx={userTeamIdx} />}
-          {tab === 'stats' && <div className="live-panel-stats">{sideCards}</div>}
-        </section>
+        </div>
+        <button className={overlay === 'tactics' ? 'on' : ''} onClick={() => setOverlay((o) => (o === 'tactics' ? null : 'tactics'))}>
+          <Icon name="tactics" size={15} /> Tactics
+        </button>
+        <span className="flex-spacer" />
+        {md.paused
+          ? (
+            <button disabled={md.timeoutActive !== null} onClick={() => g.resume()}>
+              <Icon name="play" size={14} /> Resume
+            </button>
+          )
+          : (
+            <button disabled={md.timeoutActive !== null} onClick={() => g.pause()}>
+              <Icon name="pause" size={14} /> Pause
+            </button>
+          )}
+        <Segmented
+          size="sm"
+          options={[[1, '1×'], [1.5, '1.5×'], [2, '2×']] as const}
+          value={md.speed}
+          onChange={(sp) => g.setSpeed(sp)}
+        />
+        <button className="lv-skip" onClick={() => g.finishMatchdayNow()} title="Skip to the result">
+          Skip to result <Icon name="arrowRight" size={14} />
+        </button>
       </div>
     </div>
   );
@@ -913,62 +968,6 @@ function SubCard({
       <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
       <Bar value={store.condition[playerIdx]} />
     </div>
-  );
-}
-
-/**
- * Every player's live rating, one side at a time, best first. Players still
- * on court are marked; substitutes appear once they have played a rally.
- */
-function LiveRatingsCard({
-  ratings, defaultTeam,
-}: {
-  ratings: Map<number, number>;
-  defaultTeam: 0 | 1;
-}): JSX.Element {
-  const g = useGame();
-  const world = g.world!;
-  const md = g.matchday!;
-  const store = world.players;
-  const [team, setTeam] = useState<0 | 1>(defaultTeam);
-  const players = md.sides[team].players;
-  const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
-  const libero = (team === 0 ? md.snapshot?.homeLibero : md.snapshot?.awayLibero) ?? -1;
-  const rows = [...ratings.entries()]
-    .filter(([p]) => players.includes(p))
-    .sort((a, b) => b[1] - a[1]);
-  const homeName = md.sides[0].shortName;
-  const awayName = md.sides[1].shortName;
-
-  return (
-    <Card
-      title="Ratings"
-      icon="star"
-      className="live-ratings-card"
-      flush
-      actions={(
-        <Segmented<0 | 1>
-          size="sm"
-          options={[[0, homeName], [1, awayName]]}
-          value={team}
-          onChange={setTeam}
-        />
-      )}
-    >
-      <div className="live-ratings">
-        {rows.length === 0 && <p className="empty">Ratings appear after the first rally.</p>}
-        {rows.map(([p, r]) => {
-          const onCourt = court.includes(p) || p === libero;
-          return (
-            <div className={`live-rating-row${onCourt ? '' : ' off'}`} key={p} title={store.fullName(p)}>
-              <Pos pos={store.position[p] as Position} />
-              <span className="live-rating-name">{store.shortName(p)}</span>
-              <RatingBadge value={r} size="sm" />
-            </div>
-          );
-        })}
-      </div>
-    </Card>
   );
 }
 

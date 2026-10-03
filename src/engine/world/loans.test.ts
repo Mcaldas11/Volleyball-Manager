@@ -11,7 +11,7 @@ import { endSeason } from '../season/rollover.ts';
 import { acceptIncomingOffer, counterLoanOffer, openTalks, processDeals, submitOffer } from './deals.ts';
 import { monthlyLoanReports } from './inbox.ts';
 import {
-  canRecall, coachRequests, coachTalkBlock, evaluateLoanCounter, evaluateLoanRequest, fitMatches, generateLoanOffers, loanOf, loanShare,
+  canRecall, coachRequests, coachTalkBlock, evaluateLoanCounter, evaluateLoanRequest, fitMatches, generateLoanOffers, loanOf,
   loanStarters, playingTimeOnOffer, promiseShare, recallFromLoan, recordLoanMatch, requestLoanReport, returnLoans,
   reviewLoanPromises, squadSize, startLoan, talkToLoanCoach, wageBill, type Loan,
 } from './loans.ts';
@@ -190,10 +190,11 @@ test('a club that promised a loanee a starting place gives him the games, and hi
   const { p, borrower } = fringeOutAndBorrower(world, club);
   const loan = startLoan(world, club, borrower, p, 0.5, undefined, 'starter');
   loan.honour = 1; // a club as good as its word
-  while ((loan.stats?.clubMatches ?? 0) < 8 && world.day < 250) advanceDay(world, ctx);
+  // Measured over the matches he was fit for: an injury is nobody's broken promise.
+  while ((loan.stats?.fitMatches ?? 0) < 8 && world.day < 300) advanceDay(world, ctx);
 
-  assert.ok(loan.stats!.clubMatches >= 8, 'his club has played');
-  assert.ok(loanShare(loan.stats) >= 0.6, `he has played most of it (${loanShare(loan.stats).toFixed(2)})`);
+  assert.ok((loan.stats!.fitMatches ?? 0) >= 8, 'his club has played');
+  assert.ok(promiseShare(loan.stats) >= 0.6, `he has played most of it (${promiseShare(loan.stats).toFixed(2)})`);
   assert.ok(loan.stats!.apps >= 6);
 
   const message = requestLoanReport(world, p);
