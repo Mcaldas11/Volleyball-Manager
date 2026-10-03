@@ -26,6 +26,11 @@ export function clubBooks(world: World, club: Club): ClubBooks {
   for (const p of club.youthPlayers) youthWages += store.wage[p];
   let staffWages = 0;
   for (const sid of club.staff) staffWages += world.staff[sid]?.wage ?? 0;
+  // The user is the head coach on its books, on whatever his contract pays.
+  const job = world.career.jobs[world.career.jobs.length - 1];
+  if (club.id === world.userClubId && job !== undefined && job.endDay < 0 && job.clubId === club.id) {
+    staffWages += job.contract?.wage ?? 0;
+  }
 
   const income: Array<[string, number]> = [
     ['Sponsorship', f.sponsorshipIncome],

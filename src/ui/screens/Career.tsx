@@ -1,7 +1,8 @@
 import { useState, type JSX } from 'react';
 import type { Club } from '../../engine/model/club.ts';
 import {
-  applicationBlock, boardMood, currentJob, hiringChance, lastJobEnded, type JobExit, type ManagerJob,
+  applicationBlock, boardMood, contractAskBlock, contractEndYear, contractTerms, currentJob, hiringChance,
+  lastJobEnded, type JobExit, type ManagerJob,
 } from '../../engine/world/career.ts';
 import { ordinal } from '../../engine/world/inbox.ts';
 import {
@@ -9,7 +10,7 @@ import {
 } from '../../engine/world/internationals.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import {
-  Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, PersonFace, Segmented, StarMeter, StatTile,
+  Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter, StatTile,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -18,6 +19,7 @@ const EXIT_LABEL: Readonly<Record<JobExit, string>> = {
   resigned: 'Resigned',
   sacked: 'Sacked',
   moved: 'Moved on',
+  expired: 'Contract expired',
 };
 
 const CONTINENTS: ReadonlyArray<readonly [Confederation | 'all', string]> = [
@@ -69,6 +71,7 @@ function OffersList(): JSX.Element {
             <div className="job-item-main">
               <strong className="player-link" onClick={() => g.selectClub(c.id)}>{c.name}</strong>
               <span className="faint">{world.competitions[c.leagueId]?.name ?? `Tier ${c.tier}`} · until {g.dateLabelForDay(o.expiresOn)}</span>
+              {o.contract !== undefined && <span className="faint">{contractTerms(world, o.contract)}</span>}
             </div>
             <div className="job-item-actions">
               <button className="primary sm" disabled={busy} onClick={() => g.acceptJobOffer(o.id)}>Accept</button>
@@ -296,6 +299,7 @@ function CurrentJobCard(): JSX.Element {
       <div className="career-meter"><Bar value={conf} wide /></div>
       <KV k="Board target">Finish {ordinal(club.boardExpectation)} or better</KV>
       {job !== undefined && <KV k="Record">{job.won}W {job.lost}L</KV>}
+      {job?.contract !== undefined && <ContractBlock />}
       {!confirming ? (
         <button className="danger block career-resign" disabled={busy} onClick={() => setConfirming(true)}>
           <Icon name="exit" size={14} /> Resign
@@ -311,6 +315,38 @@ function CurrentJobCard(): JSX.Element {
       )}
       {nationalTeam !== undefined && <NationalJobBlock nation={nationalTeam} />}
     </Card>
+  );
+}
+
+/** His contract: what it pays and when it ends — and the board's offer of a new one, or the way to ask. */
+function ContractBlock(): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  const contract = currentJob(world)?.contract;
+  if (contract === undefined) return null;
+  const offer = world.career.contractOffer;
+  const lastSeason = contract.untilSeason <= world.season;
+  const blocked = contractAskBlock(world);
+  return (
+    <div className="career-contract">
+      <KV k="Contract"><span className={lastSeason ? 'warn' : undefined}>Until 30 June {contractEndYear(world, contract)}</span></KV>
+      <KV k="Wage">{money(contract.wage)} a season</KV>
+      {offer != null ? (
+        <div className="career-offer">
+          <span className="career-offer-kicker">New contract offered</span>
+          <strong>{contractTerms(world, offer.terms)}</strong>
+          <span className="faint">The offer stands until {g.dateLabelForDay(offer.expiresOn)}.</span>
+          <div className="career-confirm-actions">
+            <button className="primary sm" onClick={() => g.acceptContractOffer()}><Icon name="check" size={13} /> Sign</button>
+            <button className="sm" onClick={() => g.declineContractOffer()}>Decline</button>
+          </div>
+        </div>
+      ) : (
+        <button className="block career-ask" disabled={blocked !== null} title={blocked ?? undefined} onClick={() => g.askForNewContract()}>
+          <Icon name="contract" size={14} /> Ask for a new contract
+        </button>
+      )}
+    </div>
   );
 }
 

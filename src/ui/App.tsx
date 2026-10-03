@@ -8,6 +8,7 @@ import {
 import { NATIONS } from '../engine/world/nations.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { HolidayDialog } from './holiday.tsx';
+import { FriendlyDialog } from './friendlyDialog.tsx';
 import { TacticPicker } from './tacticPicker.tsx';
 import { ProcessingWindow } from './processing.tsx';
 import { CLUBLESS_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
@@ -213,6 +214,7 @@ function GameShell(): JSX.Element {
       <Toast />
       <TrophyOverlay />
       <HolidayDialog />
+      <FriendlyDialog />
       <ProcessingWindow />
     </div>
   );

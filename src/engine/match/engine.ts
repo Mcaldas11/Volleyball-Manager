@@ -101,6 +101,8 @@ export interface MatchSetup {
    * rest of a match skipped to the end. Off unless asked for.
    */
   autoCoach?: readonly [boolean, boolean];
+  /** A friendly: played in full, but nothing of it goes on anyone's career record. */
+  friendly?: boolean;
 }
 
 export interface RallyContact {
@@ -491,7 +493,7 @@ export class MatchSimulator {
       ) {
         this.teams[0].stats.setsWon = this.teams[0].setsWon;
         this.teams[1].stats.setsWon = this.teams[1].setsWon;
-        this.commitCareerTotals();
+        if (this.setup.friendly !== true) this.commitCareerTotals();
         this.matchOver = true;
       } else {
         this.beginSet();

@@ -662,7 +662,7 @@ function crownWinner(world: World, comp: Competition, bracket: PlayoffGroup): vo
   const club = world.clubs[winner];
   if (club !== undefined) {
     const lift: Readonly<Record<CompetitionKind, number>> = {
-      league: 1, supercup: 1.005, cup: 1.015, continental: 1.03, clubworld: 1.04, international: 1,
+      league: 1, supercup: 1.005, cup: 1.015, continental: 1.03, clubworld: 1.04, international: 1, friendly: 1,
     };
     club.reputation = Math.min(10000, Math.round(club.reputation * lift[comp.kind] + 20));
   }
@@ -675,6 +675,7 @@ function crownWinner(world: World, comp: Competition, bracket: PlayoffGroup): vo
 export function stageLabel(world: World, fixture: Fixture): string {
   const comp = world.competitions[fixture.competitionId];
   if (comp === undefined) return '';
+  if (comp.kind === 'friendly') return 'Pre-season';
   if (comp.kind === 'league' || comp.kind === 'international') {
     return fixture.round >= PLAYOFF_ROUND_BASE ? 'Playoffs' : `Matchday ${fixture.round + 1}`;
   }

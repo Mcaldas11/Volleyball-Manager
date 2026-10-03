@@ -28,6 +28,7 @@ import { PLAYOFF_ROUND_BASE, scheduleLeagueSeason } from './schedule.ts';
 import { quickSimulate } from './quickSim.ts';
 import { progressPlayoffs } from './playoffs.ts';
 import { progressCups, scheduleCupSeason } from './cups.ts';
+import { friendliesDay, isFriendly } from './friendlies.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
@@ -229,7 +230,9 @@ export function playFixture(
   const homeOwed = loanStarters(world, home);
   const awayOwed = loanStarters(world, away);
 
-  if (detailed) {
+  // Friendlies are only ever the user's, and always played in full.
+  const friendly = isFriendly(world, fixture);
+  if (detailed || friendly) {
     const result = simulateMatch(store, {
       home: { ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home) },
       away: { ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away) },
@@ -240,6 +243,7 @@ export function playFixture(
       seed: world.rng.next(),
       // Nobody is on the bench to make the changes: the engine makes them for both sides.
       autoCoach: [true, true],
+      friendly,
     });
     ctx.detailedResults.set(fixture.id, result);
     applyMatchResult(world, ctx, fixture, result);
@@ -287,6 +291,16 @@ export function applyMatchResult(
 
   const homeStats = result.stats.home.players;
   const awayStats = result.stats.away.players;
+  // A friendly is for the practice: it tires the legs and fills the stands,
+  // and goes on no table, no record and nobody's statistics.
+  if (isFriendly(world, fixture)) {
+    applyMatchLoad(world.players, homeStats, world.rng);
+    applyMatchLoad(world.players, awayStats, world.rng);
+    const home = world.clubs[fixture.home];
+    const away = world.clubs[fixture.away];
+    if (home !== undefined && away !== undefined) applyMatchFinances(world, home, away, fixture);
+    return;
+  }
   accumulate(ctx.stats, homeStats, result.setScores.length);
   accumulate(ctx.stats, awayStats, result.setScores.length);
   recordFixture(world, fixture, homeStats, awayStats);
@@ -404,6 +418,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   contractNotices(world);
   processDeals(world);
   careerDay(world);
+  friendliesDay(world);
 
   if (todays !== undefined) {
     for (const fid of todays) {

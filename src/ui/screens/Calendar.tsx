@@ -1,6 +1,9 @@
 import { useState, type JSX } from 'react';
 import { internationalNotes } from '../../engine/world/internationals.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
+import {
+  FRIENDLY_LAST_DAY, FRIENDLY_NOTICE_DAYS, friendliesOf, friendlyRequests,
+} from '../../engine/season/friendlies.ts';
 import { DAYS_PER_SEASON, TRANSFER_WINDOWS, type Competition, type Fixture } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -73,6 +76,11 @@ export function CalendarScreen(): JSX.Element {
 
   const monthTitle = monthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
+  // The pre-season, while there is still time to fix up a friendly.
+  const preSeason = today % DAYS_PER_SEASON <= FRIENDLY_LAST_DAY - FRIENDLY_NOTICE_DAYS;
+  const friendlies = friendliesOf(world, club.id);
+  const invitations = friendlyRequests(world);
+
   return (
     <div className="cal">
       <div className="cal-main">
@@ -84,6 +92,11 @@ export function CalendarScreen(): JSX.Element {
             <button className="cal-today-btn" onClick={() => setMonthStart(firstOf(today))}>Today</button>
           )}
           <span className="flex-spacer" />
+          {preSeason && (
+            <button className="cal-full" disabled={g.processing} onClick={() => g.openFriendlyDialog()}>
+              <Icon name="ball" size={14} /> Arrange friendly
+            </button>
+          )}
           <button className="cal-full" disabled={g.processing} onClick={() => g.openHoliday()}>
             <Icon name="calendar" size={14} /> Go on holiday
           </button>
@@ -125,6 +138,40 @@ export function CalendarScreen(): JSX.Element {
           {nextStop !== null && <span className="cal-next-date">{g.longDateLabel(nextStop.day)}</span>}
         </section>
 
+        {(preSeason || invitations.length > 0) && (
+          <section className="cal-card">
+            <span className="cal-card-title">Pre-season friendlies</span>
+            {friendlies.length === 0 && invitations.length === 0 && (
+              <p className="hm-empty">None arranged yet — the board books a couple if you leave it.</p>
+            )}
+            {friendlies.map((f) => {
+              const isHome = f.home === club.id;
+              const opp = world.clubs[isHome ? f.away : f.home];
+              return (
+                <div key={f.id} className="cal-fr">
+                  <span className="cal-fr-date">{g.dateLabelForDay(f.day)}</span>
+                  <strong className="club-link" onClick={() => opp !== undefined && g.selectClub(opp.id)}>
+                    {opp?.name ?? '—'} ({isHome ? 'H' : 'A'})
+                  </strong>
+                  {f.played && <span className="faint">{isHome ? f.homeSets : f.awaySets}-{isHome ? f.awaySets : f.homeSets}</span>}
+                </div>
+              );
+            })}
+            {invitations.map((r) => (
+              <div key={`req-${r.id}`} className="cal-fr pending">
+                <span className="cal-fr-date">{g.dateLabelForDay(r.day)}</span>
+                <span className="cal-fr-main">
+                  <strong>{world.clubs[r.clubId]?.name ?? '—'} ({r.home ? 'H' : 'A'})</strong>
+                  <span>Invited · answer by {g.dateLabelForDay(r.answerOn)}</span>
+                </span>
+                <button className="icon-btn" title="Withdraw the invitation" onClick={() => g.withdrawFriendly(r.id)}>
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
+
         <section className="cal-card">
           <span className="cal-card-title">Upcoming matches</span>
           {upcoming.length === 0 && <p className="hm-empty">No fixtures scheduled.</p>}
@@ -159,6 +206,7 @@ export function CalendarScreen(): JSX.Element {
           <span><b className="lg-cup">Cup</b>: national cup and super cup</span>
           <span><b className="lg-continental">Continental</b>: Champions League and the like</span>
           <span><b className="lg-world">World</b>: Club World Championship</span>
+          <span><b className="lg-friendly">Friendly</b>: pre-season friendly</span>
           <span><b className="lg-deadline">Deadline</b>: transfer window closes</span>
           <span><b className="lg-result">W / L</b>: final result</span>
         </section>
@@ -173,6 +221,7 @@ export function shortCompName(comp: Competition | undefined): string {
   if (comp.key === 'cont:CEV:1') return 'CL';
   if (comp.key === 'cont:CEV:2') return 'CEV Cup';
   if (comp.kind === 'clubworld') return 'CWC';
+  if (comp.kind === 'friendly') return 'Friendly';
   if (comp.kind === 'supercup') return 'Super Cup';
   if (comp.kind === 'cup') return 'Cup';
   return comp.organizer ?? 'Cont.';
@@ -186,7 +235,8 @@ function FixtureChip({ fixture: f }: { fixture: Fixture }): JSX.Element {
   const opp = world.clubs[isHome ? f.away : f.home];
   const comp = world.competitions[f.competitionId];
   const kind = comp?.kind === 'league' ? 'league'
-    : comp?.kind === 'continental' ? 'continental' : comp?.kind === 'clubworld' ? 'world' : 'cup';
+    : comp?.kind === 'continental' ? 'continental' : comp?.kind === 'clubworld' ? 'world'
+      : comp?.kind === 'friendly' ? 'friendly' : 'cup';
   const tag = shortCompName(comp);
   const name = `${tag !== '' ? `${tag} · ` : ''}${opp?.name ?? '—'} (${f.neutralVenue ? 'N' : isHome ? 'H' : 'A'})`;
   if (f.played) {

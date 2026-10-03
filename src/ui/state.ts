@@ -59,7 +59,11 @@ import {
 import { NATIONS } from '../engine/world/nations.ts';
 import { isCupFinal } from '../engine/season/cups.ts';
 import {
-  acceptJobOffer as takeJobOffer, appointManager, applyForJob as sendApplication, applicationBlock,
+  boardArrangeFriendly, friendlyBlock, isFriendly, requestFriendly, withdrawFriendlyRequest,
+} from '../engine/season/friendlies.ts';
+import {
+  acceptContractOffer as signContractOffer, acceptJobOffer as takeJobOffer, appointManager, askForContract,
+  applyForJob as sendApplication, applicationBlock, declineContractOffer as turnDownContractOffer,
   declineJobOffer as turnDownJobOffer, isUnemployed, resign as resignFromClub,
 } from '../engine/world/career.ts';
 import {
@@ -338,6 +342,8 @@ class Game {
   processing = false;
   /** The holiday options dialog, open — with the return date it offers first. */
   holidayDialog: { returnDay: number | null } | null = null;
+  /** The dialog to invite a club to a friendly, while it is open. */
+  friendlyDialog = false;
   /** The instructions left last time, offered again next time. */
   holidayPlan: HolidayPlan = DEFAULT_HOLIDAY;
   /** The processing window, up while days pass — one on Continue, many on
@@ -1157,6 +1163,83 @@ class Game {
     this.emit();
   }
 
+  // ---- Friendlies -------------------------------------------------------
+
+  openFriendlyDialog(): void {
+    if (this.club === null) return;
+    this.friendlyDialog = true;
+    this.emit();
+  }
+
+  closeFriendlyDialog(): void {
+    this.friendlyDialog = false;
+    this.emit();
+  }
+
+  /** Invite a club to a friendly; its answer comes to the inbox. */
+  inviteToFriendly(clubId: number, day: number, home: boolean): boolean {
+    const world = this.world;
+    if (world === null) return false;
+    const problem = friendlyBlock(world, clubId, day);
+    const req = problem === null ? requestFriendly(world, clubId, day, home) : null;
+    const name = world.clubs[clubId]?.name ?? 'The club';
+    this.notice = req !== null
+      ? `Invitation sent — ${name} will answer by ${this.dateLabelForDay(req.answerOn)}.`
+      : problem ?? 'That friendly cannot be arranged.';
+    if (req !== null) this.friendlyDialog = false;
+    this.emit();
+    return req !== null;
+  }
+
+  /** Have the board fix up a friendly — booked at once. */
+  boardFriendly(): void {
+    const world = this.world;
+    if (world === null) return;
+    const f = boardArrangeFriendly(world);
+    if (f === null) {
+      this.notice = 'The board could not find a club free to play before the pre-season ends.';
+    } else {
+      const home = f.home === world.userClubId;
+      const opp = world.clubs[home ? f.away : f.home]?.name ?? 'a club';
+      this.notice = `The board has arranged a friendly ${home ? 'at home to' : 'away at'} ${opp} on ${this.dateLabelForDay(f.day)}.`;
+      this.friendlyDialog = false;
+    }
+    this.emit();
+  }
+
+  /** Take back an invitation not yet answered. */
+  withdrawFriendly(requestId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    withdrawFriendlyRequest(world, requestId);
+    this.emit();
+  }
+
+  // ---- The manager's contract ---------------------------------------------
+
+  /** Ask the board for a new contract — its answer comes back at once. */
+  askForNewContract(): void {
+    const world = this.world;
+    if (world === null || this.club === null) return;
+    this.notice = askForContract(world);
+    this.emit();
+  }
+
+  acceptContractOffer(): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = signContractOffer(world) ? 'New contract signed.' : 'That offer is no longer on the table.';
+    this.emit();
+  }
+
+  declineContractOffer(): void {
+    const world = this.world;
+    if (world === null) return;
+    turnDownContractOffer(world);
+    this.notice = 'You turned down the board’s offer. You can still ask for a new contract later.';
+    this.emit();
+  }
+
   /**
    * Go on holiday: day after day runs on without the manager until the date
    * he set — or, sooner, until something needs him: a job offer, the sack,
@@ -1183,6 +1266,7 @@ class Game {
     const offers = world.career.offers.length;
     const nationalOffers = (): number => world.internationals?.offers?.length ?? 0;
     const nationalBefore = nationalOffers();
+    const contractOffer = world.career.contractOffer?.id;
     let why: string | null = null;
     while (until === null || world.day < until) {
       if (this.holiday.cutShort) { why = 'you cut it short'; break; }
@@ -1191,6 +1275,10 @@ class Game {
       if (world.userClubId !== clubId) { why = world.userClubId < 0 ? 'the board has let you go' : 'you have a new job'; break; }
       if (world.career.offers.length > offers) { why = 'a club has offered you a job'; break; }
       if (nationalOffers() > nationalBefore) { why = 'a national team has offered you its job'; break; }
+      if (world.career.contractOffer != null && world.career.contractOffer.id !== contractOffer) {
+        why = 'the board has offered you a new contract';
+        break;
+      }
       if (world.season !== season) { why = 'the season is over'; break; }
       this.emit();
       await sleep(HOLIDAY_TICK_MS);
@@ -1616,7 +1704,8 @@ class Game {
       defensiveLibero: md.homeDefensiveLibero,
       bench: md.homeBench,
       tactics: club.tactics,
-      read: oppositionRead(world, club),
+      // A friendly teaches the opposition nothing.
+      read: isFriendly(world, md.fixture) ? 0 : oppositionRead(world, club),
     };
     // The other side keeps any promise of games it has made a loanee.
     const homeSetup = md.userIsHome ? userSetup : toTeamSetup(world.players, homeClub, loanStarters(world, homeClub));
@@ -1630,6 +1719,7 @@ class Game {
       neutralVenue: md.fixture.neutralVenue,
       collectLog: true,
       seed: world.rng.next(),
+      friendly: isFriendly(world, md.fixture),
     });
     this.startLive();
   }

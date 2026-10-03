@@ -16,6 +16,7 @@ import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
 import { IntlReportSheet } from '../intlReport.tsx';
 import { nextTournamentFor, worldRanking } from '../../engine/world/internationals.ts';
+import { contractEndYear, currentJob } from '../../engine/world/career.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { useGame } from '../state.ts';
 
@@ -425,8 +426,39 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
         <ReportRow k="Squad average"><StarMeter value={avg} size={14} /></ReportRow>
         <ReportRow k="Transfer budget">{money(club.finances.transferBudget)}</ReportRow>
         <ReportRow k="Wage budget">{money(club.finances.wageBudget)} a season</ReportRow>
+        {offer?.contract !== undefined && (
+          <>
+            <ReportRow k="Your wage">{money(offer.contract.wage)} a season</ReportRow>
+            <ReportRow k="Contract until">30 June {contractEndYear(world, offer.contract)}</ReportRow>
+          </>
+        )}
         <ReportRow k="Status" tone={offer !== undefined || status === 'Accepted' ? 'good' : undefined}>{status}</ReportRow>
         {offer !== undefined && <ReportRow k="Offer stands until">{g.longDateLabel(offer.expiresOn)}</ReportRow>}
+      </div>
+    );
+  }
+
+  if (m.contractOfferId !== undefined) {
+    const offer = world.career.contractOffer?.id === m.contractOfferId ? world.career.contractOffer : null;
+    const now = currentJob(world)?.contract;
+    return (
+      <div className="paper-report">
+        <div className="paper-label">The contract</div>
+        {offer !== null && (
+          <>
+            <ReportRow k="Wage offered">{money(offer.terms.wage)} a season</ReportRow>
+            <ReportRow k="Until">30 June {contractEndYear(world, offer.terms)}</ReportRow>
+          </>
+        )}
+        {now !== undefined && (
+          <ReportRow k={offer !== null ? 'Your contract now' : 'Your contract'}>
+            {money(now.wage)} a season, to 30 June {contractEndYear(world, now)}
+          </ReportRow>
+        )}
+        <ReportRow k="Status" tone={offer !== null ? 'good' : undefined}>
+          {offer !== null ? 'Awaiting your signature' : 'Answered'}
+        </ReportRow>
+        {offer !== null && <ReportRow k="Offer stands until">{g.longDateLabel(offer.expiresOn)}</ReportRow>}
       </div>
     );
   }
@@ -693,6 +725,15 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
         <Icon name="check" size={15} /> Accept job
       </button>,
       <button key="decline-nation" className="paper-btn" onClick={() => g.declineNationalOffer(nationalOffer.id)}>Decline</button>,
+    );
+  }
+
+  if (m.contractOfferId !== undefined && world.career.contractOffer?.id === m.contractOfferId) {
+    out.push(
+      <button key="sign" className="paper-btn primary-dark" onClick={() => g.acceptContractOffer()}>
+        <Icon name="check" size={15} /> Sign contract
+      </button>,
+      <button key="decline-contract" className="paper-btn" onClick={() => g.declineContractOffer()}>Decline</button>,
     );
   }
 

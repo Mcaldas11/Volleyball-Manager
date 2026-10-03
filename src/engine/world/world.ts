@@ -29,9 +29,24 @@ import type { ManagerCareer, Vacancy } from './career.ts';
  * its league and cup winners open the season with; a continental club
  * competition (Europe's Champions League and CEV Cup, each other
  * confederation's club championship); the Club World Championship, open to
- * clubs from anywhere; or a national-team tournament.
+ * clubs from anywhere; a national-team tournament; or the friendlies a club
+ * plays in its pre-season, which count for nothing but the practice.
  */
-export type CompetitionKind = 'league' | 'cup' | 'supercup' | 'continental' | 'clubworld' | 'international';
+export type CompetitionKind =
+  | 'league' | 'cup' | 'supercup' | 'continental' | 'clubworld' | 'international' | 'friendly';
+
+/** An invitation to a friendly, waiting on the other club's answer — see friendlies.ts. */
+export interface FriendlyRequest {
+  id: number;
+  clubId: number;
+  /** The day the match would be played. */
+  day: number;
+  /** The user's club would host it. */
+  home: boolean;
+  sentOn: number;
+  /** When the other club answers. */
+  answerOn: number;
+}
 
 /** One group of a cup competition's group stage. */
 export interface CupGroup {
@@ -353,6 +368,8 @@ export interface GameMessage {
   jobOfferId?: number;
   /** A federation's offer of its national team job — see `Internationals.offers`. */
   nationalOffer?: { id: number; nation: number };
+  /** The board's offer of a new contract — see career.ts. */
+  contractOfferId?: number;
   /** News of one of the user's players out on loan: the inbox offers to
    *  compile his matches there. */
   loanOut?: boolean;
@@ -560,6 +577,10 @@ export interface World {
   career: ManagerCareer;
   /** The national teams' tournaments — see internationals.ts. Absent until first planned. */
   internationals?: Internationals;
+  /** The user's invitations to friendlies awaiting an answer, and the season
+   *  the board last arranged some of its own — see friendlies.ts. Absent on
+   *  saves from before friendlies. */
+  friendlies?: { requests: FriendlyRequest[]; nextId: number; boardArranged: number };
   /** The world's news, most recent last — see news.ts. */
   news: NewsItem[];
   nextNewsId: number;

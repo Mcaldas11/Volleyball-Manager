@@ -1534,6 +1534,7 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .cal-chip.cup { color: #c7a8ff; background: rgba(166, 132, 240, 0.12); border-color: rgba(166, 132, 240, 0.38); }
 .cal-chip.continental { color: var(--accent-bright); background: var(--accent-soft); border-color: rgba(79, 141, 255, 0.35); }
 .cal-chip.world { color: #6fd6e6; background: rgba(63, 176, 201, 0.12); border-color: rgba(63, 176, 201, 0.4); }
+.cal-chip.friendly { color: var(--text-dim); background: var(--surface-2); border-color: var(--line-strong); }
 .cal-chip.result.win { color: #5fd47f; background: rgba(63, 189, 95, 0.08); border-color: rgba(63, 189, 95, 0.35); }
 .cal-chip.result.loss { color: #f07d75; background: rgba(226, 87, 79, 0.08); border-color: rgba(226, 87, 79, 0.35); }
 button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
@@ -1562,6 +1563,36 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
 .lg-world { color: #6fd6e6; }
 .lg-deadline { color: #f07d75; }
 .lg-result { color: #5fd47f; }
+.lg-friendly { color: var(--text); }
+.cal-fr { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.cal-fr > strong { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-fr-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.cal-fr-main strong, .cal-fr-main span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-fr-main span { font-size: 11.5px; }
+.cal-fr-date { width: 64px; flex: none; font-size: 12px; color: var(--text-dim); }
+.cal-fr.pending { color: var(--text-dim); }
+
+/* Arranging a friendly — the holiday dialog's frame, a club list inside it. */
+.fr-card { width: min(720px, 100%); height: min(640px, calc(100vh - 32px)); }
+.fr-body { display: flex; flex-direction: column; flex: 1; min-height: 0; border-top: 1px solid var(--line); }
+.fr-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.fr-field { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.fr-field select, .fr-field input { height: 30px; font-size: 13px; letter-spacing: 0; text-transform: none; }
+.fr-search { flex: 1 1 160px; }
+.fr-list { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 12px; }
+.fr-club {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+}
+.fr-club:hover:not(:disabled) { background: var(--surface-hover); }
+.fr-club.active { background: var(--gold-soft); border-color: var(--gold-deep); }
+.fr-club:disabled { opacity: 0.5; cursor: default; }
+.fr-club-main { display: flex; flex-direction: column; flex: 1; min-width: 0; font-size: 13px; }
+.fr-club-main strong, .fr-club-main span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-club-main span { font-size: 11.5px; }
+.fr-keen { width: 92px; flex: none; text-align: right; font-size: 12px; font-weight: 700; }
+.fr-empty { margin: 16px 20px; font-size: 13px; color: var(--text-dim); }
+.fr-foot { justify-content: flex-start; padding: 12px 16px; }
 
 
 /* ============================================================
@@ -4207,6 +4238,14 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .career-meter { margin: 2px 0 8px; }
 .career-meter .bar-wide, .hm-conf .bar-wide { width: 100%; height: 8px; }
 .career-resign { margin-top: 14px; }
+.career-contract { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.career-ask { margin-top: 8px; }
+.career-offer {
+  display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding: 10px 12px;
+  border: 1px solid var(--gold-deep); border-radius: 8px; background: var(--gold-soft); font-size: 12.5px;
+}
+.career-offer-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-bright); }
+.career-offer .career-confirm-actions { margin-top: 6px; }
 .career-confirm {
   margin-top: 14px;
   padding: 12px;

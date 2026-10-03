@@ -12,6 +12,12 @@
  * approach the user when his name fits theirs, he can apply for any of them,
  * and he can walk out on his own club whenever he likes. Out of work, the
  * calendar keeps running until somebody takes him on.
+ *
+ * Every job comes with a contract: a wage and the June it runs to. A board
+ * happy with its coach offers him a new one in his last season — sooner, if
+ * it is delighted — and he can ask for one himself; one that would rather
+ * not keep him says so by the spring. A contract nobody renews runs out at
+ * the season's end, and the coach leaves with it.
  */
 
 import { newsCoachAppointed, newsCoachSacked } from './news.ts';
@@ -27,7 +33,25 @@ import {
 } from './world.ts';
 
 /** How a job came to an end. */
-export type JobExit = 'resigned' | 'sacked' | 'moved';
+export type JobExit = 'resigned' | 'sacked' | 'moved' | 'expired';
+
+/** The terms a head coach is employed on. */
+export interface ManagerContract {
+  /** A season's pay. */
+  wage: number;
+  /** The last season it runs: it ends on the 30 June that closes it. */
+  untilSeason: number;
+}
+
+/** The board's offer of a new contract to its coach. */
+export interface ContractOffer {
+  id: number;
+  clubId: number;
+  terms: ManagerContract;
+  madeOn: number;
+  /** The last day it can be signed. */
+  expiresOn: number;
+}
 
 /** One spell in charge of a club. */
 export interface ManagerJob {
@@ -40,6 +64,8 @@ export interface ManagerJob {
   lost: number;
   /** Titles won in charge. */
   trophies: Array<{ competitionId: number; season: number }>;
+  /** What he is employed on — the latest he signed. Absent on a club assigned by hand. */
+  contract?: ManagerContract;
 }
 
 /** A club's offer of its head coach's job. */
@@ -51,6 +77,8 @@ export interface JobOffer {
   expiresOn: number;
   /** The answer to an application of the user's, rather than an approach. */
   applied: boolean;
+  /** The contract that comes with the job. */
+  contract?: ManagerContract;
 }
 
 /** An application for a vacancy, waiting on the club's answer. */
@@ -91,6 +119,13 @@ export interface ManagerCareer {
   nationalTeam?: number;
   /** Every spell in charge of a national team, oldest first; endDay -1 while current. */
   nationalJobs?: Array<{ nation: number; startDay: number; endDay: number }>;
+  /** The board's offer of a new contract, while it stands. */
+  contractOffer?: ContractOffer | null;
+  nextContractOfferId?: number;
+  /** The day he last asked the board for a new contract, -1 if never. */
+  contractAskedOn?: number;
+  /** The season his board last raised his contract itself — it does so once a season at most. */
+  contractTalks?: number;
 }
 
 /** Where a new coach's board starts: the benefit of the doubt. */
@@ -118,6 +153,18 @@ const OFFER_DAYS = 10;
 const SILENCE_LIMIT_DAYS = 35;
 /** Reputation gap at which the stronger club is a 10-to-1 favourite. */
 const RESULT_SCALE = 2500;
+/** A board this happy offers its coach a new contract in his last season… */
+const RENEW_CONFIDENCE = 50;
+/** …and one this happy, a year early. */
+const DELIGHTED = 75;
+/** By this day of his last season the board has said whether it wants him to stay. */
+const CONTRACT_DECISION_DAY = 285;
+/** How long the board's offer stands — never past the season's end. */
+const CONTRACT_OFFER_DAYS = 30;
+/** Once he has asked, he waits this long to ask again. */
+const CONTRACT_ASK_DAYS = 30;
+/** A new coach is not offered a new contract before he has had this long in the job. */
+const CONTRACT_SETTLE_DAYS = 120;
 
 function clampConfidence(v: number): number {
   return Math.max(0, Math.min(100, v));
@@ -241,6 +288,224 @@ function fillVacancy(world: World, v: Vacancy): void {
   newsCoachAppointed(world, club, coach);
 }
 
+// ---- Contracts -------------------------------------------------------------------
+
+/** What a head coach of his standing is paid at this club, a season. */
+export function marketWage(club: Club, reputation: number): number {
+  const standing = Math.max(club.reputation, reputation * 0.9) / 10000;
+  return Math.max(3_000, Math.round((5_000 + Math.pow(standing, 1.5) * 280_000) / 1000) * 1000);
+}
+
+/** The 30 June a contract ends on, as a calendar year. */
+export function contractEndYear(world: World, c: ManagerContract): number {
+  return world.startYear + c.untilSeason + 1;
+}
+
+/** Seasons left on a contract after the one in progress: 0 in its last. */
+export function seasonsLeft(world: World, c: ManagerContract): number {
+  return c.untilSeason - world.season;
+}
+
+/** A new job's contract: `years` seasons, counting this one only if most of it is still to run. */
+function newContract(world: World, club: Club, years: number): ManagerContract {
+  const first = dayOfSeason(world) >= 183 ? world.season + 1 : world.season;
+  return { wage: marketWage(club, world.career.reputation), untilSeason: first + years - 1 };
+}
+
+/** What the board offers to keep its coach: longer and better paid the happier it is. */
+function renewalTerms(world: World, club: Club, current: ManagerContract): ManagerContract {
+  const conf = club.boardConfidence;
+  const years = conf >= DELIGHTED ? 3 : 2;
+  const raise = 0.04 + Math.max(0, conf - RENEW_CONFIDENCE) * 0.004;
+  const wage = Math.round(Math.max(current.wage * (1 + raise), marketWage(club, world.career.reputation)) / 1000) * 1000;
+  return { wage, untilSeason: Math.max(current.untilSeason + 1, world.season + years) };
+}
+
+/** "€120,000 a season, to June 2029" */
+export function contractTerms(world: World, c: ManagerContract): string {
+  return `${euros(c.wage)} a season, to June ${contractEndYear(world, c)}`;
+}
+
+/** The board puts a new contract on the table. */
+function offerContract(world: World, club: Club, current: ManagerContract, asked: boolean): ContractOffer {
+  const career = world.career;
+  const terms = renewalTerms(world, club, current);
+  const seasonEnd = world.season * DAYS_PER_SEASON + 349;
+  const offer: ContractOffer = {
+    id: career.nextContractOfferId ?? 0,
+    clubId: club.id,
+    terms,
+    madeOn: world.day,
+    expiresOn: Math.min(seasonEnd, world.day + CONTRACT_OFFER_DAYS),
+  };
+  career.nextContractOfferId = offer.id + 1;
+  career.contractOffer = offer;
+  career.contractTalks = world.season;
+  const why = asked
+    ? 'The board has considered your request and is happy to offer you a new contract'
+    : club.boardConfidence >= DELIGHTED
+      ? 'The board is delighted with your work and wants to keep you at the club for the long term. It offers you a new contract'
+      : 'The board is pleased with your work and would like you to stay on. It offers you a new contract';
+  postMessage(world, {
+    subject: asked ? 'The board offers you a new contract' : 'A new contract from the board',
+    body: `${why}: ${contractTerms(world, terms)}. You are on ${contractTerms(world, current)} now. ` +
+      `The offer stands until ${formatDay(world, offer.expiresOn)}.`,
+    from: `${club.name} Board`,
+    clubId: club.id,
+    contractOfferId: offer.id,
+    category: 'board',
+  });
+  return offer;
+}
+
+/** Sign the board's offer. */
+export function acceptContractOffer(world: World): boolean {
+  const career = world.career;
+  const offer = career.contractOffer;
+  const job = currentJob(world);
+  if (offer == null || job === undefined || offer.clubId !== job.clubId || offer.expiresOn < world.day) return false;
+  job.contract = { ...offer.terms };
+  career.contractOffer = null;
+  const club = world.clubs[job.clubId];
+  postMessage(world, {
+    subject: 'New contract signed',
+    body: `You have signed a new contract with ${club?.name ?? 'the club'}: ${contractTerms(world, job.contract)}.`,
+    from: `${club?.name ?? 'The'} Board`,
+    clubId: job.clubId,
+    category: 'board',
+  });
+  return true;
+}
+
+/** Turn the board's offer down. It will not raise the matter again this season — he can still ask. */
+export function declineContractOffer(world: World): void {
+  const career = world.career;
+  if (career.contractOffer == null) return;
+  career.contractOffer = null;
+  career.contractTalks = world.season;
+}
+
+/**
+ * Ask the board for a new contract. It offers one if it is happy and the
+ * current one has under two seasons to run — or if it is delighted, whatever
+ * is left — and otherwise says why not. The answer goes to the inbox either
+ * way; the reply is returned for the screen.
+ */
+export function askForContract(world: World): string {
+  const career = world.career;
+  const club = userClubOf(world);
+  const job = currentJob(world);
+  const contract = job?.contract;
+  if (club === undefined || job === undefined || contract === undefined) return 'You have no contract to discuss.';
+  if (career.contractOffer != null) return 'The board has already put an offer on the table.';
+  const asked = career.contractAskedOn ?? -1;
+  if (asked >= 0 && world.day - asked < CONTRACT_ASK_DAYS) return 'The board will not discuss your contract again so soon.';
+  career.contractAskedOn = world.day;
+
+  const conf = club.boardConfidence;
+  const left = seasonsLeft(world, contract);
+  let refusal: string | null = null;
+  if (world.day - job.startDay < CONTRACT_SETTLE_DAYS) {
+    refusal = 'You have only just signed your contract. The board wants to see your work before it talks about a new one.';
+  } else if (conf < RENEW_CONFIDENCE) {
+    refusal = 'The board wants to see results improve before it talks about a new contract.';
+  } else if (left >= 2 && conf < DELIGHTED) {
+    refusal = `Your contract runs until June ${contractEndYear(world, contract)}, and the board sees no reason to discuss it yet.`;
+  }
+  if (refusal === null) {
+    offerContract(world, club, contract, true);
+    return 'The board has offered you a new contract.';
+  }
+  postMessage(world, {
+    subject: 'No new contract for now',
+    body: refusal,
+    from: `${club.name} Board`,
+    clubId: club.id,
+    category: 'board',
+  });
+  return refusal;
+}
+
+/** Why asking for a new contract would get nowhere right now, or null if the board would listen. */
+export function contractAskBlock(world: World): string | null {
+  const career = world.career;
+  if (currentJob(world)?.contract === undefined) return 'You have no contract to discuss.';
+  if (career.contractOffer != null) return 'The board has already put an offer on the table.';
+  const asked = career.contractAskedOn ?? -1;
+  if (asked >= 0 && world.day - asked < CONTRACT_ASK_DAYS) return 'The board will not discuss your contract again so soon.';
+  return null;
+}
+
+/**
+ * The contract's day: an offer left unsigned lapses, and the board raises
+ * the contract itself — a year early if it is delighted with its coach, and
+ * in his last season by the spring, either with an offer or with word that
+ * he will not be kept on.
+ */
+function contractDay(world: World): void {
+  const career = world.career;
+  const club = userClubOf(world);
+  const job = currentJob(world);
+  const offer = career.contractOffer;
+  if (offer != null && (club === undefined || offer.clubId !== club.id)) {
+    career.contractOffer = null;
+  } else if (offer != null && offer.expiresOn < world.day) {
+    career.contractOffer = null;
+    if (club !== undefined && job?.contract !== undefined) {
+      const last = seasonsLeft(world, job.contract) <= 0;
+      postMessage(world, {
+        subject: 'The contract offer has lapsed',
+        body: "You did not sign the board's offer of a new contract in time, and it has been withdrawn." +
+          (last ? ' Your contract runs out at the end of the season.' : ''),
+        from: `${club.name} Board`,
+        clubId: club.id,
+        category: 'board',
+      });
+    }
+  }
+  const contract = job?.contract;
+  if (club === undefined || job === undefined || contract === undefined || career.contractOffer != null) return;
+  if (career.contractTalks === world.season || world.day - job.startDay < CONTRACT_SETTLE_DAYS) return;
+  const d = dayOfSeason(world);
+  if (d < 60 || d >= SEASON_CLOSES || world.day % 7 !== 3) return;
+
+  const left = seasonsLeft(world, contract);
+  const conf = club.boardConfidence;
+  if (left === 1 && conf >= DELIGHTED && world.rng.chance(0.15)) {
+    offerContract(world, club, contract, false);
+  } else if (left <= 0 && d >= 120) {
+    const decide = d >= CONTRACT_DECISION_DAY;
+    if (conf >= RENEW_CONFIDENCE && (decide || world.rng.chance(0.2))) {
+      offerContract(world, club, contract, false);
+    } else if (decide) {
+      career.contractTalks = world.season;
+      postMessage(world, {
+        subject: 'Your contract will not be renewed',
+        body: `The board has decided not to offer you a new contract. Your contract with ${club.name} runs out ` +
+          `at the end of the season, on 30 June ${contractEndYear(world, contract)}.`,
+        from: `${club.name} Board`,
+        clubId: club.id,
+        category: 'board',
+      });
+    }
+  }
+}
+
+/** The contract has run its course with nobody renewing it: the coach leaves with the season. */
+function contractExpires(world: World, club: Club): void {
+  const job = currentJob(world);
+  leaveClub(world, 'expired');
+  postMessage(world, {
+    subject: `Your contract with ${club.name} has ended`,
+    body: `Your contract as head coach of ${club.name} has come to an end, and you leave the club` +
+      `${recordLine(job)}. The board thanks you for your work. Every club looking for a head coach is listed ` +
+      'in the Job Centre.',
+    from: `${club.name} Board`,
+    clubId: club.id,
+    category: 'career',
+  });
+}
+
 // ---- Taking a job, and leaving one ----------------------------------------------
 
 /** Where a first-time head coach's name starts: a little below the club that gave him the job. */
@@ -265,7 +530,7 @@ function openingMarket(world: World, except: number): void {
  * wherever he is now. The club's own coach makes way, any other job search
  * ends, and the board sets out what it expects.
  */
-export function appointManager(world: World, clubId: number): void {
+export function appointManager(world: World, clubId: number, contract?: ManagerContract): void {
   const club = world.clubs[clubId];
   if (club === undefined) return;
   const career = world.career;
@@ -280,11 +545,17 @@ export function appointManager(world: World, clubId: number): void {
   world.userClubId = clubId;
   club.coachSince = world.day;
   club.boardConfidence = CONFIDENCE_START;
-  career.jobs.push({ clubId, startDay: world.day, endDay: -1, exit: null, won: 0, lost: 0, trophies: [] });
+  career.jobs.push({
+    clubId, startDay: world.day, endDay: -1, exit: null, won: 0, lost: 0, trophies: [],
+    contract: contract ?? newContract(world, club, 2),
+  });
   career.offers = [];
   career.applications = [];
   career.warning = 0;
   career.warnedOn = -1;
+  career.contractOffer = null;
+  career.contractTalks = -1;
+  career.contractAskedOn = -1;
 
   welcomeMessages(world);
   // The cup draws only mean something before the season is under way.
@@ -318,6 +589,7 @@ function leaveClub(world: World, exit: JobExit): Club | undefined {
   world.userClubId = -1;
   career.warning = 0;
   career.warnedOn = -1;
+  career.contractOffer = null;
   openVacancy(world, club);
 
   if (exit === 'sacked') {
@@ -404,6 +676,7 @@ export function acceptJobOffer(world: World, offerId: number): boolean {
   const to = offer !== undefined ? world.clubs[offer.clubId] : undefined;
   if (offer === undefined || to === undefined || offer.expiresOn < world.day) return false;
   const job = currentJob(world);
+  const terms = offer.contract;
   const from = leaveClub(world, 'moved');
   if (from !== undefined) {
     postMessage(world, {
@@ -414,7 +687,7 @@ export function acceptJobOffer(world: World, offerId: number): boolean {
       category: 'career',
     });
   }
-  appointManager(world, to.id);
+  appointManager(world, to.id, terms);
   return true;
 }
 
@@ -429,12 +702,16 @@ export function declineJobOffer(world: World, offerId: number): void {
 
 function makeOffer(world: World, club: Club, applied: boolean): JobOffer {
   const career = world.career;
+  // A club that has to reach for him offers longer.
+  const years = club.reputation < career.reputation * 0.9 ? 3 : 2;
+  const contract = newContract(world, club, years);
   const offer: JobOffer = {
     id: career.nextOfferId++,
     clubId: club.id,
     madeOn: world.day,
     expiresOn: world.day + OFFER_DAYS,
     applied,
+    contract,
   };
   career.offers.push(offer);
   const league = world.competitions[club.leagueId];
@@ -444,7 +721,8 @@ function makeOffer(world: World, club: Club, applied: boolean): JobOffer {
       ? `The board of ${club.name} has considered your application and would like you to become the club's new head coach.`
       : `${club.name} are looking for a new head coach, and the board would like it to be you.`) +
       `${league !== undefined ? ` They play in the ${league.name}, and` : ' The board'} would expect a finish of ` +
-      `${ordinal(club.boardExpectation)} or better. The offer stands until ${formatDay(world, offer.expiresOn)}.`,
+      `${ordinal(club.boardExpectation)} or better. The contract: ${contractTerms(world, contract)}. ` +
+      `The offer stands until ${formatDay(world, offer.expiresOn)}.`,
     from: `${club.name} Board`,
     clubId: club.id,
     jobOfferId: offer.id,
@@ -552,7 +830,7 @@ export function boardResults(world: World, fixtureIds: readonly number[]): void 
     const f = world.fixtures[id];
     if (f === undefined || !f.played) continue;
     const comp = world.competitions[f.competitionId];
-    if (comp === undefined || comp.kind === 'international') continue;
+    if (comp === undefined || comp.kind === 'international' || comp.kind === 'friendly') continue;
     const home = world.clubs[f.home];
     const away = world.clubs[f.away];
     if (home === undefined || away === undefined) continue;
@@ -654,6 +932,7 @@ export function careerDay(world: World): void {
   const career = world.career;
   career.offers = career.offers.filter((o) => o.expiresOn >= world.day);
   answerApplications(world);
+  contractDay(world);
   for (const v of [...world.vacancies]) {
     if (v.fillsOn > world.day) continue;
     if (career.offers.some((o) => o.clubId === v.clubId) || career.applications.some((a) => a.clubId === v.clubId)) continue;
@@ -770,6 +1049,11 @@ function userVerdict(world: World, club: Club, finish: SeasonFinish | undefined,
       : 'The board has decided to make a change before the new season.');
     return;
   }
+  const contract = currentJob(world)?.contract;
+  if (contract !== undefined && seasonsLeft(world, contract) <= 0) {
+    contractExpires(world, club);
+    return;
+  }
   career.warning = 0;
   career.warnedOn = -1;
 
@@ -845,10 +1129,17 @@ export function backfillCareer(world: World): void {
   world.vacancies ??= [];
   for (const club of world.clubs) club.coachSince ??= 0;
   const club = userClubOf(world);
-  if (club === undefined || world.career.jobs.length > 0) return;
-  world.career.reputation = startingReputation(club);
-  world.career.jobs.push({
-    clubId: club.id, startDay: world.season * DAYS_PER_SEASON, endDay: -1, exit: null, won: 0, lost: 0, trophies: [],
-  });
-  detachHeadCoaches(world, club);
+  if (club === undefined) return;
+  if (world.career.jobs.length === 0) {
+    world.career.reputation = startingReputation(club);
+    world.career.jobs.push({
+      clubId: club.id, startDay: world.season * DAYS_PER_SEASON, endDay: -1, exit: null, won: 0, lost: 0, trophies: [],
+    });
+    detachHeadCoaches(world, club);
+  }
+  // Saves from before contracts: the job runs to the end of next season.
+  const job = currentJob(world);
+  if (job !== undefined && job.contract === undefined) {
+    job.contract = { wage: marketWage(club, world.career.reputation), untilSeason: world.season + 1 };
+  }
 }

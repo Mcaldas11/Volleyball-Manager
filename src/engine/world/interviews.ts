@@ -229,6 +229,8 @@ export function generateInterviewSessions(world: World, day: number): void {
     if (f.played) continue;
     if (f.home !== world.userClubId && f.away !== world.userClubId) continue;
     if (world.interviewedFixtures.has(f.id)) continue;
+    // Nobody calls a press conference for a friendly.
+    if (world.competitions[f.competitionId]?.kind === 'friendly') continue;
 
     const isHome = f.home === world.userClubId;
     const opponentId = isHome ? f.away : f.home;

@@ -153,7 +153,8 @@ function seasonFixtures(world: World, clubId: number): Fixture[] {
     .filter((f) =>
       f.played && f.day >= start && f.day < start + DAYS_PER_SEASON &&
       (f.home === clubId || f.away === clubId) &&
-      world.competitions[f.competitionId]?.kind !== 'international')
+      world.competitions[f.competitionId]?.kind !== 'international' &&
+      world.competitions[f.competitionId]?.kind !== 'friendly')
     .sort((a, b) => a.day - b.day);
 }
 
