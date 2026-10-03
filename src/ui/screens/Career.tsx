@@ -2,12 +2,13 @@ import { useState, type JSX } from 'react';
 import type { Club } from '../../engine/model/club.ts';
 import {
   applicationBlock, boardMood, contractAskBlock, contractEndYear, contractTerms, currentJob, hiringChance,
-  lastJobEnded, type JobExit, type ManagerJob,
+  lastJobEnded, type JobExit,
 } from '../../engine/world/career.ts';
 import { ordinal } from '../../engine/world/inbox.ts';
 import {
-  nationalApplicationBlock, nationalHiringChance, nextTournamentFor, worldRanking,
+  nationalApplicationBlock, nationalHiringChance, nationalRecord, nextTournamentFor, worldRanking,
 } from '../../engine/world/internationals.ts';
+import type { World } from '../../engine/world/world.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import {
   Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter, StatTile,
@@ -17,6 +18,7 @@ import { HonourList, honourOf, type Honour } from '../honours.tsx';
 import { CoachAttributes, coachStrengths } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 const EXIT_LABEL: Readonly<Record<JobExit, string>> = {
   resigned: 'Resigned',
@@ -47,11 +49,6 @@ function moodClass(confidence: number): string {
   if (confidence >= 45) return '';
   if (confidence >= 35) return 'warn';
   return 'bad';
-}
-
-function winRate(job: ManagerJob): string {
-  const n = job.won + job.lost;
-  return n === 0 ? '—' : `${Math.round((job.won / n) * 100)}%`;
 }
 
 // ---- Shared pieces ---------------------------------------------------------------
@@ -126,18 +123,59 @@ export function VacancyAction({ club }: { club: Club }): JSX.Element {
   return <button className="primary sm" onClick={() => g.applyForJob(club.id)}>Apply</button>;
 }
 
-/** Every club the manager has coached, most recent first. */
+/** One spell in a job — at a club or at the head of a nation — as the history lists it. */
+interface Spell {
+  key: string;
+  club?: Club;
+  nation?: number;
+  from: number;
+  to: number;
+  won: number;
+  lost: number;
+  trophies: number;
+  /** How it ended; null while it lasts. */
+  exit: string | null;
+  sacked: boolean;
+}
+
+/** Every job the manager has held, clubs and nations together, most recent first. */
+function careerSpells(world: World): Spell[] {
+  const clubs = world.career.jobs.map((j): Spell => ({
+    key: `c${j.clubId}-${j.startDay}`, club: world.clubs[j.clubId], from: j.startDay, to: j.endDay,
+    won: j.won, lost: j.lost, trophies: j.trophies.length,
+    exit: j.exit === null ? null : EXIT_LABEL[j.exit], sacked: j.exit === 'sacked',
+  }));
+  const nations = (world.career.nationalJobs ?? []).map((j): Spell => {
+    const r = nationalRecord(world, j.nation, j.startDay, j.endDay);
+    return {
+      key: `n${j.nation}-${j.startDay}`, nation: j.nation, from: j.startDay, to: j.endDay,
+      won: r.won, lost: r.lost, trophies: r.titles.length,
+      exit: j.endDay < 0 ? null : j.exit === 'sacked' ? 'Sacked' : 'Resigned', sacked: j.exit === 'sacked',
+    };
+  });
+  return [...clubs, ...nations].sort((a, b) => b.from - a.from || (a.to < 0 ? -1 : 1));
+}
+
+/** The titles the manager won in charge of his nations. */
+function nationalTitles(world: World): Honour[] {
+  return (world.career.nationalJobs ?? [])
+    .flatMap((j) => nationalRecord(world, j.nation, j.startDay, j.endDay).titles
+      .map((t) => honourOf(world, t.competitionId, t.year, NATIONS[j.nation]?.code)))
+    .filter((h): h is Honour => h !== null);
+}
+
+/** Every club and nation the manager has coached, most recent first. */
 function HistoryTable({ limit }: { limit?: number }): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const jobs = [...world.career.jobs].reverse().slice(0, limit);
-  if (jobs.length === 0) return <Empty>No jobs yet.</Empty>;
+  const spells = careerSpells(world).slice(0, limit);
+  if (spells.length === 0) return <Empty>No jobs yet.</Empty>;
   return (
     <div className="table-wrap">
       <table className="data-table">
         <thead>
           <tr>
-            <th>Club</th>
+            <th>Team</th>
             <th>From</th>
             <th>To</th>
             <th className="num">W</th>
@@ -148,26 +186,36 @@ function HistoryTable({ limit }: { limit?: number }): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {jobs.map((j) => {
-            const c = world.clubs[j.clubId];
+          {spells.map((s) => {
+            const n = s.won + s.lost;
+            const open = (): void => {
+              if (s.club !== undefined) g.selectClub(s.club.id);
+              else if (s.nation !== undefined) g.selectNation(s.nation);
+            };
             return (
-              <tr key={`${j.clubId}-${j.startDay}`} className="clickable" onClick={() => c !== undefined && g.selectClub(c.id)}>
+              <tr key={s.key} className="clickable" onClick={open}>
                 <td>
                   <span className="name-cell">
-                    {c !== undefined && <ClubCrest club={c} size={22} />}
-                    <span className="strong">{c?.name ?? '—'}</span>
+                    {s.club !== undefined && <><ClubCrest club={s.club} size={22} /><span className="strong">{s.club.name}</span></>}
+                    {s.nation !== undefined && (
+                      <>
+                        <Flag nation={s.nation} />
+                        <span className="strong">{NATIONS[s.nation]?.name ?? '—'}</span>
+                        <span className="role-tag national">National team</span>
+                      </>
+                    )}
                   </span>
                 </td>
-                <td className="dim">{g.dateLabelForDay(j.startDay)}</td>
-                <td className="dim">{j.endDay < 0 ? 'Present' : g.dateLabelForDay(j.endDay)}</td>
-                <td className="num">{j.won}</td>
-                <td className="num">{j.lost}</td>
-                <td className="num dim">{winRate(j)}</td>
-                <td className={`num${j.trophies.length > 0 ? ' gold-text' : ' dim'}`}>{j.trophies.length}</td>
+                <td className="dim">{g.dateLabelForDay(s.from)}</td>
+                <td className="dim">{s.to < 0 ? 'Present' : g.dateLabelForDay(s.to)}</td>
+                <td className="num">{s.won}</td>
+                <td className="num">{s.lost}</td>
+                <td className="num dim">{n === 0 ? '—' : `${Math.round((s.won / n) * 100)}%`}</td>
+                <td className={`num${s.trophies > 0 ? ' gold-text' : ' dim'}`}>{s.trophies}</td>
                 <td>
-                  {j.exit === null
+                  {s.exit === null
                     ? <span className="your-club-tag">Current</span>
-                    : <span className={j.exit === 'sacked' ? 'bad' : 'dim'}>{EXIT_LABEL[j.exit]}</span>}
+                    : <span className={s.sacked ? 'bad' : 'dim'}>{s.exit}</span>}
                 </td>
               </tr>
             );
@@ -193,9 +241,11 @@ export function CareerScreen(): JSX.Element {
   const name = `${m.firstName} ${m.lastName}`;
   const club = g.club;
   const jobs = career.jobs;
-  const won = jobs.reduce((s, j) => s + j.won, 0);
-  const lost = jobs.reduce((s, j) => s + j.lost, 0);
+  const spells = careerSpells(world);
+  const won = spells.reduce((s, j) => s + j.won, 0);
+  const lost = spells.reduce((s, j) => s + j.lost, 0);
   const trophies = jobs.flatMap((j) => j.trophies.map((t) => ({ ...t, clubId: j.clubId })));
+  const titles = nationalTitles(world);
 
   return (
     <div className="club-profile">
@@ -226,7 +276,7 @@ export function CareerScreen(): JSX.Element {
         <StatTile label="Clubs coached" value={new Set(jobs.map((j) => j.clubId)).size} />
         <StatTile label="Matches" value={won + lost} sub={`${won}W ${lost}L`} />
         <StatTile label="Win rate" value={won + lost === 0 ? '—' : `${Math.round((won / (won + lost)) * 100)}%`} />
-        <StatTile label="Trophies" value={trophies.length} tone={trophies.length > 0 ? 'gold' : undefined} />
+        <StatTile label="Trophies" value={trophies.length + titles.length} tone={trophies.length + titles.length > 0 ? 'gold' : undefined} />
         <StatTile label="Sackings" value={jobs.filter((j) => j.exit === 'sacked').length} />
         {career.attributes !== undefined && (
           <StatTile
@@ -259,15 +309,18 @@ export function CareerScreen(): JSX.Element {
           {career.applications.length > 0 && (
             <Card title="Applications" icon="contract"><ApplicationsList /></Card>
           )}
-          <Card title={`Trophies (${trophies.length})`} icon="trophy">
+          <Card title={`Trophies (${trophies.length + titles.length})`} icon="trophy">
             <HonourList
               empty="No trophies yet."
-              honours={trophies
-                .map((t) => honourOf(
-                  world, t.competitionId, world.startYear + t.season + 1,
-                  new Set(jobs.map((j) => j.clubId)).size > 1 ? world.clubs[t.clubId]?.shortName : undefined,
-                ))
-                .filter((h): h is Honour => h !== null)}
+              honours={[
+                ...trophies
+                  .map((t) => honourOf(
+                    world, t.competitionId, world.startYear + t.season + 1,
+                    new Set(jobs.map((j) => j.clubId)).size > 1 || titles.length > 0 ? world.clubs[t.clubId]?.shortName : undefined,
+                  ))
+                  .filter((h): h is Honour => h !== null),
+                ...titles,
+              ]}
             />
           </Card>
         </div>
@@ -444,9 +497,12 @@ export function JobCentreScreen(): JSX.Element {
         <div className="jobs-filters">
           <Segmented options={[['clubs', 'Clubs'], ['national', 'National teams']] as const} value={kind} onChange={setKind} />
           {kind === 'clubs' && <Segmented options={[['suitable', 'Suited to you'], ['all', 'All vacancies']] as const} value={scope} onChange={setScope} />}
-          <select value={conf} onChange={(e) => setConf(e.target.value as Confederation | 'all')}>
-            {CONTINENTS.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
-          </select>
+          <Dropdown
+            size="sm"
+            value={conf}
+            onChange={setConf}
+            options={CONTINENTS.map(([c, label]) => ({ value: c, label, icon: <Icon name="world" size={14} /> }))}
+          />
           <span className="search-mini">
             <Icon name="search" size={14} />
             <input placeholder="Club name" value={query} onChange={(e) => setQuery(e.target.value)} />

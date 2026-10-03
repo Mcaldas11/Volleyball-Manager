@@ -16,6 +16,7 @@ import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from '
 import { Formation, FORMATION_NAMES, formationOf } from '../../engine/match/tactics.ts';
 import { RallyTicker } from './Match.tsx';
 import { useGame, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 /** National teams play in something like their flag's colour. */
 const NATION_HUES: Readonly<Record<string, number>> = {
@@ -226,9 +227,13 @@ function MatchdayTacticSelect(): JSX.Element | null {
   return (
     <div className="md-formation">
       <span className="faint">Tactic</span>
-      <select className="md-tactic-select" value={saved.active} onChange={(e) => g.loadTactic(Number(e.target.value))}>
-        {saved.slots.map((t, i) => <option key={i} value={i}>{i + 1}. {t.name}</option>)}
-      </select>
+      <Dropdown
+        size="sm"
+        className="md-tactic-select"
+        value={saved.active}
+        onChange={(v) => g.loadTactic(v)}
+        options={saved.slots.map((t, i) => ({ value: i, label: `${i + 1}. ${t.name}` }))}
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type { NewsItem, NewsKind } from '../../engine/world/news.ts';
 import { ClubCrest, Empty, PlayerFace } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 /** How each kind of story is badged. */
 export const NEWS_KIND: Readonly<Record<NewsKind, { label: string; icon: IconName; color: string }>> = {
@@ -101,12 +102,19 @@ export function NewsScreen(): JSX.Element {
               <button key={f} className={`news-chip${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>{label}</button>
             ))}
           </div>
-          <select value={nation} onChange={(e) => setNation(Number(e.target.value))}>
-            <option value={ALL_COUNTRIES}>All countries</option>
-            {nations.map((id) => (
-              <option key={id} value={id}>{id < 0 ? 'International' : NATIONS[id]?.name ?? '?'}</option>
-            ))}
-          </select>
+          <Dropdown
+            size="sm"
+            value={nation}
+            onChange={setNation}
+            options={[
+              { value: ALL_COUNTRIES, label: 'All countries', icon: <Icon name="world" size={14} /> },
+              ...nations.map((id) => ({
+                value: id,
+                label: id < 0 ? 'International' : NATIONS[id]?.name ?? '?',
+                icon: id < 0 ? <Icon name="world" size={14} /> : <Flag nation={id} />,
+              })),
+            ]}
+          />
         </header>
         <div className="news-items">
           {items.length === 0 && <p className="news-none">No stories here yet — the papers fill up as the season goes on.</p>}

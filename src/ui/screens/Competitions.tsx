@@ -3,10 +3,11 @@ import { compareTableRows } from '../../engine/model/club.ts';
 import { cupGroupTable, cupProgress, isCupCompetition, nextClubWorldYear, stageLabel } from '../../engine/season/cups.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import type { Competition, Fixture } from '../../engine/world/world.ts';
-import { ClubCrest, ClubLink, Empty, FormGuide, money } from '../components.tsx';
+import { ClubCrest, ClubLink, Empty, Flag, FormGuide, money } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
-import { BracketView } from './Match.tsx';
+import { BracketView, LeagueTableView } from './Match.tsx';
+import { Dropdown } from '../dropdown.tsx';
 
 const REGION: Readonly<Record<string, string>> = {
   CEV: 'Europe',
@@ -205,18 +206,26 @@ function BrowseBar(): JSX.Element {
   const cups = world.competitions.filter(isCupCompetition);
   const worldwide = cups.filter((c) => c.kind === 'continental' || c.kind === 'clubworld');
   const national = cups.filter((c) => c.kind === 'cup' || c.kind === 'supercup').sort((a, b) => a.name.localeCompare(b.name));
+  const leagues = world.competitions
+    .filter((c) => c.kind === 'league' && c.participants.length > 0)
+    .sort((a, b) => (NATIONS[a.nation]?.name ?? '').localeCompare(NATIONS[b.nation]?.name ?? '') || a.tier - b.tier);
   return (
     <div className="comps-browse">
       <span className="faint">Follow another competition</span>
-      <select value="" onChange={(e) => { if (e.target.value !== '') g.openCompetition(Number(e.target.value)); }}>
-        <option value="">Choose a competition…</option>
-        <optgroup label="Continental & world">
-          {worldwide.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </optgroup>
-        <optgroup label="National cups">
-          {national.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </optgroup>
-      </select>
+      <Dropdown<number>
+        value={null}
+        placeholder="Choose a competition…"
+        onChange={(id) => g.openCompetition(id)}
+        menuWidth={340}
+        options={[
+          ...worldwide.map((c) => ({ value: c.id, label: c.name, group: 'Continental & world', icon: <Icon name="world" size={14} /> })),
+          ...leagues.map((c) => ({
+            value: c.id, label: c.name, text: `${c.name} ${NATIONS[c.nation]?.name ?? ''}`, group: 'Leagues',
+            icon: <Flag nation={c.nation} />, hint: `Tier ${c.tier}`,
+          })),
+          ...national.map((c) => ({ value: c.id, label: c.name, group: 'National cups', icon: <Flag nation={c.nation} /> })),
+        ]}
+      />
     </div>
   );
 }
@@ -229,7 +238,7 @@ function ordinal(n: number): string {
 
 // ---- One competition ---------------------------------------------------------------
 
-type DetailTab = 'groups' | 'knockout' | 'results';
+type DetailTab = 'table' | 'groups' | 'knockout' | 'results';
 
 /** A competition's own page: its groups, its bracket and every result. */
 export function CompetitionDetail(): JSX.Element | null {
@@ -237,12 +246,15 @@ export function CompetitionDetail(): JSX.Element | null {
   const world = g.world!;
   const comp = g.selectedCompetition !== null ? world.competitions[g.selectedCompetition] : undefined;
   const cup = comp?.cup;
+  const league = comp?.kind === 'league';
   const [tab, setTab] = useState<DetailTab>(() =>
-    cup?.bracket !== null && cup?.bracket !== undefined ? 'knockout' : cup !== undefined && cup.groups.length > 0 ? 'groups' : 'results');
+    league ? 'table'
+      : cup?.bracket !== null && cup?.bracket !== undefined ? 'knockout' : cup !== undefined && cup.groups.length > 0 ? 'groups' : 'results');
   if (comp === undefined) return null;
 
   const holder = comp.champion >= 0 ? world.clubs[comp.champion] : undefined;
   const tabs: Array<[DetailTab, string]> = [];
+  if (league) tabs.push(['table', 'Table']);
   if (cup !== undefined && cup.groups.length > 0) tabs.push(['groups', 'Groups']);
   if (cup !== undefined) tabs.push(['knockout', 'Knockout']);
   tabs.push(['results', 'Fixtures & results']);
@@ -253,7 +265,9 @@ export function CompetitionDetail(): JSX.Element | null {
       <div className="comp-page-head">
         <span className="comp-card-icon lg"><Icon name={comp.kind === 'clubworld' ? 'world' : 'trophy'} size={24} /></span>
         <div className="comp-page-titles">
-          <span className="comp-card-kind">{competitionKind(comp)} · {comp.organizer ?? ''}</span>
+          <span className="comp-card-kind">
+            {league ? <><Flag nation={comp.nation} /> {NATIONS[comp.nation]?.name} · Tier {comp.tier}</> : <>{competitionKind(comp)} · {comp.organizer ?? ''}</>}
+          </span>
           <h2>{comp.name}</h2>
           <span className="faint">
             {comp.participants.length} clubs · {money(comp.prizePool)} to the winners
@@ -268,7 +282,9 @@ export function CompetitionDetail(): JSX.Element | null {
         <button className="icon-btn" title="Close" onClick={() => g.back()}><Icon name="close" size={18} /></button>
       </div>
 
-      {cup === undefined && (
+      {league && active === 'table' && <LeagueTableView comp={comp} titled={false} />}
+
+      {cup === undefined && !league && (
         <Empty>
           {comp.kind === 'clubworld'
             ? `The Club World Championship is played every four years — the next one is in December ${nextClubWorldYear(world.startYear + world.season)}.`

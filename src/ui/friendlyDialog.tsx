@@ -11,6 +11,7 @@ import {
 import { ClubCrest, Segmented, StarMeter } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
+import { Dropdown } from './dropdown.tsx';
 
 /** How keen a club is likely to be, in the words a secretary would use. */
 function keenness(p: number): { label: string; cls: 'good' | 'warn' | 'bad' } {
@@ -94,9 +95,12 @@ function FriendlyForm(): JSX.Element {
             <div className="fr-controls">
               <label className="fr-field">
                 <span>Date</span>
-                <select value={day ?? ''} onChange={(e) => setDay(Number(e.target.value))}>
-                  {dates.map((d) => <option key={d} value={d}>{g.longDateLabel(d)}</option>)}
-                </select>
+                <Dropdown
+                  value={day}
+                  onChange={setDay}
+                  searchable={false}
+                  options={dates.map((d) => ({ value: d, label: g.longDateLabel(d), icon: <Icon name="calendar" size={14} /> }))}
+                />
               </label>
               <div className="fr-field">
                 <span>Venue</span>

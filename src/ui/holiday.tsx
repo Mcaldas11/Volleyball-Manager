@@ -13,6 +13,7 @@ import {
 } from '../engine/world/holiday.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { useGame } from './state.ts';
+import { Dropdown } from './dropdown.tsx';
 
 /** A preset return date in the dropdown. */
 interface Preset {
@@ -161,10 +162,12 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
             <label className="hol-row">
               <input type="radio" name="hol-back" checked={mode === 'date'} onChange={() => setMode('date')} />
               <span>Return from holiday on:</span>
-              <select value={presetKey} disabled={mode !== 'date'} onChange={(e) => setPresetKey(e.target.value)}>
-                {presets.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-                <option value="custom">Choose a date…</option>
-              </select>
+              <Dropdown
+                value={presetKey}
+                disabled={mode !== 'date'}
+                onChange={setPresetKey}
+                options={[...presets.map((p) => ({ value: p.key, label: p.label })), { value: 'custom', label: 'Choose a date…' }]}
+              />
             </label>
             {mode === 'date' && presetKey === 'custom' && (
               <label className="hol-row hol-indent">
@@ -211,9 +214,12 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
             <label className="hol-row">
               <input type="checkbox" checked={jobs !== null} onChange={(e) => setJobs(e.target.checked ? jobTarget : null)} />
               <span>Apply for head coach jobs at:</span>
-              <select value={jobTarget} disabled={jobs === null} onChange={(e) => setJobTarget(e.target.value as JobTarget)}>
-                {JOB_TARGETS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-              </select>
+              <Dropdown
+                value={jobTarget}
+                disabled={jobs === null}
+                onChange={setJobTarget}
+                options={JOB_TARGETS.map(([k, label]) => ({ value: k, label }))}
+              />
             </label>
           </Section>
 

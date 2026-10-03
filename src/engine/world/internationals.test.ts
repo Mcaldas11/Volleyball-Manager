@@ -9,7 +9,8 @@ import { MatchFormat, simulateMatch } from '../match/engine.ts';
 import { Position } from '../model/positions.ts';
 import {
   acceptNationalOffer, appointNationalCoach, applyForNationalJob, askForSquad, declineNationalOffer, leaveNationalJob, applyIntlResult, eligibleFor, internationalDay, internationals,
-  matchImportance, nameSquad, nationSetup, pickSquad, poolTable, secondNation, selectionScore, squadDue, squadOf,
+  matchImportance, nameSquad, nationalRecord, nationResults, nationSetup, nationTournaments, pickSquad, poolTable,
+  secondNation, selectionScore, squadDue, squadOf,
   startNationalCareer, suggestSquad, userMatchToday, worldRanking, type Tournament,
 } from './internationals.ts';
 import { NATIONS } from './nations.ts';
@@ -342,4 +343,25 @@ test('club and country: the club sets his name, and the nation comes on top', ()
   assert.ok(world.userClubId >= 0);
   assert.equal(world.career.nationalTeam, nation);
   assert.equal(world.career.reputation, rep, "a weak nation does not lower a club coach's name");
+});
+
+test("a nation's record: its matches won and lost over a spell, the tournaments it won, and every one it played", () => {
+  const { world, ctx } = start(43);
+  const euro = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!;
+  runTo(world, ctx, euro.knockoutDays[euro.knockoutDays.length - 1] + 1);
+  const champion = euro.placings[0];
+  const played = euro.matches.filter((m) => m.home === champion || m.away === champion);
+  const won = played.filter((m) => (m.home === champion) === (m.homeSets > m.awaySets)).length;
+
+  const all = nationalRecord(world, champion, 0, -1);
+  assert.equal(all.won, won);
+  assert.equal(all.lost, played.length - won);
+  assert.ok(all.titles.some((t) => t.name === 'EuroVolley 2026'));
+  // A spell that ended before the final has no title in it.
+  const before = nationalRecord(world, champion, 0, euro.knockoutDays[euro.knockoutDays.length - 1] - 1);
+  assert.ok(!before.titles.some((t) => t.name === 'EuroVolley 2026'));
+
+  assert.equal(nationTournaments(world, champion).find((x) => x.t.id === euro.id)?.place, 1);
+  const latest = nationResults(world, champion, 3);
+  assert.ok(latest.length > 0 && latest.every((r, i) => i === 0 || r.m.day <= latest[i - 1].m.day), 'newest first');
 });

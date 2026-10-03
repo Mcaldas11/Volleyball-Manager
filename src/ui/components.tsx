@@ -17,6 +17,7 @@ import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/na
 import { playerFaceUrl, portraitUrl } from './faces.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { useGame } from './state.ts';
+import { Dropdown } from './dropdown.tsx';
 
 /** Close a popover when the user clicks anywhere outside it or presses Escape. */
 export function useDismiss(open: boolean, close: () => void): RefObject<HTMLDivElement> {
@@ -131,9 +132,7 @@ export function ChoiceField<T extends number>({
     <div className="field">
       <div className="field-row">
         <span className="field-label">{label}</span>
-        <select value={value} onChange={(e) => onChange(Number(e.target.value) as T)}>
-          {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+        <Dropdown value={value} onChange={onChange} options={options.map(([v, l]) => ({ value: v, label: l }))} />
       </div>
       {hint !== undefined && <div className="field-hint">{hint}</div>}
     </div>

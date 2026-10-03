@@ -6,6 +6,7 @@ import {
 import { ClubLink, ContractPaper, ContractRow, RatingBadge, Segmented } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 /**
  * A word with the coach of a club playing one of yours on loan too little:
@@ -61,9 +62,11 @@ export function CoachTalkScreen(): JSX.Element | null {
       {t.result === null ? (
         <div className="contract-offer">
           <ContractRow label="Ask for">
-            <select value={t.request} onChange={(e) => g.setCoachRequest(e.target.value as LoanPlayingTime)}>
-              {requests.map((r) => <option key={r} value={r}>{option(r)}</option>)}
-            </select>
+            <Dropdown
+              value={t.request}
+              onChange={(v) => g.setCoachRequest(v)}
+              options={requests.map((r) => ({ value: r, label: option(r) }))}
+            />
           </ContractRow>
           <ContractRow label="Approach">
             <Segmented

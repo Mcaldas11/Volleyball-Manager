@@ -120,7 +120,7 @@ export interface ManagerCareer {
   /** The nation whose national team he coaches as well, if any (see internationals.ts). */
   nationalTeam?: number;
   /** Every spell in charge of a national team, oldest first; endDay -1 while current. */
-  nationalJobs?: Array<{ nation: number; startDay: number; endDay: number }>;
+  nationalJobs?: Array<{ nation: number; startDay: number; endDay: number; exit?: 'sacked' | 'resigned' }>;
   /** The board's offer of a new contract, while it stands. */
   contractOffer?: ContractOffer | null;
   nextContractOfferId?: number;

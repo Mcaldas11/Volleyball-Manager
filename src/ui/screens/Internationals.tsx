@@ -12,6 +12,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import { ClubLink, Empty, Flag, PlayerLink } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 const MEDALS = ['gold', 'silver', 'bronze'] as const;
 
@@ -176,11 +177,14 @@ function TournamentView({ t }: { t: Tournament }): JSX.Element {
         <section className="intl-card intl-squad">
           <h3 className="intl-h">
             Squad
-            <select value={squadNation} onChange={(e) => setSquadNation(Number(e.target.value))}>
-              {[...t.teams].sort((a, b) => nationName(a).localeCompare(nationName(b))).map((n) => (
-                <option key={n} value={n}>{nationName(n)}</option>
-              ))}
-            </select>
+            <Dropdown
+              size="sm"
+              value={squadNation}
+              onChange={setSquadNation}
+              options={[...t.teams].sort((a, b) => nationName(a).localeCompare(nationName(b))).map((n) => ({
+                value: n, label: nationName(n), icon: <Flag nation={n} />,
+              }))}
+            />
           </h3>
           {squad.length === 0 ? <p className="intl-none">The squads are named on {g.dateLabelForDay(t.callUpDay)}.</p> : (
             <table className="data-table">

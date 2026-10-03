@@ -1137,7 +1137,10 @@ export function leaveNationalJob(world: World, sacked: boolean, why = ''): void 
   if (team !== undefined) team.managedByUser = false;
   world.career.nationalTeam = undefined;
   const spell = world.career.nationalJobs?.find((j) => j.nation === nation && j.endDay < 0);
-  if (spell !== undefined) spell.endDay = world.day;
+  if (spell !== undefined) {
+    spell.endDay = world.day;
+    spell.exit = sacked ? 'sacked' : 'resigned';
+  }
   I.chosen = null;
   I.vacancies.push({ nation, since: world.day, fillsOn: world.day + VACANCY_DAYS });
   if (sacked) {
@@ -1157,6 +1160,49 @@ export function leaveNationalJob(world: World, sacked: boolean, why = ''): void 
     body: `The ${nationName(nation)} national team is looking for a new head coach.`,
     nation,
   });
+}
+
+// ---- A nation's record ---------------------------------------------------------------
+
+/** A nation's matches won and lost between two days (`to` -1: to date), and the tournaments it won in them. */
+export function nationalRecord(world: World, nation: number, from: number, to: number): {
+  won: number; lost: number; titles: Array<{ competitionId: number; year: number; name: string }>;
+} {
+  let won = 0;
+  let lost = 0;
+  const titles: Array<{ competitionId: number; year: number; name: string }> = [];
+  const within = (day: number): boolean => day >= from && (to < 0 || day <= to);
+  for (const t of world.internationals?.tournaments ?? []) {
+    let last = -1;
+    for (const m of t.matches) {
+      if (!m.played) continue;
+      last = Math.max(last, m.day);
+      if ((m.home !== nation && m.away !== nation) || !within(m.day)) continue;
+      if ((m.home === nation) === (m.homeSets > m.awaySets)) won++;
+      else lost++;
+    }
+    if (t.status === 'done' && t.placings[0] === nation && last >= 0 && within(last)) {
+      titles.push({ competitionId: t.competitionId, year: t.year, name: t.name });
+    }
+  }
+  return { won, lost, titles };
+}
+
+/** Every tournament a nation has been drawn in, the latest first, with where it finished (0 while it is still on). */
+export function nationTournaments(world: World, nation: number): Array<{ t: Tournament; place: number }> {
+  return (world.internationals?.tournaments ?? [])
+    .filter((t) => t.teams.includes(nation))
+    .sort((a, b) => b.startDay - a.startDay)
+    .map((t) => ({ t, place: t.status === 'done' ? t.placings.indexOf(nation) + 1 : 0 }));
+}
+
+/** A nation's latest results, newest first. */
+export function nationResults(world: World, nation: number, limit: number): Array<{ t: Tournament; m: IntlMatch }> {
+  const out: Array<{ t: Tournament; m: IntlMatch }> = [];
+  for (const t of world.internationals?.tournaments ?? []) {
+    for (const m of t.matches) if (m.played && (m.home === nation || m.away === nation)) out.push({ t, m });
+  }
+  return out.sort((a, b) => b.m.day - a.m.day).slice(0, limit);
 }
 
 /** After a tournament: coaches whose nation finished far below where it was seeded are in trouble. */

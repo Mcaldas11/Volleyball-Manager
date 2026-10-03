@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import {
-  LOAN_PLAYING_TIMES, LOAN_WAGE_SHARES, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanPlayingTime,
+  LOAN_PLAYING_TIMES, LOAN_WAGE_SHARES, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE,
 } from '../../engine/world/loans.ts';
 import {
   MAX_CONTRACT_YEARS, SQUAD_ROLE_NAMES, SquadRole, TALKS_PATIENCE, yearsLeft,
@@ -11,6 +11,7 @@ import {
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 const ROLE_OPTIONS = (Object.values(SquadRole) as Array<SquadRole | string>)
   .filter((r): r is SquadRole => typeof r === 'number');
@@ -120,18 +121,22 @@ export function NegotiationScreen(): JSX.Element | null {
         {pending === null && (
           <div className="contract-offer">
             <ContractRow label="Playing time">
-              <select value={n.loanPlayingTime} onChange={(e) => g.setLoanPlayingTime(e.target.value as LoanPlayingTime)}>
-                {LOAN_PLAYING_TIMES.map((pt) => (
-                  <option key={pt} value={pt}>{PLAYING_TIME_NAMES[pt]} · about {Math.round(PLAYING_TIME_SHARE[pt] * 100)}% of your play</option>
-                ))}
-              </select>
+              <Dropdown
+                value={n.loanPlayingTime}
+                onChange={(v) => g.setLoanPlayingTime(v)}
+                options={LOAN_PLAYING_TIMES.map((pt) => ({
+                  value: pt, label: PLAYING_TIME_NAMES[pt], hint: `about ${Math.round(PLAYING_TIME_SHARE[pt] * 100)}% of the play`,
+                }))}
+              />
             </ContractRow>
             <ContractRow label="You pay">
-              <select value={n.loanShare} onChange={(e) => g.setLoanShare(Number(e.target.value))}>
-                {LOAN_WAGE_SHARES.map((s) => (
-                  <option key={s} value={s}>{Math.round(s * 100)}% of his wage · {money(Math.round(wage * s))}</option>
-                ))}
-              </select>
+              <Dropdown
+                value={n.loanShare}
+                onChange={(v) => g.setLoanShare(v)}
+                options={LOAN_WAGE_SHARES.map((s) => ({
+                  value: s, label: `${Math.round(s * 100)}% of his wage`, hint: money(Math.round(wage * s)),
+                }))}
+              />
             </ContractRow>
             <p className="contract-hint">
               {sellingClub.shortName} pay the rest: {money(wage - cost)} · Room in the wage budget:{' '}
@@ -268,18 +273,20 @@ export function NegotiationScreen(): JSX.Element | null {
                   <MoneyInput value={n.termsWage} onChange={(v) => g.setTermsWage(v)} />
                 </ContractRow>
                 <ContractRow label="Promised role">
-                  <select value={n.termsRole} onChange={(e) => g.setTermsRole(Number(e.target.value) as SquadRole)}>
-                    {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{SQUAD_ROLE_NAMES[r]}</option>)}
-                  </select>
+                  <Dropdown
+                    value={n.termsRole}
+                    onChange={(v) => g.setTermsRole(v)}
+                    options={ROLE_OPTIONS.map((r) => ({ value: r, label: SQUAD_ROLE_NAMES[r] }))}
+                  />
                 </ContractRow>
                 <ContractRow label="Contract until">
-                  <select value={n.termsYears} onChange={(e) => g.setTermsYears(Number(e.target.value))}>
-                    {yearOptions.map((y) => (
-                      <option key={y} value={y}>
-                        {endsLabel(startSeason + y - 1)} · {y} season{y === 1 ? '' : 's'}
-                      </option>
-                    ))}
-                  </select>
+                  <Dropdown
+                    value={n.termsYears}
+                    onChange={(v) => g.setTermsYears(v)}
+                    options={yearOptions.map((y) => ({
+                      value: y, label: endsLabel(startSeason + y - 1), hint: `${y} season${y === 1 ? '' : 's'}`,
+                    }))}
+                  />
                 </ContractRow>
               </div>
               <p className="contract-hint">

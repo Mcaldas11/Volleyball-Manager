@@ -6,6 +6,7 @@ import {
   ClubCrest, clubThemeStyle, Flag, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
 import { NATIONS } from '../engine/world/nations.ts';
+import { worldRanking } from '../engine/world/internationals.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { HolidayDialog } from './holiday.tsx';
 import { FriendlyDialog } from './friendlyDialog.tsx';
@@ -20,6 +21,7 @@ import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
 import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CoachProfile } from './screens/CoachProfile.tsx';
+import { NationProfile } from './screens/NationProfile.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { NewsScreen } from './screens/News.tsx';
 import { HomeScreen } from './screens/Home.tsx';
@@ -199,6 +201,8 @@ function GameShell(): JSX.Element {
                     ? <CoachTalkScreen />
                     : g.activeInterviewFixtureId !== null
                       ? <InterviewScreen />
+                      : g.selectedNation !== null
+                        ? <NationProfile />
                       : g.selectedCoach !== null
                         ? <CoachProfile />
                       : g.selectedClub !== null
@@ -287,6 +291,7 @@ function Sidebar({
   const clubInfoActive = club !== null && g.selectedClub === club.id;
   const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null || g.selectedCoach !== null ||
+    g.selectedNation !== null ||
     g.negotiation !== null || g.incomingOffer !== null || g.coachTalk !== null;
   const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
 
@@ -406,6 +411,7 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   if (g.incomingOffer !== null) return { title: 'Transfer Offer', tabs: null };
   if (g.coachTalk !== null) return { title: 'Talk to the Coach', tabs: null };
   if (g.activeInterviewFixtureId !== null) return { title: 'Press Conference', tabs: null };
+  if (g.selectedNation !== null) return { title: 'National Team', tabs: null };
   if (g.selectedCoach !== null) return { title: 'Coach', tabs: null };
   if (g.selectedClub !== null) {
     return { title: g.selectedClub === world.userClubId ? 'Club Info' : 'Club', tabs: null };
@@ -605,13 +611,14 @@ function ContinueButton(): JSX.Element {
 }
 
 interface SearchResult {
-  kind: 'club' | 'player';
+  kind: 'club' | 'player' | 'nation' | 'league';
   id: number;
 }
 
 /**
- * The header's search box: any club or player in the world by name, opened
- * straight into their profile. Results are capped and debounced so typing
+ * The header's search box: any club, player, national team or league in the
+ * world by name — a country's name finds its national team and its leagues —
+ * opened straight into its page. Results are capped and debounced so typing
  * never stalls even with a large world's full player pool behind it.
  */
 function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
@@ -645,6 +652,18 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
 
   const results = useMemo((): SearchResult[] => {
     if (debounced.length < 2) return [];
+    const nations = world.nationalTeams
+      .map((t) => t.nation)
+      .filter((n) => NATIONS[n] !== undefined && (NATIONS[n].name.toLowerCase().includes(debounced) ||
+        NATIONS[n].code.toLowerCase() === debounced))
+      .slice(0, 3)
+      .map((n): SearchResult => ({ kind: 'nation', id: n }));
+    const leagues = world.competitions
+      .filter((c) => c.kind === 'league' && c.participants.length > 0 &&
+        (c.name.toLowerCase().includes(debounced) || (NATIONS[c.nation]?.name.toLowerCase().includes(debounced) ?? false)))
+      .sort((a, b) => a.tier - b.tier || b.reputation - a.reputation)
+      .slice(0, 4)
+      .map((c): SearchResult => ({ kind: 'league', id: c.id }));
     const clubs = world.clubs
       .filter((c) => c.name.toLowerCase().includes(debounced) || c.shortName.toLowerCase() === debounced)
       .sort((a, b) => b.reputation - a.reputation)
@@ -658,13 +677,15 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
       players.push(i);
     }
     players.sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
-    return [...clubs, ...players.slice(0, 8).map((p): SearchResult => ({ kind: 'player', id: p }))];
+    return [...nations, ...leagues, ...clubs, ...players.slice(0, 8).map((p): SearchResult => ({ kind: 'player', id: p }))];
   }, [debounced, world]);
 
   useEffect(() => setHighlight(0), [debounced]);
 
   const openResult = (r: SearchResult): void => {
     if (r.kind === 'club') g.selectClub(r.id);
+    else if (r.kind === 'nation') g.selectNation(r.id);
+    else if (r.kind === 'league') g.openCompetition(r.id);
     else g.select(r.id);
     setQuery('');
     setDebounced('');
@@ -677,7 +698,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
       <input
         ref={inputRef}
         className="search-input"
-        placeholder="Search players & clubs"
+        placeholder="Search players, clubs, nations & leagues"
         value={query}
         disabled={disabled}
         aria-controls={listId}
@@ -692,8 +713,42 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
       <span className="search-kbd">Ctrl/Cmd + K</span>
       {open && debounced.length >= 2 && (
         <div className="search-pop" id={listId} role="listbox">
-          {results.length === 0 && <div className="search-empty">No players or clubs match “{query.trim()}”.</div>}
+          {results.length === 0 && <div className="search-empty">Nothing matches “{query.trim()}”.</div>}
           {results.map((r, i) => {
+            if (r.kind === 'nation') {
+              const rank = worldRanking(world).indexOf(r.id) + 1;
+              return (
+                <button
+                  key={`n${r.id}`}
+                  className={`search-row${i === highlight ? ' active' : ''}`}
+                  onMouseEnter={() => setHighlight(i)}
+                  onClick={() => openResult(r)}
+                >
+                  <span className="search-flag"><Flag nation={r.id} /></span>
+                  <span className="search-row-main">
+                    <strong>{NATIONS[r.id].name}</strong>
+                    <span className="faint">National team{rank > 0 ? ` · ranked ${rank}` : ''}</span>
+                  </span>
+                </button>
+              );
+            }
+            if (r.kind === 'league') {
+              const c = world.competitions[r.id];
+              return (
+                <button
+                  key={`l${r.id}`}
+                  className={`search-row${i === highlight ? ' active' : ''}`}
+                  onMouseEnter={() => setHighlight(i)}
+                  onClick={() => openResult(r)}
+                >
+                  <span className="search-league"><Icon name="trophy" size={15} /></span>
+                  <span className="search-row-main">
+                    <strong>{c.name}</strong>
+                    <span className="faint"><Flag nation={c.nation} /> League · Tier {c.tier} · {c.participants.length} clubs</span>
+                  </span>
+                </button>
+              );
+            }
             if (r.kind === 'club') {
               const c = world.clubs[r.id];
               return (

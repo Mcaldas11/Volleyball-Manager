@@ -15,6 +15,7 @@ import {
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 export const FORMATION_OPTIONS: Array<[Formation, string]> = [
   [Formation.FiveOne, '5-1 (one setter)'],
@@ -640,12 +641,11 @@ export function StaffScreen(): JSX.Element {
         flush={candidates.length > 0}
         actions={(
           <div className="toolbar-inline">
-            <select
+            <Dropdown
               value={role}
-              onChange={(e) => { setRole(Number(e.target.value) as StaffRole); setCandidates([]); }}
-            >
-              {hirableRoles.map((r) => <option key={r} value={r}>{STAFF_ROLE_NAMES[r]}</option>)}
-            </select>
+              onChange={(v) => { setRole(v); setCandidates([]); }}
+              options={hirableRoles.map((r) => ({ value: r, label: STAFF_ROLE_NAMES[r] }))}
+            />
             <button className="accent" onClick={() => setCandidates(g.recruitStaffCandidates(role))}>
               <Icon name="search" size={14} /> Search candidates
             </button>
@@ -851,12 +851,11 @@ export function ScoutingScreen(): JSX.Element {
           </FilterField>
 
           <FilterField label="Potential">
-            <select
+            <Dropdown
               value={filters.potentialMin}
-              onChange={(e) => setFilter('potentialMin', Number(e.target.value))}
-            >
-              {POTENTIAL_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+              onChange={(v) => setFilter('potentialMin', v)}
+              options={POTENTIAL_BANDS.map(([v, l]) => ({ value: v, label: l }))}
+            />
           </FilterField>
 
           <FilterField label="Max price">

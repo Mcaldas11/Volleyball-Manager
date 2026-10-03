@@ -528,10 +528,17 @@ function formByClub(comp: Competition, world: World): Map<number, Array<'W' | 'L
 export function TableScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
-  const comp = world.competitions[club.leagueId];
-  const [tab, setTab] = useState('table');
+  const comp = world.competitions[g.club!.leagueId];
   if (comp === undefined) return <Empty>No league assigned.</Empty>;
+  return <LeagueTableView comp={comp} />;
+}
+
+/** Any league's table — and its playoff brackets once drawn. `titled` heads it with the league's name. */
+export function LeagueTableView({ comp, titled = true }: { comp: Competition; titled?: boolean }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const me = world.userClubId;
+  const [tab, setTab] = useState('table');
 
   const rows = [...comp.table].sort(compareTableRows);
   const { championship: champSize, relegation: relegationSize } = playoffBandSizes(comp);
@@ -540,11 +547,13 @@ export function TableScreen(): JSX.Element {
 
   return (
     <>
-      <div className="comp-bar">
-        <div className="comp-bar-title">
-          <span className="comp-bar-name">{comp.name}</span>
-          <span className="faint">Tier {comp.tier} · {comp.participants.length} clubs</span>
-        </div>
+      {(titled || comp.playoffGroups.length > 0) && <div className="comp-bar">
+        {titled && (
+          <div className="comp-bar-title">
+            <span className="comp-bar-name">{comp.name}</span>
+            <span className="faint">Tier {comp.tier} · {comp.participants.length} clubs</span>
+          </div>
+        )}
         {comp.playoffGroups.length > 0 && (
           <Segmented
             options={[['table', 'Table'], ...comp.playoffGroups.map((grp) => [grp.id, grp.label] as const)]}
@@ -552,7 +561,7 @@ export function TableScreen(): JSX.Element {
             onChange={setTab}
           />
         )}
-      </div>
+      </div>}
 
       {activeGroup !== undefined ? (
         <Card title={activeGroup.label} icon="trophy">
@@ -584,7 +593,7 @@ export function TableScreen(): JSX.Element {
                 {rows.map((r, i) => {
                   const zone = i < champSize ? 'zone-champ' : i >= rows.length - relegationSize ? 'zone-releg' : '';
                   return (
-                    <tr key={r.clubId} className={`${zone}${r.clubId === club.id ? ' me' : ''}`}>
+                    <tr key={r.clubId} className={`${zone}${r.clubId === me ? ' me' : ''}`}>
                       <td className="num pos-cell">{i + 1}</td>
                       <td><ClubLink id={r.clubId} /></td>
                       <td className="num dim">{r.played}</td>

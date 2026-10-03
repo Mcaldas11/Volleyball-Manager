@@ -1,10 +1,11 @@
 import type { JSX } from 'react';
 import {
-  LOAN_PLAYING_TIMES, LOAN_WAGE_SHARES, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanPlayingTime,
+  LOAN_PLAYING_TIMES, LOAN_WAGE_SHARES, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE,
 } from '../../engine/world/loans.ts';
 import { ClubLink, ContractPaper, ContractRow, money, MoneyInput } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 /**
  * The reverse of NegotiationScreen: another club wants one of ours, presented
@@ -89,16 +90,20 @@ export function IncomingOfferScreen(): JSX.Element | null {
           <>
             <div className="contract-offer">
               <ContractRow label="Ask for playing time">
-                <select value={n.counterPlayingTime} onChange={(e) => g.setCounterPlayingTime(e.target.value as LoanPlayingTime)}>
-                  {LOAN_PLAYING_TIMES.map((t) => <option key={t} value={t}>{PLAYING_TIME_NAMES[t]}</option>)}
-                </select>
+                <Dropdown
+                  value={n.counterPlayingTime}
+                  onChange={(v) => g.setCounterPlayingTime(v)}
+                  options={LOAN_PLAYING_TIMES.map((t) => ({ value: t, label: PLAYING_TIME_NAMES[t] }))}
+                />
               </ContractRow>
               <ContractRow label="Ask them to pay">
-                <select value={n.counterShare} onChange={(e) => g.setCounterShare(Number(e.target.value))}>
-                  {LOAN_WAGE_SHARES.map((s) => (
-                    <option key={s} value={s}>{Math.round(s * 100)}% of his wage · {money(Math.round(wage * s))}</option>
-                  ))}
-                </select>
+                <Dropdown
+                  value={n.counterShare}
+                  onChange={(v) => g.setCounterShare(v)}
+                  options={LOAN_WAGE_SHARES.map((s) => ({
+                    value: s, label: `${Math.round(s * 100)}% of his wage`, hint: money(Math.round(wage * s)),
+                  }))}
+                />
               </ContractRow>
               <div className="contract-footer">
                 <button className="accent" onClick={() => g.counterLoanOffer()}>

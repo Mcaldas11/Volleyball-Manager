@@ -11,6 +11,7 @@ import type { PlayerStore } from '../engine/model/players.ts';
 import { LINEUP_SLOT_POSITIONS } from '../engine/season/seasonEngine.ts';
 import { Bar, initials, PlayerFace, Pos, POSITION_ACCENT, starRating } from './components.tsx';
 import { playerFaceUrl } from './faces.ts';
+import { Dropdown } from './dropdown.tsx';
 
 export const ZONE_ORDER = [3, 2, 1, 4, 5, 0]; // front row first: 4,3,2 then back row 5,6,1
 export const ZONE_LABELS = ['1', '2', '3', '4', '5', '6'];
@@ -94,19 +95,21 @@ export function LineupCard({
       {swapOptions.length > 0 && (
         <>
           <span className="lineup-card-swap-hint">⇅</span>
-          <select
+          <Dropdown
+            size="sm"
             className="lineup-card-select"
             value={playerIdx}
             title={`${label} — change`}
-            onChange={(e) => onSelectChange(Number(e.target.value))}
-          >
-            <option value={playerIdx}>{store.shortName(playerIdx)} ({label})</option>
-            {swapOptions.map((b) => (
-              <option key={b} value={b}>
-                {store.shortName(b)} ({POSITION_SHORT[store.position[b] as Position]})
-              </option>
-            ))}
-          </select>
+            menuWidth={190}
+            searchable={false}
+            onChange={(v) => { if (v !== playerIdx) onSelectChange(v); }}
+            options={[
+              { value: playerIdx, label: store.shortName(playerIdx), hint: label },
+              ...swapOptions.map((b) => ({
+                value: b, label: store.shortName(b), hint: POSITION_SHORT[store.position[b] as Position],
+              })),
+            ]}
+          />
         </>
       )}
     </div>
@@ -308,10 +311,14 @@ export function TeamSheet({
                 >
                   <span className="ts-libero-plus">+</span>
                   {benchLiberos.length > 0 ? (
-                    <select value={-1} onChange={(e) => onSetDefensiveLibero(Number(e.target.value))}>
-                      <option value={-1}>Add libero</option>
-                      {benchLiberos.map((p) => <option key={p} value={p}>{store.shortName(p)}</option>)}
-                    </select>
+                    <Dropdown<number>
+                      size="sm"
+                      value={null}
+                      placeholder="Add libero"
+                      menuWidth={170}
+                      onChange={(v) => onSetDefensiveLibero(v)}
+                      options={benchLiberos.map((p) => ({ value: p, label: store.shortName(p) }))}
+                    />
                   ) : (
                     <span className="ts-libero-none">No second libero available</span>
                   )}

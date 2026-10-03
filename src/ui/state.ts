@@ -210,12 +210,15 @@ interface NavEntry {
   selectedCompetition: number | null;
   /** Coach (staff id) whose profile is open. */
   selectedCoach?: number | null;
+  /** Nation whose national team page is open. */
+  selectedNation?: number | null;
 }
 
 function sameNav(a: NavEntry, b: NavEntry): boolean {
   return a.screen === b.screen && a.selectedPlayer === b.selectedPlayer &&
     a.selectedClub === b.selectedClub && a.selectedReview === b.selectedReview &&
-    a.selectedCompetition === b.selectedCompetition && (a.selectedCoach ?? null) === (b.selectedCoach ?? null);
+    a.selectedCompetition === b.selectedCompetition && (a.selectedCoach ?? null) === (b.selectedCoach ?? null) &&
+    (a.selectedNation ?? null) === (b.selectedNation ?? null);
 }
 
 /** How many steps back the header's back button remembers. */
@@ -361,6 +364,8 @@ class Game {
   selectedClub: number | null = null;
   /** A coach's profile, open over the screen — a staff id. */
   selectedCoach: number | null = null;
+  /** A national team's page, open over the screen — a nation index. */
+  selectedNation: number | null = null;
   /** Id of the inbox message whose season review is open full-screen, if any. */
   selectedReview: number | null = null;
   /** Competition whose page is open over the current screen, if any. */
@@ -444,6 +449,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
@@ -500,6 +506,7 @@ class Game {
       this.selectedPlayer = null;
       this.selectedClub = null;
       this.selectedCoach = null;
+      this.selectedNation = null;
       this.selectedReview = null;
       this.selectedCompetition = null;
       this.negotiation = null;
@@ -640,6 +647,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedCompetition = null;
     this.watched = null;
     this.postMatch = null;
@@ -709,6 +717,7 @@ class Game {
       selectedReview: this.selectedReview,
       selectedCompetition: this.selectedCompetition,
       selectedCoach: this.selectedCoach,
+      selectedNation: this.selectedNation,
     };
   }
 
@@ -734,6 +743,7 @@ class Game {
     this.selectedReview = entry.selectedReview;
     this.selectedCompetition = entry.selectedCompetition;
     this.selectedCoach = entry.selectedCoach ?? null;
+    this.selectedNation = entry.selectedNation ?? null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
@@ -780,6 +790,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     // Navigating away must always work, even mid-negotiation — the deal
@@ -799,6 +810,7 @@ class Game {
     if (playerIdx !== null) {
       this.selectedClub = null;
       this.selectedCoach = null;
+      this.selectedNation = null;
       this.selectedReview = null;
       this.selectedCompetition = null;
       this.incomingOffer = null;
@@ -814,6 +826,7 @@ class Game {
     this.selectedClub = clubId;
     if (clubId !== null) {
       this.selectedCoach = null;
+      this.selectedNation = null;
       this.selectedPlayer = null;
       this.selectedReview = null;
       this.selectedCompetition = null;
@@ -838,6 +851,26 @@ class Game {
       this.coachTalk = null;
     }
     this.selectedCoach = staffId;
+    if (staffId !== null) this.selectedNation = null;
+    this.emit();
+  }
+
+  /** Open a national team's page — any nation's. */
+  selectNation(nation: number | null): void {
+    if (nation !== null) {
+      this.pushHistory({
+        screen: this.screen, selectedPlayer: null, selectedClub: null, selectedReview: null, selectedCompetition: null,
+        selectedNation: nation,
+      });
+      this.selectedPlayer = null;
+      this.selectedClub = null;
+      this.selectedCoach = null;
+      this.selectedReview = null;
+      this.selectedCompetition = null;
+      this.incomingOffer = null;
+      this.coachTalk = null;
+    }
+    this.selectedNation = nation;
     this.emit();
   }
 
@@ -864,6 +897,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.negotiation = null;
     this.incomingOffer = null;
@@ -893,6 +927,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.negotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
@@ -928,6 +963,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
@@ -992,6 +1028,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.incomingOffer = null;
@@ -1045,6 +1082,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.incomingOffer = null;
@@ -1427,6 +1465,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
@@ -1607,6 +1646,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
@@ -2252,6 +2292,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
@@ -2697,6 +2738,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.incomingOffer = null;
@@ -3038,6 +3080,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
@@ -3103,6 +3146,7 @@ class Game {
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
+    this.selectedNation = null;
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.emit();

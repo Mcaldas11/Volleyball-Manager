@@ -11,6 +11,7 @@ import {
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame, type CareerMode } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 
 const MIN_BIRTH_DATE = '1946-01-01';
 const MAX_BIRTH_DATE = '2008-07-01';
@@ -281,21 +282,19 @@ export function CreateManager(): JSX.Element {
           </label>
           <label className="form-field">
             <span>Gender</span>
-            <select value={gender} onChange={(e) => setGender(e.target.value as 'male' | 'female')}>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
+            <Dropdown
+              value={gender}
+              onChange={setGender}
+              options={[{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]}
+            />
           </label>
           <label className="form-field form-field-wide">
             <span>Nation</span>
-            <span className="form-inline">
-              <Flag nation={nation} />
-              <select value={nation} onChange={(e) => setNation(Number(e.target.value))}>
-                {NATIONS.map((n, i) => (
-                  <option key={n.code} value={i}>{n.name}</option>
-                ))}
-              </select>
-            </span>
+            <Dropdown
+              value={nation}
+              onChange={setNation}
+              options={NATIONS.map((n, i) => ({ value: i, label: n.name, icon: <Flag nation={i} /> }))}
+            />
           </label>
         </div>
       </Card>
@@ -496,32 +495,35 @@ export function ClubSelect(): JSX.Element {
             <label className="pick-field">
               <span className="pick-label">Continent</span>
               <span className="pick-control">
-                <span className="pick-icon"><Icon name="world" size={15} /></span>
-                <select value={conf} onChange={(e) => chooseConf(e.target.value as Confederation)}>
-                  {CONTINENTS.filter(([c]) => nationsOf(c).length > 0).map(([c, label]) => (
-                    <option key={c} value={c}>{label}</option>
-                  ))}
-                </select>
+                <Dropdown
+                  value={conf}
+                  onChange={chooseConf}
+                  options={CONTINENTS.filter(([c]) => nationsOf(c).length > 0).map(([c, label]) => ({
+                    value: c, label, icon: <Icon name="world" size={15} />,
+                  }))}
+                />
               </span>
             </label>
             <label className="pick-field">
               <span className="pick-label">Country</span>
               <span className="pick-control">
-                <span className="pick-icon"><Flag nation={nation} /></span>
-                <select value={nation} onChange={(e) => chooseNation(Number(e.target.value))}>
-                  {nationsOf(conf).map((n) => <option key={n} value={n}>{NATIONS[n].name}</option>)}
-                </select>
+                <Dropdown
+                  value={nation}
+                  onChange={chooseNation}
+                  options={nationsOf(conf).map((n) => ({ value: n, label: NATIONS[n].name, icon: <Flag nation={n} /> }))}
+                />
               </span>
             </label>
             <label className="pick-field pick-field-wide">
               <span className="pick-label">Division</span>
               <span className="pick-control">
-                <span className="pick-icon"><Icon name="trophy" size={15} /></span>
-                <select value={leagueId} onChange={(e) => setLeagueId(Number(e.target.value))}>
-                  {(leaguesByNation.get(nation) ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>Tier {c.tier} · {divisionName(c)}</option>
-                  ))}
-                </select>
+                <Dropdown
+                  value={leagueId}
+                  onChange={setLeagueId}
+                  options={(leaguesByNation.get(nation) ?? []).map((c) => ({
+                    value: c.id, label: divisionName(c), hint: `Tier ${c.tier}`, icon: <Icon name="trophy" size={15} />,
+                  }))}
+                />
               </span>
             </label>
             <span className="flex-spacer" />
@@ -709,10 +711,14 @@ export function NationSelect(): JSX.Element {
               <span className="pick-label">Continent</span>
               <span className="pick-control">
                 <span className="pick-icon"><Icon name="world" size={15} /></span>
-                <select value={conf} onChange={(e) => setConf(e.target.value as Confederation | 'all')}>
-                  <option value="all">The whole world</option>
-                  {CONTINENTS.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
-                </select>
+                <Dropdown
+                  value={conf}
+                  onChange={setConf}
+                  options={[
+                    { value: 'all' as const, label: 'The whole world', icon: <Icon name="world" size={15} /> },
+                    ...CONTINENTS.map(([c, label]) => ({ value: c, label, icon: <Icon name="world" size={15} /> })),
+                  ]}
+                />
               </span>
             </label>
             <span className="flex-spacer" />
