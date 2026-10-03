@@ -602,7 +602,7 @@ export function StaffScreen(): JSX.Element {
                   : '';
                 return (
                   <tr key={s.id}>
-                    <td className="strong">{s.firstName} {s.lastName}</td>
+                    <td className="strong"><span className="player-link" onClick={() => g.selectCoach(s.id)}>{s.firstName} {s.lastName}</span></td>
                     <td><span className="role-chip">{STAFF_ROLE_NAMES[s.role]}</span></td>
                     <td><Flag nation={s.nation} /></td>
                     <td className="num">{world.year - s.birthYear}</td>

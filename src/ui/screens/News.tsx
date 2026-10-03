@@ -144,6 +144,7 @@ function Story({ item: n }: { item: NewsItem }): JSX.Element {
   const other = n.otherClubId !== undefined ? world.clubs[n.otherClubId] : undefined;
   const comp = n.competitionId !== undefined ? world.competitions[n.competitionId] : undefined;
   const player = n.playerIdx !== undefined && store.isActive(n.playerIdx) ? n.playerIdx : undefined;
+  const coach = n.staffId !== undefined ? world.staff[n.staffId] : undefined;
   return (
     <div className="news-story" style={kindStyle(n.kind)} key={n.id}>
       <span className="news-kicker"><Icon name={NEWS_KIND[n.kind].icon} size={14} /> {NEWS_KIND[n.kind].label}</span>
@@ -156,6 +157,9 @@ function Story({ item: n }: { item: NewsItem }): JSX.Element {
       <div className="news-actions">
         {player !== undefined && (
           <button onClick={() => g.select(player)}><Icon name="user" size={14} /> {store.fullName(player)}</button>
+        )}
+        {coach !== undefined && (
+          <button onClick={() => g.selectCoach(coach.id)}><Icon name="user" size={14} /> {coach.firstName} {coach.lastName}</button>
         )}
         {club !== undefined && (
           <button onClick={() => g.selectClub(club.id)}><ClubCrest club={club} size={16} /> {club.name}</button>

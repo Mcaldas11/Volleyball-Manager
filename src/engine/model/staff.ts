@@ -69,6 +69,18 @@ export interface StaffAttributes {
   ambition: number;
 }
 
+/** One spell of a head coach's in charge of a club. */
+export interface CoachSpell {
+  clubId: number;
+  from: number;
+  /** Last day in charge; -1 while it lasts. */
+  to: number;
+  /** How it ended: sacked, made way for the user, or gone of his own accord. */
+  exit?: 'sacked' | 'replaced' | 'left';
+  won: number;
+  lost: number;
+}
+
 export interface Staff {
   id: number;
   firstName: string;
@@ -88,6 +100,8 @@ export interface Staff {
   wage: number;
   contractUntil: number;
   reputation: number;
+  /** A head coach's clubs, oldest first. Absent until his first is on record. */
+  spells?: CoachSpell[];
 }
 
 export function staffName(s: Staff): string {

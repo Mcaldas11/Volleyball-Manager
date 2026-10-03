@@ -19,6 +19,7 @@ import { CalendarScreen } from './screens/Calendar.tsx';
 import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
 import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
+import { CoachProfile } from './screens/CoachProfile.tsx';
 import { CompetitionDetail, CompetitionsScreen } from './screens/Competitions.tsx';
 import { NewsScreen } from './screens/News.tsx';
 import { HomeScreen } from './screens/Home.tsx';
@@ -75,7 +76,6 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'Team',
     sections: [
-      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Players']] },
       {
         id: 'lineup',
         label: 'Lineup',
@@ -199,6 +199,8 @@ function GameShell(): JSX.Element {
                     ? <CoachTalkScreen />
                     : g.activeInterviewFixtureId !== null
                       ? <InterviewScreen />
+                      : g.selectedCoach !== null
+                        ? <CoachProfile />
                       : g.selectedClub !== null
                         ? <ClubDetail />
                         : g.selectedPlayer !== null
@@ -284,7 +286,7 @@ function Sidebar({
   const takeover = inTakeover(g);
   const clubInfoActive = club !== null && g.selectedClub === club.id;
   const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
-  const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null ||
+  const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null || g.selectedCoach !== null ||
     g.negotiation !== null || g.incomingOffer !== null || g.coachTalk !== null;
   const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
 
@@ -404,6 +406,7 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   if (g.incomingOffer !== null) return { title: 'Transfer Offer', tabs: null };
   if (g.coachTalk !== null) return { title: 'Talk to the Coach', tabs: null };
   if (g.activeInterviewFixtureId !== null) return { title: 'Press Conference', tabs: null };
+  if (g.selectedCoach !== null) return { title: 'Coach', tabs: null };
   if (g.selectedClub !== null) {
     return { title: g.selectedClub === world.userClubId ? 'Club Info' : 'Club', tabs: null };
   }

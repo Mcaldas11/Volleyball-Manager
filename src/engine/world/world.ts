@@ -710,7 +710,10 @@ export function userClub(world: World): Club | null {
 
 export interface ClubTrophy {
   year: number;
+  competitionId: number;
   competitionName: string;
+  kind: CompetitionKind;
+  key?: string;
   tier: number;
 }
 
@@ -726,7 +729,10 @@ export function clubTrophies(world: World, clubId: number): ClubTrophy[] {
       if (c.winner !== clubId) continue;
       const comp = world.competitions[c.competitionId];
       if (comp === undefined) continue;
-      out.push({ year: record.year, competitionName: comp.name, tier: comp.tier });
+      out.push({
+        year: record.year, competitionId: comp.id, competitionName: comp.name, kind: comp.kind, key: comp.key,
+        tier: comp.tier,
+      });
     }
   }
   return out.reverse();

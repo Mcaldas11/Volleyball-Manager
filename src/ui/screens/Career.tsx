@@ -12,6 +12,7 @@ import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import {
   Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter, StatTile,
 } from '../components.tsx';
+import { HonourList, honourOf, type Honour } from '../honours.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -239,16 +240,15 @@ export function CareerScreen(): JSX.Element {
             <Card title="Applications" icon="contract"><ApplicationsList /></Card>
           )}
           <Card title={`Trophies (${trophies.length})`} icon="trophy">
-            {trophies.length === 0
-              ? <Empty>No trophies yet.</Empty>
-              : [...trophies].reverse().map((t, i) => (
-                <div className="trophy-line" key={i}>
-                  <Icon name="trophy" size={15} />
-                  <span className="trophy-line-year">{world.startYear + t.season + 1}</span>
-                  <span>{world.competitions[t.competitionId]?.name ?? 'Title'}</span>
-                  <span className="faint">· {world.clubs[t.clubId]?.shortName ?? ''}</span>
-                </div>
-              ))}
+            <HonourList
+              empty="No trophies yet."
+              honours={trophies
+                .map((t) => honourOf(
+                  world, t.competitionId, world.startYear + t.season + 1,
+                  new Set(jobs.map((j) => j.clubId)).size > 1 ? world.clubs[t.clubId]?.shortName : undefined,
+                ))
+                .filter((h): h is Honour => h !== null)}
+            />
           </Card>
         </div>
       </div>

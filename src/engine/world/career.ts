@@ -23,7 +23,7 @@
 import { newsCoachAppointed, newsCoachSacked } from './news.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
-import { StaffRole, type Staff } from '../model/staff.ts';
+import { StaffRole, type CoachSpell, type Staff } from '../model/staff.ts';
 import { entryNotices, isCupCompetition } from '../season/cups.ts';
 import { finalStandingsOrder } from '../season/playoffs.ts';
 import { formatDay, MONTH_STARTS, ordinal, postMessage, welcomeMessages } from './inbox.ts';
@@ -236,17 +236,62 @@ export function headCoachOf(world: World, club: Club): Staff | undefined {
   return undefined;
 }
 
-function detachHeadCoaches(world: World, club: Club): void {
+// ---- Coaches' careers -----------------------------------------------------------
+
+/**
+ * The spell a coach is in at a club, put on record if it isn't yet — a coach
+ * the world was generated with has been in his job since the club's
+ * `coachSince`.
+ */
+function openSpell(coach: Staff, club: Club): CoachSpell {
+  coach.spells ??= [];
+  let spell = coach.spells.find((s) => s.to < 0 && s.clubId === club.id);
+  if (spell === undefined) {
+    spell = { clubId: club.id, from: club.coachSince ?? 0, to: -1, won: 0, lost: 0 };
+    coach.spells.push(spell);
+  }
+  return spell;
+}
+
+function closeSpell(world: World, coach: Staff, club: Club, exit: NonNullable<CoachSpell['exit']>): void {
+  const spell = openSpell(coach, club);
+  spell.to = world.day;
+  spell.exit = exit;
+}
+
+/** A coach's clubs, oldest first — the one he is at now included, whether or not it is on record yet. */
+export function coachSpells(world: World, coach: Staff): CoachSpell[] {
+  const spells = [...(coach.spells ?? [])];
+  const club = coach.clubId >= 0 ? world.clubs[coach.clubId] : undefined;
+  if (club !== undefined && coach.role === StaffRole.HeadCoach && !spells.some((s) => s.to < 0 && s.clubId === club.id)) {
+    spells.push({ clubId: club.id, from: club.coachSince ?? 0, to: -1, won: 0, lost: 0 });
+  }
+  return spells;
+}
+
+/** The titles a club won while a spell lasted — each credited at its season's end. */
+export function spellTrophies(world: World, spell: CoachSpell): Array<{ competitionId: number; year: number }> {
+  const out: Array<{ competitionId: number; year: number }> = [];
+  for (const record of world.history) {
+    const end = record.season * DAYS_PER_SEASON + 349;
+    if (end < spell.from || (spell.to >= 0 && end > spell.to)) continue;
+    for (const c of record.champions) if (c.winner === spell.clubId) out.push({ competitionId: c.competitionId, year: record.year });
+  }
+  return out;
+}
+
+function detachHeadCoaches(world: World, club: Club, exit: NonNullable<CoachSpell['exit']> = 'left'): void {
   club.staff = club.staff.filter((id) => {
     const s = world.staff[id];
     if (s === undefined || s.role !== StaffRole.HeadCoach) return true;
+    closeSpell(world, s, club, exit);
     s.clubId = -1;
     return false;
   });
 }
 
-function openVacancy(world: World, club: Club): void {
-  detachHeadCoaches(world, club);
+function openVacancy(world: World, club: Club, exit: NonNullable<CoachSpell['exit']> = 'left'): void {
+  detachHeadCoaches(world, club, exit);
   if (vacancyAt(world, club.id) !== undefined) return;
   world.vacancies.push({ clubId: club.id, since: world.day, fillsOn: world.day + world.rng.int(10, 35) });
 }
@@ -256,7 +301,7 @@ function sackCoach(world: World, club: Club): void {
   const coach = headCoachOf(world, club);
   if (coach !== undefined) coach.reputation = Math.round(coach.reputation * 0.9);
   newsCoachSacked(world, club, coach);
-  openVacancy(world, club);
+  openVacancy(world, club, 'sacked');
 }
 
 /**
@@ -285,6 +330,7 @@ function fillVacancy(world: World, v: Vacancy): void {
   club.staff.push(coach.id);
   club.coachSince = world.day;
   club.boardConfidence = CONFIDENCE_START;
+  openSpell(coach, club);
   newsCoachAppointed(world, club, coach);
 }
 
@@ -540,7 +586,7 @@ export function appointManager(world: World, clubId: number, contract?: ManagerC
     openingMarket(world, clubId);
   }
 
-  detachHeadCoaches(world, club);
+  detachHeadCoaches(world, club, 'replaced');
   world.vacancies = world.vacancies.filter((v) => v.clubId !== clubId);
   world.userClubId = clubId;
   club.coachSince = world.day;
@@ -838,6 +884,14 @@ export function boardResults(world: World, fixtureIds: readonly number[]): void 
     const weight = 2 + 3 * f.importance;
     judgeResult(home, away, homeWon, weight);
     judgeResult(away, home, !homeWon, weight);
+    // On each bench's record.
+    for (const [club, won] of [[home, homeWon], [away, !homeWon]] as const) {
+      const coach = headCoachOf(world, club);
+      if (coach === undefined) continue;
+      const spell = openSpell(coach, club);
+      if (won) spell.won++;
+      else spell.lost++;
+    }
     if (job !== undefined && (f.home === job.clubId || f.away === job.clubId)) {
       if ((f.home === job.clubId) === homeWon) job.won++;
       else job.lost++;
