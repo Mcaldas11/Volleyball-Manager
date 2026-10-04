@@ -2,12 +2,14 @@
  * The world's news, laid out like a sports site: the stories down the left —
  * rumours and signings, coaches coming and going, awards, results, injuries —
  * filtered by kind and by country, and the open story on the right, with the
- * player or the clubs in it a click away.
+ * player or the clubs in it a click away — and under it, what the fans make
+ * of it.
  */
 
 import { useState, type CSSProperties, type JSX } from 'react';
 import { flagImageUrl, NATIONS } from '../../engine/world/nations.ts';
 import type { NewsItem, NewsKind } from '../../engine/world/news.ts';
+import { fanComments, fanName, type FanComment } from '../../engine/world/fans.ts';
 import { ClubCrest, Empty, PlayerFace } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -179,6 +181,45 @@ function Story({ item: n }: { item: NewsItem }): JSX.Element {
           <button onClick={() => g.openCompetition(comp.id)}><Icon name="trophy" size={14} /> {comp.name}</button>
         )}
       </div>
+      <FanComments comments={fanComments(world, n)} />
     </div>
+  );
+}
+
+/** What the fans make of a story: supporters of the clubs or nations in it, and a rival or two. */
+function FanComments({ comments }: { comments: FanComment[] }): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  if (comments.length === 0) return null;
+  return (
+    <section className="news-fans">
+      <header className="news-fans-head">
+        <Icon name="press" size={14} /> What the fans say
+        <span>{comments.length} comments</span>
+      </header>
+      {comments.map((c, i) => {
+        const club = c.clubId !== undefined ? world.clubs[c.clubId] : undefined;
+        return (
+          <div key={i} className={`news-fan mood-${c.mood}`}>
+            <span className="news-fan-badge">
+              {club !== undefined ? <ClubCrest club={club} size={28} /> : c.nation !== undefined ? <Flag nation={c.nation} /> : <Icon name="user" size={16} />}
+            </span>
+            <div className="news-fan-main">
+              <div className="news-fan-top">
+                <b>{c.handle}</b>
+                <span>{club !== undefined ? `${fanName(club)} fan` : c.nation !== undefined ? `${NATIONS[c.nation]?.name ?? ''} fan` : 'Fan'}</span>
+              </div>
+              <p>{c.text}</p>
+            </div>
+            <span className="news-fan-likes" title={`${c.likes} likes`}>
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                <path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.4.7-1.2 2.2-2.4 4.3-2.4 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z" />
+              </svg>
+              {c.likes}
+            </span>
+          </div>
+        );
+      })}
+    </section>
   );
 }

@@ -10,15 +10,20 @@
  * out at a club beneath him — the kind who does move in the summer; the
  * player of the month is the best average rating over the month's league
  * matches. The paper follows the leagues that matter: the world's strongest
- * top flights, the user's country's, and his own league whatever its level.
- * The feed keeps its most recent stories only.
+ * top flights, the user's country's, and his own league whatever its level —
+ * and the manager's own club closest of all: every match it plays, every
+ * player it buys or sells, the day he takes over. Under every story the fans
+ * have their say (see fans.ts). The feed keeps its most recent stories only.
  */
 
+import { Rng } from '../core/rng.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { INJURY_NAMES, PlayerFlag } from '../model/players.ts';
 import { POSITION_NAMES, type Position } from '../model/positions.ts';
 import { StaffRole, type Staff } from '../model/staff.ts';
 import { MONTH_NAMES, MONTH_STARTS } from './inbox.ts';
+import type { FanBrief } from './fans.ts';
+import { stageLabel } from '../season/cups.ts';
 import {
   contractEndSeason, dayOfSeason, seasonEndDay, seasonEndYear, type Competition, type Fixture, type World,
 } from './world.ts';
@@ -41,6 +46,8 @@ export interface NewsItem {
   /** A coach the story is about. */
   staffId?: number;
   competitionId?: number;
+  /** What the fans' comments under it turn on — absent on stories from before they had their say. */
+  fans?: FanBrief;
 }
 
 /** How many stories the feed keeps. */
@@ -164,6 +171,7 @@ export function newsCoachSacked(world: World, club: Club, coach: Staff | undefin
     nation: club.nation,
     clubId: club.id,
     staffId: coach?.id,
+    fans: { story: 'sacked', club: club.id, coach: coach !== undefined ? coachName(coach) : undefined },
   });
 }
 
@@ -177,6 +185,21 @@ export function newsCoachAppointed(world: World, club: Club, coach: Staff): void
     nation: club.nation,
     clubId: club.id,
     staffId: coach.id,
+    fans: { story: 'appointed', club: club.id, coach: coachName(coach) },
+  });
+}
+
+/** The manager takes over a club: the paper, and its fans, take notice. */
+export function newsManagerAppointed(world: World, club: Club): void {
+  const name = `${world.manager.firstName} ${world.manager.lastName}`;
+  postNews(world, {
+    kind: 'coach',
+    headline: `${club.name} appoint ${name}`,
+    body: `${name} is the new head coach of ${club.name}. ` +
+      `The board will be looking for a strong start${standing(world, club) !== '' ? ` from a side ${standing(world, club)}` : ''}.`,
+    nation: club.nation,
+    clubId: club.id,
+    fans: { story: 'appointed', club: club.id, coach: name },
   });
 }
 
@@ -229,6 +252,7 @@ function rumours(world: World): void {
       clubId: suitor.id,
       otherClubId: club.id,
       playerIdx: p,
+      fans: { story: 'rumour', club: suitor.id, other: club.id, player: p },
     });
   }
 }
@@ -254,8 +278,31 @@ export function newsSignings(world: World, signings: ReadonlyArray<{ playerIdx: 
       clubId: to.id,
       otherClubId: from?.id,
       playerIdx: s.playerIdx,
+      fans: { story: 'signing', club: to.id, other: from?.id, player: s.playerIdx },
     });
   }
+}
+
+/** A transfer with a fee — the manager's own business, or a followed club's. */
+export function newsTransfer(world: World, p: number, fromId: number, toId: number, fee: number): void {
+  const to = world.clubs[toId];
+  const from = world.clubs[fromId];
+  const own = toId === world.userClubId || fromId === world.userClubId;
+  if (to === undefined || (!own && !followed(world, to))) return;
+  const name = world.players.fullName(p);
+  const price = fee >= 1_000_000 ? `€${(fee / 1_000_000).toFixed(1)}M` : fee > 0 ? `€${Math.round(fee / 1000)}k` : '';
+  postNews(world, {
+    kind: 'transfer',
+    headline: `${name} joins ${to.name}${from !== undefined ? ` from ${from.name}` : ''}`,
+    body: `${to.name} have signed ${name}, ${describe(world, p)}` +
+      `${from !== undefined ? ` from ${from.name}` : ''}${price !== '' ? ` for a fee of ${price}` : ' on a free transfer'}.` +
+      `${seasonLine(world, p)}`,
+    nation: to.nation,
+    clubId: to.id,
+    otherClubId: from?.id,
+    playerIdx: p,
+    fans: { story: 'signing', club: to.id, other: from?.id, player: p, fee },
+  });
 }
 
 /** A star who stays: his contract extended at a followed club. */
@@ -269,6 +316,7 @@ export function newsExtension(world: World, club: Club, p: number): void {
     nation: club.nation,
     clubId: club.id,
     playerIdx: p,
+    fans: { story: 'extension', club: club.id, player: p },
   });
 }
 
@@ -288,16 +336,64 @@ export function newsInjury(world: World, p: number, type: number, days: number):
     nation: club.nation,
     clubId: club.id,
     playerIdx: p,
+    fans: { story: 'injury', club: club.id, player: p, weeks },
   });
 }
 
 // ---- Results -------------------------------------------------------------------------------
 
+/** The manager's own club's match: the result, how it came, who starred. */
+function matchReport(world: World, f: Fixture): void {
+  const comp = world.competitions[f.competitionId];
+  const home = world.clubs[f.home];
+  const away = world.clubs[f.away];
+  if (comp === undefined || home === undefined || away === undefined) return;
+  const homeWon = f.homeSets > f.awaySets;
+  const [winner, loser] = homeWon ? [home, away] : [away, home];
+  const score = `${Math.max(f.homeSets, f.awaySets)}-${Math.min(f.homeSets, f.awaySets)}`;
+  const store = world.players;
+  const mvp = f.mvp >= 0 && store.isActive(f.mvp) ? f.mvp : -1;
+  const stage = stageLabel(world, f);
+  const shock = loser.reputation - winner.reputation > SHOCK_GAP * 0.7;
+  // Its own dice for the wording, so the paper never moves the world's.
+  const rng = new Rng(f.id * 7919 + 3);
+  const headline = shock
+    ? `Shock: ${winner.name} beat ${loser.name} ${score}`
+    : Math.min(f.homeSets, f.awaySets) === 0
+      ? rng.pick([`${winner.name} sweep aside ${loser.name}`, `${winner.name} cruise past ${loser.name} ${score}`])
+      : Math.min(f.homeSets, f.awaySets) === 2
+        ? rng.pick([`${winner.name} edge ${loser.name} in a five-set thriller`, `${winner.name} survive tie-break against ${loser.name}`])
+        : rng.pick([`${winner.name} beat ${loser.name} ${score}`, `${winner.name} see off ${loser.name}`, `Defeat for ${loser.name} against ${winner.name}`]);
+  const sets = f.setScores.map(([h, a]) => (homeWon ? `${h}-${a}` : `${a}-${h}`)).join(', ');
+  postNews(world, {
+    kind: 'result',
+    headline,
+    body: `${winner.name} beat ${loser.name} ${score} (${sets}) ${homeWon ? 'at home' : 'on the road'} ` +
+      `in the ${comp.name}${stage !== '' ? `, ${stage.toLowerCase()}` : ''}.` +
+      `${mvp >= 0 ? ` ${store.fullName(mvp)} was named player of the match.` : ''}`,
+    nation: winner.nation,
+    clubId: winner.id,
+    otherClubId: loser.id,
+    playerIdx: mvp >= 0 ? mvp : undefined,
+    competitionId: comp.id,
+    fans: {
+      story: shock ? 'shock' : 'match', club: winner.id, other: loser.id, score,
+      player: mvp >= 0 && store.clubId[mvp] === winner.id ? mvp : undefined,
+    },
+  });
+}
+
 /** Shock results, and a new side on top of a followed league. */
 function results(world: World, fixtures: readonly Fixture[]): void {
   for (const f of fixtures) {
     const comp = world.competitions[f.competitionId];
-    if (!f.played || comp === undefined || comp.kind !== 'league') continue;
+    if (!f.played || comp === undefined) continue;
+    // The manager's own matches, whatever the competition.
+    if (f.home === world.userClubId || f.away === world.userClubId) {
+      if (comp.kind !== 'friendly' && comp.kind !== 'international') matchReport(world, f);
+      continue;
+    }
+    if (comp.kind !== 'league') continue;
     const home = world.clubs[f.home];
     const away = world.clubs[f.away];
     if (!followed(world, home) || !followed(world, away)) continue;
@@ -316,6 +412,7 @@ function results(world: World, fixtures: readonly Fixture[]): void {
       clubId: winner.id,
       otherClubId: loser.id,
       competitionId: comp.id,
+      fans: { story: 'shock', club: winner.id, other: loser.id, score },
     });
   }
 
@@ -344,6 +441,7 @@ function results(world: World, fixtures: readonly Fixture[]): void {
       clubId: club.id,
       otherClubId: old?.id,
       competitionId: comp.id,
+      fans: { story: 'top', club: club.id, other: old?.id },
     });
   }
 }
@@ -417,6 +515,7 @@ function monthlyAwards(world: World): void {
         clubId: club.id,
         playerIdx: best,
         competitionId: comp.id,
+        fans: { story: 'playerAward', club: club.id, player: best },
       });
     }
 
@@ -444,6 +543,7 @@ function monthlyAwards(world: World): void {
         clubId: top.id,
         staffId: coach.id,
         competitionId: comp.id,
+        fans: { story: 'coachAward', club: top.id, coach: coachName(coach) },
       });
     } else if (top !== undefined && top.id === world.userClubId && topWins >= 3) {
       postNews(world, {
@@ -454,6 +554,7 @@ function monthlyAwards(world: World): void {
         nation: comp.nation,
         clubId: top.id,
         competitionId: comp.id,
+        fans: { story: 'coachAward', club: top.id, coach: `${world.manager.firstName} ${world.manager.lastName}` },
       });
     }
   }
@@ -476,6 +577,7 @@ export function newsChampions(world: World, champions: ReadonlyArray<{ competiti
       nation: big ? -1 : club.nation,
       clubId: club.id,
       competitionId: comp.id,
+      fans: { story: 'title', club: club.id, comp: comp.name },
     });
   }
 }

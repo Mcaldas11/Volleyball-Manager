@@ -20,7 +20,7 @@
  * the season's end, and the coach leaves with it.
  */
 
-import { newsCoachAppointed, newsCoachSacked } from './news.ts';
+import { newsCoachAppointed, newsCoachSacked, newsManagerAppointed } from './news.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import {
@@ -660,6 +660,7 @@ export function appointManager(world: World, clubId: number, contract?: ManagerC
   career.contractAskedOn = -1;
 
   welcomeMessages(world);
+  newsManagerAppointed(world, club);
   // The cup draws only mean something before the season is under way.
   if (dayOfSeason(world) < SEASON_OPENS) entryNotices(world);
 }

@@ -70,7 +70,10 @@ import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
   declineInterview as declineInterviewSession,
+  generatePostMatchInterview,
+  interviewMessage,
   type AnswerResult,
+  type InterviewSession,
 } from '../engine/world/interviews.ts';
 import {
   deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
@@ -234,7 +237,8 @@ export interface PendingDecision {
   label: string;
   /** Why the day can't move on yet. */
   reason: string;
-  fixtureId: number | null;
+  /** The press conference waiting, by its id. */
+  interviewId: number | null;
   offerId: number | null;
   /** The inbox message to answer it from. */
   messageId: number | null;
@@ -398,7 +402,8 @@ class Game {
   /** A word with the coach of a club playing one of ours on loan. */
   coachTalk: CoachTalk | null = null;
   /** Fixture id of the press conference currently open full-screen, if any. */
-  activeInterviewFixtureId: number | null = null;
+  /** The press conference on screen, by its id. */
+  activeInterviewId: number | null = null;
   matchday: MatchdayState | null = null;
   private liveSim: MatchSimulator | null = null;
   /** Distinguishes each substitution for React, even if the same two players swap twice. */
@@ -670,7 +675,7 @@ class Game {
     this.selectedCompetition = null;
     this.watched = null;
     this.postMatch = null;
-    this.activeInterviewFixtureId = null;
+    this.activeInterviewId = null;
     if (this.club === null && !CLUBLESS_SCREENS.has(this.screen)) this.screen = 'home';
     this.resetHistory();
   }
@@ -1035,15 +1040,16 @@ class Game {
     this.emit();
   }
 
-  /** Open the full-screen press conference for a fixture the user chose to
-   *  attend — a no-op if there's no open session for it. */
-  openInterview(fixtureId: number): void {
+  /** Open the full-screen press conference the user chose to attend — a
+   *  no-op if it is no longer open. */
+  openInterview(sessionId: number): void {
     const world = this.world;
     if (world === null) return;
-    if (!world.pendingInterviews.some((s) => s.fixtureId === fixtureId)) return;
-    const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === fixtureId);
+    const session = world.pendingInterviews.find((s) => s.id === sessionId);
+    if (session === undefined) return;
+    const msg = interviewMessage(world, session);
     if (msg !== undefined) msg.read = true;
-    this.activeInterviewFixtureId = fixtureId;
+    this.activeInterviewId = sessionId;
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
@@ -1057,11 +1063,12 @@ class Game {
 
   /** Skip a press conference entirely — always safe: no morale risk, but no
    *  boost either. */
-  declineInterview(fixtureId: number): void {
+  declineInterview(sessionId: number): void {
     const world = this.world;
     if (world === null) return;
-    if (!declineInterviewSession(world, fixtureId)) return;
-    const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === fixtureId);
+    const session = world.pendingInterviews.find((s) => s.id === sessionId);
+    const msg = session === undefined ? undefined : interviewMessage(world, session);
+    if (!declineInterviewSession(world, sessionId)) return;
     if (msg !== undefined) msg.read = true;
     this.notice = 'You declined the press conference.';
     this.emit();
@@ -1070,26 +1077,32 @@ class Game {
   /** Answer the current question of the open press conference. Nudges both
    *  squads' morale, updates that journalist's body language, and advances
    *  to the next question (or finishes the conference). */
-  answerInterviewQuestion(fixtureId: number, optionIndex: number): AnswerResult | null {
+  answerInterviewQuestion(sessionId: number, optionIndex: number): AnswerResult | null {
     const world = this.world;
     if (world === null) return null;
-    const result = resolveInterviewAnswer(world, fixtureId, optionIndex);
+    const result = resolveInterviewAnswer(world, sessionId, optionIndex);
     if (result === null) return null;
     // Answering is itself reading the message — without this, a manager who
     // goes straight into the conference from the notification would still
     // see it flagged unread afterwards.
-    const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === fixtureId);
+    const session = world.pendingInterviews.find((s) => s.id === sessionId);
+    const msg = session === undefined ? undefined : interviewMessage(world, session);
     if (msg !== undefined) msg.read = true;
     this.emit();
     return result;
   }
 
+  /** The press conference after a match, still open: offered on its result screen. */
+  postMatchInterview(fixtureId: number): InterviewSession | null {
+    return this.world?.pendingInterviews.find((s) => s.kind === 'post' && s.fixtureId === fixtureId) ?? null;
+  }
+
   /** Close a finished press conference's summary and return to the game. */
   closeInterview(): void {
     const world = this.world;
-    const fixtureId = this.activeInterviewFixtureId;
-    if (world !== null && fixtureId !== null) closeInterviewSession(world, fixtureId);
-    this.activeInterviewFixtureId = null;
+    const sessionId = this.activeInterviewId;
+    if (world !== null && sessionId !== null) closeInterviewSession(world, sessionId);
+    this.activeInterviewId = null;
     this.emit();
   }
 
@@ -1124,7 +1137,7 @@ class Game {
    */
   async continueGame(maxDays = 1): Promise<void> {
     const world = this.world;
-    if (world === null || this.processing || this.matchday !== null || this.activeInterviewFixtureId !== null) return;
+    if (world === null || this.processing || this.matchday !== null || this.activeInterviewId !== null) return;
     if (this.postMatch !== null) {
       this.finishPostMatch();
       return;
@@ -1181,10 +1194,11 @@ class Game {
     const world = this.world;
     if (world === null) return null;
     for (const s of world.pendingInterviews) {
-      if (s.finished || world.fixtures[s.fixtureId]?.played !== false) continue;
-      const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === s.fixtureId);
+      // Only a conference before a match holds the day up; the one after it can wait.
+      if (s.finished || s.kind !== 'pre' || world.fixtures[s.fixtureId]?.played !== false) continue;
+      const msg = interviewMessage(world, s);
       return {
-        kind: 'interview', label: 'Press conference', fixtureId: s.fixtureId, offerId: null, messageId: msg?.id ?? null,
+        kind: 'interview', label: 'Press conference', interviewId: s.id, offerId: null, messageId: msg?.id ?? null,
         reason: 'The press are waiting — attend the press conference or decline it before you go on.',
       };
     }
@@ -1193,14 +1207,14 @@ class Game {
       const msg = world.messages.find((m) => m.offerId === o.id);
       const club = world.clubs[o.buyingClubId]?.name ?? 'A club';
       return {
-        kind: 'offer', label: 'Respond to offer', fixtureId: null, offerId: o.id, messageId: msg?.id ?? null,
+        kind: 'offer', label: 'Respond to offer', interviewId: null, offerId: o.id, messageId: msg?.id ?? null,
         reason: `${club} want an answer about ${world.players.fullName(o.playerIdx)} — accept, counter or reject the offer before you go on.`,
       };
     }
     const due = squadDue(world);
     if (due !== undefined) {
       return {
-        kind: 'squad', label: 'Name your squad', fixtureId: null, offerId: null, messageId: null,
+        kind: 'squad', label: 'Name your squad', interviewId: null, offerId: null, messageId: null,
         reason: `${nationName(userNation(world))} need your fourteen for the ${due.name} — name the squad before you go on.`,
       };
     }
@@ -1217,7 +1231,7 @@ class Game {
       const m = this.world === null ? undefined : askForSquad(this.world);
       if (m !== undefined) this.openMessage(m.id);
     } else if (d.messageId !== null) this.openMessage(d.messageId);
-    else if (d.fixtureId !== null) this.openInterview(d.fixtureId);
+    else if (d.interviewId !== null) this.openInterview(d.interviewId);
     else if (d.offerId !== null) this.openOffer(d.offerId);
     this.notice = d.reason;
     this.emit();
@@ -1404,8 +1418,8 @@ class Game {
     if (plan.jobs !== null) applyForJobs(world, plan.jobs);
     // The press get the assistant instead.
     for (const s of [...world.pendingInterviews]) {
-      if (s.finished || !declineInterviewSession(world, s.fixtureId)) continue;
-      const msg = world.messages.find((m) => m.category === 'interview' && m.fixtureId === s.fixtureId);
+      const msg = interviewMessage(world, s);
+      if (s.finished || !declineInterviewSession(world, s.id)) continue;
       if (msg !== undefined) msg.body = 'Your assistant faced the press while you were on holiday.';
     }
     countHolidayDay(world);
@@ -1478,6 +1492,8 @@ class Game {
   }
 
   private showPostMatch(f: Fixture): void {
+    // The press want the manager's reaction — offered from the result screen.
+    if (this.world !== null) generatePostMatchInterview(this.world, f);
     this.postMatch = f.id;
     this.matchday = null;
     this.liveSim = null;

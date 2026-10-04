@@ -4,6 +4,7 @@ import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngin
 import { endSeason } from '../season/rollover.ts';
 import { appointManager } from './career.ts';
 import { followed, postNews, type NewsItem } from './news.ts';
+import { fanComments } from './fans.ts';
 import { generateWorld } from './worldGen.ts';
 import { seasonEndDay, stubManager, type World } from './world.ts';
 
@@ -44,7 +45,9 @@ test('the paper covers the leagues that matter, and every story names its countr
     const club = n.clubId !== undefined ? world.clubs[n.clubId] : undefined;
     // A rumour is filed under the suitor, who may be from anywhere; the player's club is followed.
     const subject = n.kind === 'rumour' ? (n.otherClubId !== undefined ? world.clubs[n.otherClubId] : undefined) : club;
-    if (subject !== undefined && n.kind !== 'title') assert.ok(followed(world, subject), `${n.headline}: a followed club`);
+    // The manager's own club is followed wherever it plays, and whoever it deals with.
+    const own = n.clubId === world.userClubId || n.otherClubId === world.userClubId;
+    if (subject !== undefined && n.kind !== 'title' && !own) assert.ok(followed(world, subject), `${n.headline}: a followed club`);
   }
 });
 
@@ -82,4 +85,42 @@ test('the summer brings champions and signings, and the feed keeps only its late
   for (let i = 0; i < 500; i++) postNews(world, { kind: 'result', headline: 'x', body: 'y', nation: 0 });
   assert.equal(world.news.length, 400);
   assert.equal(world.news[world.news.length - 1].id, world.nextNewsId - 1, 'the newest kept');
+});
+
+test("the manager's own matches make the paper, and the fans of both sides have their say", () => {
+  const { world, clubId, news } = season(25, 200);
+  const played = world.fixtures.filter((f) => f.played && (f.home === clubId || f.away === clubId) &&
+    !['friendly', 'international'].includes(world.competitions[f.competitionId]?.kind ?? ''));
+  const reports = news.filter((n) => n.kind === 'result' && (n.clubId === clubId || n.otherClubId === clubId));
+  assert.ok(played.length > 5);
+  assert.equal(reports.length, played.length, 'every competitive match he plays is reported');
+  assert.ok(world.news.some((n) => n.kind === 'coach' && n.clubId === clubId), 'his appointment made the news');
+
+  const report = reports[0];
+  const comments = fanComments(world, report);
+  assert.ok(comments.length >= 4);
+  assert.ok(comments.some((c) => c.clubId === report.clubId) && comments.some((c) => c.clubId === report.otherClubId),
+    "the winners' fans and the losers'");
+  assert.deepEqual(fanComments(world, report), comments, 'the same comments every time the story is read');
+});
+
+test('every story carries what the fans make of it, written out in full', () => {
+  const { world, news } = season(26, 330);
+  assert.ok(news.length > 0);
+  const kinds = new Set<string>();
+  for (const n of news) {
+    assert.ok(n.fans !== undefined, `${n.headline}: a brief for the fans`);
+    const comments = fanComments(world, n);
+    assert.ok(comments.length > 0, `${n.headline}: comments`);
+    for (const c of comments) {
+      assert.ok(!/[{}]/.test(c.text) && c.text.trim().length > 0, c.text);
+      assert.ok(c.handle.length > 2 && c.likes >= 0);
+      assert.ok(c.clubId !== undefined || c.nation !== undefined, 'a fan of someone');
+    }
+    for (let i = 1; i < comments.length; i++) assert.ok(comments[i - 1].likes >= comments[i].likes, 'most liked first');
+    kinds.add(n.fans!.story);
+  }
+  for (const story of ['match', 'rumour', 'injury', 'sacked']) assert.ok(kinds.has(story), `some ${story} stories`);
+  // A story from before fans had their say has none, and is none the worse for it.
+  assert.deepEqual(fanComments(world, { id: 1 }), []);
 });

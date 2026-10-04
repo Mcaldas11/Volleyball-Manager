@@ -4953,3 +4953,48 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .lv-rot-fields .slider-value { position: absolute; right: 0; top: 0; font-size: 14px; }
 .lv-rot-fields .field { position: relative; }
 .lv-rot-tab.now span { color: var(--gold-bright); }
+
+/* Press conferences: the occasion, the size of the room, the player spoken of. */
+.interview-occasion {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  background: var(--surface-3); color: var(--text-dim); border: 1px solid var(--line);
+}
+.interview-occasion.stakes-big { background: rgba(79, 141, 255, 0.12); color: #8fb4ff; border-color: rgba(79, 141, 255, 0.35); }
+.interview-occasion.stakes-huge { background: var(--gold-soft); color: var(--gold-bright); border-color: var(--gold-deep); }
+.interview-context.won { color: var(--good); }
+.interview-context.lost { color: var(--bad); }
+.interview-about {
+  display: flex; align-items: center; gap: 10px; margin: -4px 0 14px; padding: 8px 12px;
+  border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); font-size: 12.5px; color: var(--text-dim);
+}
+.interview-about b { color: var(--text); }
+.interview-crowd { margin: 10px 0 0; font-size: 12px; }
+.mr-press { display: inline-flex; align-items: center; gap: 6px; }
+.mr-foot .mr-press { margin-left: auto; padding: 10px 14px; }
+
+/* The fans' comments under a story. */
+.news-fans { display: flex; flex-direction: column; margin-top: 18px; border-top: 1px solid var(--line); }
+.news-fans-head {
+  display: flex; align-items: center; gap: 8px; padding: 14px 0 8px;
+  font: 700 12px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim);
+}
+.news-fans-head span { margin-left: auto; font: 600 12px/1 var(--font-body); letter-spacing: 0; text-transform: none; color: var(--text-faint); }
+.news-fan {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 12px 14px; margin-top: 8px;
+  border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line-soft); border-left: 3px solid var(--fan-mood, var(--line-strong));
+}
+.news-fan.mood-delighted { --fan-mood: var(--gold); }
+.news-fan.mood-happy { --fan-mood: var(--good); }
+.news-fan.mood-neutral { --fan-mood: var(--text-faint); }
+.news-fan.mood-worried { --fan-mood: #f0913d; }
+.news-fan.mood-angry { --fan-mood: var(--bad); }
+.news-fan-badge { display: grid; flex: none; place-items: center; width: 32px; height: 32px; }
+.news-fan-badge .news-flag { width: 24px; height: 16px; }
+.news-fan-main { flex: 1; min-width: 0; }
+.news-fan-top { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.news-fan-top b { color: var(--text); }
+.news-fan-top span { font-size: 11.5px; color: var(--text-faint); }
+.news-fan-main p { margin: 3px 0 0; font-size: 14px; line-height: 1.45; color: var(--text); }
+.news-fan-likes { display: inline-flex; flex: none; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
+.news-fan.mood-delighted .news-fan-likes svg, .news-fan.mood-happy .news-fan-likes svg { color: #e5484d; }

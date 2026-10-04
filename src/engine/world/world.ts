@@ -361,9 +361,10 @@ export interface GameMessage {
   seasonReview?: SeasonReview;
   /** Talks this message is an answer in — the inbox offers a way back into them. */
   talksId?: number;
-  /** Fixture a pre-match interview request concerns — looked up against
-   *  `World.pendingInterviews` to render the question and answer options. */
+  /** Fixture a press conference concerns. */
   fixtureId?: number;
+  /** The press conference itself — looked up against `World.pendingInterviews`. */
+  interviewId?: number;
   /** A club's offer of its head coach's job — see `World.career.offers`. */
   jobOfferId?: number;
   /** A federation's offer of its national team job — see `Internationals.offers`. */
@@ -549,9 +550,11 @@ export interface World {
   /** Monotonic id source for incomingOffers — they get removed, unlike messages. */
   nextOfferId: number;
 
-  /** Pre-match press conferences in progress or awaiting their summary to be
-   *  dismissed, keyed off their fixture. */
+  /** Press conferences, before a match or after it, in progress or awaiting
+   *  their summary to be dismissed. */
   pendingInterviews: InterviewSession[];
+  /** Monotonic id source for pendingInterviews. */
+  nextInterviewId: number;
   /** Fixture ids already offered a press conference, so the same match is never asked twice. */
   interviewedFixtures: Set<number>;
 
@@ -638,6 +641,7 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     incomingOffers: [],
     nextOfferId: 0,
     pendingInterviews: [],
+    nextInterviewId: 0,
     interviewedFixtures: new Set(),
     competitionRecords: new Map(),
     ratingForm: new Map(),

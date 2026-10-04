@@ -68,6 +68,8 @@ export function MatchResultScreen(): JSX.Element | null {
   const homeSide = fixture.home === me ? 'mine' : 'theirs';
   const awaySide = fixture.away === me ? 'mine' : 'theirs';
   const heading = watched.national?.title ?? `${comp?.name ?? 'Match'} · ${stageLabel(world, fixture)}`;
+  // The press want a word — the conference after the match, while it is open.
+  const press = national ? null : g.postMatchInterview(fixture.id);
 
   const teamRow = (clubId: number, sets: number, won: boolean, side: 0 | 1): JSX.Element => {
     const c = national ? undefined : world.clubs[clubId];
@@ -112,6 +114,15 @@ export function MatchResultScreen(): JSX.Element | null {
           )}
           <footer className="mr-foot">
             <span>{national ? "The rest of the day's matches at the tournament come in with yours." : "The rest of the matchday's results come in with yours."}</span>
+            {press !== null && !press.finished && (
+              <button
+                className="mr-press"
+                onClick={() => g.openInterview(press.id)}
+                title={`${press.crowd} journalists want your reaction`}
+              >
+                <Icon name="press" size={15} /> {press.currentIndex > 0 ? 'Back to the press' : 'Face the press'}
+              </button>
+            )}
             <button className="primary" onClick={() => g.finishPostMatch()}>
               Continue <Icon name="arrowRight" size={15} />
             </button>

@@ -20,6 +20,7 @@ import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { endLoan, loanOf, MAX_SQUAD, type LoanPlayingTime } from './loans.ts';
 import { pendingMoveOf } from './moves.ts';
+import { newsTransfer } from './news.ts';
 import {
   contractEndSeason, dayOfYear, euros, logTransfer, seasonEndDay, windowCloseDay, type World,
 } from './world.ts';
@@ -156,6 +157,7 @@ export function completeTransfer(
   store.clubId[playerIdx] = buyingClub.id;
   store.wage[playerIdx] = wage;
   store.contractUntil[playerIdx] = contractEnd;
+  newsTransfer(world, playerIdx, oldClubId, buyingClub.id, fee);
 }
 
 // ---- Contract terms --------------------------------------------------------

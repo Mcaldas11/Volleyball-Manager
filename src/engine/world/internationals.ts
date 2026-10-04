@@ -1033,6 +1033,7 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
     nation: podium[0],
     playerIdx: mvp >= 0 ? mvp : undefined,
     competitionId: t.competitionId,
+    fans: { story: 'nationTitle', nation: podium[0], otherNation: podium[1], player: mvp >= 0 ? mvp : undefined },
   });
   judgeCoaches(world, t);
 }
@@ -1125,6 +1126,7 @@ export function appointNationalCoach(world: World, nation: number): void {
     headline: `${nationName(nation)} appoint ${world.manager.firstName} ${world.manager.lastName}`,
     body: `${world.manager.firstName} ${world.manager.lastName} is the new head coach of the ${nationName(nation)} national team.`,
     nation,
+    fans: { story: 'nationCoachIn', nation },
   });
 }
 
@@ -1159,6 +1161,7 @@ export function leaveNationalJob(world: World, sacked: boolean, why = ''): void 
       : `${world.manager.firstName} ${world.manager.lastName} steps down as ${nationName(nation)} coach`,
     body: `The ${nationName(nation)} national team is looking for a new head coach.`,
     nation,
+    fans: { story: 'nationCoachOut', nation },
   });
 }
 
@@ -1225,6 +1228,7 @@ function judgeCoaches(world: World, t: Tournament): void {
         body: `After a disappointing ${t.name} — seeded to go deep, out in ${ordinal(place + 1)} place — ` +
           `${nationName(n)} are looking for a new national team coach.`,
         nation: n,
+        fans: { story: 'nationCoachOut', nation: n },
       });
     }
   });
@@ -1264,6 +1268,7 @@ function nationalJobsDay(world: World): void {
       headline: `${nationName(v.nation)} name a new national team coach`,
       body: `The ${nationName(v.nation)} Volleyball Federation has filled the head coach's job.`,
       nation: v.nation,
+      fans: { story: 'nationCoachIn', nation: v.nation },
     });
   }
 }
@@ -1474,6 +1479,7 @@ function headlines(world: World, t: Tournament, today: IntlMatch[]): void {
         `${t.host >= 0 ? `; ${nationName(t.host)} have home advantage` : ''}.`,
       nation: t.host >= 0 ? t.host : -1,
       competitionId: t.competitionId,
+      fans: { story: 'tournament', nation: t.host >= 0 ? t.host : undefined },
     });
   }
   // A shock: one of the favourites beaten by a side ranked well below it.
@@ -1491,8 +1497,34 @@ function headlines(world: World, t: Tournament, today: IntlMatch[]): void {
         `in the ${m.stage.toLowerCase()} of the ${t.name}.`,
       nation: w,
       competitionId: t.competitionId,
+      fans: { story: 'nationShock', nation: w, otherNation: l },
     });
   }
+  // The manager's own national team: every match makes the paper.
+  const mine = userNation(world);
+  if (mine < 0) return;
+  for (const m of t.matches) {
+    if (m.day !== world.day || !m.played || (m.home !== mine && m.away !== mine)) continue;
+    const w = winnerOf(m);
+    const l = loserOf(m);
+    const score = `${Math.max(m.homeSets, m.awaySets)}-${Math.min(m.homeSets, m.awaySets)}`;
+    const mvp = m.mvp >= 0 && world.players.isActive(m.mvp) ? m.mvp : -1;
+    postNews(world, {
+      kind: 'result',
+      headline: `${nationName(w)} beat ${nationName(l)} ${score} at the ${shortName(t)}`,
+      body: `${nationName(w)} beat ${nationName(l)} ${score} in the ${m.stage.toLowerCase()} of the ${t.name}.` +
+        `${mvp >= 0 ? ` ${world.players.fullName(mvp)} was named player of the match.` : ''}`,
+      nation: w,
+      playerIdx: mvp >= 0 ? mvp : undefined,
+      competitionId: t.competitionId,
+      fans: { story: 'nationMatch', nation: w, otherNation: l, score, player: mvp >= 0 && playsFor(world, mvp) === w ? mvp : undefined },
+    });
+  }
+}
+
+/** The nation a player plays for, if he has played for one. */
+function playsFor(world: World, p: number): number {
+  return internationals(world).tiedTo.get(p) ?? -1;
 }
 
 // ---- Each day -----------------------------------------------------------------------------

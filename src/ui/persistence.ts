@@ -185,6 +185,18 @@ export function reviveWorld(raw: World): World {
   // Saves from before pre-match interviews existed have neither field.
   raw.pendingInterviews ??= [];
   raw.interviewedFixtures ??= new Set();
+  // Saves from before post-match conferences: sessions were known by their fixture.
+  raw.nextInterviewId ??= 0;
+  for (const s of raw.pendingInterviews) {
+    if (s.id !== undefined) continue;
+    s.id = raw.nextInterviewId++;
+    s.kind = 'pre';
+    s.occasion ??= 'League match';
+    s.stakes ??= 'routine';
+    s.crowd ??= s.questions.length * 2;
+    const msg = raw.messages.find((m) => m.category === 'interview' && m.fixtureId === s.fixtureId && m.interviewId === undefined);
+    if (msg !== undefined) msg.interviewId = s.id;
+  }
   // Saves from before match ratings and the second libero existed.
   raw.competitionRecords ??= new Map();
   raw.ratingForm ??= new Map();

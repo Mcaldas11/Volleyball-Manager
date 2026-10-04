@@ -2,18 +2,28 @@ import { useEffect, type JSX } from 'react';
 import type { Club } from '../../engine/model/club.ts';
 import type { ManagerProfile } from '../../engine/world/world.ts';
 import type {
-  AnswerCategory, BodyLanguage, InterviewQuestion, InterviewSession,
+  AnswerCategory, BodyLanguage, InterviewKind, InterviewQuestion, InterviewSession,
 } from '../../engine/world/interviews.ts';
-import { Card, ClubLink, managerPhotoUrl, PersonFace } from '../components.tsx';
+import type { Fixture } from '../../engine/world/world.ts';
+import { Card, ClubLink, managerPhotoUrl, PersonFace, PlayerFace } from '../components.tsx';
 import { portraitUrl } from '../faces.ts';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
-const CATEGORY_LABEL: Readonly<Record<AnswerCategory, string>> = {
-  positive: 'Positive',
-  neutral: 'Neutral',
-  convince: 'Convince',
+/** The tones, as the press hear them before a match and after it. */
+const CATEGORY_LABEL: Readonly<Record<InterviewKind, Record<AnswerCategory, string>>> = {
+  pre: { positive: 'Positive', neutral: 'Neutral', convince: 'Convince' },
+  post: { positive: 'Praise', neutral: 'Measured', convince: 'Demanding' },
 };
+
+/** "after the 3-1 win over Skra" / "ahead of hosting Skra". */
+function matchLine(session: InterviewSession, f: Fixture, userClubId: number): { lead: string; result: string } {
+  const home = f.home === userClubId;
+  if (session.kind === 'pre') return { lead: home ? 'Ahead of hosting' : 'Ahead of facing', result: '' };
+  const own = home ? f.homeSets : f.awaySets;
+  const opp = home ? f.awaySets : f.homeSets;
+  return { lead: own > opp ? `After the ${own}-${opp} win over` : `After the ${own}-${opp} defeat to`, result: own > opp ? 'won' : 'lost' };
+}
 
 const CATEGORY_ORDER: readonly AnswerCategory[] = ['positive', 'neutral', 'convince'];
 
@@ -59,10 +69,13 @@ function QuestionView({
   manager: ManagerProfile;
 }): JSX.Element {
   const question = session.questions[session.currentIndex];
+  const store = g.world!.players;
+  const about = question.options.find((o) => o.playerIdx !== undefined)?.playerIdx;
+  const others = session.crowd - session.questions.length;
 
   return (
     <div className="interview-layout">
-      <Card className="interview-left" title="The Room" icon="press">
+      <Card className="interview-left" title={`The Room · ${session.crowd} journalists`} icon="press">
         <div className="interview-speaker">
           <PersonFace
             photoUrl={portraitUrl(question.journalist.photoId, question.journalist.gender)}
@@ -80,12 +93,19 @@ function QuestionView({
         </div>
 
         <div className="interview-bubble">{question.prompt}</div>
+        {about !== undefined && store.isActive(about) && (
+          <div className="interview-about">
+            <PlayerFace playerId={store.id[about]} name={store.fullName(about)} size={26} />
+            <span><b>{store.fullName(about)}</b> will hear what you say — praise lifts him, criticism stings.</span>
+          </div>
+        )}
 
         <div className="interview-journo-grid">
           {session.questions.map((q, i) => (
             <JournalistBadge key={i} q={q} active={i === session.currentIndex} />
           ))}
         </div>
+        {others > 0 && <p className="interview-crowd faint">…and {others} more journalists in the room, notebooks out.</p>}
       </Card>
 
       <Card className="interview-right" title="Your Answer" icon="user">
@@ -99,12 +119,12 @@ function QuestionView({
 
         {CATEGORY_ORDER.map((cat) => (
           <div key={cat}>
-            <div className={`interview-category-label cat-${cat}`}>{CATEGORY_LABEL[cat]}</div>
+            <div className={`interview-category-label cat-${cat}`}>{CATEGORY_LABEL[session.kind][cat]}</div>
             {question.options.map((o, i) => (o.category === cat ? (
               <button
                 key={i}
                 className="interview-answer"
-                onClick={() => g.answerInterviewQuestion(session.fixtureId, i)}
+                onClick={() => g.answerInterviewQuestion(session.id, i)}
               >
                 {o.text}
               </button>
@@ -119,16 +139,17 @@ function QuestionView({
 /** The conference is over: a recap of every question asked, what was said,
  *  and how each journalist took it. */
 function SummaryView({
-  g, session, opponent,
+  g, session, opponent, lead,
 }: {
   g: ReturnType<typeof useGame>;
   session: InterviewSession;
   opponent: Club | undefined;
+  lead: string;
 }): JSX.Element {
   return (
     <>
       <p className="page-intro">
-        Conference complete{opponent !== undefined ? <> — ahead of the match with <ClubLink id={opponent.id} short /></> : null}.
+        Conference complete{opponent !== undefined ? <> — {lead.toLowerCase()} <ClubLink id={opponent.id} short /></> : null}.
       </p>
       <Card title="What You Told Them" icon="press" style={{ maxWidth: 720 }}>
         {session.questions.map((q, i) => (
@@ -159,32 +180,36 @@ function SummaryView({
 export function InterviewScreen(): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
-  const fixtureId = g.activeInterviewFixtureId;
-  const session = fixtureId !== null
-    ? world.pendingInterviews.find((s) => s.fixtureId === fixtureId)
+  const sessionId = g.activeInterviewId;
+  const session = sessionId !== null
+    ? world.pendingInterviews.find((s) => s.id === sessionId)
     : undefined;
 
   // Defensive: if the session vanished from under us (the fixture was played
   // before the manager finished, say), back out instead of rendering nothing
   // forever.
   useEffect(() => {
-    if (fixtureId !== null && session === undefined) g.closeInterview();
-  }, [fixtureId, session]);
+    if (sessionId !== null && session === undefined) g.closeInterview();
+  }, [sessionId, session]);
 
-  if (fixtureId === null || session === undefined) return null;
+  if (sessionId === null || session === undefined) return null;
 
-  const f = world.fixtures[fixtureId];
+  const f = world.fixtures[session.fixtureId];
   const isHome = f.home === world.userClubId;
   const opponent = world.clubs[isHome ? f.away : f.home];
+  const { lead, result } = matchLine(session, f, world.userClubId);
 
   return (
     <div className="interview-screen">
       {!session.finished && (
         <div className="interview-topline">
-          <span className="interview-context">
+          <span className={`interview-occasion stakes-${session.stakes}`}>
+            <Icon name={session.stakes === 'huge' ? 'trophy' : 'press'} size={13} /> {session.occasion}
+          </span>
+          <span className={`interview-context${result !== '' ? ` ${result}` : ''}`}>
             {opponent !== undefined
-              ? <>Ahead of {isHome ? 'hosting' : 'facing'} <ClubLink id={opponent.id} short /></>
-              : 'Pre-match'}
+              ? <>{lead} <ClubLink id={opponent.id} short /></>
+              : session.kind === 'pre' ? 'Pre-match' : 'Post-match'}
           </span>
           <span className="interview-progress">
             {session.questions.map((_, i) => (
@@ -201,7 +226,7 @@ export function InterviewScreen(): JSX.Element | null {
       )}
 
       {session.finished
-        ? <SummaryView g={g} session={session} opponent={opponent} />
+        ? <SummaryView g={g} session={session} opponent={opponent} lead={lead} />
         : <QuestionView g={g} session={session} manager={world.manager} />}
     </div>
   );

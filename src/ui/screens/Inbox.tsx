@@ -506,14 +506,20 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
 
   if (cat === 'interview' && m.fixtureId !== undefined) {
     const f = world.fixtures[m.fixtureId];
-    const session = world.pendingInterviews.find((s) => s.fixtureId === m.fixtureId);
+    const session = m.interviewId !== undefined ? world.pendingInterviews.find((s) => s.id === m.interviewId) : undefined;
     const opp = f !== undefined ? world.clubs[f.home === world.userClubId ? f.away : f.home] : undefined;
+    const after = session?.kind === 'post' || (f?.played === true && m.day >= f.day);
     return (
       <div className="paper-report">
-        <div className="paper-label">Press conference</div>
+        <div className="paper-label">{after ? 'Post-match press conference' : 'Press conference'}</div>
         {opp !== undefined && f !== undefined && (
-          <ReportRow k="Ahead of">{f.home === world.userClubId ? 'vs' : 'at'} {opp.name} · {g.longDateLabel(f.day)}</ReportRow>
+          <ReportRow k={after ? 'After' : 'Ahead of'}>
+            {after ? `${f.home === world.userClubId ? f.homeSets : f.awaySets}-${f.home === world.userClubId ? f.awaySets : f.homeSets} ` : ''}
+            {f.home === world.userClubId ? 'vs' : 'at'} {opp.name} · {g.longDateLabel(f.day)}
+          </ReportRow>
         )}
+        {session !== undefined && <ReportRow k="Occasion">{session.occasion}</ReportRow>}
+        {session !== undefined && <ReportRow k="In the room">{session.crowd} journalists</ReportRow>}
         <ReportRow k="Questions">{session?.questions.length ?? '—'}</ReportRow>
         <ReportRow k="Status">
           {session === undefined ? 'Closed' : session.finished ? 'Done' : session.currentIndex > 0 ? 'In progress' : 'Waiting for you'}
@@ -698,18 +704,18 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
   const out: JSX.Element[] = [];
   const p = m.playerIdx;
 
-  const session = m.fixtureId !== undefined ? world.pendingInterviews.find((s) => s.fixtureId === m.fixtureId) : undefined;
+  const session = m.interviewId !== undefined ? world.pendingInterviews.find((s) => s.id === m.interviewId) : undefined;
   if (session !== undefined) {
     if (session.currentIndex === 0 && !session.finished) {
       out.push(
-        <button key="attend" className="paper-btn primary-dark" onClick={() => g.openInterview(session.fixtureId)}>
+        <button key="attend" className="paper-btn primary-dark" onClick={() => g.openInterview(session.id)}>
           <Icon name="press" size={15} /> Attend press conference
         </button>,
-        <button key="decline" className="paper-btn" onClick={() => g.declineInterview(session.fixtureId)}>Decline interview</button>,
+        <button key="decline" className="paper-btn" onClick={() => g.declineInterview(session.id)}>Decline interview</button>,
       );
     } else {
       out.push(
-        <button key="resume" className="paper-btn primary-dark" onClick={() => g.openInterview(session.fixtureId)}>
+        <button key="resume" className="paper-btn primary-dark" onClick={() => g.openInterview(session.id)}>
           {session.finished ? 'View summary' : 'Resume conference'}
         </button>,
       );

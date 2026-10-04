@@ -45,11 +45,11 @@ import { SeasonReviewScreen } from './seasonReview.tsx';
 /** Identifies the current main-content view, so it can be keyed to replay the fade-in on change. */
 function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.matchday !== null) return 'matchday';
+  if (g.activeInterviewId !== null) return `interview-${g.activeInterviewId}`;
   if (g.postMatch !== null) return `result-${g.postMatch}`;
   if (g.negotiation !== null) return 'negotiation';
   if (g.incomingOffer !== null) return 'offer';
   if (g.coachTalk !== null) return 'coach-talk';
-  if (g.activeInterviewFixtureId !== null) return `interview-${g.activeInterviewFixtureId}`;
   if (g.selectedClub !== null) return `club-${g.selectedClub}`;
   if (g.selectedPlayer !== null) return `player-${g.selectedPlayer}`;
   if (g.selectedReview !== null) return `review-${g.selectedReview}`;
@@ -192,6 +192,8 @@ function GameShell(): JSX.Element {
           <div key={key} className="view-fade">
             {g.matchday !== null
               ? <MatchdayScreen />
+              : g.activeInterviewId !== null
+                ? <InterviewScreen />
               : g.postMatch !== null
                 ? <MatchResultScreen />
                 : g.negotiation !== null
@@ -200,8 +202,6 @@ function GameShell(): JSX.Element {
                     ? <IncomingOfferScreen />
                     : g.coachTalk !== null
                     ? <CoachTalkScreen />
-                    : g.activeInterviewFixtureId !== null
-                      ? <InterviewScreen />
                       : g.selectedNation !== null
                         ? <NationProfile />
                       : g.selectedCoach !== null
@@ -273,7 +273,7 @@ function Screen(): JSX.Element {
 /** True while a full-screen flow (a match, its result, a press conference)
  *  owns the content area — sidebar navigation would only change what's underneath. */
 function inTakeover(g: ReturnType<typeof useGame>): boolean {
-  return g.matchday !== null || g.activeInterviewFixtureId !== null || g.postMatch !== null;
+  return g.matchday !== null || g.activeInterviewId !== null || g.postMatch !== null;
 }
 
 function Sidebar({
@@ -407,11 +407,11 @@ function headerInfo(g: ReturnType<typeof useGame>): {
     const stage = g.matchday.stage;
     return { title: stage === 'lineup' ? 'Team Selection' : stage === 'setBreak' ? 'Set Break' : 'Live Match', tabs: null };
   }
+  if (g.activeInterviewId !== null) return { title: 'Press Conference', tabs: null };
   if (g.postMatch !== null) return { title: 'Full Time', tabs: null };
   if (g.negotiation !== null) return { title: 'Contract Negotiation', tabs: null };
   if (g.incomingOffer !== null) return { title: 'Transfer Offer', tabs: null };
   if (g.coachTalk !== null) return { title: 'Talk to the Coach', tabs: null };
-  if (g.activeInterviewFixtureId !== null) return { title: 'Press Conference', tabs: null };
   if (g.selectedNation !== null) return { title: 'National Team', tabs: null };
   if (g.selectedCoach !== null) return { title: 'Coach', tabs: null };
   if (g.selectedClub !== null) {
@@ -518,7 +518,7 @@ function ContinueButton(): JSX.Element {
   const inMatch = g.matchday !== null;
   // A press conference or a bid to answer holds the day up.
   const decision = g.pendingDecision();
-  const blocked = inMatch || g.activeInterviewFixtureId !== null || g.processing;
+  const blocked = inMatch || g.activeInterviewId !== null || g.processing;
   const inInbox = g.screen === 'inbox' && g.selectedPlayer === null && g.selectedClub === null &&
     g.selectedReview === null && g.negotiation === null && g.incomingOffer === null;
 

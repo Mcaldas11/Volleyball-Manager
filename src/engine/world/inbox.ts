@@ -68,8 +68,8 @@ export function messageNeedsAction(world: World, m: GameMessage): boolean {
     const offer = world.incomingOffers.find((o) => o.id === m.offerId);
     if (offer !== undefined && (offer.status ?? 'open') === 'open') return true;
   }
-  if (m.fixtureId !== undefined && messageCategory(m) === 'interview') {
-    const session = world.pendingInterviews.find((s) => s.fixtureId === m.fixtureId);
+  if (m.interviewId !== undefined && messageCategory(m) === 'interview') {
+    const session = world.pendingInterviews.find((s) => s.id === m.interviewId);
     if (session !== undefined && !session.finished) return true;
   }
   if (m.talksId !== undefined) {
