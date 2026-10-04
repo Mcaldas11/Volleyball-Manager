@@ -8,7 +8,7 @@ import { messageNeedsAction } from './inbox.ts';
 import { MatchFormat, simulateMatch } from '../match/engine.ts';
 import { Position } from '../model/positions.ts';
 import {
-  acceptNationalOffer, appointNationalCoach, applyForNationalJob, askForSquad, declineNationalOffer, leaveNationalJob, applyIntlResult, eligibleFor, internationalDay, internationals,
+  acceptNationalOffer, appointNationalCoach, internationalCalendar, applyForNationalJob, askForSquad, declineNationalOffer, leaveNationalJob, applyIntlResult, eligibleFor, internationalDay, internationals,
   matchImportance, nameSquad, nationalRecord, nationResults, nationSetup, nationTournaments, pickSquad, poolTable,
   secondNation, selectionScore, squadDue, squadOf,
   startNationalCareer, suggestSquad, userMatchToday, worldRanking, type Tournament,
@@ -407,4 +407,19 @@ test("a nation's record: its matches won and lost over a spell, the tournaments 
   assert.equal(nationTournaments(world, champion).find((x) => x.t.id === euro.id)?.place, 1);
   const latest = nationResults(world, champion, 3);
   assert.ok(latest.length > 0 && latest.every((r, i) => i === 0 || r.m.day <= latest[i - 1].m.day), 'newest first');
+});
+
+test('the road ahead: what is drawn this season, then what the cycle brings, in date order', () => {
+  const { world } = start(46);
+  const road = internationalCalendar(world, 'CEV');
+  for (let i = 1; i < road.length; i++) assert.ok(road[i - 1].startDay <= road[i].startDay);
+  assert.equal(road[0].name, 'EuroVolley 2026');
+  assert.ok(road[0].tournament !== undefined, 'this summer is drawn');
+  const names = road.map((e) => e.name);
+  for (const n of ['Nations League 2027', 'World Championship 2027', 'EuroVolley 2028 Qualifiers', 'Olympic Games 2028', 'EuroVolley 2028']) {
+    assert.ok(names.includes(n), `${n} on the road`);
+  }
+  const worlds = road.find((e) => e.name === 'World Championship 2027')!;
+  assert.equal(worlds.tournament, undefined, 'not drawn until its season starts');
+  assert.equal(worlds.drawDay, 365);
 });

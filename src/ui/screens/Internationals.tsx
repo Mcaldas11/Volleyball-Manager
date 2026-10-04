@@ -1,14 +1,19 @@
 /**
- * The national teams' tournaments: this season's — the summer's major, the
- * Nations League — and every edition played, down the side; the one picked
- * out in full on the right: where it stands, the medals, the manager's own
- * players at it, the pools, the bracket, the results, and any nation's squad.
+ * The national teams' tournaments. Across the top, the road ahead: what is
+ * coming and when — the tournaments drawn this season and the ones the FIVB
+ * cycle brings after them, each with how long until it starts. Down the side,
+ * the manager's nation and where it stands, then this season's tournaments —
+ * live, coming up, done — and the honours. The one picked out in full: where
+ * it stands on its way from squads to final, how its field was made, the
+ * manager's own players at it, the pools, the bracket, the results, and any
+ * nation's squad.
  */
 
 import { useState, type JSX } from 'react';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import {
-  championsTitle, poolTable, type IntlMatch, type Tournament, type TournamentKind,
+  championsTitle, internationalCalendar, poolTable, userNation, worldRanking,
+  type CalendarEvent, type IntlMatch, type Tournament, type TournamentKind,
 } from '../../engine/world/internationals.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { ClubLink, Empty, Flag, PlayerLink } from '../components.tsx';
@@ -26,12 +31,26 @@ function Nation({ n, bold = false }: { n: number; bold?: boolean }): JSX.Element
   return <span className={`intl-nation${bold ? ' won' : ''}`}><Flag nation={n} /> {nationName(n)}</span>;
 }
 
+/** How long until a day: "Today", "In 5 days", "In 3 weeks", "In 4 months". */
+function until(days: number): string {
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days < 14) return `In ${days} days`;
+  if (days < 60) return `In ${Math.round(days / 7)} weeks`;
+  const months = Math.round(days / 30.4);
+  return `In ${months} month${months === 1 ? '' : 's'}`;
+}
+
+function live(t: Tournament): boolean {
+  return t.status === 'pools' || t.status === 'knockout';
+}
+
 /** Where a tournament stands, in a few words. */
-function statusLabel(t: Tournament, dateOf: (day: number) => string): string {
-  if (t.status === 'planned') return `Squads named ${dateOf(t.callUpDay)}`;
-  if (t.status === 'called') return `Starts ${dateOf(t.startDay)}`;
-  if (t.status === 'pools') return 'Pool stage';
-  if (t.status === 'knockout') return 'Knockout rounds';
+function statusLabel(t: Tournament, today: number): string {
+  if (t.status === 'planned') return t.callUpDay > today ? `Squads named ${until(t.callUpDay - today).toLowerCase()}` : 'Squads due';
+  if (t.status === 'called') return `Starts ${until(t.startDay - today).toLowerCase()}`;
+  if (t.status === 'pools') return 'Live · pool stage';
+  if (t.status === 'knockout') return 'Live · knockout rounds';
   if (t.kind === 'qualifier') return `${t.places ?? 0} nations through`;
   return `${nationName(t.placings[0])} ${championsTitle(t)}`;
 }
@@ -50,35 +69,57 @@ function qualificationRule(t: Tournament): string {
   return rules[t.kind];
 }
 
-/** Live first, then the ones to come, then the ones done — the latest first. */
-function ordered(list: readonly Tournament[]): Tournament[] {
-  const rank = (t: Tournament): number => (t.status === 'pools' || t.status === 'knockout' ? 0 : t.status === 'done' ? 2 : 1);
-  return [...list].sort((a, b) => rank(a) - rank(b) || (rank(a) === 2 ? b.startDay - a.startDay : a.startDay - b.startDay));
+/** The colour a kind of tournament is marked with. */
+const KIND_CLASS: Readonly<Record<TournamentKind, string>> = {
+  olympics: 'k-olympics', worlds: 'k-worlds', continental: 'k-continental', qualifier: 'k-qualifier', nationsLeague: 'k-vnl',
+};
+
+/** The nation the manager follows: the one he coaches, or his own. */
+function followedNation(g: ReturnType<typeof useGame>): number {
+  const world = g.world!;
+  const coached = userNation(world);
+  return coached >= 0 ? coached : g.club?.nation ?? world.manager.nation;
 }
 
 export function InternationalsScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const I = world.internationals;
-  const list = ordered(I?.tournaments ?? []);
+  const today = world.day;
+  const tournaments = I?.tournaments ?? [];
+  const nowOn = tournaments.filter(live).sort((a, b) => a.startDay - b.startDay);
+  const coming = tournaments.filter((t) => t.status === 'planned' || t.status === 'called').sort((a, b) => a.startDay - b.startDay);
+  const done = tournaments.filter((t) => t.status === 'done').sort((a, b) => b.startDay - a.startDay);
   const [picked, setPicked] = useState<number | null>(g.focusTournament);
-  const t = list.find((x) => x.id === picked) ?? list[0];
-  const dateOf = (day: number): string => g.dateLabelForDay(day);
+  const t = tournaments.find((x) => x.id === picked) ?? nowOn[0] ?? coming[0] ?? done[0];
+  const home = followedNation(g);
+  const conf = NATIONS[home]?.confederation ?? 'CEV';
+  const calendar = internationalCalendar(world, conf).slice(0, 5);
+
+  const pick = (x: Tournament): JSX.Element => (
+    <button key={x.id} className={`intl-pick ${KIND_CLASS[x.kind]}${t?.id === x.id ? ' on' : ''}`} onClick={() => setPicked(x.id)}>
+      <b>{x.name}</b>
+      <small>
+        {x.status === 'done' && x.kind !== 'qualifier' && <Flag nation={x.placings[0]} />}
+        {statusLabel(x, today)}
+        {x.teams.includes(home) && x.status !== 'done' && <span className="intl-in">{NATIONS[home]?.code ?? ''} in</span>}
+      </small>
+    </button>
+  );
 
   return (
     <div className="intl">
       <aside className="intl-side">
         <h2 className="intl-title">International</h2>
+        <NationCard nation={home} calendar={calendar} onPick={setPicked} />
         <div className="intl-list">
-          {list.map((x) => (
-            <button key={x.id} className={`intl-pick${t?.id === x.id ? ' on' : ''}`} onClick={() => setPicked(x.id)}>
-              <b>{x.name}</b>
-              <small>
-                {x.status === 'done' && <Flag nation={x.placings[0]} />} {statusLabel(x, dateOf)}
-              </small>
-            </button>
-          ))}
-          {list.length === 0 && <p className="intl-none">No tournaments drawn yet.</p>}
+          {nowOn.length > 0 && <span className="intl-group live"><i /> Live now</span>}
+          {nowOn.map(pick)}
+          {coming.length > 0 && <span className="intl-group">Coming up</span>}
+          {coming.map(pick)}
+          {done.length > 0 && <span className="intl-group">Finished</span>}
+          {done.map(pick)}
+          {tournaments.length === 0 && <p className="intl-none">No tournaments drawn yet.</p>}
         </div>
         <h3 className="intl-h">Honours</h3>
         <div className="intl-honours">
@@ -92,9 +133,121 @@ export function InternationalsScreen(): JSX.Element {
         </div>
       </aside>
       <section className="intl-main">
+        <RoadAhead events={calendar} picked={t?.id ?? null} onPick={setPicked} />
         {t !== undefined ? <TournamentView key={t.id} t={t} /> : <Empty>Nothing on the international calendar yet.</Empty>}
       </section>
     </div>
+  );
+}
+
+/** The manager's nation: its place in the world, and its next date. */
+function NationCard({ nation, calendar, onPick }: {
+  nation: number; calendar: CalendarEvent[]; onPick: (id: number) => void;
+}): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  if (NATIONS[nation] === undefined) return null;
+  const rank = worldRanking(world).indexOf(nation) + 1;
+  const coached = userNation(world) === nation;
+  // Its next tournament: one it is in, or — not drawn yet — the next it could be.
+  const next = calendar.find((e) => e.tournament === undefined || e.tournament.teams.includes(nation));
+  const inIt = next?.tournament?.teams.includes(nation) ?? false;
+  return (
+    <div className="intl-nation-card">
+      <div className="intl-nation-top">
+        <Flag nation={nation} />
+        <div>
+          <b>{nationName(nation)}</b>
+          <span className="faint">{coached ? 'Your national team' : 'Your nation'} · #{rank} in the world</span>
+        </div>
+      </div>
+      {next !== undefined && (
+        <button
+          className="intl-nation-next"
+          disabled={next.tournament === undefined}
+          onClick={() => next.tournament !== undefined && onPick(next.tournament.id)}
+        >
+          <span className="intl-nation-next-label">Next</span>
+          <b>{next.name}</b>
+          <span className="faint">
+            {g.dateLabelForDay(next.startDay)} · {until(next.startDay - world.day)}
+            {next.tournament !== undefined ? (inIt ? ' · in the field' : '') : ` · field drawn ${g.dateLabelForDay(next.drawDay)}`}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** What is coming, and when: the next events on the international calendar, drawn or still to be. */
+function RoadAhead({ events, picked, onPick }: {
+  events: CalendarEvent[]; picked: number | null; onPick: (id: number) => void;
+}): JSX.Element {
+  const g = useGame();
+  const today = g.world!.day;
+  return (
+    <section className="intl-road">
+      <h3 className="intl-h">The road ahead</h3>
+      <div className="intl-road-line">
+        {events.map((e) => {
+          const t = e.tournament;
+          const isLive = t !== undefined && live(t);
+          const when = isLive ? 'Live now' : until(e.startDay - today);
+          return (
+            <button
+              key={`${e.kind}-${e.year}-${e.confederation ?? ''}`}
+              className={`intl-road-stop ${KIND_CLASS[e.kind]}${t !== undefined && t.id === picked ? ' on' : ''}${isLive ? ' live' : ''}`}
+              disabled={t === undefined}
+              onClick={() => t !== undefined && onPick(t.id)}
+              title={t === undefined ? `Drawn on ${g.dateLabelForDay(e.drawDay)}` : undefined}
+            >
+              <span className="intl-road-dot" />
+              <span className="intl-road-when">{when}</span>
+              <b>{e.name}</b>
+              <span className="faint">
+                {t !== undefined
+                  ? `${g.dateLabelForDay(e.startDay)} – ${g.dateLabelForDay(e.endDay)}`
+                  : `From ${g.dateLabelForDay(e.startDay)} · not drawn yet`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** A tournament's way from squads to final, with today on it. */
+function Stepper({ t }: { t: Tournament }): JSX.Element {
+  const g = useGame();
+  const pools = t.matches.filter((m) => m.round < 0).map((m) => m.day);
+  const lastPool = pools.length > 0 ? Math.max(...pools) : t.startDay;
+  const finalDay = t.knockoutDays[t.knockoutDays.length - 1];
+  const order = ['planned', 'called', 'pools', 'knockout', 'done'];
+  const at = order.indexOf(t.status);
+  const steps: Array<{ label: string; when: string; from: number }> = [
+    { label: 'Squads named', when: g.dateLabelForDay(t.callUpDay), from: 1 },
+    { label: 'Pool stage', when: `${g.dateLabelForDay(t.startDay)} – ${g.dateLabelForDay(lastPool)}`, from: 2 },
+    ...(t.kind === 'qualifier'
+      ? [{ label: 'Places decided', when: g.dateLabelForDay(lastPool), from: 4 }]
+      : [
+        { label: 'Knockout', when: `${g.dateLabelForDay(t.knockoutDays[0])} – ${g.dateLabelForDay(finalDay)}`, from: 3 },
+        { label: 'Final', when: g.dateLabelForDay(finalDay), from: 4 },
+      ]),
+  ];
+  return (
+    <ol className="intl-steps">
+      {steps.map((s, i) => {
+        const doneStep = at > s.from || (at === 4 && s.from === 4);
+        const current = !doneStep && (at === s.from || (i === 0 && at === 0));
+        return (
+          <li key={s.label} className={`${doneStep ? 'done' : ''}${current ? ' current' : ''}`}>
+            <span className="intl-step-dot">{doneStep ? <Icon name="check" size={11} /> : i + 1}</span>
+            <span className="intl-step-text"><b>{s.label}</b><span className="faint">{s.when}</span></span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -102,24 +255,31 @@ function TournamentView({ t }: { t: Tournament }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
-  const finalDay = t.knockoutDays[t.knockoutDays.length - 1];
+  const today = world.day;
   const ours = world.userClubId < 0 ? [] : t.squads.flatMap(([n, squad]) =>
     squad.filter((p) => store.clubId[p] === world.userClubId).map((p) => [p, n] as const));
-  const homeNation = g.club?.nation ?? world.manager.nation;
+  const homeNation = followedNation(g);
   const [squadNation, setSquadNation] = useState(t.teams.includes(homeNation) ? homeNation : t.teams[0]);
   const squad = t.squads.find(([n]) => n === squadNation)?.[1] ?? [];
+  const chip = live(t) ? 'Live'
+    : t.status === 'done' ? 'Finished'
+      : until(t.startDay - today);
 
   return (
     <div className="intl-view">
-      <header className="intl-head">
-        <span className="intl-kicker">
-          <Icon name="world" size={14} /> {t.confederation ?? 'FIVB'} · {t.teams.length} nations
-        </span>
+      <header className={`intl-head ${KIND_CLASS[t.kind]}`}>
+        <div className="intl-head-top">
+          <span className="intl-kicker">
+            <Icon name="world" size={14} /> {t.confederation ?? 'FIVB'} · {t.teams.length} nations
+            {t.host >= 0 && <> · Hosts <Flag nation={t.host} /> {nationName(t.host)}</>}
+          </span>
+          <span className={`intl-chip${live(t) ? ' live' : t.status === 'done' ? ' done' : ''}`}>
+            {live(t) && <i />}{chip}
+          </span>
+        </div>
         <h1 className="intl-name">{t.name}</h1>
-        <span className="faint">
-          Squads named {g.dateLabelForDay(t.callUpDay)} · {g.dateLabelForDay(t.startDay)} – {g.dateLabelForDay(finalDay)} ·{' '}
-          <b className="intl-status">{statusLabel(t, (d) => g.dateLabelForDay(d))}</b>
-        </span>
+        <span className="intl-head-status">{statusLabel(t, today)}</span>
+        <Stepper t={t} />
         {t.status === 'done' && t.kind !== 'qualifier' && (
           <div className="intl-podium">
             {t.placings.slice(0, 3).map((n, i) => (

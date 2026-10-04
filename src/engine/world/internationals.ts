@@ -718,6 +718,64 @@ function fieldNotice(world: World, t: Tournament): void {
   });
 }
 
+// ---- The calendar ahead ------------------------------------------------------------------------
+
+/** One event on the international calendar: a tournament drawn, or one the cycle will bring. */
+export interface CalendarEvent {
+  kind: TournamentKind;
+  confederation: Confederation | null;
+  name: string;
+  year: number;
+  /** Absolute days: squads named, first match, last match — the last an estimate until it is drawn. */
+  callUpDay: number;
+  startDay: number;
+  endDay: number;
+  /** The tournament itself, once drawn — every one is drawn on the first day of its season. */
+  tournament?: Tournament;
+  /** The day it is drawn, if it hasn't been. */
+  drawDay: number;
+}
+
+/** Roughly how long each kind of tournament runs, until it is drawn and its days are known. */
+const RUNS: Readonly<Record<TournamentKind, number>> = { worlds: 12, olympics: 12, continental: 14, qualifier: 4, nationsLeague: 24 };
+
+/**
+ * What is on the international calendar from today on: the tournaments drawn
+ * this season, and those the FIVB cycle brings in the `seasons` after it —
+ * with `home`'s confederation's own championship and qualifiers, the ones a
+ * manager from there follows.
+ */
+export function internationalCalendar(world: World, home: Confederation, seasons = 2): CalendarEvent[] {
+  const I = internationals(world);
+  const out: CalendarEvent[] = [];
+  for (let s = world.season; s <= world.season + seasons; s++) {
+    const year = world.startYear + s;
+    const base = s * DAYS_PER_SEASON;
+    const add = (kind: TournamentKind, conf: Confederation | null, name: string, eventYear: number, callUp: number, start: number): void => {
+      const t = I.tournaments.find((x) => x.kind === kind && x.year === eventYear && (conf === null || x.confederation === conf));
+      out.push({
+        kind, confederation: conf, name: t?.name ?? name, year: eventYear,
+        callUpDay: t?.callUpDay ?? base + callUp,
+        startDay: t?.startDay ?? base + start,
+        endDay: t !== undefined ? Math.max(t.startDay, ...t.knockoutDays) : base + start + RUNS[kind],
+        tournament: t,
+        drawDay: base,
+      });
+    };
+    if (year % 4 === 0) add('olympics', null, `Olympic Games ${year}`, year, SUMMER_CALL_UP, SUMMER_START);
+    else if (year % 2 === 1) add('worlds', null, `World Championship ${year}`, year, SUMMER_CALL_UP, SUMMER_START);
+    if (year % 2 === 0) {
+      const olympic = year % 4 === 0;
+      add('continental', home, `${CONTINENTAL[home].name} ${year}`, year,
+        olympic ? AFTER_GAMES_CALL_UP : SUMMER_CALL_UP, olympic ? AFTER_GAMES_START : SUMMER_START);
+    } else if (NATIONS.filter((n) => n.confederation === home).length > CONTINENTAL_SIZE[home]) {
+      add('qualifier', home, `${CONTINENTAL[home].name} ${year + 1} Qualifiers`, year + 1, AFTER_GAMES_CALL_UP, AFTER_GAMES_START);
+    }
+    add('nationsLeague', null, `Nations League ${year + 1}`, year + 1, VNL_CALL_UP, VNL_START);
+  }
+  return out.filter((e) => e.endDay >= world.day).sort((a, b) => a.startDay - b.startDay);
+}
+
 // ---- Dual nationals --------------------------------------------------------------------------
 
 /** A foreign player of this age or more at a club may have taken its country's passport… */
