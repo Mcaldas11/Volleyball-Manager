@@ -34,6 +34,7 @@ import { matchRating } from './playerRating.ts';
 import { computeRatings, contest, type PlayerMatchRatings } from './ratings.ts';
 import {
   AttackLane,
+  lineupSlotPositions,
   BlockAssignment,
   DEFENSE_PROFILE,
   LANE_NAMES,
@@ -143,6 +144,8 @@ export interface MatchResult {
   totalRallies: number;
   /** Match MVP: highest scoring impact. Player index, or -1. */
   mvp: number;
+  /** The position each player in the two squads played — or would have, off the bench. */
+  roles?: Map<number, Position>;
 }
 
 /**
@@ -206,6 +209,8 @@ const SUB_MARGIN_REVERSAL = 0.08;
  * See `crossShift()`.
  */
 const SYSTEM_CHANGE_MARGIN = 0.05;
+/** A hitter attacking from the other side to his usual one — receiving in P1 — is a little less dangerous. */
+const OFF_SIDE = 0.97;
 /**
  * The same judgement for the six handed in at a set break — a lower bar than
  * a substitution, since it costs none, shifted up after a set won and down
@@ -296,13 +301,13 @@ class TeamRuntime {
   /** What it prepared for. */
   readonly prep: { reception: number; transition: number; block: number };
   private readonly startRotation: number;
-  private readonly positions: Uint8Array;
 
   constructor(
     readonly setup: TeamSetup,
-    store: PlayerStore,
+    private readonly store: PlayerStore,
+    /** The position each player plays in this match, shared by both sides — see MatchSimulator.roles. */
+    private readonly roles: Uint8Array,
   ) {
-    this.positions = store.position;
     this.startLineup = setup.lineup.slice();
     this.read = Math.min(1, Math.max(0, setup.read ?? 0));
     this.prep = setup.prep ?? { reception: 0, transition: 0, block: 0 };
@@ -311,17 +316,37 @@ class TeamRuntime {
     this.receptionLibero = setup.libero;
     this.defensiveLibero = setup.defensiveLibero ?? -1;
 
-    // Ratings for everyone who might take the floor.
+    // Ratings for everyone who might take the floor: the six and the liberos
+    // in the positions they were picked for, the bench in their own.
     const all = [...setup.lineup, ...setup.bench];
     if (setup.libero >= 0) all.push(setup.libero);
     if (this.defensiveLibero >= 0) all.push(this.defensiveLibero);
     for (const p of all) {
       if (p < 0) continue;
-      const role = store.position[p] as Position;
-      this.ratings.set(p, computeRatings(store, p, role));
+      this.ratings.set(p, computeRatings(store, p, roles[p] as Position));
     }
+    this.takePositions(this.startLineup, setup.libero, this.defensiveLibero);
 
     this.resetForSet();
+  }
+
+  /** The six take the positions of the slots they start in, the liberos libero. */
+  takePositions(lineup: readonly number[], libero: number, defensiveLibero: number): void {
+    const slots = lineupSlotPositions(formationOf(this.setup.tactics));
+    lineup.forEach((p, i) => { if (p >= 0) this.assign(p, slots[i]); });
+    for (const l of [libero, defensiveLibero]) if (l >= 0) this.assign(l, Position.Libero);
+  }
+
+  /** A player takes a position for the rest of the match — his ratings for it, his evening so far kept. */
+  assign(p: number, role: Position): void {
+    const now = this.ratings.get(p);
+    if (now === undefined || (this.roles[p] === role && now.role === role)) {
+      this.roles[p] = role;
+      return;
+    }
+    this.roles[p] = role;
+    const fresh = computeRatings(this.store, p, role);
+    Object.assign(now, fresh, { fatigue: now.fatigue, confidence: now.confidence });
   }
 
   get tactics(): TeamTactics {
@@ -337,7 +362,7 @@ class TeamRuntime {
     this.setterIdx = -1;
     const fourTwo = formationOf(this.setup.tactics) === Formation.FourTwo;
     for (const p of this.startLineup) {
-      if (this.positions[p] !== Position.Setter) continue;
+      if (this.roles[p] !== Position.Setter) continue;
       if (!fourTwo || this.setterIdx < 0) this.setterIdx = p;
     }
     if (this.setterIdx < 0) this.setterIdx = this.startLineup[0];
@@ -367,7 +392,7 @@ class TeamRuntime {
   settingIdx(): number {
     if (!this.fourTwo) return this.setterIdx;
     for (const z of BACK_ROW_ZONES) {
-      if (this.positions[this.court[z]] === Position.Setter) return this.court[z];
+      if (this.roles[this.court[z]] === Position.Setter) return this.court[z];
     }
     return this.setterIdx;
   }
@@ -411,12 +436,22 @@ export class MatchSimulator {
   /** The rally each engine-coached side last made a change on. */
   private readonly lastAutoSub: [number, number] = [-Infinity, -Infinity];
 
+  /**
+   * The position each player plays in this match, by player index: whatever
+   * slot of the team sheet he was put in — an outside hitter in the
+   * opposite's slot plays opposite, a libero picked as a setter sets — and a
+   * substitute whichever position the player he replaced was playing. Bench
+   * players are in their own position until they come on.
+   */
+  readonly roles: Uint8Array;
+
   constructor(
     private readonly store: PlayerStore,
     private readonly setup: MatchSetup,
   ) {
     this.rng = new Rng(setup.seed);
-    this.teams = [new TeamRuntime(setup.home, store), new TeamRuntime(setup.away, store)];
+    this.roles = store.position.slice(0, store.count);
+    this.teams = [new TeamRuntime(setup.home, store, this.roles), new TeamRuntime(setup.away, store, this.roles)];
     this.log = setup.collectLog ? [] : null;
     this.autoCoached = [setup.autoCoach?.[0] ?? false, setup.autoCoach?.[1] ?? false];
 
@@ -610,6 +645,8 @@ export class MatchSimulator {
       log: this.log,
       totalRallies: this.totalRallies,
       mvp: this.findMvp(),
+      roles: new Map([...this.teams[0].ratings.keys(), ...this.teams[1].ratings.keys()]
+        .map((p) => [p, this.roles[p] as Position])),
     };
   }
 
@@ -625,6 +662,8 @@ export class MatchSimulator {
     team: 0 | 1,
     outPlayerIdx: number,
     inPlayerIdx: number,
+    /** The position he comes on to play: the replaced player's, unless the change is of system. */
+    role?: Position,
   ): { ok: boolean; reason?: string } {
     const error = this.substitutionError(team, outPlayerIdx, inPlayerIdx);
     if (error !== null) return { ok: false, reason: error };
@@ -633,11 +672,12 @@ export class MatchSimulator {
     const zone = t.court.indexOf(outPlayerIdx);
     const pairing = this.subPairing[team];
     const requiredPartner = pairing.get(outPlayerIdx);
+    t.assign(inPlayerIdx, role ?? this.roleFor(team, outPlayerIdx, inPlayerIdx));
     t.court[zone] = inPlayerIdx;
     if (t.setterIdx === outPlayerIdx) {
       // A setter off for someone who isn't one: in a 4-2 the other setter
       // runs the offence from here — failing one, whoever came on has to.
-      const pos = this.store.position;
+      const pos = this.roles;
       t.setterIdx = pos[inPlayerIdx] === Position.Setter
         ? inPlayerIdx
         : Array.from(t.court).find((p) => pos[p] === Position.Setter) ?? inPlayerIdx;
@@ -648,6 +688,23 @@ export class MatchSimulator {
       pairing.set(inPlayerIdx, outPlayerIdx);
     }
     return { ok: true };
+  }
+
+  /**
+   * The position a substitute plays: the one the player he replaces was
+   * playing — except the 4-2's change of system, an opposite on for a setter
+   * or a setter back on for him, where each plays his own.
+   */
+  private roleFor(team: 0 | 1, out: number, inc: number): Position {
+    const was = this.roles[out] as Position;
+    const own = this.store.position[inc] as Position;
+    const swap = (was === Position.Setter && own === Position.Opposite) || (was === Position.Opposite && own === Position.Setter);
+    return this.teams[team].fourTwo && swap ? own : was;
+  }
+
+  /** The position a player is playing in this match. */
+  roleOf(p: number): Position {
+    return this.roles[p] as Position;
   }
 
   /** Why substitute() would refuse this swap, or null if it is legal. */
@@ -765,7 +822,7 @@ export class MatchSimulator {
    * and a setter back on for that opposite, restoring the 4-2.
    */
   private crossShift(team: 0 | 1, out: number, inc: number, six: ArrayLike<number>): number | null {
-    const pos = this.store.position;
+    const pos = this.roles;
     if (pos[inc] === pos[out]) return 0;
     if (!this.teams[team].fourTwo) return null;
     let setters = 0;
@@ -804,7 +861,7 @@ export class MatchSimulator {
     const s = t.stats.players.get(playerIdx);
     if (s === undefined || s.ralliesPlayed < FORM_MIN_RALLIES) return { fatigue, form: 1 };
     const rating = matchRating(
-      s, this.store.position[playerIdx] as Position, t.setsWon, this.teams[1 - team].setsWon,
+      s, this.roles[playerIdx] as Position, t.setsWon, this.teams[1 - team].setsWon,
     );
     const form = rating >= FORM_FLOOR ? 1 : Math.max(0.6, 1 - (FORM_FLOOR - rating) * FORM_PENALTY);
     return { fatigue, form };
@@ -844,10 +901,9 @@ export class MatchSimulator {
       return { ok: true };
     }
     if (!t.ratings.has(playerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
-    if (this.store.position[playerIdx] !== Position.Libero) {
-      return { ok: false, reason: 'Only a registered libero can play libero.' };
-    }
     if (t.court.includes(playerIdx)) return { ok: false, reason: 'That player is already on court.' };
+    // Whoever is named libero plays libero, whatever he is by trade.
+    t.assign(playerIdx, Position.Libero);
 
     if (role === 'reception') {
       if (playerIdx === t.defensiveLibero) t.defensiveLibero = t.receptionLibero;
@@ -893,7 +949,6 @@ export class MatchSimulator {
     for (const l of [libero, defensiveLibero]) {
       if (l < 0) continue;
       if (!t.ratings.has(l)) return { ok: false, reason: 'That player is not part of the squad.' };
-      if (this.store.position[l] !== Position.Libero) return { ok: false, reason: 'Only a registered libero can play libero.' };
       if (lineup.includes(l)) return { ok: false, reason: 'A libero cannot also start in the six.' };
     }
     if (defensiveLibero >= 0 && (libero < 0 || defensiveLibero === libero)) {
@@ -903,6 +958,7 @@ export class MatchSimulator {
     t.startLineup = lineup.slice();
     t.receptionLibero = libero;
     t.defensiveLibero = defensiveLibero;
+    t.takePositions(t.startLineup, libero, defensiveLibero);
     t.resetForSet();
     this.subsUsedThisSet[team] = 0;
     this.subPairing[team].clear();
@@ -1280,7 +1336,7 @@ export class MatchSimulator {
    */
   private secondTouch(atk: TeamRuntime, firstTouch: number, quality: number): number {
     const setter = atk.settingIdx();
-    const pos = this.store.position;
+    const pos = this.roles;
     const onCourt: number[] = [];
     for (let z = 0; z < 6; z++) onCourt.push(effectivePlayerAt(atk.court, z, pos, atk.liberoIdx));
     const free = (p: number): boolean => p >= 0 && p !== firstTouch && onCourt.includes(p);
@@ -1307,7 +1363,7 @@ export class MatchSimulator {
    * gives, so the tactic has to actually change who touches the ball.
    */
   private pickReceiver(rcv: TeamRuntime, srvTactics: TeamTactics, rotTac: ServeTarget): number {
-    const n = receptionUnit(rcv.court, this.store.position, rcv.liberoIdx, this.recvUnit);
+    const n = receptionUnit(rcv.court, this.roles, rcv.liberoIdx, this.recvUnit);
     if (n === 0) return rcv.court[0];
 
     const target = rotTac !== ServeTarget.Auto ? rotTac : autoTarget(srvTactics);
@@ -1354,6 +1410,11 @@ export class MatchSimulator {
    * When the setter is front row only two attackers are available, so those
    * three rotations are structurally weaker — exactly the pattern a real
    * coach sees in their rotation report.
+   *
+   * Receiving in P1 a 5-1 doesn't switch: the outside hitter passing in zone 2
+   * is too far from the left to get there, so he attacks on the right and the
+   * opposite on the left, and they stay that way until the side wins the
+   * point — the lane is where he hits from, his share of the sets his own.
    */
   private chooseLane(
     atk: TeamRuntime,
@@ -1369,8 +1430,9 @@ export class MatchSimulator {
     attackers.fill(-1);
 
     const base = OFFENSE_LANE_WEIGHTS[atk.tactics.offense];
-    const pos = this.store.position;
+    const pos = this.roles;
     const fastBias = 0.6 + (rotTac.setterTempoBias / 100) * 0.8;
+    const noSwitch = !atk.fourTwo && atk.rotation() === 0 && atk !== this.teams[this.serving];
 
     for (let z = 0; z < 6; z++) {
       const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx);
@@ -1386,6 +1448,13 @@ export class MatchSimulator {
             weights[AttackLane.QuickMiddle] = base[AttackLane.QuickMiddle] * fastBias * qual(r.quickAttack);
             attackers[AttackLane.QuickMiddle] = p;
           }
+        } else if (role === Position.OutsideHitter && noSwitch) {
+          // On the right, off his wrong hand side: a touch less than from the left.
+          weights[AttackLane.OppositeRight] = base[AttackLane.OutsideHigh] * qual(r.attackPower) * OFF_SIDE;
+          attackers[AttackLane.OppositeRight] = p;
+        } else if (role === Position.Opposite && noSwitch) {
+          weights[AttackLane.OutsideHigh] = base[AttackLane.OppositeRight] * qual(r.attackPower) * OFF_SIDE;
+          attackers[AttackLane.OutsideHigh] = p;
         } else if (role === Position.OutsideHitter) {
           weights[AttackLane.OutsideHigh] = base[AttackLane.OutsideHigh] * qual(r.attackPower);
           attackers[AttackLane.OutsideHigh] = p;
@@ -1502,7 +1571,7 @@ export class MatchSimulator {
 
   /** Average digging strength of the players who can realistically get the ball up. */
   private digStrength(def: TeamRuntime): number {
-    const pos = this.store.position;
+    const pos = this.roles;
     let total = 0;
     let n = 0;
     for (const z of [0, 4, 5]) {
@@ -1517,7 +1586,7 @@ export class MatchSimulator {
   }
 
   private pickDigger(def: TeamRuntime): number {
-    const pos = this.store.position;
+    const pos = this.roles;
     const zones = [0, 4, 5];
     const w = [1, 1, 1];
     for (let i = 0; i < 3; i++) {
@@ -1553,7 +1622,7 @@ export class MatchSimulator {
       const momentumBoost = 1 + team.momentum * 0.006;
       const edge = team.edge;
       for (let z = 0; z < 6; z++) {
-        const p = effectivePlayerAt(team.court, z, this.store.position, team.liberoIdx);
+        const p = effectivePlayerAt(team.court, z, this.roles, team.liberoIdx);
         const r = team.rate(p);
         const clutch = (r.bigMatch - 0.5) * 0.5 + (r.composure - 0.5) * 0.5;
         r.confidence = clamp(edge * momentumBoost * (1 + clutch * pressure * 0.16), 0.72, 1.28);
@@ -1567,7 +1636,7 @@ export class MatchSimulator {
     for (let t = 0; t < 2; t++) {
       const team = this.teams[t];
       for (let z = 0; z < 6; z++) {
-        const p = effectivePlayerAt(team.court, z, this.store.position, team.liberoIdx);
+        const p = effectivePlayerAt(team.court, z, this.roles, team.liberoIdx);
         const r = team.rate(p);
         // Stamina buys endurance; a 20-stamina player fades roughly a third as
         // fast as a 5-stamina one.

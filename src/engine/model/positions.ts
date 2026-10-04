@@ -84,23 +84,31 @@ const OUT_OF_POSITION: Readonly<Record<Position, Readonly<Record<Position, numbe
 };
 
 /**
- * Effectiveness multiplier for `player` (natural position `natural`, with an
- * optional trained secondary) playing at `role`.
- *
- * A trained secondary position closes most but not all of the gap.
+ * Effectiveness multiplier for a player of natural position `natural`
+ * playing at `role`, by how familiar he has become with it — through
+ * training there, and through matches played there. A position fully learnt
+ * closes most but not all of the gap.
  */
 export function positionalEffectiveness(
   natural: Position,
-  secondary: Position | -1,
   role: Position,
+  /** How at home he is there, 0-100: a trained secondary is 100. */
+  familiarity: number,
 ): number {
   if (natural === role) return 1.0;
   const base = OUT_OF_POSITION[natural][role];
-  if (secondary === role) {
-    // Trained secondary recovers ~70% of the shortfall.
-    return base + (1.0 - base) * 0.7;
-  }
-  return base;
+  // A position fully learnt recovers three quarters of the shortfall, never all of it.
+  return base + (1.0 - base) * 0.75 * Math.max(0, Math.min(100, familiarity)) / 100;
+}
+
+/** How at home a player is in a position, in words — and a class for its colour. */
+export function familiarityLabel(familiarity: number, natural: boolean): { label: string; cls: string } {
+  if (natural) return { label: 'Natural', cls: 'fam-natural' };
+  if (familiarity >= 90) return { label: 'Accomplished', cls: 'fam-accomplished' };
+  if (familiarity >= 65) return { label: 'Competent', cls: 'fam-competent' };
+  if (familiarity >= 40) return { label: 'Unconvincing', cls: 'fam-unconvincing' };
+  if (familiarity >= 15) return { label: 'Awkward', cls: 'fam-awkward' };
+  return { label: 'Ineffectual', cls: 'fam-poor' };
 }
 
 /**

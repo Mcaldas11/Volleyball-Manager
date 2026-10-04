@@ -70,6 +70,8 @@ export type CourtView = '3d' | '2d';
 
 interface CourtProps {
   store: PlayerStore;
+  /** The position each player is playing in this match, if not his own. */
+  roles?: ArrayLike<number>;
   kits: [Kit, Kit];
   /** Which side (0 home, 1 away) a player belongs to. */
   teamOf: (p: number) => 0 | 1;
@@ -81,11 +83,12 @@ interface CourtProps {
 }
 
 export function LiveCourt({
-  scene, store, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
+  scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
   teamNames = ['Home', 'Away'], view = '3d',
 }: {
   scene: Scene;
   store: PlayerStore;
+  roles?: ArrayLike<number>;
   kits: [Kit, Kit];
   teamOf: (p: number) => 0 | 1;
   ratings: Map<number, number>;
@@ -102,8 +105,8 @@ export function LiveCourt({
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, kits, teamOf, ratings, labels, teamNames, view });
-  props.current = { store, kits, teamOf, ratings, labels, teamNames, view };
+  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view });
+  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view };
   const motion = useRef<CourtMotion | null>(null);
   if (motion.current === null) {
     motion.current = new CourtMotion(
@@ -328,7 +331,7 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
     const Y = P.Y(b.y);
     const lift = 1 + Math.min(0.35, b.lift * 0.35);
     const kit = kits[teamOf(p)];
-    const role = store.position[p] as Position;
+    const role = (props.roles ?? store.position)[p] as Position;
     ctx.save();
     ctx.globalAlpha = b.alpha;
     // A shadow, wider as the player leaves the floor.
@@ -432,7 +435,7 @@ const SKIN_TONES: readonly string[] = ['#f3d4b8', '#eac29d', '#dcaa80', '#c18a60
 
 function lookFor(p: number, props: CourtProps, numbers: ShirtNumbers): Look {
   const team = props.teamOf(p);
-  const role = props.store.position[p] as Position;
+  const role = (props.roles ?? props.store.position)[p] as Position;
   const id = props.store.id[p];
   const h = Math.imul(id, 0x9e3779b1) >>> 0;
   const tone = h % SKIN_TONES.length;
@@ -845,7 +848,7 @@ function drawPlayer(
   const perM = foot.Y - head.Y; // screen px per metre of height here
   const s = foot.s;
   const kit = kits[teamOf(p)];
-  const role = store.position[p] as Position;
+  const role = (props.roles ?? store.position)[p] as Position;
   const shirt = role === Position.Libero ? kit.libero : kit.shirt;
   const at = (z: number): number => foot.Y - z * perM;
   const wide = (m: number): number => m * s;

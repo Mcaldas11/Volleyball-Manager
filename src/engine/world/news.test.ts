@@ -89,7 +89,10 @@ test('the summer brings champions and signings, and the feed keeps only its late
 
 test("the manager's own matches make the paper, and the fans of both sides have their say", () => {
   const { world, clubId, news } = season(25, 200);
+  // While he is the club's manager, that is — a manager can be sacked.
+  const left = world.career.jobs.find((j) => j.clubId === clubId)?.endDay ?? -1;
   const played = world.fixtures.filter((f) => f.played && (f.home === clubId || f.away === clubId) &&
+    (left < 0 || f.day < left) &&
     !['friendly', 'international'].includes(world.competitions[f.competitionId]?.kind ?? ''));
   const reports = news.filter((n) => n.kind === 'result' && (n.clubId === clubId || n.otherClubId === clubId));
   assert.ok(played.length > 5);

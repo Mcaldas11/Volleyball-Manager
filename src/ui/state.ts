@@ -66,6 +66,10 @@ import {
   applyForJob as sendApplication, applicationBlock, declineContractOffer as turnDownContractOffer,
   declineJobOffer as turnDownJobOffer, isUnemployed, resign as resignFromClub,
 } from '../engine/world/career.ts';
+import { positionTarget, setPositionTarget } from '../engine/world/training.ts';
+import {
+  academyOffers, sellAcademyPlayer, userYouthLeague, type AcademyOffer, type YouthLeague,
+} from '../engine/world/youth.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
@@ -1742,7 +1746,11 @@ class Game {
     const club = this.club;
     if (club === null) return;
     while (club.preferredLineup.length <= slot) club.preferredLineup.push(-1);
+    // Whoever he was, he moves to this slot.
+    const was = club.preferredLineup.indexOf(playerIdx);
+    if (was >= 0 && was !== slot) club.preferredLineup[was] = -1;
     club.preferredLineup[slot] = playerIdx;
+    club.preferredFormation = formationOf(club.tactics);
     this.emit();
   }
 
@@ -1753,6 +1761,7 @@ class Game {
     const a = club.preferredLineup[slotA];
     club.preferredLineup[slotA] = club.preferredLineup[slotB];
     club.preferredLineup[slotB] = a;
+    club.preferredFormation = formationOf(club.tactics);
     this.emit();
   }
 
@@ -2057,11 +2066,13 @@ class Game {
     outPlayerIdx: number,
     inPlayerIdx: number,
     why?: SubstitutionReason,
+    /** The position he comes on to play, when it isn't the replaced player's — a change of system. */
+    role?: Position,
   ): { ok: boolean; reason?: string } {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null) return { ok: false };
-    const result = sim.substitute(team, outPlayerIdx, inPlayerIdx);
+    const result = sim.substitute(team, outPlayerIdx, inPlayerIdx, role);
     if (result.ok) {
       md.snapshot = sim.snapshot();
       md.paused = true;
@@ -2110,6 +2121,26 @@ class Game {
       };
     }
     this.emit();
+  }
+
+  /** The position one of the user's players is learning in training, if any. */
+  positionTraining(p: number): Position | null {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? null : positionTarget(world, club, p);
+  }
+
+  /** Have a player learn another position in training — null to stop. */
+  setPositionTraining(p: number, pos: Position | null): void {
+    const club = this.club;
+    if (club === null) return;
+    setPositionTarget(club, p, pos);
+    this.emit();
+  }
+
+  /** The position each player is playing in the live match — his own, if there is no match on. */
+  liveRoles(): Uint8Array {
+    return this.liveSim?.roles ?? this.world?.players.position ?? new Uint8Array();
   }
 
   /** The user's two libero roles in the live match; `defence` is -1 with one libero. */
@@ -2536,7 +2567,9 @@ class Game {
     const tactics = this.matchTactics();
     if (md === null || tactics === null || md.stage !== 'live' || md.setBreakPending) return;
     if (change !== undefined) {
-      const result = this.performSubstitution(md.userIsHome ? 0 : 1, change.out, change.in);
+      // Each plays his own position: the setter sets, the opposite hits.
+      const own = this.world?.players.position[change.in] as Position | undefined;
+      const result = this.performSubstitution(md.userIsHome ? 0 : 1, change.out, change.in, undefined, own);
       if (!result.ok) {
         this.notice = result.reason ?? 'That substitution is not allowed.';
         this.emit();
@@ -2667,6 +2700,24 @@ class Game {
     return [...club.players].sort(
       (a, b) => world.players.currentAbility[b] - world.players.currentAbility[a],
     );
+  }
+
+  /** Who would take one of the academy's players, and what they'd pay. */
+  academyOffers(p: number): AcademyOffer[] {
+    return this.world === null ? [] : academyOffers(this.world, p);
+  }
+
+  /** Sell an academy player to a club that offered for him. */
+  sellAcademyPlayer(p: number, buyerId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = sellAcademyPlayer(world, p, buyerId).text;
+    this.emit();
+  }
+
+  /** The manager's academy side's league this season. */
+  youthLeague(): YouthLeague | undefined {
+    return this.world === null ? undefined : userYouthLeague(this.world);
   }
 
   youthSquad(): number[] {

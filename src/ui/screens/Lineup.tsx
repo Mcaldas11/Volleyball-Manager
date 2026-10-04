@@ -70,7 +70,6 @@ export function LineupScreen(): JSX.Element {
         onSwapPlayers={(a, b) => g.swapPreferredLineupSlots(a, b)}
         onSetLibero={(p) => g.setPreferredLibero(p)}
         onSetDefensiveLibero={(p) => g.setPreferredDefensiveLibero(p)}
-        restrictSwapsByPosition
         slotPositions={lineupSlotPositions(formation)}
       />
     </div>

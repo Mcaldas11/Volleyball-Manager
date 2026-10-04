@@ -9,7 +9,7 @@
  * a handful of stars, a broad middle, and a long tail.
  */
 
-import type { Rng } from '../core/rng.ts';
+import { Rng } from '../core/rng.ts';
 import {
   ATTR_COUNT, ATTR_INDEX, HIDDEN_ATTRS, type AttributeName,
 } from '../model/attributes.ts';
@@ -95,6 +95,14 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
   if (rng.chance(0.24)) {
     const options = PLAUSIBLE_SECONDARY[position];
     store.secondary[i] = rng.pick(options);
+  }
+  // A little of the positions next to his own; next to none of the rest —
+  // drawn from his own dice, so the world's are untouched.
+  const own = new Rng(store.id[i] * 2654435761);
+  for (const pos of [Position.Setter, Position.OutsideHitter, Position.Opposite, Position.MiddleBlocker, Position.Libero]) {
+    if (pos === position) continue;
+    const near = PLAUSIBLE_SECONDARY[position].includes(pos);
+    store.setFamiliarity(i, pos, store.secondary[i] === pos ? 100 : near ? own.int(5, 35) : own.int(0, 10));
   }
 
   // ---- Career state ----

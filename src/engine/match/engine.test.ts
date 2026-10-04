@@ -325,14 +325,13 @@ test('snapshot() names the libero for whichever side of the ball the team is on 
   }
 });
 
-test('setLibero() swaps liberos freely but only ever to a registered libero', () => {
+test('setLibero() swaps liberos freely — and whoever is named libero plays libero', () => {
   const { store, setup, reception, defence } = buildTwoLiberoMatch(10, 1010);
   const sim = new MatchSimulator(store, setup);
   sim.step();
 
-  const outfield = setup.home.bench.find((p) => store.position[p] !== Position.Libero);
-  assert.ok(outfield !== undefined);
-  assert.equal(sim.setLibero(0, 'reception', outfield).ok, false);
+  // Nobody on court, though.
+  assert.equal(sim.setLibero(0, 'reception', sim.snapshot().homeCourt[0]).ok, false);
 
   // Naming the defensive libero for reception swaps the two roles over.
   assert.equal(sim.setLibero(0, 'reception', defence).ok, true);
@@ -343,6 +342,11 @@ test('setLibero() swaps liberos freely but only ever to a registered libero', ()
   assert.equal(sim.setLibero(0, 'defence', -1).ok, true);
   assert.deepEqual(sim.liberos(0), { reception: defence, defence: -1 });
   assert.equal(sim.subsRemaining(0), 5);
+
+  // An outside hitter named libero plays it.
+  const outfield = setup.home.bench.find((p) => store.position[p] === Position.OutsideHitter)!;
+  assert.equal(sim.setLibero(0, 'reception', outfield).ok, true);
+  assert.equal(sim.roleOf(outfield), Position.Libero);
 });
 
 /** Two top-flight sides of one league, the first clearly the stronger. */

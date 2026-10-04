@@ -20,6 +20,7 @@ import type { PendingMove } from './moves.ts';
 import type { NewsItem } from './news.ts';
 import type { Internationals, IntlReport } from './internationals.ts';
 import type { TeamTactics } from '../match/tactics.ts';
+import type { YouthState } from './youth.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -557,6 +558,9 @@ export interface World {
   nextInterviewId: number;
   /** Fixture ids already offered a press conference, so the same match is never asked twice. */
   interviewedFixtures: Set<number>;
+
+  /** Every club's youth side and its league this season — see youth.ts. Absent until the first is drawn up. */
+  youth?: YouthState;
 
   /** Appearances and match ratings per player, per competition, for this
    *  season and the last — see records.ts. Keyed by player index. */

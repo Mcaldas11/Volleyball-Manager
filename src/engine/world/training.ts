@@ -17,7 +17,9 @@
  *
  * Each player can also be given his own focus and load — or the assistant
  * does it: the weakest part of his game for his position, and less work for a
- * player who is tired or coming back from injury.
+ * player who is tired or coming back from injury. And the manager can have a
+ * player learn another position: a few points of familiarity a week, quicker
+ * for the young and the coachable — playing there teaches it too.
  *
  * Every club trains this way. The user plans his own; every other club's
  * assistant plans for it — the week around its matches, hard in a pre-season
@@ -28,6 +30,7 @@
 import { ATTR_COUNT, ATTR_INDEX, type AttributeName } from '../model/attributes.ts';
 import type { Club } from '../model/club.ts';
 import { Position } from '../model/positions.ts';
+import { postMessage } from './inbox.ts';
 import { DAYS_PER_SEASON, type Fixture, type World } from './world.ts';
 
 export type SessionType = 'rest' | 'recovery' | 'physical' | 'technical' | 'tactical' | 'balanced' | 'preparation' | 'match';
@@ -50,6 +53,8 @@ export interface TrainingPlan {
   individual: Record<number, { focus: IndividualFocus; load: PlayerLoad }>;
   /** The assistant runs everyone's individual training. */
   assistantIndividual: boolean;
+  /** A position each player is learning, by player index — absent on plans from before it could be set. */
+  positions?: Record<number, Position>;
 }
 
 export interface Session {
@@ -141,7 +146,7 @@ const NORMAL_WEEK_DEV = 4;
 const NORMAL_WEEK_LOAD = 4.3;
 
 export function newTrainingPlan(): TrainingPlan {
-  return { weeks: {}, days: {}, prep: {}, individual: {}, assistantIndividual: true };
+  return { weeks: {}, days: {}, prep: {}, individual: {}, assistantIndividual: true, positions: {} };
 }
 
 export function planOf(club: Club): TrainingPlan {
@@ -441,6 +446,75 @@ export function weekEffect(world: World, club: Club, p: number, week: ClubWeek =
     injury: Math.max(0.5, (week.load / NORMAL_WEEK_LOAD) * ownLoad.load),
   };
 }
+
+// ---- Learning a position ------------------------------------------------------------
+
+/** Familiarity a normal week's work on a new position brings, 0-100. */
+const POSITION_WEEK = 4.5;
+/** And a match played there. */
+export const POSITION_MATCH = 3;
+
+/** The position a player of the user's is learning, if any. */
+export function positionTarget(world: World, club: Club, p: number): Position | null {
+  if (club.id !== world.userClubId) return null;
+  const target = club.training?.positions?.[p];
+  return target === undefined || target === world.players.position[p] ? null : target;
+}
+
+/** Set it — null to stop. */
+export function setPositionTarget(club: Club, p: number, pos: Position | null): void {
+  const plan = planOf(club);
+  plan.positions ??= {};
+  if (pos === null) delete plan.positions[p];
+  else plan.positions[p] = pos;
+}
+
+/**
+ * A week's work on new positions at the user's club: each player learning one
+ * gains a few points of familiarity — more if he is young and coachable,
+ * nothing if he is injured or resting. A position learnt in full is his;
+ * the manager hears of it, and the player goes back to his normal work.
+ */
+export function trainPositions(world: World): void {
+  const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
+  const plan = club?.training?.positions;
+  if (club === undefined || plan === undefined) return;
+  const store = world.players;
+  for (const key of Object.keys(plan)) {
+    const p = Number(key);
+    const pos = plan[p];
+    if (!club.players.includes(p) || store.position[p] === pos) {
+      delete plan[p];
+      continue;
+    }
+    if (store.injuryDaysLeft[p] > 0) continue;
+    const age = store.ageOn(p, world.year, 181);
+    const young = age <= 21 ? 1.3 : age <= 25 ? 1.1 : age <= 29 ? 1 : 0.75;
+    const coachable = 0.7 + (store.getAttr(p, 'coachability') / 20) * 0.6;
+    const load = PLAYER_LOAD[loadOf(world, club, p)].dev;
+    const before = store.familiarityWith(p, pos);
+    store.setFamiliarity(p, pos, before + POSITION_WEEK * young * coachable * load);
+    if (store.familiarityWith(p, pos) >= 100) {
+      delete plan[p];
+      postMessage(world, {
+        subject: `${store.fullName(p)} can play ${POSITION_NAME_LOWER[pos]}`,
+        body: `${store.fullName(p)} has learnt to play ${POSITION_NAME_LOWER[pos]} — he is accomplished there now, ` +
+          'and goes back to his normal training.',
+        playerIdx: p,
+        from: 'Coaching Staff',
+        category: 'task',
+      });
+    }
+  }
+}
+
+const POSITION_NAME_LOWER: Readonly<Record<Position, string>> = {
+  [Position.Setter]: 'setter',
+  [Position.OutsideHitter]: 'outside hitter',
+  [Position.Opposite]: 'opposite',
+  [Position.MiddleBlocker]: 'middle blocker',
+  [Position.Libero]: 'libero',
+};
 
 /**
  * The next match's preparation: how much of each part of the game the days

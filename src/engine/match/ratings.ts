@@ -91,8 +91,7 @@ export function computeRatings(
   const g = (k: number): number => n(at[b + k]);
 
   const natural = store.position[idx] as Position;
-  const secondary = store.secondary[idx] as Position | -1;
-  const posEff = positionalEffectiveness(natural, secondary, role);
+  const posEff = positionalEffectiveness(natural, role, store.familiarityWith(idx, role));
 
   // Condition and morale act as broad multipliers on everything technical.
   const condition = store.condition[idx] / 100;

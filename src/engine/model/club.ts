@@ -9,7 +9,7 @@
  * point and a real constraint.
  */
 
-import { defaultTactics, type TeamTactics } from '../match/tactics.ts';
+import { defaultTactics, type Formation, type TeamTactics } from '../match/tactics.ts';
 import type { SavedTactic } from './tacticSlots.ts';
 import type { TacticRead } from './tacticRead.ts';
 import type { TrainingPlan } from '../world/training.ts';
@@ -76,6 +76,13 @@ export interface Club {
   tactics: TeamTactics;
   /** Preferred starting six, as player indices in rotational order. */
   preferredLineup: number[];
+  /**
+   * The system the manager picked that six for, by hand. Only then does a
+   * player he put in another position's slot start there; otherwise — a
+   * world-built six, or one from before he changed system — each slot goes to
+   * a player of its own position.
+   */
+  preferredFormation?: Formation;
   /** The libero — with a second one named below, the reception libero. */
   preferredLibero: number;
   /** Optional second libero who replaces the first whenever the team serves,

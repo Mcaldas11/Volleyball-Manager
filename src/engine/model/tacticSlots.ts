@@ -20,9 +20,12 @@ export interface SavedTactic {
   preferredLineup: number[];
   preferredLibero: number;
   preferredDefensiveLibero: number;
+  /** The system the six was picked for by hand, if it was. */
+  preferredFormation?: Club['preferredFormation'];
 }
 
 type TacticFields = Pick<Club, 'tactics' | 'preferredLineup' | 'preferredLibero' | 'preferredDefensiveLibero'
+  | 'preferredFormation'
   | 'tacticSlots' | 'activeTactic'>;
 
 function snapshot(club: TacticFields, name: string): SavedTactic {
@@ -30,6 +33,7 @@ function snapshot(club: TacticFields, name: string): SavedTactic {
     name,
     tactics: structuredClone(club.tactics),
     preferredLineup: [...club.preferredLineup],
+    preferredFormation: club.preferredFormation,
     preferredLibero: club.preferredLibero,
     preferredDefensiveLibero: club.preferredDefensiveLibero,
   };
@@ -38,6 +42,7 @@ function snapshot(club: TacticFields, name: string): SavedTactic {
 function apply(club: TacticFields, t: SavedTactic): void {
   club.tactics = structuredClone(t.tactics);
   club.preferredLineup = [...t.preferredLineup];
+  club.preferredFormation = t.preferredFormation;
   club.preferredLibero = t.preferredLibero;
   club.preferredDefensiveLibero = t.preferredDefensiveLibero;
 }

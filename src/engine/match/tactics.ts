@@ -26,6 +26,28 @@ export const FORMATION_NAMES: Readonly<Record<Formation, string>> = {
   [Formation.FourTwo]: '4-2',
 };
 
+/** Slot order used by `club.preferredLineup`, `pickLineup`'s result, the
+ *  team-sheet UI and the match engine alike — slot `i` starts the set in zone
+ *  `i + 1`, so this is the standard 5-1 in rotation P1: setter in 1, outsides
+ *  in 2 and 5, middles in 3 and 6, opposite in 4. Setter and opposite sit
+ *  diagonal, as do the two outsides and the two middles, and every other
+ *  rotation follows from it. Whoever starts in a slot plays its position. */
+export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
+  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
+  Position.Opposite, Position.OutsideHitter, Position.MiddleBlocker,
+];
+
+/** The 4-2: a second setter where the opposite stands, diagonal to the first. */
+export const LINEUP_SLOT_POSITIONS_42: readonly Position[] = [
+  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
+  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
+];
+
+/** The six slots' positions for a system. */
+export function lineupSlotPositions(formation: Formation): readonly Position[] {
+  return formation === Formation.FourTwo ? LINEUP_SLOT_POSITIONS_42 : LINEUP_SLOT_POSITIONS;
+}
+
 /** A team's system — 5-1 unless its coach has chosen otherwise (and on saves from before the choice). */
 export function formationOf(t: Pick<TeamTactics, 'formation'> | undefined): Formation {
   return t?.formation ?? Formation.FiveOne;

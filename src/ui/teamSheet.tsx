@@ -6,7 +6,7 @@
  */
 
 import { useState, type CSSProperties, type JSX } from 'react';
-import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
+import { familiarityLabel, Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import type { PlayerStore } from '../engine/model/players.ts';
 import { LINEUP_SLOT_POSITIONS } from '../engine/season/seasonEngine.ts';
 import { Bar, initials, PlayerFace, Pos, POSITION_ACCENT, starRating } from './components.tsx';
@@ -47,12 +47,14 @@ function ConditionStrip({ value }: { value: number }): JSX.Element {
  *  target, and (when there is anyone to swap in) a select as a non-drag
  *  alternative. */
 export function LineupCard({
-  label, playerIdx, store, swapOptions, isDragOver, draggable = true,
+  label, playerIdx, store, swapOptions, isDragOver, draggable = true, role,
   onSelectChange, onDropPlayer, onDragOverZone, onDragLeaveZone,
 }: {
   label: string;
   playerIdx: number;
   store: PlayerStore;
+  /** The position the slot plays — his own, or another he is put in. */
+  role?: Position;
   swapOptions: number[];
   isDragOver: boolean;
   draggable?: boolean;
@@ -61,8 +63,10 @@ export function LineupCard({
   onDragOverZone: () => void;
   onDragLeaveZone: () => void;
 }): JSX.Element {
-  const pos = store.position[playerIdx] as Position;
+  const natural = store.position[playerIdx] as Position;
+  const pos = role ?? natural;
   const ca = store.currentAbility[playerIdx];
+  const fam = familiarityLabel(store.familiarityWith(playerIdx, pos), pos === natural);
   return (
     <div
       className={`lineup-card${isDragOver ? ' drag-over' : ''}`}
@@ -91,6 +95,11 @@ export function LineupCard({
           <span className="lineup-card-ability">{ca}</span>
         </div>
       </div>
+      {pos !== natural && (
+        <span className={`lineup-card-oop ${fam.cls}`} title={`A natural ${POSITION_SHORT[natural]} playing ${POSITION_SHORT[pos]}: ${fam.label.toLowerCase()} there`}>
+          {POSITION_SHORT[natural]} · {fam.label}
+        </span>
+      )}
       <ConditionStrip value={store.condition[playerIdx]} />
       {swapOptions.length > 0 && (
         <>
@@ -227,6 +236,7 @@ export function TeamSheet({
         key={z}
         label={`Zone ${ZONE_LABELS[z]}`}
         playerIdx={p}
+        role={slotPositions[z]}
         store={store}
         swapOptions={swapOptions}
         isDragOver={dragOverZone === z}
@@ -238,8 +248,9 @@ export function TeamSheet({
     );
   };
 
-  const benchLiberos = bench.filter((p) => store.position[p] === Position.Libero);
-  const isLibero = (p: number): boolean => store.position[p] === Position.Libero;
+  const benchLiberos = [...bench].sort((a, b) =>
+    Number(store.position[b] === Position.Libero) - Number(store.position[a] === Position.Libero));
+  const isLibero = (p: number): boolean => p >= 0;
   const frontZones = ZONE_ORDER.slice(0, 3);
   const backZones = ZONE_ORDER.slice(3);
   const liberoDrop = (role: 'reception' | 'defence') => ({
@@ -271,6 +282,7 @@ export function TeamSheet({
               <LineupCard
                 label="Reception"
                 playerIdx={libero}
+                role={Position.Libero}
                 store={store}
                 swapOptions={defensiveLibero >= 0 ? [...benchLiberos, defensiveLibero] : benchLiberos}
                 draggable={false}
@@ -289,6 +301,7 @@ export function TeamSheet({
                   <LineupCard
                     label="Defence"
                     playerIdx={defensiveLibero}
+                    role={Position.Libero}
                     store={store}
                     swapOptions={[...benchLiberos, libero]}
                     draggable={false}

@@ -79,6 +79,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'Team',
     sections: [
+      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Squad']] },
       {
         id: 'lineup',
         label: 'Lineup',

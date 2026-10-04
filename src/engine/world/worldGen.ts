@@ -26,6 +26,7 @@ import { cityBankFor } from './cities.ts';
 import { bankFor } from './names.ts';
 import { NATIONS, type Confederation } from './nations.ts';
 import { estimateValue, generatePlayer } from './playerGen.ts';
+import { generateYouthIntake } from './progression.ts';
 import { ensureCupCompetitions } from '../season/cups.ts';
 import {
   DAYS_PER_SEASON, newWorld, seasonEndDay, type Competition, type ManagerProfile, type NationalTeam, type World,
@@ -103,6 +104,12 @@ export function generateWorld(opts: WorldGenOptions): World {
     buildSquad(world, rng, club);
     hireStaff(world, rng, club);
   }
+
+  // Every club starts with an academy — two years' intakes, from dice of their
+  // own so the rest of the world comes out as it always has.
+  const academies = new Rng(opts.seed ^ 0x5eed_ac4d);
+  generateYouthIntake(world, academies);
+  generateYouthIntake(world, academies);
 
   createNationalTeams(world);
   ensureCupCompetitions(world);

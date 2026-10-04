@@ -17,7 +17,7 @@
  */
 
 import { Rng } from '../engine/core/rng.ts';
-import { PLAYING_TIME_UNKNOWN, PlayerStore, StringTable } from '../engine/model/players.ts';
+import { PLAYING_TIME_UNKNOWN, PlayerStore, POSITION_SLOTS, StringTable } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
 import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
@@ -176,6 +176,14 @@ export function reviveWorld(raw: World): World {
   Object.setPrototypeOf(raw.rng, Rng.prototype);
   Object.setPrototypeOf(raw.players, PlayerStore.prototype);
   Object.setPrototypeOf(raw.players.names, StringTable.prototype);
+  // Saves from before positions could be learnt: a trained secondary is known in full, the rest not at all.
+  if (raw.players.familiarity === undefined) {
+    raw.players.familiarity = new Uint8Array(raw.players.id.length * POSITION_SLOTS);
+    for (let i = 0; i < raw.players.count; i++) {
+      const second = raw.players.secondary[i];
+      if (second >= 0) raw.players.familiarity[i * POSITION_SLOTS + second] = 100;
+    }
+  }
   // Saves from before playing time was tracked: everyone starts in between.
   raw.players.playingTime ??= new Uint8Array(raw.players.id.length).fill(PLAYING_TIME_UNKNOWN);
   // Saves from before the playoff system existed have no bracket state at all.

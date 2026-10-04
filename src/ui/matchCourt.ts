@@ -7,7 +7,9 @@
  * the setter tucked in at the net behind a front-row team-mate, ready to
  * release — and the instant the ball is served both sides switch into their
  * specialist spots: outside hitter left, middle in the middle, opposite and
- * setter right. This module turns the engine's rotational court (who is in
+ * setter right. All but one: a 5-1 receiving in P1 stays put — the outside
+ * passing in zone 2 attacks on the right, the opposite on the left — until
+ * it wins the point. This module turns the engine's rotational court (who is in
  * zones 1-6) into those real positions for every beat of a rally — serve
  * receive for the current rotation, base defence, the setter running to the
  * target whenever their side has the ball, hitters on their approach,
@@ -197,6 +199,8 @@ interface Team {
   passers: number[];
   role: (p: number) => Position;
   zoneOf: (p: number) => number;
+  /** Receiving in P1 in a 5-1: the front row keeps its rotational places all rally. */
+  noSwitch: boolean;
 }
 
 function buildTeam(near: boolean, court: number[], libero: number, positions: Uint8Array): Team {
@@ -213,7 +217,13 @@ function buildTeam(near: boolean, court: number[], libero: number, positions: Ui
     passers: out.slice(0, n),
     role,
     zoneOf: (p) => zones.indexOf(p),
+    noSwitch: false,
   };
+}
+
+/** Where a front-row player plays from once the ball is in play: his specialist lane, or — not switching — his own column. */
+function frontLane(t: Team, p: number): number {
+  return t.noSwitch ? column(t.zoneOf(p)) : FRONT_LANE[t.role(p)];
 }
 
 /** A team-frame point in court metres. The near side faces away from the
@@ -319,7 +329,7 @@ function defenceFormation(t: Team): Formation {
   const f: Formation = new Map();
   const front = t.zones.filter((_, z) => isFrontRow(z));
   const back = t.zones.filter((_, z) => !isFrontRow(z));
-  for (const [p, lane] of assignLanes(front, (p) => FRONT_LANE[t.role(p)])) {
+  for (const [p, lane] of assignLanes(front, (p) => frontLane(t, p))) {
     f.set(p, { u: LANE_U[lane], v: 0.12 });
   }
   for (const [p, lane] of assignLanes(back, (p) => BACK_LANE[t.role(p)])) {
@@ -337,7 +347,7 @@ function offenceFormation(t: Team): Formation {
   if (t.setter >= 0) f.set(t.setter, { ...TARGET });
   const frontSpot = [{ u: 0.06, v: 0.38 }, { u: 0.48, v: 0.26 }, { u: 0.94, v: 0.38 }];
   const backSpot = [{ u: 0.24, v: 0.58 }, { u: 0.5, v: 0.66 }, { u: 0.84, v: 0.66 }];
-  for (const [p, lane] of assignLanes(front, (p) => FRONT_LANE[t.role(p)])) f.set(p, { ...frontSpot[lane] });
+  for (const [p, lane] of assignLanes(front, (p) => frontLane(t, p))) f.set(p, { ...frontSpot[lane] });
   for (const [p, lane] of assignLanes(back, (p) => BACK_LANE[t.role(p)])) f.set(p, { ...backSpot[lane] });
   return f;
 }
@@ -425,11 +435,18 @@ function wobble(seed: number, i: number): number {
   return (x - Math.floor(x)) * 2 - 1;
 }
 
-function teamsOf(court: CourtState, positions: Uint8Array, nearTeam: 0 | 1): [Team, Team] {
-  return [
+function teamsOf(court: CourtState, positions: Uint8Array, nearTeam: 0 | 1, receiving: 0 | 1 | null = null): [Team, Team] {
+  const teams: [Team, Team] = [
     buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, positions),
     buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, positions),
   ];
+  // A 5-1 receiving in P1 — its one setter in zone 1 — keeps its places.
+  if (receiving !== null) {
+    const t = teams[receiving];
+    const setters = t.zones.filter((p) => t.role(p) === Position.Setter).length;
+    t.noSwitch = setters === 1 && t.role(t.zones[0]) === Position.Setter;
+  }
+  return teams;
 }
 
 /** A fresh formation per side: the serving side ready to serve, the other ready to pass. */
@@ -488,7 +505,7 @@ export function rallyBeats(
   nearTeam: 0 | 1,
   winner: 0 | 1 | null = null,
 ): Beat[] {
-  const teams = teamsOf(court, positions, nearTeam);
+  const teams = teamsOf(court, positions, nearTeam, (1 - serveTeam) as 0 | 1);
   const forms = openingFormations(teams, serveTeam);
   const beats: Beat[] = [];
   const at = (t: 0 | 1, p: number): Local => forms[t].get(p) ?? { u: 0.5, v: 0.5 };

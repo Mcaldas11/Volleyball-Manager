@@ -1,10 +1,12 @@
 import { useState, type JSX } from 'react';
+import { feeText, youthRound, youthRoundDay, youthTable, type YouthLeague } from '../../engine/world/youth.ts';
+import { Dropdown } from '../dropdown.tsx';
 import {
   ATTR_LABELS, HIDDEN_ATTR_SET, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS,
   type AttributeName,
 } from '../../engine/model/attributes.ts';
 import {
-  POSITION_NAMES, POSITIONS, positionalEffectiveness, type Position,
+  POSITION_NAMES, POSITIONS, familiarityLabel, type Position,
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
@@ -13,7 +15,7 @@ import { canRecall, coachTalkBlock, PLAYING_TIME_NAMES } from '../../engine/worl
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import {
-  abilityClass, attrClass, Bar, Card, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
+  abilityClass, attrClass, Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
   RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useDismiss, useSort,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
@@ -316,15 +318,6 @@ const PROFILE_TABS: ReadonlyArray<[ProfileTab, string, IconName]> = [
 ];
 
 /** How comfortable a player is in a role, in the words a coach would use. */
-function familiarity(eff: number): { label: string; cls: string } {
-  if (eff >= 0.999) return { label: 'Natural', cls: 'fam-natural' };
-  if (eff >= 0.85) return { label: 'Accomplished', cls: 'fam-accomplished' };
-  if (eff >= 0.7) return { label: 'Competent', cls: 'fam-competent' };
-  if (eff >= 0.55) return { label: 'Unconvincing', cls: 'fam-unconvincing' };
-  if (eff >= 0.4) return { label: 'Awkward', cls: 'fam-awkward' };
-  return { label: 'Ineffectual', cls: 'fam-awkward' };
-}
-
 /** The transfer actions on one of your own players: the transfer list, the loan list, and release. */
 function TransferMenu({ p }: { p: number }): JSX.Element {
   const g = useGame();
@@ -611,13 +604,14 @@ export function PlayerDetail(): JSX.Element | null {
             </Card>
             <Card title="Positions" icon="tactics">
               {POSITIONS.map((pos) => {
-                const eff = positionalEffectiveness(natural, secondary, pos);
-                const fam = familiarity(eff);
+                const known = store.familiarityWith(p, pos);
+                const fam = familiarityLabel(known, pos === natural);
+                const learning = club?.id === world.userClubId ? g.positionTraining(p) === pos : false;
                 return (
-                  <div className="fam-row" key={pos}>
+                  <div className="fam-row" key={pos} title={`${known}/100 — how much he plays like one`}>
                     <Pos pos={pos} />
-                    <span className="fam-name">{POSITION_NAMES[pos]}</span>
-                    <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${eff * 100}%` }} /></span>
+                    <span className="fam-name">{POSITION_NAMES[pos]}{learning && <span className="fam-learning"> · training</span>}</span>
+                    <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${known}%` }} /></span>
                     <span className={`fam-label ${fam.cls}`}>{fam.label}</span>
                   </div>
                 );
@@ -779,16 +773,27 @@ function assessment(pa: number): { text: string; cls: string } {
   return { text: 'Unlikely to make the grade', cls: 'dim' };
 }
 
+type AcademyTab = 'players' | 'league';
+
+/**
+ * The academy: its prospects — what they might become, how their season in
+ * the U19 side is going, promotion to the first team or a sale to a club that
+ * wants them — and the U19 side's league.
+ */
 export function YouthScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
   const club = g.club!;
   const youth = g.youthSquad();
+  const league = g.youthLeague();
+  const [tab, setTab] = useState<AcademyTab>('players');
   const bestPotential = youth.length > 0 ? store.potentialAbility[youth[0]] : 0;
+  const stats = world.youth?.stats;
+  const position = league !== undefined ? youthTable(league).findIndex((r) => r.clubId === club.id) + 1 : 0;
 
   return (
-    <>
+    <div className="academy">
       <div className="tiles">
         <StatTile label="Youth facilities" value={`${club.youthFacilities}/20`} sub={<Bar value={club.youthFacilities} max={20} wide />} />
         <StatTile label="Recruitment reach" value={`${club.youthRecruitment}/20`} sub={<Bar value={club.youthRecruitment} max={20} wide />} />
@@ -798,64 +803,202 @@ export function YouthScreen(): JSX.Element {
           value={youth.length > 0 ? <span className={abilityClass(bestPotential)}>{bestPotential}</span> : '—'}
           sub={youth.length > 0 ? <StarMeter value={bestPotential} size={12} /> : 'no prospects yet'}
         />
+        <StatTile
+          label="U19 league"
+          value={league !== undefined && league.round > 0 ? `${position}${ordinalSuffix(position)}` : '—'}
+          sub={league?.name ?? 'no youth league'}
+        />
       </div>
 
-      <Card title="Academy Players" icon="youth" flush actions={<span className="faint">A new intake arrives each summer</span>}>
-        {youth.length === 0
-          ? <Empty>No youth players yet. The next intake arrives at the end of the season.</Empty>
-          : (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th />
-                    <th>Name</th>
-                    <th>Pos</th>
-                    <th className="num">Age</th>
-                    <th>Nat</th>
-                    <th className="num">Height</th>
-                    <th className="num">Ability</th>
-                    <th>Potential</th>
-                    <th>Assessment</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {youth.map((p) => {
-                    const pa = store.potentialAbility[p];
-                    const a = assessment(pa);
-                    return (
-                      <tr key={p} className="clickable" onClick={() => g.select(p)}>
-                        <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
-                        <td className="strong">{store.fullName(p)}</td>
-                        <td><Pos pos={store.position[p] as Position} /></td>
-                        <td className="num">{store.ageOn(p, world.year, 181)}</td>
-                        <td><Flag nation={store.nation[p]} /></td>
-                        <td className="num dim">{store.heightCm[p]}</td>
-                        <td className={`num ${abilityClass(store.currentAbility[p])}`}>
-                          {store.currentAbility[p]}
-                        </td>
-                        <td>
-                          <span className="ability-cell">
-                            <StarMeter value={pa} size={11} />
-                            <span className={abilityClass(pa)}>{pa}</span>
-                          </span>
-                        </td>
-                        <td className={a.cls}>{a.text}</td>
-                        <td className="num">
-                          <button className="sm" onClick={(e) => { e.stopPropagation(); g.promotePlayer(p); }}>
-                            Promote
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+      <div className="academy-tabs">
+        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
+        <span className="faint">
+          {tab === 'players'
+            ? 'A new intake arrives each summer. Who plays for the U19s gets the minutes that make training stick.'
+            : "Your academy side against the other clubs' — a round every week from late August."}
+        </span>
+      </div>
+
+      {tab === 'players' ? (
+        <Card title="Academy Players" icon="youth" flush className="academy-card">
+          {youth.length === 0
+            ? <Empty>No youth players yet. The next intake arrives at the end of the season.</Empty>
+            : (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th />
+                      <th>Name</th>
+                      <th>Pos</th>
+                      <th className="num">Age</th>
+                      <th>Nat</th>
+                      <th className="num">Ability</th>
+                      <th>Potential</th>
+                      <th>Assessment</th>
+                      <th className="num" title="U19 matches this season">U19</th>
+                      <th className="num" title="Points for the U19s">Pts</th>
+                      <th className="num" title="Average rating for the U19s">Avg</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {youth.map((p) => {
+                      const pa = store.potentialAbility[p];
+                      const a = assessment(pa);
+                      const line = stats?.get(p);
+                      const offers = g.academyOffers(p);
+                      return (
+                        <tr key={p} className="clickable" onClick={() => g.select(p)}>
+                          <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                          <td className="strong">{store.fullName(p)}</td>
+                          <td><Pos pos={store.position[p] as Position} /></td>
+                          <td className="num">{store.ageOn(p, world.year, 181)}</td>
+                          <td><Flag nation={store.nation[p]} /></td>
+                          <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                          <td>
+                            <span className="ability-cell">
+                              <StarMeter value={pa} size={11} />
+                              <span className={abilityClass(pa)}>{pa}</span>
+                            </span>
+                          </td>
+                          <td className={a.cls}>{a.text}</td>
+                          <td className="num">{line?.[0] ?? 0}</td>
+                          <td className="num">{line?.[1] ?? 0}</td>
+                          <td className="num">
+                            {line !== undefined && line[0] > 0 ? <RatingBadge value={line[2] / line[0]} size="sm" /> : <span className="dim">—</span>}
+                          </td>
+                          <td className="num">
+                            <span className="academy-actions" onClick={(e) => e.stopPropagation()}>
+                              <button className="sm" onClick={() => g.promotePlayer(p)}>Promote</button>
+                              <Dropdown<number>
+                                size="sm"
+                                className="academy-sell"
+                                placeholder={offers.length > 0 ? 'Sell' : 'No offers'}
+                                disabled={offers.length === 0}
+                                value={null}
+                                menuWidth={250}
+                                searchable={false}
+                                title="Clubs who would take him, and what they would pay"
+                                onChange={(buyer) => g.sellAcademyPlayer(p, buyer)}
+                                options={offers.map((o) => {
+                                  const buyer = world.clubs[o.clubId];
+                                  return {
+                                    value: o.clubId,
+                                    label: buyer?.name ?? '?',
+                                    icon: buyer !== undefined ? <ClubCrest club={buyer} size={16} /> : undefined,
+                                    hint: feeText(o.fee),
+                                  };
+                                })}
+                              />
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </Card>
+      ) : league === undefined
+        ? <Empty>Your club has no youth league this season.</Empty>
+        : <YouthLeagueView league={league} />}
+    </div>
+  );
+}
+
+function ordinalSuffix(n: number): string {
+  return n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+}
+
+/** The U19 league: the table, and the academy side's results and matches to come. */
+function YouthLeagueView({ league }: { league: YouthLeague }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const mine = world.userClubId;
+  const table = youthTable(league);
+  const results = (world.youth?.results ?? []).filter((r) => r.home === mine || r.away === mine).slice().reverse();
+  const upcoming: Array<{ round: number; home: number; away: number }> = [];
+  for (let r = league.round; r < league.rounds && upcoming.length < 6; r++) {
+    const pair = youthRound(league, r).find(([h, a]) => h === mine || a === mine);
+    if (pair !== undefined) upcoming.push({ round: r, home: pair[0], away: pair[1] });
+  }
+  const opponent = (h: number, a: number): number => (h === mine ? a : h);
+  const status = league.champion >= 0
+    ? `Champions: ${world.clubs[league.champion]?.name ?? '?'}`
+    : `Round ${Math.min(league.round, league.rounds)} of ${league.rounds}`;
+  return (
+    <div className="academy-league">
+      <Card title={league.name} icon="trophy" flush className="academy-card" actions={<span className="faint">{status}</span>}>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="num">#</th>
+                <th>Club</th>
+                <th className="num">P</th>
+                <th className="num">W</th>
+                <th className="num">L</th>
+                <th className="num">Sets</th>
+                <th className="num">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {table.map((row, i) => (
+                <tr key={row.clubId} className={row.clubId === mine ? 'mine' : ''}>
+                  <td className="num dim">{i + 1}</td>
+                  <td className="strong"><ClubLink id={row.clubId} /></td>
+                  <td className="num">{row.played}</td>
+                  <td className="num">{row.won}</td>
+                  <td className="num">{row.lost}</td>
+                  <td className="num dim">{row.setsFor}-{row.setsAgainst}</td>
+                  <td className="num strong">{row.points}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
-    </>
+      <div className="stack academy-side">
+        <Card title="Results" icon="ball" flush className="academy-card">
+          {results.length === 0
+            ? <Empty>No matches played yet — the first round is in late August.</Empty>
+            : (
+              <div className="academy-results">
+                {results.map((r) => {
+                  const home = r.home === mine;
+                  const own = home ? r.homeSets : r.awaySets;
+                  const opp = home ? r.awaySets : r.homeSets;
+                  return (
+                    <div key={r.round} className={`academy-result ${own > opp ? 'won' : 'lost'}`}>
+                      <b>{own > opp ? 'W' : 'L'}</b>
+                      <span className="academy-result-score">{own}-{opp}</span>
+                      <span className="academy-result-opp">{home ? 'vs' : 'at'} <ClubLink id={opponent(r.home, r.away)} /></span>
+                      {r.mvp >= 0 && store.clubId[r.mvp] === mine && <span className="faint">MVP {store.shortName(r.mvp)}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+        </Card>
+        <Card title="Coming up" icon="calendar" flush className="academy-card">
+          {upcoming.length === 0
+            ? <Empty>The season's youth matches are all played.</Empty>
+            : (
+              <div className="academy-results">
+                {upcoming.map((m) => (
+                  <div key={m.round} className="academy-result">
+                    <span className="faint">{g.dateLabelForDay(youthRoundDay(world, m.round))}</span>
+                    <span className="academy-result-opp">{m.home === mine ? 'vs' : 'at'} <ClubLink id={opponent(m.home, m.away)} /></span>
+                  </div>
+                ))}
+              </div>
+            )}
+        </Card>
+      </div>
+    </div>
   );
 }
 

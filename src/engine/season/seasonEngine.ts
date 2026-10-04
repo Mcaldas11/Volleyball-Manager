@@ -21,7 +21,7 @@ import { awardLeaguePoints, type Club, type LeagueTableRow } from '../model/club
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import { simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
-import { Formation, formationOf, type TeamTactics } from '../match/tactics.ts';
+import { formationOf, lineupSlotPositions, type TeamTactics } from '../match/tactics.ts';
 import { addToSeason, newSeasonLine, type PlayerMatchStats, type SeasonStatLine } from '../match/stats.ts';
 import { DAYS_PER_SEASON, currentPhase, dayOfSeason, SeasonPhase, type Fixture, type World } from '../world/world.ts';
 import { PLAYOFF_ROUND_BASE, scheduleLeagueSeason } from './schedule.ts';
@@ -29,7 +29,8 @@ import { quickSimulate } from './quickSim.ts';
 import { progressPlayoffs } from './playoffs.ts';
 import { progressCups, scheduleCupSeason } from './cups.ts';
 import { friendliesDay, isFriendly } from './friendlies.ts';
-import { prepCoverage, trainingDay } from '../world/training.ts';
+import { POSITION_MATCH, prepCoverage, trainingDay, trainPositions } from '../world/training.ts';
+import { youthDay } from '../world/youth.ts';
 import { rollInjuries, weeklyTraining } from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
@@ -58,26 +59,7 @@ export function newSeasonContext(): SeasonContext {
   return { stats: new Map(), detailedResults: new Map(), seasonStartAbility: new Map() };
 }
 
-/** Slot order used by `club.preferredLineup`, `pickLineup`'s result, and the
- *  team-sheet UI alike — slot `i` starts the set in zone `i + 1`, so this is
- *  the standard 5-1 in rotation P1: setter in 1, outsides in 2 and 5, middles
- *  in 3 and 6, opposite in 4. Setter and opposite sit diagonal, as do the two
- *  outsides and the two middles, and every other rotation follows from it. */
-export const LINEUP_SLOT_POSITIONS: readonly Position[] = [
-  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
-  Position.Opposite, Position.OutsideHitter, Position.MiddleBlocker,
-];
-
-/** The 4-2: a second setter where the opposite stands, diagonal to the first. */
-export const LINEUP_SLOT_POSITIONS_42: readonly Position[] = [
-  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
-  Position.Setter, Position.OutsideHitter, Position.MiddleBlocker,
-];
-
-/** The six slots' positions for a system. */
-export function lineupSlotPositions(formation: Formation): readonly Position[] {
-  return formation === Formation.FourTwo ? LINEUP_SLOT_POSITIONS_42 : LINEUP_SLOT_POSITIONS;
-}
+export { LINEUP_SLOT_POSITIONS, LINEUP_SLOT_POSITIONS_42, lineupSlotPositions } from '../match/tactics.ts';
 
 /**
  * Choose a starting seven, respecting the coach's preferred lineup but
@@ -90,7 +72,7 @@ export function lineupSlotPositions(formation: Formation): readonly Position[] {
 export function pickLineup(
   store: PlayerStore,
   club: Pick<Club, 'players' | 'preferredLineup' | 'preferredLibero' | 'preferredDefensiveLibero'>
-    & { tactics?: Pick<TeamTactics, 'formation'> },
+    & { tactics?: Pick<TeamTactics, 'formation'>; preferredFormation?: Club['preferredFormation'] },
   mustStart?: ReadonlySet<number>,
   /** Who can play — a club's fit players by default; a national team's own. */
   canPlay: (p: number) => boolean = (p) => store.isAvailable(p),
@@ -127,15 +109,18 @@ export function pickLineup(
     if (slot >= 0) { lineup[slot] = p; used.add(p); }
   }
 
-  // Honour whichever named starters are still fit to play their slot; an
-  // empty or stale preference (nobody has set one, or the player named for
-  // it left, got injured, or changed position) just falls through below.
+  // Honour whichever named starters are still fit to play their slot — in
+  // whatever slot the manager put them, if he picked the six by hand for this
+  // system: whoever starts in a slot plays its position. An empty or stale
+  // preference (nobody has set one, the player named for it left or got
+  // injured, or it was made for the other system) just falls through below.
+  const byHand = club.preferredFormation !== undefined && club.preferredFormation === formationOf(club.tactics);
   SLOTS.forEach((pos, slot) => {
     if (lineup[slot] !== -1) return;
     const preferred = club.preferredLineup[slot];
     if (
       preferred !== undefined && preferred >= 0
-      && availableSet.has(preferred) && store.position[preferred] === pos
+      && availableSet.has(preferred) && (byHand || store.position[preferred] === pos)
       && !used.has(preferred)
     ) {
       used.add(preferred);
@@ -162,8 +147,7 @@ export function pickLineup(
   const preferredLibero = club.preferredLibero;
   const libero = forcedLibero >= 0
     ? forcedLibero
-    : preferredLibero >= 0 && availableSet.has(preferredLibero)
-      && store.position[preferredLibero] === Position.Libero && !used.has(preferredLibero)
+    : preferredLibero >= 0 && availableSet.has(preferredLibero) && !used.has(preferredLibero)
       ? preferredLibero
       : pools[Position.Libero]?.find((p) => !used.has(p)) ?? -1;
   if (libero !== -1) used.add(libero);
@@ -172,8 +156,7 @@ export function pickLineup(
   // been promoted into that role above; then one libero plays throughout.
   const preferredDefensive = club.preferredDefensiveLibero ?? -1;
   const defensiveLibero =
-    libero !== -1 && preferredDefensive >= 0 && availableSet.has(preferredDefensive)
-    && store.position[preferredDefensive] === Position.Libero && !used.has(preferredDefensive)
+    libero !== -1 && preferredDefensive >= 0 && availableSet.has(preferredDefensive) && !used.has(preferredDefensive)
       ? preferredDefensive
       : -1;
   if (defensiveLibero !== -1) used.add(defensiveLibero);
@@ -297,6 +280,13 @@ export function applyMatchResult(
 
   const homeStats = result.stats.home.players;
   const awayStats = result.stats.away.players;
+  // Playing out of position teaches it, a match at a time.
+  for (const [p, role] of result.roles ?? []) {
+    if (role === world.players.position[p]) continue;
+    const s = homeStats.get(p) ?? awayStats.get(p);
+    if (s === undefined || s.ralliesPlayed === 0) continue;
+    world.players.setFamiliarity(p, role, world.players.familiarityWith(p, role) + POSITION_MATCH);
+  }
   // A friendly is for the practice: it tires the legs and fills the stands,
   // and goes on no table, no record and nobody's statistics.
   if (isFriendly(world, fixture)) {
@@ -426,6 +416,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   careerDay(world);
   friendliesDay(world);
   trainingDay(world);
+  youthDay(world);
 
   if (todays !== undefined) {
     for (const fid of todays) {
@@ -463,6 +454,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     const phase = currentPhase(world);
     if (phase !== SeasonPhase.OffSeason) {
       weeklyTraining(world);
+      trainPositions(world);
       rollInjuries(world);
       generateIncomingOffers(world);
       generateListedBids(world);

@@ -387,9 +387,8 @@ export function retirePlayer(world: World, i: number): void {
  * genuine future international should be a rare and memorable event, not an
  * annual occurrence.
  */
-export function generateYouthIntake(world: World): number[] {
+export function generateYouthIntake(world: World, rng: Rng = world.rng): number[] {
   const store = world.players;
-  const rng = world.rng;
   const created: number[] = [];
 
   for (const club of world.clubs) {

@@ -16,7 +16,7 @@ import {
   ATTACKER_OPTIONS, BLOCK_OPTIONS, DEFENSE_OPTIONS, InstructionTiles, OFFENSE_OPTIONS, SERVE_OPTIONS,
   SERVE_TARGET_OPTIONS, SHAPE_OPTIONS, SliderField, TEMPO_OPTIONS,
 } from './Manage.tsx';
-import { Formation, FORMATION_NAMES, formationOf, type TeamTactics } from '../../engine/match/tactics.ts';
+import { Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, type TeamTactics } from '../../engine/match/tactics.ts';
 import { describeRallyHighlight } from './Match.tsx';
 import { useGame, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -71,9 +71,9 @@ function pickBigPlay(kind: RallyContact['kind']): string | null {
 }
 
 /** Both sides set up for the next serve, from the live snapshot. */
-function sceneFor(snap: MatchdaySnapshot | null, store: PlayerStore, nearTeam: 0 | 1): Scene {
+function sceneFor(snap: MatchdaySnapshot | null, roles: Uint8Array, nearTeam: 0 | 1): Scene {
   if (snap === null) return { positions: new Map(), poses: new Map(), ball: null, arc: 0, actor: null, ms: 400 };
-  return setupScene(snap, snap.serving, store.position, nearTeam);
+  return setupScene(snap, snap.serving, roles, nearTeam);
 }
 
 /**
@@ -84,7 +84,7 @@ function sceneFor(snap: MatchdaySnapshot | null, store: PlayerStore, nearTeam: 0
  */
 async function animateRally(
   logEntry: MatchdayLogEntry,
-  store: PlayerStore,
+  roles: Uint8Array,
   nearTeam: 0 | 1,
   speed: number,
   cancelled: { current: boolean },
@@ -93,7 +93,7 @@ async function animateRally(
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, store.position, seed, nearTeam, entry.winner);
+  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner);
   for (const beat of beats) {
     if (cancelled.current) return;
     // Beat timings are tuned for 1x — slower speeds stretch them, faster squeeze.
@@ -196,6 +196,7 @@ function LineupSetup(): JSX.Element {
         onSwapPlayers={(a, b) => g.swapMatchdayPlayers(a, b)}
         onSetLibero={(p) => g.setMatchdayLibero(p)}
         onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
+        slotPositions={lineupSlotPositions(formationOf(g.matchTactics() ?? undefined))}
       />
     </div>
   );
@@ -339,6 +340,7 @@ function SetBreak(): JSX.Element {
         onSwapPlayers={(a, b) => g.swapMatchdayPlayers(a, b)}
         onSetLibero={(p) => g.setMatchdayLibero(p)}
         onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
+        slotPositions={lineupSlotPositions(formationOf(g.matchTactics() ?? undefined))}
       />
     </div>
   );
@@ -474,11 +476,12 @@ function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolea
   const md = g.matchday!;
   const store = world.players;
   const side = md.sides[team];
+  const roles = g.liveRoles();
   const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
   const libero = (team === 0 ? md.snapshot?.homeLibero : md.snapshot?.awayLibero) ?? -1;
   const rows = [...court, ...(libero >= 0 ? [libero] : [])]
     .filter((p, i, all) => all.indexOf(p) === i)
-    .sort((a, b) => ROLE_ORDER[store.position[a] as Position] - ROLE_ORDER[store.position[b] as Position]);
+    .sort((a, b) => ROLE_ORDER[roles[a] as Position] - ROLE_ORDER[roles[b] as Position]);
   return (
     <section className="card lv-team">
       <header className="lv-team-head">
@@ -493,7 +496,7 @@ function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolea
             <div key={p} className="lv-team-row" onClick={() => g.select(p)} title={store.fullName(p)}>
               <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={22} />
               <span className="lv-team-name">{store.shortName(p).split(' ').pop()}</span>
-              <Pos pos={store.position[p] as Position} />
+              <Pos pos={roles[p] as Position} />
               {r !== undefined ? <RatingBadge value={r} size="sm" /> : <span className="lv-rating-none">—</span>}
             </div>
           );
@@ -515,8 +518,10 @@ interface SystemChange {
  * already fit it: a 4-2 wants a second setter, diagonal to the first — so on
  * for the opposite; a 5-1 wants one, so an opposite on for the other.
  */
-function systemChangeFor(store: PlayerStore, target: Formation, court: readonly number[], bench: readonly number[]): SystemChange | null {
-  const pos = (p: number): Position => store.position[p] as Position;
+function systemChangeFor(
+  store: PlayerStore, roles: ArrayLike<number>, target: Formation, court: readonly number[], bench: readonly number[],
+): SystemChange | null {
+  const pos = (p: number): Position => roles[p] as Position;
   const best = (ps: number[]): number[] => [...ps].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
   const setters = court.filter((p) => pos(p) === Position.Setter);
   if (target === Formation.FourTwo) {
@@ -554,11 +559,12 @@ function LiveSystem({ tactics, target, onTarget }: {
   const team: 0 | 1 = md.userIsHome ? 0 : 1;
   const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
   const liberos = g.liveLiberos();
+  const roles = g.liveRoles();
   const bench = md.sides[team].players.filter((p) => !court.includes(p) && g.matchAvailable(p)
     && store.position[p] !== Position.Libero && p !== liberos.reception && p !== liberos.defence);
   const playing = formationOf(tactics);
   const pending = target !== null && target !== playing ? target : null;
-  const change = pending !== null ? systemChangeFor(store, pending, court, bench) : null;
+  const change = pending !== null ? systemChangeFor(store, roles, pending, court, bench) : null;
   const [out, setOut] = useState<number | null>(null);
   const [inc, setInc] = useState<number | null>(null);
   useEffect(() => { setOut(null); setInc(null); }, [pending]);
@@ -567,15 +573,15 @@ function LiveSystem({ tactics, target, onTarget }: {
   const inP = inc ?? change?.in[0] ?? -1;
 
   const name = (p: number): string => store.shortName(p);
-  const setters = court.filter((p) => store.position[p] === Position.Setter);
-  const opposite = court.find((p) => store.position[p] === Position.Opposite);
+  const setters = court.filter((p) => roles[p] === Position.Setter);
+  const opposite = court.find((p) => roles[p] === Position.Opposite);
   const now = playing === Formation.FourTwo && setters.length >= 2
     ? `${name(setters[0])} and ${name(setters[1])} set, from the back row`
     : `${setters.length > 0 ? `${name(setters[0])} sets` : 'No setter on court'}${opposite !== undefined ? ` · ${name(opposite)} opposite` : ''}`;
 
   const pick = (f: Formation): void => {
     if (f === playing) { onTarget(null); return; }
-    if (systemChangeFor(store, f, court, bench) === null) {
+    if (systemChangeFor(store, roles, f, court, bench) === null) {
       g.changeLiveFormation(f);
       onTarget(null);
       return;
@@ -761,7 +767,7 @@ function LiveMatchView(): JSX.Element {
   const logRef = useRef<HTMLDivElement>(null);
   // The user's side plays in the half nearest the camera.
   const nearTeam: 0 | 1 = md.userIsHome ? 0 : 1;
-  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, store, nearTeam));
+  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, g.liveRoles(), nearTeam));
   const [labels, setLabels] = useState<CourtLabels>('ratings');
   const [overlay, setOverlay] = useState<'subs' | 'tactics' | null>(null);
   const [shoutOpen, setShoutOpen] = useState(false);
@@ -871,7 +877,7 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = true;
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
-        await animateRally(logEntry, store, nearTeam, current.speed, cancelled, setScene, triggerBigPlay);
+        await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay);
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
@@ -890,7 +896,7 @@ function LiveMatchView(): JSX.Element {
         }
         // Everyone walks into position for the next serve — rotating on a
         // side-out — while the referee gives the point and waves the serve on.
-        setScene(sceneFor(g.matchday?.snapshot ?? null, store, nearTeam));
+        setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam));
         await sleep(1800 / current.speed);
       }
     };
@@ -914,7 +920,7 @@ function LiveMatchView(): JSX.Element {
 
   // A substitution or libero change between rallies redraws the set-up.
   useEffect(() => {
-    if (!animatingRef.current) setScene(sceneFor(md.snapshot, store, nearTeam));
+    if (!animatingRef.current) setScene(sceneFor(md.snapshot, g.liveRoles(), nearTeam));
   }, [md.snapshot]);
 
   const [homeClub, awayClub] = md.sides;
@@ -1023,7 +1029,7 @@ function LiveMatchView(): JSX.Element {
         <div className="lv-center">
           <div className="card court-panel lv-court">
             <LiveCourt
-              scene={scene} store={store} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
+              scene={scene} store={store} roles={g.liveRoles()} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
               // The referee sees a stoppage — and signals a time-out — once
               // the rally it followed has been shown.
               timeout={pending === null ? md.timeoutActive : null}

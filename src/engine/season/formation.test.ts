@@ -33,7 +33,7 @@ test('in a 4-2 both setters set — from the back row — and both attack, from 
   // Over a few matches, so one short night doesn't decide it.
   const sets = [0, 0];
   const attacks = [0, 0];
-  for (const seed of [9, 10, 11]) {
+  for (const seed of [9, 10, 11, 12, 13, 14]) {
     const result = simulateMatch(store, {
       home, away: toTeamSetup(store, b), format: MatchFormat.BestOf5, importance: 0.5,
       neutralVenue: false, collectLog: false, seed,
@@ -45,8 +45,8 @@ test('in a 4-2 both setters set — from the back row — and both attack, from 
     });
   }
   for (let i = 0; i < 2; i++) {
-    assert.ok(sets[i] > 60, 'each sets a share of every match');
-    assert.ok(attacks[i] > 9, 'and hits on the right when at the net');
+    assert.ok(sets[i] > 120, 'each sets a share of every match');
+    assert.ok(attacks[i] > 15, 'and hits on the right when at the net');
   }
 });
 
@@ -182,7 +182,8 @@ test('a side can switch to a 4-2 mid-match: a second setter on for the opposite,
   const opposite = court[(court.indexOf(setter) + 3) % 6];
   const second = home.bench.find((p) => store.position[p] === Position.Setter)!;
   assert.ok(second !== undefined, 'a setter on the bench');
-  assert.equal(sim.substitute(0, opposite, second).ok, true);
+  // A change of system: he comes on to play his own position — as the interface asks.
+  assert.equal(sim.substitute(0, opposite, second, Position.Setter).ok, true);
   // The live tactics are the very object the engine reads.
   home.tactics.formation = Formation.FourTwo;
   const setBy = new Set<number>();

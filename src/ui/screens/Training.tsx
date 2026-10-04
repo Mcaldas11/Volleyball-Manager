@@ -6,7 +6,7 @@
  */
 
 import { useState, type JSX } from 'react';
-import type { Position } from '../../engine/model/positions.ts';
+import { familiarityLabel, POSITION_NAMES, POSITIONS, type Position } from '../../engine/model/positions.ts';
 import {
   assistantFocus, dayLoad, FOCUS_LABELS, individualOf, INTENSITY, planOf, PLAYER_LOAD, prepCoverage, PREP_AREAS,
   SESSIONS, squadReadiness, weekPlan, weekSettings, weekStartOf,
@@ -253,6 +253,37 @@ function ReadinessCard(): JSX.Element {
 
 // ---- Individual training -------------------------------------------------------------
 
+/** The position a player is learning — picked here whoever runs the rest of his training — and how far he has come. */
+function PositionLearning({ p }: { p: number }): JSX.Element {
+  const g = useGame();
+  const store = g.world!.players;
+  const natural = store.position[p] as Position;
+  const target = g.positionTraining(p);
+  const known = target !== null ? store.familiarityWith(p, target) : 0;
+  return (
+    <span className="tr-learn">
+      <Dropdown<number>
+        size="sm"
+        className="tr-pick"
+        value={target ?? -1}
+        onChange={(v) => g.setPositionTraining(p, v < 0 ? null : v as Position)}
+        options={[
+          { value: -1, label: 'None' },
+          ...POSITIONS.filter((pos) => pos !== natural).map((pos) => {
+            const f = store.familiarityWith(p, pos);
+            return { value: pos as number, label: POSITION_NAMES[pos], hint: familiarityLabel(f, false).label };
+          }),
+        ]}
+      />
+      {target !== null && (
+        <span className="tr-learn-bar" title={`${known}/100 — ${familiarityLabel(known, false).label}`}>
+          <i style={{ width: `${known}%` }} />
+        </span>
+      )}
+    </span>
+  );
+}
+
 function IndividualTraining(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -306,6 +337,7 @@ function IndividualTraining(): JSX.Element {
               <th>Condition</th>
               <th>Focus</th>
               <th>Load</th>
+              <th title="A position he is learning in training — playing there teaches it too">New position</th>
               <th>Ability</th>
               <th className="num" title="Ability gained this season">Season</th>
             </tr>
@@ -343,6 +375,7 @@ function IndividualTraining(): JSX.Element {
                       options={LOADS.map((l) => ({ value: l, label: PLAYER_LOAD[l].label }))}
                     />
                   </td>
+                  <td><PositionLearning p={p} /></td>
                   <td>
                     <span className="ability-cell">
                       <StarMeter value={ca} size={11} />

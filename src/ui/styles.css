@@ -2168,7 +2168,8 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
   width: var(--card-w, 124px);
   height: var(--card-h, 174px);
   flex: none;
-  overflow: hidden;
+  /* clip, not hidden: focusing the swap menu must not scroll the card's insides. */
+  overflow: clip;
   border-radius: 10px;
   border: 2px solid var(--line-strong);
   background-color: #151922;
@@ -4998,3 +4999,41 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .news-fan-main p { margin: 3px 0 0; font-size: 14px; line-height: 1.45; color: var(--text); }
 .news-fan-likes { display: inline-flex; flex: none; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
 .news-fan.mood-delighted .news-fan-likes svg, .news-fan.mood-happy .news-fan-likes svg { color: #e5484d; }
+.fam-poor { color: var(--bad); opacity: 0.8; }
+.fam-learning { color: var(--gold); font-size: 11px; font-weight: 600; }
+.tr-learn { display: inline-flex; align-items: center; gap: 8px; }
+.tr-learn-bar { display: block; width: 54px; height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.tr-learn-bar i { display: block; height: 100%; border-radius: 3px; background: var(--gold); }
+.lineup-card-oop {
+  position: absolute; left: 6px; top: 26px; z-index: 2; max-width: calc(100% - 12px); padding: 2px 6px; border-radius: 4px;
+  background: rgba(8, 10, 14, 0.82); font-size: 10px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* The academy: its players and its U19 side's league. */
+.academy { display: flex; flex-direction: column; gap: 14px; }
+.content-fill > .view-fade > .academy { flex: 1 1 0; min-height: 0; }
+.academy > .tiles { flex: none; }
+.academy-tabs { flex: none; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.academy-tabs .faint { font-size: 12.5px; }
+.academy-card { min-height: 0; display: flex; flex-direction: column; }
+.academy > .academy-card { flex: 1 1 0; }
+.academy-card > .card-body { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.academy-card .table-wrap { max-height: none; }
+.academy-actions { display: inline-flex; align-items: center; gap: 6px; }
+.academy-sell { min-width: 104px; }
+.academy-league { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 14px; }
+.academy-side { min-height: 0; display: flex; flex-direction: column; gap: 14px; }
+.academy-side > .academy-card { flex: 1 1 0; }
+.academy-league tr.mine td { background: var(--gold-soft); }
+.academy-results { display: flex; flex-direction: column; }
+.academy-result { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+.academy-result:last-child { border-bottom: none; }
+.academy-result > b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; font-size: 11px; }
+.academy-result.won > b { background: var(--good-soft); color: var(--good); }
+.academy-result.lost > b { background: var(--bad-soft); color: var(--bad); }
+.academy-result-score { font: 800 15px/1 var(--font-display); }
+.academy-result-opp { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1100px) { .academy-league { grid-template-columns: 1fr; } }
+/* The invisible swap box sits over the ⇅ icon — the dropdown's own rules would otherwise put it back in the flow. */
+.lineup-card .lineup-card-select { position: absolute; bottom: 8px; right: 5px; width: 19px; height: 19px; min-width: 0; }
+.lineup-card .lineup-card-select .dd-trigger { width: 19px; height: 19px; min-width: 0; padding: 0; }

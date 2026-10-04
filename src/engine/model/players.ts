@@ -101,6 +101,9 @@ export class StringTable {
   }
 }
 
+/** Positions a familiarity is kept for, one per Position. */
+export const POSITION_SLOTS = 5;
+
 export class PlayerStore {
   count = 0;
   private capacity: number;
@@ -131,6 +134,13 @@ export class PlayerStore {
   position!: Uint8Array;
   /** Trained secondary position, or -1. */
   secondary!: Int8Array;
+  /**
+   * How at home he is in each position, 0-100, five to a player in Position
+   * order: player i's familiarity with position k lives at i * 5 + k. His
+   * natural position reads as 100 whatever is stored; a trained secondary
+   * starts at 100; training and playing there build the rest.
+   */
+  familiarity!: Uint8Array;
 
   // ---- Attributes (1-20, one byte each) -----------------------------------
   /** Row-major: player i's attribute a lives at i * ATTR_COUNT + a. */
@@ -198,6 +208,7 @@ export class PlayerStore {
     this.blockReachCm = new Uint16Array(cap);
     this.position = new Uint8Array(cap);
     this.secondary = new Int8Array(cap).fill(-1);
+    this.familiarity = new Uint8Array(cap * POSITION_SLOTS);
     this.attrs = new Uint8Array(cap * ATTR_COUNT);
     this.currentAbility = new Uint16Array(cap);
     this.potentialAbility = new Uint16Array(cap);
@@ -231,7 +242,7 @@ export class PlayerStore {
       nation: this.nation, nation2: this.nation2, birthYear: this.birthYear, birthDay: this.birthDay,
       heightCm: this.heightCm, weightKg: this.weightKg, spikeReachCm: this.spikeReachCm,
       blockReachCm: this.blockReachCm, position: this.position, secondary: this.secondary,
-      attrs: this.attrs, currentAbility: this.currentAbility, potentialAbility: this.potentialAbility,
+      familiarity: this.familiarity, attrs: this.attrs, currentAbility: this.currentAbility, potentialAbility: this.potentialAbility,
       clubId: this.clubId, condition: this.condition, morale: this.morale, form: this.form,
       injuryDaysLeft: this.injuryDaysLeft, injuryType: this.injuryType, flags: this.flags,
       playingTime: this.playingTime,
@@ -259,6 +270,7 @@ export class PlayerStore {
     this.blockReachCm.set(old.blockReachCm.subarray(0, n));
     this.position.set(old.position.subarray(0, n));
     this.secondary.set(old.secondary.subarray(0, n));
+    this.familiarity.set(old.familiarity.subarray(0, n * POSITION_SLOTS));
     this.attrs.set(old.attrs.subarray(0, n * ATTR_COUNT));
     this.currentAbility.set(old.currentAbility.subarray(0, n));
     this.potentialAbility.set(old.potentialAbility.subarray(0, n));
@@ -281,6 +293,18 @@ export class PlayerStore {
     this.careerTitles.set(old.careerTitles.subarray(0, n));
     this.nationalCaps.set(old.nationalCaps.subarray(0, n));
     this.retiredYear.set(old.retiredYear.subarray(0, n));
+  }
+
+  /** How at home he is playing `pos`, 0-100 — his natural position always 100. */
+  familiarityWith(i: number, pos: number): number {
+    return this.position[i] === pos ? 100 : this.familiarity[i * POSITION_SLOTS + pos];
+  }
+
+  /** Set it — a position fully learnt becomes his secondary, if he has none. */
+  setFamiliarity(i: number, pos: number, value: number): void {
+    const v = Math.max(0, Math.min(100, Math.round(value)));
+    this.familiarity[i * POSITION_SLOTS + pos] = v;
+    if (v >= 100 && this.secondary[i] < 0 && this.position[i] !== pos) this.secondary[i] = pos;
   }
 
   /** Reserve a slot and return its index. Assigns a permanent ID. */
