@@ -55,9 +55,37 @@ export const SERVE_OPTIONS: Array<[ServeStrategy, string]> = [
   [ServeStrategy.Conservative, 'Conservative'],
 ];
 
+/** The per-rotation instruction choices, shared by the Rotations screen and the in-match tactics. */
+export const ATTACKER_OPTIONS: Array<[Position | -1, string]> = [
+  [-1, 'Automatic'],
+  ...([0, 1, 2, 3] as Position[]).map((p) => [p, POSITION_NAMES[p]] as [Position, string]),
+];
+
+export const SERVE_TARGET_OPTIONS: Array<[ServeTarget, string]> = [
+  [ServeTarget.Auto, 'Automatic'],
+  [ServeTarget.WeakestPasser, 'Weakest passer'],
+  [ServeTarget.Setter, 'The setter'],
+  [ServeTarget.BestAttacker, 'Their best attacker'],
+  [ServeTarget.DeepCorner, 'Deep corner'],
+  [ServeTarget.ShortZone, 'Short zone'],
+];
+
+export const BLOCK_OPTIONS: Array<[BlockAssignment, string]> = [
+  [BlockAssignment.ReadBlock, 'Read block'],
+  [BlockAssignment.CommitMiddle, 'Commit on the middle'],
+  [BlockAssignment.SpreadBlock, 'Spread block'],
+  [BlockAssignment.ReleaseToLine, 'Release to line'],
+];
+
+export const SHAPE_OPTIONS: Array<[DefensiveShape, string]> = [
+  [DefensiveShape.PerimeterDefense, 'Perimeter'],
+  [DefensiveShape.RotationDefense, 'Rotation'],
+  [DefensiveShape.ManUpDefense, 'Man-up'],
+];
+
 /** A team instruction as a row of toggle tiles — every option visible at
  *  once, the current one lit — rather than hidden behind a dropdown. */
-function InstructionTiles<T extends number>({
+export function InstructionTiles<T extends number>({
   label, hint, value, options, onChange,
 }: {
   label: string;
@@ -148,7 +176,7 @@ export function TacticsScreen(): JSX.Element {
 }
 
 /** A slider with its current value spelled out beside it. */
-function SliderField({
+export function SliderField({
   label, value, onChange, left, right,
 }: {
   label: string;
@@ -249,47 +277,26 @@ export function RotationsScreen(): JSX.Element {
           <ChoiceField
             label="Preferred attacker"
             value={r.preferredAttacker}
-            onChange={(v) => { r.preferredAttacker = v as Position | -1; g.touch(); }}
-            options={[
-              [-1 as Position, 'Automatic'],
-              ...([0, 1, 2, 3] as Position[]).map(
-                (p) => [p, POSITION_NAMES[p]] as [Position, string],
-              ),
-            ]}
+            onChange={(v) => { r.preferredAttacker = v; g.touch(); }}
+            options={ATTACKER_OPTIONS}
           />
           <ChoiceField
             label="Serve target"
             value={r.serveTarget}
             onChange={(v) => { r.serveTarget = v; g.touch(); }}
-            options={[
-              [ServeTarget.Auto, 'Automatic'],
-              [ServeTarget.WeakestPasser, 'Weakest passer'],
-              [ServeTarget.Setter, 'The setter'],
-              [ServeTarget.BestAttacker, 'Their best attacker'],
-              [ServeTarget.DeepCorner, 'Deep corner'],
-              [ServeTarget.ShortZone, 'Short zone'],
-            ]}
+            options={SERVE_TARGET_OPTIONS}
           />
           <ChoiceField
             label="Block assignment"
             value={r.blockAssignment}
             onChange={(v) => { r.blockAssignment = v; g.touch(); }}
-            options={[
-              [BlockAssignment.ReadBlock, 'Read block'],
-              [BlockAssignment.CommitMiddle, 'Commit on the middle'],
-              [BlockAssignment.SpreadBlock, 'Spread block'],
-              [BlockAssignment.ReleaseToLine, 'Release to line'],
-            ]}
+            options={BLOCK_OPTIONS}
           />
           <ChoiceField
             label="Defensive shape"
             value={r.defensiveShape}
             onChange={(v) => { r.defensiveShape = v; g.touch(); }}
-            options={[
-              [DefensiveShape.PerimeterDefense, 'Perimeter'],
-              [DefensiveShape.RotationDefense, 'Rotation'],
-              [DefensiveShape.ManUpDefense, 'Man-up'],
-            ]}
+            options={SHAPE_OPTIONS}
           />
           <SliderField
             label="Back-row transition"

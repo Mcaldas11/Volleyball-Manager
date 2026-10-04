@@ -31,7 +31,7 @@ import {
   type Fixture, type GameMessage, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
-import { defaultTactics, type Formation, type TeamTactics } from '../engine/match/tactics.ts';
+import { defaultTactics, FORMATION_NAMES, formationOf, type Formation, type TeamTactics } from '../engine/match/tactics.ts';
 import {
   activeTactic, deleteTactic as deleteTacticSlot, loadTactic as loadTacticSlot, MAX_TACTICS,
   newTactic as newTacticSlot, renameTactic as renameTacticSlot, tacticSlots, type SavedTactic,
@@ -270,6 +270,9 @@ export interface MatchdaySnapshot {
   set: number;
   serving: 0 | 1;
   matchOver: boolean;
+  /** The rotation each side stands in, P1 to P6 as 0-5; absent on a match saved before it was kept. */
+  homeRotation?: number;
+  awayRotation?: number;
 }
 
 /** A revealed rally, plus the court arrangement that was in effect while it
@@ -2497,20 +2500,44 @@ class Game {
   }
 
   /** The system the user's side plays in today's match — a club's or a nation's —
-   *  with the six re-picked for it before kickoff. */
+   *  with the six re-picked for it before kickoff, or for the next set at a set break. */
   setMatchdayFormation(formation: Formation): void {
     const tactics = this.matchTactics();
-    if (this.matchday?.stage !== 'lineup' || tactics === null) return;
+    const stage = this.matchday?.stage;
+    if ((stage !== 'lineup' && stage !== 'setBreak') || tactics === null) return;
     tactics.formation = formation;
     this.repickMatchdaySix();
   }
 
-  /** Pick the six again before kickoff, for the system and team sheet now loaded. */
+  /**
+   * Change the system mid-rally-flow, from the next rally — with the
+   * substitution it takes, when it takes one: a second setter on for the
+   * opposite to play a 4-2, an opposite on for one of the two setters to go
+   * back to a 5-1.
+   */
+  changeLiveFormation(formation: Formation, change?: { out: number; in: number }): void {
+    const md = this.matchday;
+    const tactics = this.matchTactics();
+    if (md === null || tactics === null || md.stage !== 'live' || md.setBreakPending) return;
+    if (change !== undefined) {
+      const result = this.performSubstitution(md.userIsHome ? 0 : 1, change.out, change.in);
+      if (!result.ok) {
+        this.notice = result.reason ?? 'That substitution is not allowed.';
+        this.emit();
+        return;
+      }
+    }
+    tactics.formation = formation;
+    this.notice = `Now playing a ${FORMATION_NAMES[formation]}.`;
+    this.emit();
+  }
+
+  /** Pick the six again — before kickoff, or for the next set — for the system and team sheet now loaded. */
   private repickMatchdaySix(): void {
     const world = this.world;
     const md = this.matchday;
     const tactics = this.matchTactics();
-    if (world === null || md === null || md.stage !== 'lineup' || tactics === null) return;
+    if (world === null || md === null || (md.stage !== 'lineup' && md.stage !== 'setBreak') || tactics === null) return;
     const mine = md.sides[md.userIsHome ? 0 : 1];
     const club = this.club;
     const pick = md.national !== null || club === null
@@ -2545,6 +2572,28 @@ class Game {
     this.notice = `${tacticSlots(club)[index].name} loaded.`;
     if (this.matchday !== null && this.matchday.national === null) this.repickMatchdaySix();
     this.emit();
+  }
+
+  /**
+   * Load a saved tactic during the match: its instructions apply from the
+   * next rally. The engine holds on to the tactics it kicked off with, so they
+   * go into that same object; the system stays as it is, since changing it
+   * takes a substitution — the system the loaded tactic plays is returned for
+   * the caller to offer it.
+   */
+  loadTacticInMatch(index: number): Formation | null {
+    const club = this.club;
+    const md = this.matchday;
+    if (club === null || md === null || md.national !== null || (md.stage !== 'live' && md.stage !== 'setBreak')) return null;
+    const live = club.tactics;
+    const playing = formationOf(live);
+    if (!loadTacticSlot(club, index)) return null;
+    const loaded = club.tactics;
+    Object.assign(live, loaded, { formation: playing });
+    club.tactics = live;
+    this.notice = `${tacticSlots(club)[index].name} loaded — its instructions apply from the next rally.`;
+    this.emit();
+    return formationOf(loaded);
   }
 
   /** A new tactic, from the defaults, and loaded — before kickoff, the six is picked again for it. */

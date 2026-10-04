@@ -4904,3 +4904,52 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .tr-table td { vertical-align: middle; }
 .tr-pick { width: 140px; }
 .tr-table .role-tag { margin-left: 8px; }
+
+/* ============================================================
+   Live match tactics: the system (and the substitution a switch
+   takes), the team instructions, and each rotation's.
+   ============================================================ */
+
+.lv-tac .lv-overlay-head { flex-wrap: wrap; row-gap: 8px; }
+.lv-tac-load { min-width: 170px; }
+.lv-tac .lv-overlay-body { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; }
+.lv-tac-label { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); }
+
+.lv-sys { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, 0.02); }
+.lv-sys-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.lv-sys-now { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.lv-sys-now b { font: 800 22px/1 var(--font-display); color: var(--gold-bright); }
+.lv-sys-now .faint { font-size: 12.5px; }
+.lv-sys-change { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.lv-sys-change p { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+.lv-sys-swap { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.lv-sys-swap > .icon { margin-bottom: 8px; color: var(--gold); }
+.lv-sys-pick { display: flex; flex-direction: column; gap: 4px; }
+.lv-sys-pick .dd { min-width: 200px; }
+.lv-sys-change p.lv-sys-blocked { display: flex; align-items: center; gap: 6px; color: var(--warn); }
+.lv-sys-actions { display: flex; gap: 8px; }
+
+.lv-tac-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; }
+.lv-tac .instr { padding-bottom: 12px; }
+.lv-tac .instr + .instr { padding-top: 12px; }
+.lv-tac .instr-head { margin-bottom: 7px; }
+.lv-tac .instr-label { font-size: 11.5px; }
+.lv-tac .instr-current { font-size: 12.5px; }
+.lv-tac .instr-tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 5px; }
+.lv-tac .instr-tile { padding: 7px 9px; font-size: 12px; }
+
+.lv-rot { display: flex; flex-direction: column; gap: 12px; }
+.lv-rot-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.lv-rot-tab {
+  flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text-dim);
+}
+.lv-rot-tab b { font: 800 16px/1 var(--font-display); color: var(--text); }
+.lv-rot-tab span { font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; }
+.lv-rot-tab.active { border-color: var(--club-bright); box-shadow: inset 0 0 0 1px var(--club-bright); background: linear-gradient(180deg, var(--club-tint), rgba(255, 255, 255, 0.02)); }
+.lv-rot-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.lv-rot-fields { gap: 12px 22px; }
+.lv-rot-fields .field-row { flex-direction: column; align-items: stretch; gap: 4px; }
+.lv-rot-fields .slider-value { position: absolute; right: 0; top: 0; font-size: 14px; }
+.lv-rot-fields .field { position: relative; }
+.lv-rot-tab.now span { color: var(--gold-bright); }

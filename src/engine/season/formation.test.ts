@@ -166,3 +166,30 @@ test('in a 4-2, a set break can start an opposite for a worn-out setter; a 5-1 n
   assert.ok(fiveOne.sim.suggestSubstitution(0)?.outPlayerIdx !== fiveOne.setter);
   assert.equal(fiveOne.sim.suggestStartingLineup(0)?.lineup[0] ?? fiveOne.setter, fiveOne.setter);
 });
+
+test('a side can switch to a 4-2 mid-match: a second setter on for the opposite, and from the next rally both set', () => {
+  const { world, a, b } = twoClubs(64);
+  const store = world.players;
+  a.tactics.formation = Formation.FiveOne;
+  const home = toTeamSetup(store, a);
+  const sim = new MatchSimulator(store, {
+    home, away: toTeamSetup(store, b), format: MatchFormat.BestOf5, importance: 0.5,
+    neutralVenue: true, collectLog: true, seed: 7,
+  });
+  for (let i = 0; i < 6; i++) sim.step();
+  const court = sim.snapshot().homeCourt;
+  const setter = court.find((p) => store.position[p] === Position.Setter)!;
+  const opposite = court[(court.indexOf(setter) + 3) % 6];
+  const second = home.bench.find((p) => store.position[p] === Position.Setter)!;
+  assert.ok(second !== undefined, 'a setter on the bench');
+  assert.equal(sim.substitute(0, opposite, second).ok, true);
+  // The live tactics are the very object the engine reads.
+  home.tactics.formation = Formation.FourTwo;
+  const setBy = new Set<number>();
+  for (let i = 0; i < 40; i++) {
+    const r = sim.step();
+    if (r === null || r.set !== 0) break;
+    for (const c of r.contacts) if (c.team === 0 && c.kind === 'set') setBy.add(c.player);
+  }
+  assert.ok(setBy.has(setter) && setBy.has(second), 'both setters set, each from the back row');
+});

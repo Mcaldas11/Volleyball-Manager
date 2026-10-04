@@ -944,9 +944,13 @@ export class MatchSimulator {
     set: number;
     serving: 0 | 1;
     matchOver: boolean;
+    homeRotation: number;
+    awayRotation: number;
   } {
     this.startIfNeeded();
     return {
+      homeRotation: this.teams[0].rotation(),
+      awayRotation: this.teams[1].rotation(),
       homeCourt: Array.from(this.teams[0].court),
       awayCourt: Array.from(this.teams[1].court),
       homeLibero: this.activeLibero(0),

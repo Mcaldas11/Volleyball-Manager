@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { Position } from '../../engine/model/positions.ts';
+import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
 import type { RallyContact, ShoutKind } from '../../engine/match/engine.ts';
 import {
@@ -12,8 +12,11 @@ import { Icon } from '../icons.tsx';
 import { kitsFor, LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { rallyBeats, setupScene, type Scene } from '../matchCourt.ts';
 import { TeamSheet } from '../teamSheet.tsx';
-import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
-import { Formation, FORMATION_NAMES, formationOf } from '../../engine/match/tactics.ts';
+import {
+  ATTACKER_OPTIONS, BLOCK_OPTIONS, DEFENSE_OPTIONS, InstructionTiles, OFFENSE_OPTIONS, SERVE_OPTIONS,
+  SERVE_TARGET_OPTIONS, SHAPE_OPTIONS, SliderField, TEMPO_OPTIONS,
+} from './Manage.tsx';
+import { Formation, FORMATION_NAMES, formationOf, type TeamTactics } from '../../engine/match/tactics.ts';
 import { describeRallyHighlight } from './Match.tsx';
 import { useGame, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -176,15 +179,7 @@ function LineupSetup(): JSX.Element {
             </div>
           </div>
           {md.national === null && <MatchdayTacticSelect />}
-          <div className="md-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
-            <span className="faint">Formation</span>
-            <Segmented<Formation>
-              size="sm"
-              options={[[Formation.FiveOne, FORMATION_NAMES[Formation.FiveOne]], [Formation.FourTwo, FORMATION_NAMES[Formation.FourTwo]]]}
-              value={formationOf(g.matchTactics() ?? undefined)}
-              onChange={(f) => g.setMatchdayFormation(f)}
-            />
-          </div>
+          <MatchdayFormation />
           <button className="primary lg" onClick={() => g.kickOff()}>
             <Icon name="whistle" size={18} /> Kick off
           </button>
@@ -211,6 +206,15 @@ function MatchdayTacticSelect(): JSX.Element | null {
   const g = useGame();
   const saved = g.savedTactics();
   if (saved === null || saved.slots.length < 2) return null;
+  const load = (v: number): void => {
+    if (g.matchday?.stage !== 'setBreak') {
+      g.loadTactic(v);
+      return;
+    }
+    // At a set break the tactic's system comes with it, and the six is picked for it.
+    const f = g.loadTacticInMatch(v);
+    if (f !== null && f !== formationOf(g.matchTactics() ?? undefined)) g.setMatchdayFormation(f);
+  };
   return (
     <div className="md-formation">
       <span className="faint">Tactic</span>
@@ -218,8 +222,24 @@ function MatchdayTacticSelect(): JSX.Element | null {
         size="sm"
         className="md-tactic-select"
         value={saved.active}
-        onChange={(v) => g.loadTactic(v)}
+        onChange={load}
         options={saved.slots.map((t, i) => ({ value: i, label: `${i + 1}. ${t.name}` }))}
+      />
+    </div>
+  );
+}
+
+/** The 5-1 / 4-2 switch of the team-sheet screens — before kickoff, or for the next set. */
+function MatchdayFormation(): JSX.Element {
+  const g = useGame();
+  return (
+    <div className="md-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
+      <span className="faint">Formation</span>
+      <Segmented<Formation>
+        size="sm"
+        options={[[Formation.FiveOne, FORMATION_NAMES[Formation.FiveOne]], [Formation.FourTwo, FORMATION_NAMES[Formation.FourTwo]]]}
+        value={formationOf(g.matchTactics() ?? undefined)}
+        onChange={(f) => g.setMatchdayFormation(f)}
       />
     </div>
   );
@@ -301,6 +321,8 @@ function SetBreak(): JSX.Element {
               </button>
             </div>
           </div>
+          {md.national === null && <MatchdayTacticSelect />}
+          <MatchdayFormation />
           <button className="primary lg" onClick={() => g.startNextSet()}>
             <Icon name="whistle" size={18} /> Start set {setsPlayed + 1}
           </button>
@@ -341,7 +363,7 @@ function TimeoutPanel({
         <span className="timeout-icon"><Icon name="whistle" size={22} /></span>
         <div className="timeout-title">
           <strong>Timeout{calledBy !== undefined ? ` — ${calledBy}` : ''}</strong>
-          <span className="faint">Adjust your tactics here, or make changes in the Subs tab — they apply from the next rally.</span>
+          <span className="faint">Adjust the instructions here, or open Tactics for the system and each rotation — changes apply from the next rally.</span>
         </div>
         <span className="timeout-countdown">0:{secondsLeft.toString().padStart(2, '0')}</span>
         <button className="primary" onClick={() => g.resumeFromTimeout()}>
@@ -481,23 +503,250 @@ function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolea
   );
 }
 
-/** The tactics, changed between rallies — the same object the engine reads, so a change applies from the next. */
+/** What switching system takes on court: who could make way, who could come on, and the obvious pair. */
+interface SystemChange {
+  out: number[];
+  in: number[];
+  why: string;
+}
+
+/**
+ * The substitution a change of system needs, or null if the six on court
+ * already fit it: a 4-2 wants a second setter, diagonal to the first — so on
+ * for the opposite; a 5-1 wants one, so an opposite on for the other.
+ */
+function systemChangeFor(store: PlayerStore, target: Formation, court: readonly number[], bench: readonly number[]): SystemChange | null {
+  const pos = (p: number): Position => store.position[p] as Position;
+  const best = (ps: number[]): number[] => [...ps].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
+  const setters = court.filter((p) => pos(p) === Position.Setter);
+  if (target === Formation.FourTwo) {
+    if (setters.length >= 2) return null;
+    const zone = court.findIndex((p) => pos(p) === Position.Setter);
+    const diagonal = zone >= 0 ? court[(zone + 3) % 6] : -1;
+    const rank = (p: number): number => (p === diagonal ? 0 : pos(p) === Position.Opposite ? 1 : 2);
+    return {
+      out: court.filter((p) => pos(p) !== Position.Setter && pos(p) !== Position.Libero).sort((a, b) => rank(a) - rank(b)),
+      in: best(bench.filter((p) => pos(p) === Position.Setter)),
+      why: 'A 4-2 plays two setters, diagonal to each other: a second one comes on, for the opposite.',
+    };
+  }
+  if (setters.length <= 1) return null;
+  return {
+    // The weaker of the two makes way.
+    out: [...setters].sort((a, b) => store.currentAbility[a] - store.currentAbility[b]),
+    in: [
+      ...best(bench.filter((p) => pos(p) === Position.Opposite)),
+      ...best(bench.filter((p) => pos(p) === Position.OutsideHitter)),
+    ],
+    why: 'A 5-1 runs on one setter: an opposite comes on for the other.',
+  };
+}
+
+/** The system the side plays, and the switch to the other — with the substitution it takes. */
+function LiveSystem({ tactics, target, onTarget }: {
+  tactics: TeamTactics;
+  target: Formation | null;
+  onTarget: (f: Formation | null) => void;
+}): JSX.Element {
+  const g = useGame();
+  const md = g.matchday!;
+  const store = g.world!.players;
+  const team: 0 | 1 = md.userIsHome ? 0 : 1;
+  const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
+  const liberos = g.liveLiberos();
+  const bench = md.sides[team].players.filter((p) => !court.includes(p) && g.matchAvailable(p)
+    && store.position[p] !== Position.Libero && p !== liberos.reception && p !== liberos.defence);
+  const playing = formationOf(tactics);
+  const pending = target !== null && target !== playing ? target : null;
+  const change = pending !== null ? systemChangeFor(store, pending, court, bench) : null;
+  const [out, setOut] = useState<number | null>(null);
+  const [inc, setInc] = useState<number | null>(null);
+  useEffect(() => { setOut(null); setInc(null); }, [pending]);
+  const remaining = g.subsRemaining();
+  const outP = out ?? change?.out[0] ?? -1;
+  const inP = inc ?? change?.in[0] ?? -1;
+
+  const name = (p: number): string => store.shortName(p);
+  const setters = court.filter((p) => store.position[p] === Position.Setter);
+  const opposite = court.find((p) => store.position[p] === Position.Opposite);
+  const now = playing === Formation.FourTwo && setters.length >= 2
+    ? `${name(setters[0])} and ${name(setters[1])} set, from the back row`
+    : `${setters.length > 0 ? `${name(setters[0])} sets` : 'No setter on court'}${opposite !== undefined ? ` · ${name(opposite)} opposite` : ''}`;
+
+  const pick = (f: Formation): void => {
+    if (f === playing) { onTarget(null); return; }
+    if (systemChangeFor(store, f, court, bench) === null) {
+      g.changeLiveFormation(f);
+      onTarget(null);
+      return;
+    }
+    onTarget(f);
+  };
+  const blocked = md.setBreakPending
+    ? 'The set is over: change it at the set break.'
+    : change === null ? null
+      : remaining <= 0 ? 'No substitutions left this set: the change can be made at the set break.'
+        : change.in.length === 0
+          ? pending === Formation.FourTwo ? 'There is no setter on the bench to bring on.' : 'There is no opposite or outside hitter on the bench to bring on.'
+          : null;
+  const option = (p: number): { value: number; label: string; hint: string } => ({
+    value: p, label: name(p), hint: `${POSITION_SHORT[store.position[p] as Position]} · ${store.currentAbility[p]}`,
+  });
+
+  return (
+    <section className="lv-sys">
+      <div className="lv-sys-head">
+        <div className="lv-sys-now">
+          <span className="lv-tac-label">System</span>
+          <b>{FORMATION_NAMES[playing]}</b>
+          <span className="faint">{now}</span>
+        </div>
+        <Segmented<Formation>
+          options={[[Formation.FiveOne, '5-1 · one setter'], [Formation.FourTwo, '4-2 · two setters']]}
+          value={pending ?? playing}
+          onChange={pick}
+        />
+      </div>
+      {pending !== null && (
+        <div className="lv-sys-change">
+          <p>{change?.why ?? `The six on court already fit a ${FORMATION_NAMES[pending]}.`}</p>
+          {change !== null && change.in.length > 0 && (
+            <div className="lv-sys-swap">
+              <div className="lv-sys-pick">
+                <span className="lv-tac-label">Off</span>
+                <Dropdown size="sm" value={outP} options={change.out.map(option)} onChange={setOut} />
+              </div>
+              <Icon name="swap" size={16} />
+              <div className="lv-sys-pick">
+                <span className="lv-tac-label">On</span>
+                <Dropdown size="sm" value={inP} options={change.in.map(option)} onChange={setInc} />
+              </div>
+            </div>
+          )}
+          {blocked !== null && <p className="lv-sys-blocked"><Icon name="alert" size={13} /> {blocked}</p>}
+          <div className="lv-sys-actions">
+            <button
+              className="primary sm"
+              disabled={blocked !== null || (change !== null && (outP < 0 || inP < 0))}
+              onClick={() => {
+                g.changeLiveFormation(pending, change === null ? undefined : { out: outP, in: inP });
+                onTarget(null);
+              }}
+            >
+              <Icon name="check" size={13} />
+              {change === null ? ` Switch to ${FORMATION_NAMES[pending]}` : ` Make the change · uses 1 of ${remaining} subs`}
+            </button>
+            <button className="sm ghost" onClick={() => onTarget(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Each rotation's instructions, the one the side stands in now first. */
+function LiveRotations({ tactics, current }: { tactics: TeamTactics; current: number }): JSX.Element {
+  const g = useGame();
+  const [rot, setRot] = useState(current);
+  const r = tactics.rotations[rot];
+  const fourTwo = formationOf(tactics) === Formation.FourTwo;
+  const setterFront = !fourTwo && rot >= 1 && rot <= 3;
+  const copyToAll = (): void => {
+    for (let i = 0; i < tactics.rotations.length; i++) if (i !== rot) tactics.rotations[i] = { ...r };
+    g.touch();
+  };
+  return (
+    <div className="lv-rot">
+      <div className="lv-rot-tabs">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <button key={i} className={`lv-rot-tab${i === rot ? ' active' : ''}${i === current ? ' now' : ''}`} onClick={() => setRot(i)}>
+            <b>P{i + 1}</b>
+            <span>{i === current ? 'Now' : !fourTwo && i >= 1 && i <= 3 ? 'Setter front' : 'Setter back'}</span>
+          </button>
+        ))}
+      </div>
+      <div className="lv-rot-meta">
+        <span className={`rot-flag${setterFront ? ' warn' : ''}`}>
+          {fourTwo ? 'A setter always in the back row · three attackers' : setterFront ? 'Setter front row · two attackers' : 'Setter back row · three attackers'}
+        </span>
+        <button className="sm ghost" onClick={copyToAll} title={`Every rotation gets P${rot + 1}'s instructions`}>
+          <Icon name="swap" size={13} /> Use for every rotation
+        </button>
+      </div>
+      <div className="grid2 timeout-fields lv-rot-fields">
+        <ChoiceField label="Preferred attacker" value={r.preferredAttacker} onChange={(v) => { r.preferredAttacker = v; g.touch(); }} options={ATTACKER_OPTIONS} />
+        <ChoiceField label="Serve target" value={r.serveTarget} onChange={(v) => { r.serveTarget = v; g.touch(); }} options={SERVE_TARGET_OPTIONS} />
+        <ChoiceField label="Block assignment" value={r.blockAssignment} onChange={(v) => { r.blockAssignment = v; g.touch(); }} options={BLOCK_OPTIONS} />
+        <ChoiceField label="Defensive shape" value={r.defensiveShape} onChange={(v) => { r.defensiveShape = v; g.touch(); }} options={SHAPE_OPTIONS} />
+        <SliderField label="Back-row transition" value={r.transitionBackRow} onChange={(v) => { r.transitionBackRow = v; g.touch(); }} left="Rarely" right="Often" />
+        <SliderField label="Setter tempo bias" value={r.setterTempoBias} onChange={(v) => { r.setterTempoBias = v; g.touch(); }} left="Slower" right="Quicker" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The tactics, changed during the match — the same object the engine reads,
+ * so a change applies from the next rally: the system (with the substitution
+ * a switch takes), the team instructions, each rotation's, or another saved
+ * tactic altogether.
+ */
 function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | null {
   const g = useGame();
+  const md = g.matchday!;
   const t = g.matchTactics();
+  const [tab, setTab] = useState<'team' | 'rotations'>('team');
+  /** A system picked that takes a substitution to play — waiting on who goes off and who comes on. */
+  const [target, setTarget] = useState<Formation | null>(null);
   if (t === null) return null;
+  const saved = md.national === null ? g.savedTactics() : null;
+  const rotation = (md.userIsHome ? md.snapshot?.homeRotation : md.snapshot?.awayRotation) ?? 0;
+  const set = <K extends 'offense' | 'tempo' | 'defense' | 'serve'>(key: K) => (v: TeamTactics[K]): void => {
+    t[key] = v;
+    g.touch();
+  };
   return (
-    <div className="lv-overlay">
+    <div className="lv-overlay lv-tac">
       <header className="lv-overlay-head">
         <strong><Icon name="tactics" size={16} /> Tactics</strong>
+        <Segmented<'team' | 'rotations'> size="sm" options={[['team', 'Team'], ['rotations', 'Rotations']]} value={tab} onChange={setTab} />
         <span className="faint">Changes apply from the next rally.</span>
+        {saved !== null && saved.slots.length >= 2 && (
+          <Dropdown
+            size="sm"
+            className="lv-tac-load"
+            title="Load another of your tactics"
+            value={saved.active}
+            onChange={(i) => {
+              const f = g.loadTacticInMatch(i);
+              if (f !== null && f !== formationOf(t)) {
+                setTab('team');
+                setTarget(f);
+              }
+            }}
+            options={saved.slots.map((s, i) => ({ value: i, label: s.name, hint: FORMATION_NAMES[formationOf(s.tactics)] }))}
+          />
+        )}
         <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={16} /></button>
       </header>
-      <div className="lv-overlay-body grid2 timeout-fields">
-        <ChoiceField label="Offensive system" value={t.offense} onChange={(v) => { t.offense = v; g.touch(); }} options={OFFENSE_OPTIONS} />
-        <ChoiceField label="Tempo" value={t.tempo} onChange={(v) => { t.tempo = v; g.touch(); }} options={TEMPO_OPTIONS} />
-        <ChoiceField label="Defensive system" value={t.defense} onChange={(v) => { t.defense = v; g.touch(); }} options={DEFENSE_OPTIONS} />
-        <ChoiceField label="Serve strategy" value={t.serve} onChange={(v) => { t.serve = v; g.touch(); }} options={SERVE_OPTIONS} />
+      <div className="lv-overlay-body">
+        {tab === 'team'
+          ? (
+            <>
+              <LiveSystem tactics={t} target={target} onTarget={setTarget} />
+              <div className="lv-tac-grid">
+                <div>
+                  <InstructionTiles label="Offensive system" value={t.offense} onChange={set('offense')} options={OFFENSE_OPTIONS} />
+                  <InstructionTiles label="Tempo" value={t.tempo} onChange={set('tempo')} options={TEMPO_OPTIONS} />
+                </div>
+                <div>
+                  <InstructionTiles label="Defensive system" value={t.defense} onChange={set('defense')} options={DEFENSE_OPTIONS} />
+                  <InstructionTiles label="Serve strategy" value={t.serve} onChange={set('serve')} options={SERVE_OPTIONS} />
+                </div>
+              </div>
+            </>
+          )
+          : <LiveRotations tactics={t} current={rotation} />}
       </div>
     </div>
   );
