@@ -145,6 +145,26 @@ export function clubWorldYear(year: number): boolean {
   return ((year - 2026) % 4 + 4) % 4 === 0;
 }
 
+/**
+ * A Club World Championship drawn for a season that isn't one of its years —
+ * in a save from before it went to every four years — is called off: its
+ * matches not yet played come off the calendar, and the entrants go home.
+ */
+export function cancelOffCycleClubWorld(world: World): void {
+  const comp = world.competitions.find((c) => c.kind === 'clubworld');
+  if (comp?.cup === undefined || clubWorldYear(world.startYear + comp.cup.season)) return;
+  for (const id of comp.fixtureIds) {
+    const f = world.fixtures[id];
+    if (f === undefined || f.played) continue;
+    const list = world.fixturesByDay.get(f.day);
+    if (list !== undefined) world.fixturesByDay.set(f.day, list.filter((x) => x !== id));
+    f.day = -1;
+  }
+  comp.fixtureIds = comp.fixtureIds.filter((id) => world.fixtures[id]?.played === true);
+  comp.cup = undefined;
+  comp.participants = [];
+}
+
 /** The year of the next Club World Championship from the season starting in `year` on, that one included. */
 export function nextClubWorldYear(year: number): number {
   let y = year;

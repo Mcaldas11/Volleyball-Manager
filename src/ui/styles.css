@@ -5037,3 +5037,11 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 /* The invisible swap box sits over the ⇅ icon — the dropdown's own rules would otherwise put it back in the flow. */
 .lineup-card .lineup-card-select { position: absolute; bottom: 8px; right: 5px; width: 19px; height: 19px; min-width: 0; }
 .lineup-card .lineup-card-select .dd-trigger { width: 19px; height: 19px; min-width: 0; padding: 0; }
+
+/* How a tournament's field was made. */
+.intl-qualify { grid-column: 1 / -1; }
+.intl-rule { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
+.intl-entry { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 18px; }
+.intl-entry-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 4px 6px; border-radius: 5px; font-size: 12.5px; }
+.intl-entry-row .faint { font-size: 11.5px; text-align: right; }
+.intl-entry-row.me { background: var(--gold-soft); }

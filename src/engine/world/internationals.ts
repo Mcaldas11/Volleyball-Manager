@@ -1,12 +1,27 @@
 /**
  * The national teams: their tournaments, their squads, and their coaches.
  *
- * Every summer, before the club season, there is a major: the Olympic Games
- * every fourth year, the World Championship in the odd years, and in the
- * even years between Olympics each confederation's own championship —
- * EuroVolley, the South American, NORCECA, Asian and African championships.
- * Every spring, once the club playoffs are done, the best sixteen nations
- * play the Nations League. Places go by world ranking, with each
+ * The FIVB calendar (2025-2028 on): every summer, before the club season,
+ * there is a major — the World Championship in the odd years, and in the
+ * even years each confederation's own championship: EuroVolley, the South
+ * American, NORCECA, Asian and African championships. The Olympic Games
+ * come every fourth year, an even one, and the continental championships
+ * that summer follow straight after them. Every spring, once the club
+ * playoffs are done, eighteen nations play the Nations League.
+ *
+ * Places are earned the way the FIVB hands them out:
+ * - The World Championship (32): the hosts, the holders, the top three of
+ *   each continental championship the year before, and the rest by world
+ *   ranking.
+ * - The Olympic Games (12): the hosts, each continental championship's
+ *   winners from two years before, the best three at the World
+ *   Championship the year before not yet in, and three by world ranking.
+ * - EuroVolley (24): the hosts, the top eight of the last edition, and the
+ *   rest through qualifiers the summer before — pools of four, the top two
+ *   and the best thirds through. The other confederations have fewer
+ *   nations than places: all of them play.
+ * - The Nations League (18): the same nations every year, bar one — the
+ *   last-placed goes down, the best-ranked nation outside comes up. Places go by world ranking, with each
  * confederation guaranteed its share of the World Championship and the
  * Olympics; a major has a host, who qualifies and plays at home.
  *
@@ -50,7 +65,7 @@ import {
   dayOfSeason, DAYS_PER_SEASON, type Competition, type Fixture, type GameMessage, type World,
 } from './world.ts';
 
-export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics';
+export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics' | 'qualifier';
 
 export interface IntlMatch {
   id: number;
@@ -104,6 +119,10 @@ export interface Tournament {
   mvp: number;
   /** Every player's tournament: [apps, points, rating sum, MVP awards]. */
   stats: Map<number, [number, number, number, number]>;
+  /** How each nation earned its place: "Hosts", "EuroVolley 2026 — 3rd"… Absent on tournaments from before qualification. */
+  entry?: Array<[number, string]>;
+  /** A qualifying tournament: how many places it hands out. */
+  places?: number;
 }
 
 /** A finished tournament, kept for good. */
@@ -114,6 +133,8 @@ export interface TournamentRecord {
   year: number;
   /** Gold, silver, bronze — and fourth. */
   podium: number[];
+  /** Everyone, best first — absent on records from before it was kept. */
+  placings?: number[];
   mvp: number;
   /** The medallists' squads. */
   medallists: Array<[number, number[]]>;
@@ -159,6 +180,13 @@ export interface Internationals {
   lastApproach: number;
   /** Tournaments the manager has been sent the squad message for. */
   squadAsked: number[];
+  /** Hosts named ahead of time — a championship whose qualifiers need to know them — by field key. */
+  hosts?: Record<string, number>;
+  /** Places already won for a tournament to come, through its qualifiers, by field key. */
+  qualified?: Record<string, Array<[number, string]>>;
+  /** The Nations League's eighteen for the next edition, and who has just come up. */
+  vnl?: number[];
+  vnlPromoted?: number;
 }
 
 // ---- What the manager is told: the reports behind the messages ----------------------------
@@ -223,6 +251,9 @@ export interface IntlReport {
 /** The summer major: squads named, first match (days of the season). July. */
 const SUMMER_CALL_UP = 8;
 const SUMMER_START = 15;
+/** An Olympic summer's continental championships, after the Games: August. */
+const AFTER_GAMES_CALL_UP = 31;
+const AFTER_GAMES_START = 38;
 /** The Nations League, once the club playoffs are over. May and June. */
 const VNL_CALL_UP = 304;
 const VNL_START = 311;
@@ -244,12 +275,21 @@ const CONTINENTAL: Readonly<Record<Confederation, { name: string; champions: str
   CAVB: { name: 'African Championship', champions: 'African champions' },
 };
 
-/** Each confederation's guaranteed places at the World Championship (32) and the Olympics (12). */
-const WORLDS_QUOTA: Readonly<Record<Confederation, number>> = { CEV: 14, AVC: 6, CSV: 4, NORCECA: 4, CAVB: 4 };
-const OLYMPIC_QUOTA: Readonly<Record<Confederation, number>> = { CEV: 5, AVC: 2, CSV: 2, NORCECA: 2, CAVB: 1 };
+/** The fields. */
+const WORLDS_SIZE = 32;
+const OLYMPIC_SIZE = 12;
+const VNL_SIZE = 18;
+/** Each confederation's championship field — EuroVolley 24, the rest as many as there are. */
+const CONTINENTAL_SIZE: Readonly<Record<Confederation, number>> = { CEV: 24, AVC: 12, CSV: 12, NORCECA: 12, CAVB: 12 };
+/** Straight into EuroVolley from the last one: its top eight. */
+const CONTINENTAL_DIRECT = 8;
+/** A qualifying tournament's pools. */
+const QUALIFIER_POOL = 4;
 
 /** How much one result moves the world ranking, by the stage it is played on. */
-const RANKING_K: Readonly<Record<TournamentKind, number>> = { nationsLeague: 10, continental: 14, worlds: 18, olympics: 20 };
+const RANKING_K: Readonly<Record<TournamentKind, number>> = {
+  nationsLeague: 10, continental: 14, worlds: 18, olympics: 20, qualifier: 8,
+};
 
 /** National jobs: always a few open, and how long one waits for the manager. */
 const MIN_VACANCIES = 3;
@@ -309,7 +349,8 @@ function competitionFor(world: World, kind: TournamentKind, conf: Confederation 
   const found = world.competitions.find((c) => c.key === key);
   if (found !== undefined) return found;
   const name = kind === 'worlds' ? 'World Championship' : kind === 'olympics' ? 'Olympic Games'
-    : kind === 'nationsLeague' ? 'Nations League' : CONTINENTAL[conf ?? 'CEV'].name;
+    : kind === 'nationsLeague' ? 'Nations League'
+      : kind === 'qualifier' ? `${CONTINENTAL[conf ?? 'CEV'].name} Qualifiers` : CONTINENTAL[conf ?? 'CEV'].name;
   const comp: Competition = {
     id: world.competitions.length,
     name,
@@ -321,7 +362,7 @@ function competitionFor(world: World, kind: TournamentKind, conf: Confederation 
     participants: [],
     table: [],
     fixtureIds: [],
-    reputation: kind === 'olympics' ? 10000 : kind === 'worlds' ? 9500 : 8000,
+    reputation: kind === 'olympics' ? 10000 : kind === 'worlds' ? 9500 : kind === 'qualifier' ? 5000 : 8000,
     promotionSlots: 0,
     relegationSlots: 0,
     hasPlayoffs: false,
@@ -353,25 +394,108 @@ export function worldRanking(world: World): number[] {
   return [...world.nationalTeams].sort((a, b) => b.rankingPoints - a.rankingPoints).map((t) => t.nation);
 }
 
-/** Places by confederation quota, the rest to the best of everyone else — the host always in. */
-function byQuota(ranked: number[], quota: Readonly<Record<Confederation, number>>, total: number, host: number): number[] {
-  const picked: number[] = host >= 0 ? [host] : [];
-  for (const conf of Object.keys(quota) as Confederation[]) {
-    for (const n of ranked.filter((x) => NATIONS[x].confederation === conf).slice(0, quota[conf])) {
-      if (!picked.includes(n)) picked.push(n);
+/** The key a tournament's field is known by, before it is drawn: "continental:CEV:2028". */
+export function fieldKey(kind: TournamentKind, conf: Confederation | null, year: number): string {
+  return `${kind}:${conf ?? 'FIVB'}:${year}`;
+}
+
+/** The record of a finished edition, if it was played. */
+function editionOf(world: World, kind: TournamentKind, conf: Confederation | null, year: number): TournamentRecord | undefined {
+  const history = internationals(world).history;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i];
+    if (h.kind === kind && h.confederation === conf && h.year === year) return h;
+  }
+  return undefined;
+}
+
+/**
+ * A field as it fills: each nation in once, with how it got there — and only
+ * nations that can raise a team.
+ */
+class Field {
+  readonly entries: Array<[number, string]> = [];
+  constructor(private readonly ranked: readonly number[]) {}
+  has(n: number): boolean {
+    return this.entries.some(([x]) => x === n);
+  }
+  add(n: number, why: string): boolean {
+    if (n < 0 || this.has(n) || !this.ranked.includes(n)) return false;
+    this.entries.push([n, why]);
+    return true;
+  }
+  /** The best placed of an edition not in yet, up to `count` of them. */
+  fromEdition(rec: TournamentRecord | undefined, count: number, why: (place: number) => string): void {
+    if (rec === undefined) return;
+    let taken = 0;
+    (rec.placings ?? rec.podium).forEach((n, i) => {
+      if (taken < count && this.add(n, why(i))) taken++;
+    });
+  }
+  /** The rest by world ranking, from among `pool`. */
+  fill(pool: readonly number[], size: number, why = 'World ranking'): void {
+    for (const n of pool) {
+      if (this.entries.length >= size) break;
+      this.add(n, why);
     }
   }
-  for (const n of ranked) {
-    if (picked.length >= total) break;
-    if (!picked.includes(n)) picked.push(n);
+  /** The nations, in ranking order — the seeds. */
+  seeded(): number[] {
+    return this.ranked.filter((n) => this.has(n));
   }
-  // Too many with the host in: the lowest-ranked of the rest makes way.
-  const field = ranked.filter((n) => picked.includes(n));
-  while (field.length > total) {
-    const drop = [...field].reverse().find((n) => n !== host);
-    field.splice(field.indexOf(drop!), 1);
+}
+
+/** The World Championship: hosts, holders, the top three of each continental championship the year before, the rest by ranking. */
+function worldsField(world: World, ranked: number[], host: number, year: number): Field {
+  const f = new Field(ranked);
+  f.add(host, 'Hosts');
+  const holders = editionOf(world, 'worlds', null, year - 2);
+  if (holders !== undefined) f.add(holders.podium[0], 'Holders');
+  for (const conf of CONFEDERATIONS) {
+    f.fromEdition(editionOf(world, 'continental', conf, year - 1), 3, (i) => `${CONTINENTAL[conf].name} ${year - 1} — ${ordinal(i + 1)}`);
   }
-  return field;
+  f.fill(ranked, WORLDS_SIZE);
+  return f;
+}
+
+/** The Olympic Games: hosts, the continental champions of two years before, the best three at last year's World Championship not yet in, three by ranking. */
+function olympicField(world: World, ranked: number[], host: number, year: number): Field {
+  const f = new Field(ranked);
+  f.add(host, 'Hosts');
+  for (const conf of CONFEDERATIONS) {
+    f.fromEdition(editionOf(world, 'continental', conf, year - 2), 1, (i) =>
+      i === 0 ? `${CONTINENTAL[conf].champions} ${year - 2}` : `${CONTINENTAL[conf].name} ${year - 2} — ${ordinal(i + 1)}`);
+  }
+  f.fromEdition(editionOf(world, 'worlds', null, year - 1), 3, (i) => `World Championship ${year - 1} — ${ordinal(i + 1)}`);
+  f.fill(ranked, OLYMPIC_SIZE);
+  return f;
+}
+
+/** A confederation's championship: the hosts, the top eight of the last one, those through the qualifiers — and in a small confederation, everyone. */
+function continentalField(world: World, ranked: number[], conf: Confederation, host: number, year: number): Field {
+  const own = ranked.filter((n) => NATIONS[n].confederation === conf);
+  const size = CONTINENTAL_SIZE[conf];
+  const f = new Field(own);
+  f.add(host, 'Hosts');
+  if (own.length <= size) {
+    for (const n of own) f.add(n, 'Member federation');
+    return f;
+  }
+  const name = CONTINENTAL[conf].name;
+  f.fromEdition(editionOf(world, 'continental', conf, year - 2), CONTINENTAL_DIRECT, (i) => `${name} ${year - 2} — ${ordinal(i + 1)}`);
+  for (const [n, why] of internationals(world).qualified?.[fieldKey('continental', conf, year)] ?? []) f.add(n, why);
+  // No qualifiers played (the first edition, or a save from before them): by ranking.
+  f.fill(own, size);
+  return f;
+}
+
+/** The Nations League: last year's eighteen, the one relegated replaced — or, the first time, the best eighteen. */
+function nationsLeagueField(world: World, ranked: number[]): Field {
+  const I = internationals(world);
+  const f = new Field(ranked);
+  for (const n of I.vnl ?? []) f.add(n, n === I.vnlPromoted ? 'Promoted — highest-ranked outside' : 'Member');
+  f.fill(ranked, VNL_SIZE);
+  return f;
 }
 
 /** Pools and how many go through, for a field of `n`. */
@@ -415,7 +539,10 @@ function createTournament(
   if (teams.length < 2) return null;
   const I = internationals(world);
   const comp = competitionFor(world, kind, conf);
-  const { pools: poolCount, advance } = formatFor(teams.length);
+  // Qualifiers are pools of four and nothing after them.
+  const { pools: poolCount, advance } = kind === 'qualifier'
+    ? { pools: Math.ceil(teams.length / QUALIFIER_POOL), advance: 0 }
+    : formatFor(teams.length);
   const pools = Array.from({ length: poolCount }, (_, i) => ({ name: `Pool ${String.fromCharCode(65 + i)}`, teams: [] as number[] }));
   teams.forEach((n, i) => {
     const lap = Math.floor(i / poolCount);
@@ -426,14 +553,14 @@ function createTournament(
     id: I.nextTournamentId++,
     kind,
     confederation: conf,
-    name: `${comp.name} ${year}`,
+    name: kind === 'qualifier' ? `${CONTINENTAL[conf ?? 'CEV'].name} ${year} Qualifiers` : `${comp.name} ${year}`,
     year,
     season: world.season,
     competitionId: comp.id,
     teams,
     host,
     pools,
-    advance: Math.min(advance, Math.min(...pools.map((p) => p.teams.length))),
+    advance: kind === 'qualifier' ? 0 : Math.min(advance, Math.min(...pools.map((p) => p.teams.length))),
     matches: [],
     callUpDay: callUp,
     startDay: start,
@@ -457,8 +584,8 @@ function createTournament(
     });
   }
   const qualifiers = t.advance * pools.length;
-  const rounds = Math.max(1, Math.round(Math.log2(qualifiers)));
-  t.knockoutDays = Array.from({ length: rounds }, (_, r) => lastPoolDay + 3 + r * 2);
+  const rounds = kind === 'qualifier' ? 0 : Math.max(1, Math.round(Math.log2(qualifiers)));
+  t.knockoutDays = rounds === 0 ? [lastPoolDay] : Array.from({ length: rounds }, (_, r) => lastPoolDay + 3 + r * 2);
   I.tournaments.push(t);
   return t;
 }
@@ -492,29 +619,103 @@ export function planInternationals(world: World): void {
   const ranked = rankedNations(world);
   // Hosts and jobs on a generator of their own: the world's own draws stay as they were.
   const rng = new Rng(`intl:${world.seed}:${world.season}`);
+  // The summer's major: the World Championship in an odd year, the Olympic
+  // Games every fourth one.
   if (d <= SUMMER_CALL_UP) {
     if (year % 4 === 0) {
       const host = pickHost(rng, ranked);
-      createTournament(world, 'olympics', null, byQuota(ranked, OLYMPIC_QUOTA, 12, host), host, year,
-        base + SUMMER_CALL_UP, base + SUMMER_START, 1);
+      const f = olympicField(world, ranked, host, year);
+      drawField(world, 'olympics', null, f, host, year, base + SUMMER_CALL_UP, base + SUMMER_START, 1);
     } else if (year % 2 === 1) {
       const host = pickHost(rng, ranked);
-      createTournament(world, 'worlds', null, byQuota(ranked, WORLDS_QUOTA, 32, host), host, year,
-        base + SUMMER_CALL_UP, base + SUMMER_START, 1);
-    } else {
+      const f = worldsField(world, ranked, host, year);
+      drawField(world, 'worlds', null, f, host, year, base + SUMMER_CALL_UP, base + SUMMER_START, 1);
+    }
+  }
+  // The continental championships every even year — straight after the Games in an Olympic one.
+  if (year % 2 === 0) {
+    const olympic = year % 4 === 0;
+    const callUp = olympic ? AFTER_GAMES_CALL_UP : SUMMER_CALL_UP;
+    const start = olympic ? AFTER_GAMES_START : SUMMER_START;
+    if (d <= callUp) {
       for (const conf of CONFEDERATIONS) {
-        const field = ranked.filter((n) => NATIONS[n].confederation === conf).slice(0, conf === 'CEV' ? 24 : 12);
-        if (field.length >= 4) {
-          createTournament(world, 'continental', conf, field, pickHost(rng, field), year,
-            base + SUMMER_CALL_UP, base + SUMMER_START, 1);
-        }
+        const own = ranked.filter((n) => NATIONS[n].confederation === conf);
+        if (own.length < 4) continue;
+        const host = I.hosts?.[fieldKey('continental', conf, year)] ?? pickHost(rng, own);
+        const f = continentalField(world, ranked, conf, host, year);
+        drawField(world, 'continental', conf, f, host, year, base + callUp, base + start, 1);
       }
     }
   }
+  // And in an odd year, after the World Championship, the qualifiers for next summer's.
+  if (year % 2 === 1 && d <= AFTER_GAMES_CALL_UP) planQualifiers(world, ranked, rng, year + 1, base);
   if (d <= VNL_CALL_UP) {
-    createTournament(world, 'nationsLeague', null, ranked.slice(0, 16), -1, year + 1, base + VNL_CALL_UP, base + VNL_START, 2);
+    drawField(world, 'nationsLeague', null, nationsLeagueField(world, ranked), -1, year + 1, base + VNL_CALL_UP, base + VNL_START, 2);
   }
   ensureVacancies(world, ranked, rng);
+}
+
+/** Draw a tournament from its field — seeded by ranking, each nation's route in kept — and tell the manager how his nation fared. */
+function drawField(
+  world: World, kind: TournamentKind, conf: Confederation | null, f: Field, host: number, year: number,
+  callUp: number, start: number, gap: number,
+): Tournament | null {
+  const t = createTournament(world, kind, conf, f.seeded(), host, year, callUp, start, gap);
+  if (t === null) return null;
+  t.entry = f.entries;
+  fieldNotice(world, t);
+  return t;
+}
+
+/**
+ * Next summer's championship qualifiers, where a confederation has more
+ * nations than places: its hosts named now, its direct places settled — the
+ * top eight of the last edition — and everyone else into pools of four, the
+ * top two and the best thirds through. Where everyone fits, no qualifiers:
+ * they are all in.
+ */
+function planQualifiers(world: World, ranked: number[], rng: Rng, target: number, base: number): void {
+  const I = internationals(world);
+  I.hosts ??= {};
+  I.qualified ??= {};
+  for (const conf of CONFEDERATIONS) {
+    const own = ranked.filter((n) => NATIONS[n].confederation === conf);
+    const size = CONTINENTAL_SIZE[conf];
+    if (own.length <= size) continue;
+    const key = fieldKey('continental', conf, target);
+    const host = I.hosts[key] ??= pickHost(rng, own);
+    const direct = new Field(own);
+    direct.add(host, 'Hosts');
+    direct.fromEdition(editionOf(world, 'continental', conf, target - 2), CONTINENTAL_DIRECT, () => '');
+    const field = own.filter((n) => !direct.has(n));
+    const places = size - direct.entries.length;
+    if (field.length <= places) {
+      I.qualified[key] = field.map((n) => [n, 'Entered']);
+      continue;
+    }
+    const t = createTournament(world, 'qualifier', conf, field, -1, target, base + AFTER_GAMES_CALL_UP, base + AFTER_GAMES_START, 1);
+    if (t === null) continue;
+    t.places = places;
+    t.entry = field.map((n) => [n, `Not in the top ${CONTINENTAL_DIRECT} of ${CONTINENTAL[conf].name} ${target - 2}`]);
+  }
+}
+
+/** The manager's nation, told whether it made the field — and how. */
+function fieldNotice(world: World, t: Tournament): void {
+  const mine = userNation(world);
+  if (mine < 0 || t.kind === 'qualifier') return;
+  const entry = t.entry?.find(([n]) => n === mine);
+  // Only a field his nation could have been in.
+  if (entry === undefined && t.confederation !== null && NATIONS[mine]?.confederation !== t.confederation) return;
+  postMessage(world, {
+    subject: entry !== undefined ? `${nationName(mine)} are in the ${t.name}` : `${nationName(mine)} miss out on the ${t.name}`,
+    body: entry !== undefined
+      ? `${nationName(mine)} have their place at the ${t.name} — ${entry[1].toLowerCase()}. ${t.teams.length} nations in all.`
+      : `The field for the ${t.name} is set, and ${nationName(mine)} are not in it: ` +
+        `the places went to the hosts, those who earned them and the best of the world ranking.`,
+    from: 'FIVB',
+    category: 'international',
+  });
 }
 
 // ---- Dual nationals --------------------------------------------------------------------------
@@ -943,8 +1144,63 @@ function nextRound(world: World, t: Tournament): void {
 
 /** Once the day's matches are in: the bracket drawn, the next round, or the end. */
 function progress(world: World, t: Tournament): void {
-  if (t.status === 'pools' && t.matches.every((m) => m.played)) drawKnockout(world, t);
-  else if (t.status === 'knockout') nextRound(world, t);
+  if (t.status === 'pools' && t.matches.every((m) => m.played)) {
+    if (t.kind === 'qualifier') finishQualifier(world, t);
+    else drawKnockout(world, t);
+  } else if (t.status === 'knockout') nextRound(world, t);
+}
+
+/**
+ * The qualifiers over: the pool winners through, then the runners-up, then
+ * the best of the thirds until the places are gone — their places kept for
+ * next summer's championship.
+ */
+function finishQualifier(world: World, t: Tournament): void {
+  const I = internationals(world);
+  const tables = t.pools.map((p) => poolTable(t, p));
+  const order: Array<[number, string]> = [];
+  const deepest = Math.max(...tables.map((tb) => tb.length));
+  for (let pos = 0; pos < deepest; pos++) {
+    const tier = tables
+      .map((tb, i) => ({ row: tb[pos], pool: t.pools[i].name }))
+      .filter((x) => x.row !== undefined)
+      .sort((a, b) => compareTableRows(a.row, b.row));
+    for (const { row, pool } of tier) {
+      order.push([row.clubId, pos === 0 ? `${pool} winners` : pos === 1 ? `${pool} runners-up` : `${ordinal(pos + 1)} in ${pool}`]);
+    }
+  }
+  t.placings = order.map(([n]) => n);
+  const places = t.places ?? 0;
+  const through = order.slice(0, places);
+  const name = CONTINENTAL[t.confederation ?? 'CEV'].name;
+  I.qualified ??= {};
+  I.qualified[fieldKey('continental', t.confederation, t.year)] = through.map(([n, why]) => [n, `Qualifiers — ${why}`]);
+  t.status = 'done';
+  for (const n of t.teams) release(world, t, n);
+
+  const out = order.slice(places).map(([n]) => n);
+  postNews(world, {
+    kind: 'result',
+    headline: `${name} ${t.year}: the qualifiers are done`,
+    body: `${through.length} nations have won their places at ${name} ${t.year}: ` +
+      `${through.map(([n]) => nationName(n)).join(', ')}.` +
+      `${out.length > 0 ? ` ${out.map(nationName).join(', ')} miss out.` : ''}`,
+    nation: -1,
+    competitionId: t.competitionId,
+    fans: { story: 'qualified', nation: through[0]?.[0], otherNation: out[0] },
+  });
+  const mine = userNation(world);
+  if (t.teams.includes(mine)) {
+    const won = through.find(([n]) => n === mine);
+    postMessage(world, {
+      subject: won !== undefined ? `${nationName(mine)} qualify for ${name} ${t.year}` : `${nationName(mine)} miss out on ${name} ${t.year}`,
+      body: won !== undefined
+        ? `Through as ${won[1].toLowerCase()} — ${nationName(mine)} will be at ${name} ${t.year}.`
+        : `${nationName(mine)} finished outside the places in the qualifiers, and will not be at ${name} ${t.year}.`,
+      from: `${name} Qualifiers`,
+      category: 'international',
+    });
+  }
 }
 
 /** The pool record a placing goes on: the better record, the better place. */
@@ -1017,9 +1273,11 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
     confederation: t.confederation,
     year: t.year,
     podium: podium.slice(0, 4),
+    placings: [...t.placings],
     mvp,
     medallists: podium.slice(0, 3).map((n) => [n, [...squadOf(t, n)]]),
   });
+  if (t.kind === 'nationsLeague') turnOverNationsLeague(world, t);
   for (const n of t.teams) release(world, t, n);
 
   const score = `${Math.max(final.homeSets, final.awaySets)}-${Math.min(final.homeSets, final.awaySets)}`;
@@ -1036,6 +1294,26 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
     fans: { story: 'nationTitle', nation: podium[0], otherNation: podium[1], player: mvp >= 0 ? mvp : undefined },
   });
   judgeCoaches(world, t);
+}
+
+/** The Nations League's last-placed nation goes down; the best-ranked nation outside comes up. */
+function turnOverNationsLeague(world: World, t: Tournament): void {
+  const I = internationals(world);
+  const down = t.placings[t.placings.length - 1];
+  const stay = t.teams.filter((n) => n !== down);
+  const up = rankedNations(world).find((n) => !t.teams.includes(n));
+  I.vnl = up !== undefined ? [...stay, up] : stay;
+  I.vnlPromoted = up;
+  if (down === undefined || up === undefined) return;
+  postNews(world, {
+    kind: 'result',
+    headline: `${nationName(down)} relegated from the Nations League`,
+    body: `${nationName(down)} finished last in the ${t.name} and lose their place. ` +
+      `${nationName(up)}, the best-ranked nation outside the league, take it next year.`,
+    nation: down,
+    competitionId: t.competitionId,
+    fans: { story: 'qualified', nation: up, otherNation: down },
+  });
 }
 
 // ---- National jobs ---------------------------------------------------------------------------
@@ -1474,9 +1752,13 @@ function headlines(world: World, t: Tournament, today: IntlMatch[]): void {
     postNews(world, {
       kind: 'result',
       headline: `The ${t.name} gets under way${t.host >= 0 ? ` in ${nationName(t.host)}` : ''}`,
-      body: `${t.teams.length} nations, ${t.pools.length} pool${t.pools.length === 1 ? '' : 's'}, and one title. ` +
-        `The world ranking makes ${favourites.join(', ')} the favourites` +
-        `${t.host >= 0 ? `; ${nationName(t.host)} have home advantage` : ''}.`,
+      body: t.kind === 'qualifier'
+        ? `${t.teams.length} nations in ${t.pools.length} pools of four, playing for ${t.places ?? 0} places — ` +
+          `the top two in each pool and the best of the thirds go through. ` +
+          `The world ranking makes ${favourites.join(', ')} the favourites.`
+        : `${t.teams.length} nations, ${t.pools.length} pool${t.pools.length === 1 ? '' : 's'}, and one title. ` +
+          `The world ranking makes ${favourites.join(', ')} the favourites` +
+          `${t.host >= 0 ? `; ${nationName(t.host)} have home advantage` : ''}.`,
       nation: t.host >= 0 ? t.host : -1,
       competitionId: t.competitionId,
       fans: { story: 'tournament', nation: t.host >= 0 ? t.host : undefined },

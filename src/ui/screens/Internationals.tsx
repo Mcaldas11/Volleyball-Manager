@@ -7,7 +7,9 @@
 
 import { useState, type JSX } from 'react';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
-import { championsTitle, poolTable, type IntlMatch, type Tournament } from '../../engine/world/internationals.ts';
+import {
+  championsTitle, poolTable, type IntlMatch, type Tournament, type TournamentKind,
+} from '../../engine/world/internationals.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { ClubLink, Empty, Flag, PlayerLink } from '../components.tsx';
 import { Icon } from '../icons.tsx';
@@ -30,7 +32,22 @@ function statusLabel(t: Tournament, dateOf: (day: number) => string): string {
   if (t.status === 'called') return `Starts ${dateOf(t.startDay)}`;
   if (t.status === 'pools') return 'Pool stage';
   if (t.status === 'knockout') return 'Knockout rounds';
+  if (t.kind === 'qualifier') return `${t.places ?? 0} nations through`;
   return `${nationName(t.placings[0])} ${championsTitle(t)}`;
+}
+
+/** How a tournament's places are earned — the FIVB's rules, as the game plays them. */
+function qualificationRule(t: Tournament): string {
+  const rules: Readonly<Record<TournamentKind, string>> = {
+    worlds: 'The hosts, the holders, the top three of each continental championship the year before, and the rest by world ranking — 32 nations.',
+    olympics: 'The hosts, the champions of each continental championship two years before, the best three at the World Championship the year before not yet in, and the rest by world ranking — 12 nations.',
+    continental: t.confederation === 'CEV'
+      ? 'The hosts, the top eight of the last EuroVolley, and the nations through the qualifiers the summer before — 24 nations.'
+      : 'Every nation of the confederation plays.',
+    nationsLeague: 'The same eighteen every year, bar one: the last-placed nation goes down, and the best-ranked nation outside the league comes up.',
+    qualifier: `Pools of four: the winners, the runners-up and the best third-placed teams take the ${t.places ?? 0} places at the championship.`,
+  };
+  return rules[t.kind];
 }
 
 /** Live first, then the ones to come, then the ones done — the latest first. */
@@ -103,7 +120,7 @@ function TournamentView({ t }: { t: Tournament }): JSX.Element {
           Squads named {g.dateLabelForDay(t.callUpDay)} · {g.dateLabelForDay(t.startDay)} – {g.dateLabelForDay(finalDay)} ·{' '}
           <b className="intl-status">{statusLabel(t, (d) => g.dateLabelForDay(d))}</b>
         </span>
-        {t.status === 'done' && (
+        {t.status === 'done' && t.kind !== 'qualifier' && (
           <div className="intl-podium">
             {t.placings.slice(0, 3).map((n, i) => (
               <span key={n} className={`intl-medal ${MEDALS[i]}`}><Icon name="trophy" size={14} /> <Nation n={n} /></span>
@@ -114,6 +131,8 @@ function TournamentView({ t }: { t: Tournament }): JSX.Element {
       </header>
 
       <div className="intl-grid">
+        <Qualification t={t} home={homeNation} />
+
         {ours.length > 0 && (
           <section className="intl-card intl-ours">
             <h3 className="intl-h">Your players</h3>
@@ -149,7 +168,7 @@ function TournamentView({ t }: { t: Tournament }): JSX.Element {
                 <thead><tr><th colSpan={2}>{pool.name}</th><th className="num">P</th><th className="num">W</th><th className="num">Sets</th><th className="num">Pts</th></tr></thead>
                 <tbody>
                   {poolTable(t, pool).map((r, i) => (
-                    <tr key={r.clubId} className={`${i < t.advance && t.status !== 'planned' ? 'intl-through' : ''}${r.clubId === homeNation ? ' me' : ''}`}>
+                    <tr key={r.clubId} className={`${through(t, r.clubId, i) && t.status !== 'planned' ? 'intl-through' : ''}${r.clubId === homeNation ? ' me' : ''}`}>
                       <td className="num faint">{i + 1}</td>
                       <td><Nation n={r.clubId} /></td>
                       <td className="num">{r.played}</td>
@@ -164,10 +183,12 @@ function TournamentView({ t }: { t: Tournament }): JSX.Element {
           </div>
         </section>
 
-        <section className="intl-card intl-bracket-card">
-          <h3 className="intl-h">Knockout</h3>
-          <Bracket t={t} />
-        </section>
+        {t.kind !== 'qualifier' && (
+          <section className="intl-card intl-bracket-card">
+            <h3 className="intl-h">Knockout</h3>
+            <Bracket t={t} />
+          </section>
+        )}
 
         <section className="intl-card intl-results">
           <h3 className="intl-h">Results</h3>
@@ -210,6 +231,43 @@ function TournamentView({ t }: { t: Tournament }): JSX.Element {
         </section>
       </div>
     </div>
+  );
+}
+
+/** Whether a pool row is going through: into the knockout rounds — or, in qualifiers, to the championship. */
+function through(t: Tournament, nation: number, row: number): boolean {
+  if (t.kind !== 'qualifier') return row < t.advance;
+  if (t.status === 'done') return t.placings.indexOf(nation) < (t.places ?? 0);
+  return row < 2;
+}
+
+/** How the field was made: the rule, and each nation's route in — or, for qualifiers, who went through. */
+function Qualification({ t, home }: { t: Tournament; home: number }): JSX.Element {
+  const qualifier = t.kind === 'qualifier';
+  const list: Array<[number, string]> = qualifier
+    ? t.status === 'done'
+      ? t.placings.slice(0, t.places ?? 0).map((n) => [n, 'Through'])
+      : []
+    : t.entry ?? [];
+  return (
+    <section className="intl-card intl-qualify">
+      <h3 className="intl-h">{qualifier ? 'Who goes through' : 'Qualification'}</h3>
+      <p className="intl-rule">{qualificationRule(t)}</p>
+      {list.length > 0 ? (
+        <div className="intl-entry">
+          {list.map(([n, why]) => (
+            <span key={n} className={`intl-entry-row${n === home ? ' me' : ''}`}>
+              <Nation n={n} />
+              <span className="faint">{why}</span>
+            </span>
+          ))}
+        </div>
+      ) : qualifier ? (
+        <p className="intl-none">The places are decided when the pools are over.</p>
+      ) : (
+        <p className="intl-none">Drawn before qualification was kept — every nation here came in on the world ranking.</p>
+      )}
+    </section>
   );
 }
 

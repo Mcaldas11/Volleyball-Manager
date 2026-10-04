@@ -21,7 +21,7 @@ import { PLAYING_TIME_UNKNOWN, PlayerStore, POSITION_SLOTS, StringTable } from '
 import { Position } from '../engine/model/positions.ts';
 import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
-import { ensureCupCompetitions } from '../engine/season/cups.ts';
+import { cancelOffCycleClubWorld, ensureCupCompetitions } from '../engine/season/cups.ts';
 import { backfillCareer } from '../engine/world/career.ts';
 import {
   newSeasonContext, recordSeasonStartAbility, type SeasonContext, type SeasonStats,
@@ -241,6 +241,8 @@ export function reviveWorld(raw: World): World {
   // Saves from before the cups were played: national cups, super cups and the
   // Club World Championship are added; all of them start with the next season.
   ensureCupCompetitions(raw);
+  // The Club World Championship is every fourth year: one drawn before that for any other comes off.
+  cancelOffCycleClubWorld(raw);
   for (const club of raw.clubs) {
     club.preferredDefensiveLibero ??= -1;
     migrateLineupOrder(club.preferredLineup, raw.players.position);

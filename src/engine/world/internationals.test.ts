@@ -55,7 +55,7 @@ test('the summer of 2026 is the continental championships, and every season ends
   assert.equal(euro.teams.length, 24);
   assert.ok(euro.teams.every((n) => NATIONS[n].confederation === 'CEV'));
   const vnl = byKind(world, 'nationsLeague')[0];
-  assert.equal(vnl.teams.length, 16);
+  assert.equal(vnl.teams.length, 18);
   assert.ok(vnl.startDay > euro.knockoutDays[euro.knockoutDays.length - 1] + 200, 'the spring after');
 });
 
@@ -117,19 +117,62 @@ test('the manager hears about his players: the call-up, each match day, and the 
   assert.ok(intl.filter((m) => m.subject.includes('how your players')).every((m) => /played|did not get on court|missed/.test(m.body)));
 });
 
-test('the cycle: a World Championship in 2027 and the Olympic Games in 2028, places shared by confederation', () => {
+test('the FIVB cycle: a World Championship in 2027, then in 2028 the Olympic Games and, after them, the continental championships', () => {
   const { world, ctx } = start(45);
+  const I = internationals(world);
+  const edition = (kind: Tournament['kind'], conf: string | null, year: number) =>
+    I.history.find((h) => h.kind === kind && h.confederation === conf && h.year === year)!;
+  // The Nations League turns over: the last-placed down, the best-ranked outside up.
   runTo(world, ctx, 365 + 1);
+  const vnl = edition('nationsLeague', null, 2027);
+  const down = vnl.placings![vnl.placings!.length - 1];
+  assert.equal(I.vnl?.length, 18);
+  assert.ok(!I.vnl!.includes(down), `${NATIONS[down].name} relegated`);
+  assert.ok(I.vnlPromoted !== undefined && I.vnl!.includes(I.vnlPromoted));
+
+  // The World Championship: the hosts, and the top three of every 2026 continental championship.
   const worlds = byKind(world, 'worlds')[0];
   assert.equal(worlds.name, 'World Championship 2027');
   assert.equal(worlds.teams.length, 32);
-  for (const conf of ['CSV', 'NORCECA', 'AVC', 'CAVB'] as const) {
-    assert.ok(worlds.teams.filter((n) => NATIONS[n].confederation === conf).length >= 4, `${conf} has its places`);
+  assert.ok(worlds.entry?.some(([n, why]) => n === worlds.host && why === 'Hosts'));
+  for (const conf of ['CEV', 'CSV', 'NORCECA', 'AVC', 'CAVB'] as const) {
+    for (const n of edition('continental', conf, 2026).podium.slice(0, 3)) {
+      assert.ok(worlds.teams.includes(n), `${NATIONS[n].name}, a 2026 ${conf} medallist, is in`);
+    }
   }
+  assert.ok(worlds.entry?.some(([, why]) => why === 'World ranking'), 'the rest by ranking');
+  assert.equal(byKind(world, 'continental').filter((t) => t.year === 2027).length, 0, 'no continental championships in a World Championship year');
+
+  // After it, the EuroVolley 2028 qualifiers: pools of four for the places the hosts and the top eight leave.
+  const qualifiers = byKind(world, 'qualifier').find((t) => t.year === 2028)!;
+  assert.ok(qualifiers !== undefined, 'EuroVolley 2028 qualifiers');
+  assert.equal(qualifiers.name, 'EuroVolley 2028 Qualifiers');
+  assert.ok(qualifiers.startDay > Math.max(...worlds.knockoutDays), 'after the World Championship');
+  assert.ok(qualifiers.pools.every((p) => p.teams.length <= 4));
+  const top8 = edition('continental', 'CEV', 2026).placings!.slice(0, 8);
+  assert.ok(top8.every((n) => !qualifiers.teams.includes(n)), 'the top eight go straight through');
+  runTo(world, ctx, qualifiers.knockoutDays[0] + 2);
+  assert.equal(qualifiers.status, 'done');
+  const through = I.qualified?.['continental:CEV:2028'] ?? [];
+  assert.equal(through.length, qualifiers.places);
+
+  // 2028: the Olympic Games — the hosts and the 2026 continental champions among them — then EuroVolley.
   runTo(world, ctx, 2 * 365 + 1);
   const olympics = byKind(world, 'olympics')[0];
   assert.equal(olympics.name, 'Olympic Games 2028');
   assert.equal(olympics.teams.length, 12);
+  for (const conf of ['CEV', 'CSV', 'NORCECA', 'AVC', 'CAVB'] as const) {
+    const champion = edition('continental', conf, 2026).podium[0];
+    assert.ok(olympics.teams.includes(champion), `${NATIONS[champion].name}, 2026 ${conf} champions, are in`);
+  }
+  assert.ok(olympics.entry?.some(([, why]) => why.startsWith('World Championship 2027')), 'the best of the World Championship');
+  const euro = byKind(world, 'continental').find((t) => t.year === 2028 && t.confederation === 'CEV');
+  assert.ok(euro !== undefined, 'EuroVolley 2028');
+  assert.equal(euro.teams.length, 24);
+  for (const [n] of through) assert.ok(euro.teams.includes(n), 'everyone through the qualifiers is there');
+  for (const n of top8) assert.ok(euro.teams.includes(n), 'and the top eight of 2026');
+  assert.ok(euro.callUpDay > Math.max(...olympics.knockoutDays), 'squads named once the Games are over');
+  assert.equal(byKind(world, 'worlds').filter((t) => t.year === 2028).length, 0, 'and no World Championship');
 });
 
 test("the match-day message carries every one of his players' numbers, for the inbox to draw", () => {

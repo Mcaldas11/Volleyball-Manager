@@ -24,7 +24,7 @@ import type { World } from './world.ts';
 export type FanStory =
   | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top'
   | 'playerAward' | 'coachAward' | 'title' | 'match'
-  | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament';
+  | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified';
 
 /** What a story's comments turn on. */
 export interface FanBrief {
@@ -304,6 +304,21 @@ const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>>
       ['worried', "Who on earth do we get now?"],
     ],
   },
+  qualified: {
+    nation: [
+      ['delighted', "We're in! Job done, {n}!"],
+      ['happy', 'Never in doubt. Now for the real thing.'],
+      ['neutral', 'Qualifying is the minimum. Let us see what we do there.'],
+    ],
+    otherNation: [
+      ['angry', 'Missing out again. Embarrassing for a country like ours.'],
+      ['worried', 'The federation has to look at itself after this.'],
+      ['neutral', 'We were not good enough. Simple as that.'],
+    ],
+    neutral: [
+      ['neutral', 'Some big names stayed at home this time.'],
+    ],
+  },
   tournament: {
     nation: [
       ['happy', 'Home crowd will carry us all the way!'],
@@ -321,7 +336,7 @@ const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>>
 const COMMENTS: Readonly<Record<FanStory, number>> = {
   rumour: 4, signing: 5, extension: 3, sacked: 4, appointed: 4, injury: 3, shock: 5, top: 4,
   playerAward: 3, coachAward: 3, title: 6, match: 5,
-  nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4,
+  nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4, qualified: 4,
 };
 
 /** Words in a club's name that say nothing about it. */

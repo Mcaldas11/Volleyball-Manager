@@ -4,7 +4,7 @@ import { generateWorld } from '../world/worldGen.ts';
 import { NATIONS } from '../world/nations.ts';
 import { DAYS_PER_SEASON, stubManager, type World } from '../world/world.ts';
 import {
-  clubWorldYear, cupGroupTable, cupProgress, ensureCupCompetitions, isCupCompetition, knockoutRoundName,
+  cancelOffCycleClubWorld, clubWorldYear, cupGroupTable, cupProgress, ensureCupCompetitions, isCupCompetition, knockoutRoundName,
   nextClubWorldYear, qualifyForCups, stageLabel,
 } from './cups.ts';
 import { endSeason } from './rollover.ts';
@@ -151,4 +151,25 @@ test('the Club World Championship is played every fourth year, and only then', (
   assert.deepEqual(cwc.fixtureIds, []);
   assert.deepEqual(cwc.participants, []);
   assert.ok(off.competitions.find((c) => c.key === 'cont:CEV:1')!.cup !== undefined, 'the rest are played as ever');
+});
+
+test('a save that had drawn a Club World Championship for an off year has it called off when it loads', () => {
+  const world = generateWorld({ seed: 91, startYear: 2026, scale: 'small', manager: stubManager() });
+  startSeason(world, newSeasonContext());
+  const cwc = world.competitions.find((c) => c.kind === 'clubworld')!;
+  assert.ok(cwc.fixtureIds.length > 0, 'drawn for 2026');
+  cancelOffCycleClubWorld(world);
+  assert.ok(cwc.fixtureIds.length > 0, '2026 is one of its years: it stays');
+  // The same draw, in a save whose season is 2027.
+  world.startYear = 2027;
+  const ids = [...cwc.fixtureIds];
+  cancelOffCycleClubWorld(world);
+  assert.equal(cwc.cup, undefined);
+  assert.deepEqual(cwc.participants, []);
+  assert.equal(cwc.fixtureIds.length, 0);
+  for (const id of ids) {
+    const f = world.fixtures[id];
+    assert.ok(![...world.fixturesByDay.values()].some((list) => list.includes(id)), 'off the calendar');
+    assert.equal(f.day, -1);
+  }
 });
