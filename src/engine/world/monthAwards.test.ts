@@ -123,3 +123,40 @@ test('about one player in ten is left-handed, and nearly a third of opposites', 
   assert.ok(lefties / all > 0.08 && lefties / all < 0.2, `${((lefties / all) * 100).toFixed(1)}% left-handed`);
   assert.ok(leftOpposites / opposites > 0.22 && leftOpposites / opposites < 0.38, `${((leftOpposites / opposites) * 100).toFixed(1)}% of opposites`);
 });
+
+test('every spike, serve and block has a believable height: a hitter up at his reach, a float server on the floor', () => {
+  const w = world(66);
+  const result = simulateMatch(w.players, { ...setup(w, 9, false), collectLog: true });
+  const contacts = result.log!.flatMap((r) => r.contacts);
+  const store = w.players;
+  for (const c of contacts.filter((k) => k.kind === 'kill' || k.kind === 'attack')) {
+    const reach = store.spikeReachCm[c.player] / 100;
+    assert.ok(c.height! <= reach && c.height! >= reach - 0.5, `${c.height} against a reach of ${reach}`);
+  }
+  const jump = contacts.filter((c) => c.kind === 'serve' && c.detail === 'jump').map((c) => c.height!);
+  const float = contacts.filter((c) => c.kind === 'serve' && c.detail === 'float').map((c) => c.height!);
+  const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length;
+  if (jump.length > 0 && float.length > 0) assert.ok(mean(jump) > mean(float) + 0.3, 'a jump server strikes it far higher');
+  for (const c of contacts.filter((k) => k.kind === 'blocked')) {
+    assert.ok(c.blockHeight! > 2.8 && c.blockHeight! <= store.blockReachCm[c.by!] / 100);
+  }
+});
+
+test("most players' other hand is weak, setters' better, and now and then one is two-handed", () => {
+  const store = world(67).players;
+  let weak = 0;
+  let strong = 0;
+  let setters = 0;
+  let setterSum = 0;
+  let othersSum = 0;
+  for (let p = 0; p < store.count; p++) {
+    const v = store.offHand[p];
+    assert.ok(v >= 1 && v <= 20);
+    if (v <= 8) weak++;
+    if (v >= 15) strong++;
+    if (store.position[p] === Position.Setter) { setters++; setterSum += v; } else othersSum += v;
+  }
+  assert.ok(weak / store.count > 0.6, `${weak} of ${store.count} weak`);
+  assert.ok(strong > 0 && strong / store.count < 0.1);
+  assert.ok(setterSum / setters > othersSum / (store.count - setters) + 2, 'setters are better with the other hand');
+});

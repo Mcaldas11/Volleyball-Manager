@@ -2893,6 +2893,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   background: rgba(8, 10, 14, 0.88);
   animation-duration: 1.7s;
 }
+.big-play-reading { display: inline-flex; gap: 6px; }
 .big-play-speed {
   display: inline-flex;
   align-items: baseline;
@@ -2901,11 +2902,41 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   border-radius: 4px;
   background: rgba(215, 167, 63, 0.18);
   color: #ffd66e;
-  font: normal 800 22px/1.1 var(--font-display);
+  font: normal 800 21px/1.1 var(--font-display);
   letter-spacing: 0.04em;
 }
-.big-play-speed svg { align-self: center; }
 .big-play-speed small { font-size: 12px; font-weight: 700; opacity: 0.85; }
+.big-play-speed small:first-child { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; }
+
+/* The radar's reading of each serve, tucked in the corner over the stand. */
+.serve-radar {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 12px 7px;
+  border-radius: 6px;
+  border-left: 4px solid var(--gold);
+  background: rgba(8, 10, 14, 0.84);
+  color: #fff;
+  font-family: var(--font-display);
+  pointer-events: none;
+  animation: serve-radar-in 2s ease-out forwards;
+}
+.serve-radar-who { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.serve-radar-who small { margin-right: 5px; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
+.serve-radar-val { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.serve-radar-val b { font-size: 18px; font-weight: 800; color: #ffd66e; }
+.rp-court .serve-radar { top: 42px; }
+@keyframes serve-radar-in {
+  0% { opacity: 0; transform: translateX(-10px); }
+  10% { opacity: 1; transform: none; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
 @keyframes big-play-pop {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
   15% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
@@ -4219,7 +4250,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast, .view-fade, .spinner, .big-play, .ticker-entry, .hero-volleyball,
+  .toast, .view-fade, .spinner, .big-play, .serve-radar, .ticker-entry, .hero-volleyball,
   .sb-serve, .live-dot, .search-pop, .menu-pop, .timeout-panel,
   .trophy-overlay, .trophy-card, .trophy-icon, .trophy-glow, .confetti-piece { animation: none !important; }
   * { transition-duration: 0.001ms !important; }
@@ -5238,3 +5269,25 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .rp-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px 14px; flex-wrap: wrap; }
 .rp-tools { display: flex; align-items: center; gap: 8px; }
 .rp-tools .segmented { background: rgba(8, 10, 14, 0.5); }
+
+/* ---- A player's two arms, the way FM shows feet ---- */
+.arms { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.arm { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.arm-name { font-size: 12px; color: var(--text-dim); }
+.arm-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 10px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  font-weight: 600;
+  font-size: 14px;
+}
+.arm-pips { display: flex; gap: 4px; }
+.arm-pips i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); }
+.arm-box.lvl-1 .arm-pips i.on, .arm-box.lvl-2 .arm-pips i.on { background: #e5484d; }
+.arm-box.lvl-3 .arm-pips i.on { background: #e0823a; }
+.arm-box.lvl-4 .arm-pips i.on { background: #e3c02b; }
+.arm-box.lvl-5 .arm-pips i.on, .arm-box.lvl-6 .arm-pips i.on { background: #3dbb5c; }

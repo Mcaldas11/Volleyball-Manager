@@ -49,6 +49,8 @@ export interface PlayerMatchRatings {
 
   /** Hits with his left hand. */
   leftHanded: boolean;
+  /** How good his other hand is, 0-1. */
+  offHand: number;
 
   /** Reach differentials above league reference, in cm. */
   spikeReachEdge: number;
@@ -138,6 +140,7 @@ export function computeRatings(
     pipeAttack: mk(0.6 * g(A.pipeAttack) + 0.25 * athleticism + 0.15 * technique),
 
     leftHanded: store.hasFlag(idx, PlayerFlag.LeftHanded),
+    offHand: n(store.offHand[idx]),
     spikeReachEdge: spikeEdge,
     blockReachEdge: blockEdge,
 

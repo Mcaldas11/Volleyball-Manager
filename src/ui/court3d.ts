@@ -681,8 +681,9 @@ export class Court3D {
         }
       }
     }
-    const fast = flight !== null && flight.ms > 0 && now < flight.t0 + flight.ms
-      && Math.hypot(flight.to.x - flight.from.x, flight.to.y - flight.from.y) / flight.ms > 0.012;
+    // A streak behind a hard-hit ball — down off a block as much as across the court.
+    const fast = flight !== null && flight.ms > 0 && now >= flight.t0 && now < flight.t0 + flight.ms
+      && Math.hypot(flight.to.x - flight.from.x, flight.to.y - flight.from.y, flight.to.z - flight.from.z) / flight.ms > 0.012;
     this.trail.forEach((m, i) => {
       const t = motion.trail[i];
       m.visible = fast && t !== undefined;

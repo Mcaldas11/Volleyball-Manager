@@ -10,8 +10,9 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { kitsFor, LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
-import { rallyBeats, setupScene, type Scene } from '../matchCourt.ts';
-import { bigPlayMs, playBeats, sleep, type BigPlay } from '../rallyPlayer.ts';
+import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
+import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
+import type { Kit } from '../court3d.ts';
 import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import {
@@ -71,11 +72,12 @@ async function animateRally(
   cancelled: { current: boolean },
   setScene: (scene: Scene) => void,
   onBigPlay: (play: BigPlay) => void,
+  onRadar: (radar: Radar) => void,
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
   const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner);
-  await playBeats(beats, speed, cancelled, setScene, onBigPlay);
+  await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar);
 }
 
 /** How full the stand is: a big competition draws a crowd, a big match fills the place. */
@@ -85,17 +87,37 @@ export function crowdFor(world: World, competitionId: number, importance: number
   return Math.min(1, 0.42 + 0.38 * draw + 0.3 * importance);
 }
 
-/** A big moment flashed over the court — and, for a monster spike or a
- *  booming ace, the radar's reading of the ball's speed. */
+/** A big moment flashed over the court — with, for a spike put away or an
+ *  ace, the ball's speed and how high it was struck, and for a stuff block
+ *  how high the hands were. */
 export function BigPlayCallout({ play }: { play: BigPlay }): JSX.Element {
+  const reading = play.reading !== undefined && (play.speed !== undefined || play.height !== undefined);
   return (
-    <div
-      className={`big-play ${play.team === 0 ? 'home' : 'away'}${play.speed !== undefined ? ' with-speed' : ''}`}
-    >
+    <div className={`big-play ${play.team === 0 ? 'home' : 'away'}${reading ? ' with-speed' : ''}`}>
       {play.text}
-      {play.speed !== undefined && (
-        <span className="big-play-speed"><Icon name="ball" size={13} /> {play.speed} <small>km/h</small></span>
+      {reading && (
+        <span className="big-play-reading">
+          {play.speed !== undefined && play.reading === 'strike' && (
+            <span className="big-play-speed"><small>Speed</small> {play.speed} <small>km/h</small></span>
+          )}
+          {play.height !== undefined && (
+            <span className="big-play-speed">
+              <small>{play.reading === 'block' ? 'Block' : 'Contact'}</small> {play.height.toFixed(2)} <small>m</small>
+            </span>
+          )}
+        </span>
       )}
+    </div>
+  );
+}
+
+/** The radar's reading of a serve as it flies: who served, how fast, how high — tucked in a corner, the way television shows it. */
+export function ServeRadar({ radar, store, kits }: { radar: Radar & { key: number }; store: PlayerStore; kits: [Kit, Kit] }): JSX.Element {
+  return (
+    <div className="serve-radar" style={{ borderLeftColor: kits[radar.team].shirt }}>
+      <span className="serve-radar-who"><small>Serve</small> {store.shortName(radar.player)}</span>
+      {radar.speed !== undefined && <span className="serve-radar-val"><b>{radar.speed}</b> km/h</span>}
+      {radar.height !== undefined && <span className="serve-radar-val"><b>{radar.height.toFixed(2)}</b> m</span>}
     </div>
   );
 }
@@ -793,6 +815,14 @@ function LiveMatchView(): JSX.Element {
     if (md.timeoutActive !== null && timeoutSecondsLeft === 0) g.resumeFromTimeout();
   }, [md.timeoutActive, timeoutSecondsLeft]);
 
+  const [radar, setRadar] = useState<(Radar & { key: number }) | null>(null);
+  const radarTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const triggerRadar = (r: Radar): void => {
+    setRadar({ ...r, key: Date.now() });
+    clearTimeout(radarTimer.current);
+    radarTimer.current = setTimeout(() => setRadar(null), RADAR_MS / (g.matchday?.speed ?? 1));
+  };
+
   const triggerBigPlay = (play: BigPlay): void => {
     setBigPlay({ ...play, key: Date.now() });
     if (bigPlayTimer.current !== undefined) clearTimeout(bigPlayTimer.current);
@@ -870,7 +900,7 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = true;
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
-        await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay);
+        await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay, triggerRadar);
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
@@ -1046,6 +1076,7 @@ function LiveMatchView(): JSX.Element {
             </div>
 
             {bigPlay !== null && <BigPlayCallout key={bigPlay.key} play={bigPlay} />}
+            {radar !== null && <ServeRadar key={radar.key} radar={radar} store={store} kits={kits} />}
             {subAnnouncement !== null && (
               <div
                 key={subAnnouncement.key}

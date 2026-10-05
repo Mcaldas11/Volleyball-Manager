@@ -60,6 +60,18 @@ export function rollHandedness(store: PlayerStore, i: number): void {
   store.setFlag(i, PlayerFlag.LeftHanded, own.chance(chance));
 }
 
+/**
+ * How well a player plays with his other hand, 1-20: for most of them it is
+ * weak — a push or a tip, no more — setters, who dump and set off either
+ * hand, are better with it, and now and then one is all but two-handed.
+ * Rolled on his own dice, so the world's are untouched.
+ */
+export function rollOffHand(store: PlayerStore, i: number): void {
+  const own = new Rng((store.id[i] * 3266489917 + 0x165667b1) >>> 0);
+  const setter = store.position[i] === Position.Setter;
+  store.offHand[i] = own.chance(0.04) ? own.int(14, 19) : Math.round(own.gaussianClamped(setter ? 9 : 5, 3, 1, 15));
+}
+
 export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOptions): number {
   const i = store.create();
   const nationDef = NATIONS[opts.nation] ?? NATIONS[0];
@@ -117,6 +129,7 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
   }
 
   rollHandedness(store, i);
+  rollOffHand(store, i);
 
   // ---- Career state ----
   store.condition[i] = rng.int(88, 100);

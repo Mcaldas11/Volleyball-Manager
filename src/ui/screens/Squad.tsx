@@ -317,6 +317,42 @@ const PROFILE_TABS: ReadonlyArray<[ProfileTab, string, IconName]> = [
   ['details', 'Contract & Career', 'finances'],
 ];
 
+/** How good a hand is, 1-20, in the words FM uses for a foot — and how many of the six pips it lights. */
+const HAND_LEVELS: ReadonlyArray<[top: number, label: string]> = [
+  [4, 'Very Weak'], [8, 'Weak'], [11, 'Reasonable'], [14, 'Fairly Strong'], [17, 'Strong'], [20, 'Very Strong'],
+];
+
+function handLevel(v: number): { label: string; pips: number } {
+  const i = HAND_LEVELS.findIndex(([top]) => v <= top);
+  const at = i < 0 ? HAND_LEVELS.length - 1 : i;
+  return { label: HAND_LEVELS[at][1], pips: at + 1 };
+}
+
+/** His two arms: the one he hits with, and how well he can play with the other. */
+function ArmsPanel({ store, p }: { store: PlayerStore; p: number }): JSX.Element {
+  const lefty = store.hasFlag(p, PlayerFlag.LeftHanded);
+  const off = store.offHand[p];
+  const arms: Array<[string, number]> = [['Left Arm', lefty ? 20 : off], ['Right Arm', lefty ? off : 20]];
+  return (
+    <div className="arms">
+      {arms.map(([name, v]) => {
+        const { label, pips } = handLevel(v);
+        return (
+          <div key={name} className="arm" title={`${name}: ${label}`}>
+            <span className="arm-name">{name}</span>
+            <span className={`arm-box lvl-${pips}`}>
+              {label}
+              <span className="arm-pips">
+                {HAND_LEVELS.map((_, i) => <i key={i} className={i < pips ? 'on' : ''} />)}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** How comfortable a player is in a role, in the words a coach would use. */
 /** The transfer actions on one of your own players: the transfer list, the loan list, and release. */
 function TransferMenu({ p }: { p: number }): JSX.Element {
@@ -602,6 +638,7 @@ export function PlayerDetail(): JSX.Element | null {
           <div className="stack profile-side">
             <Card title="Attribute Profile" icon="star">
               <AttributeRadar store={store} p={p} />
+              <ArmsPanel store={store} p={p} />
             </Card>
             <Card title="Positions" icon="tactics">
               {POSITIONS.map((pos) => {

@@ -43,6 +43,8 @@ export interface Highlight {
   starTeam: 0 | 1;
   /** The ball's speed off the hand, km/h — for a spike or a serve. */
   speed?: number;
+  /** How high it was struck — or, for a block, how high the hands were — m. */
+  height?: number;
   /** Attacks and digs in the rally. */
   attacks: number;
   digs: number;
@@ -55,7 +57,7 @@ export interface Highlight {
 }
 
 /** A spike this fast that ends the rally is a monster: it gets the big callout and its speed shown. */
-export const MONSTER_SPIKE_KMH = 114;
+export const MONSTER_SPIKE_KMH = 118;
 
 /** How much rode on a rally: late in the set, a set point, a deuce, a match point. */
 export function pressureOf(
@@ -81,6 +83,7 @@ export interface RallyRating {
   star: number;
   starTeam: 0 | 1;
   speed?: number;
+  height?: number;
 }
 
 /**
@@ -105,16 +108,19 @@ export function rateRally(
     const speed = last.speed ?? 100;
     const backRow = last.detail === 'Pipe' || last.detail === 'Back-row right';
     point = {
-      what: 'spike', star: last.player, starTeam: last.team, speed,
+      what: 'spike', star: last.player, starTeam: last.team, speed, height: last.height,
       score: 1 + Math.max(0, speed - 100) * 0.12 + (backRow ? 0.3 : 0) + (attacks >= 2 ? 0.3 : 0),
     };
   } else if (last.kind === 'blocked' && last.by !== undefined) {
-    point = { what: 'block', star: last.by, starTeam: (1 - last.team) as 0 | 1, speed: last.speed, score: 2.1 };
+    point = {
+      what: 'block', star: last.by, starTeam: (1 - last.team) as 0 | 1, speed: last.speed, height: last.blockHeight,
+      score: 2.1 + Math.max(0, (last.speed ?? 100) - 105) * 0.04,
+    };
   } else if (last.kind === 'ace') {
     const serve = contacts.find((c) => c.kind === 'serve');
     const speed = serve?.speed;
     point = {
-      what: 'ace', star: last.player, starTeam: last.team, speed,
+      what: 'ace', star: last.player, starTeam: last.team, speed, height: serve?.height,
       score: 1.5 + Math.max(0, (speed ?? 0) - 100) * 0.1,
     };
   }
@@ -125,6 +131,7 @@ export function rateRally(
     // Its speed is the finishing spike's — none for a rally ended by a block.
     play = {
       what: 'rally', star: point.star, starTeam: point.starTeam, speed: point.what === 'spike' ? point.speed : undefined,
+      height: point.height,
       score: attacks * 0.85 + digs * 0.6 + (point.what === 'block' ? 0.3 : 0) +
         Math.max(0, (point.speed ?? 100) - 105) * 0.05 + pressure + luck,
     };

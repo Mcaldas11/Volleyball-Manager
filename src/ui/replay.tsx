@@ -12,9 +12,9 @@ import { describeHighlight } from '../engine/world/monthAwards.ts';
 import { ClubCrest, clubHue, Segmented } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { kitsFor, LiveCourt, type CourtLabels } from './LiveCourt.tsx';
-import { rallyBeats, setupScene, type CourtState, type Scene } from './matchCourt.ts';
-import { bigPlayMs, playBeats, sleep, type BigPlay } from './rallyPlayer.ts';
-import { BigPlayCallout, crowdFor } from './screens/Matchday.tsx';
+import { rallyBeats, setupScene, type CourtState, type Radar, type Scene } from './matchCourt.ts';
+import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from './rallyPlayer.ts';
+import { BigPlayCallout, crowdFor, ServeRadar } from './screens/Matchday.tsx';
 import { useGame } from './state.ts';
 
 export function ReplayViewer(): JSX.Element | null {
@@ -61,6 +61,8 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
   const [labels, setLabels] = useState<CourtLabels>('names');
   const [bigPlay, setBigPlay] = useState<(BigPlay & { key: number }) | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [radar, setRadar] = useState<(Radar & { key: number }) | null>(null);
+  const radarTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [view, setView] = useState<'3d' | '2d'>(g.courtView);
 
   /** From the serve again, at `p` — the court back where it stood before the
@@ -83,7 +85,11 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
       await playBeats(beats, pace, cancelled, setScene, (play) => {
         setBigPlay({ ...play, key: Date.now() });
         clearTimeout(timer.current);
-        timer.current = setTimeout(() => setBigPlay(null), bigPlayMs(play));
+        timer.current = setTimeout(() => setBigPlay(null), bigPlayMs(play) / Math.min(1, pace * 1.6));
+      }, (r) => {
+        setRadar({ ...r, key: Date.now() });
+        clearTimeout(radarTimer.current);
+        radarTimer.current = setTimeout(() => setRadar(null), RADAR_MS / pace);
       });
       if (cancelled.current) return;
       setScored(true);
@@ -96,6 +102,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
     return () => {
       cancelled.current = true;
       clearTimeout(timer.current);
+      clearTimeout(radarTimer.current);
     };
   }, [run]);
 
@@ -128,7 +135,11 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
         </header>
         <div className="rp-head">
           <div className="rp-star">
-            <span className="rp-what">{what}{h.speed !== undefined && h.what !== 'block' ? ` · ${h.speed} km/h` : ''}</span>
+            <span className="rp-what">
+              {what}
+              {h.speed !== undefined && h.what !== 'block' ? ` · ${h.speed} km/h` : ''}
+              {h.height !== undefined ? ` · ${h.what === 'block' ? 'hands at ' : ''}${h.height.toFixed(2)} m` : ''}
+            </span>
             <strong className="player-link" onClick={() => { g.closeReplay(); g.select(h.star); }}>{store.fullName(h.star)}</strong>
             <span className="faint">{describeHighlight(world, h)}</span>
           </div>
@@ -160,6 +171,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
           />
           {pace !== 1 && !done && <span className="rp-slowmo"><Icon name="clock" size={12} /> Slow motion</span>}
           {bigPlay !== null && <BigPlayCallout key={bigPlay.key} play={bigPlay} />}
+          {radar !== null && <ServeRadar key={radar.key} radar={radar} store={store} kits={kits} />}
           {done && (
             <div className="rp-again">
               <button className="primary" onClick={() => again(1)}><Icon name="play" size={14} /> Watch again</button>

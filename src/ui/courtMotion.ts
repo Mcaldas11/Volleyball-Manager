@@ -823,9 +823,11 @@ export class CourtMotion {
         break;
       }
       case 'block': {
-        // Up just after the hitter, hands over the net at the top.
+        // Up just after the hitter, hands over the net at the top — as high
+        // as the blocker's own hands got, when the scene knows it.
         const reachUp = reach(BLOCK_PEAK, b.hand, 'both', b.scale);
-        const h = Math.min(0.8, Math.max(0.3, NET_HEIGHT + 0.52 - reachUp[2]));
+        const top = sc.blockReach ?? NET_HEIGHT + 0.52;
+        const h = Math.min(0.95, Math.max(0.3, top - reachUp[2]));
         const T = hangTime(h, pre * 0.55);
         const keys = timeline(pre, [
           [-pre, BLOCK_READY], [50 - T - 130, BLOCK_LOAD], [50 - T, BLOCK_UP], [50, BLOCK_PEAK],

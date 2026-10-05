@@ -81,6 +81,8 @@ export interface Scene {
   /** The rally ends on something to bring the crowd up: a spike put away, a
    *  block, an ace, a long rally won. */
   big?: boolean;
+  /** How high the block's hands go up to meet this spike, m. */
+  blockReach?: number;
   /** Changes with every beat, so a renderer can tell repeat scenes apart. */
   seq?: number;
 }
@@ -88,8 +90,24 @@ export interface Scene {
 /** One step of a scripted rally. */
 export interface Beat extends Scene {
   /** A contact worth a big on-screen callout, the side it is good news for,
-   *  and how fast the ball was struck, km/h, when it was. */
-  callout: { kind: RallyContact['kind']; team: 0 | 1; speed?: number } | null;
+   *  how fast the ball was struck, km/h, and how high, m — for a block, how
+   *  high the hands were. */
+  callout: { kind: RallyContact['kind']; team: 0 | 1; speed?: number; height?: number } | null;
+  /** A serve on the radar as it leaves the hand: who, how fast, how high. */
+  radar?: Radar;
+}
+
+/** A ball struck, as the radar reads it. */
+export interface Radar {
+  team: 0 | 1;
+  player: number;
+  speed?: number;
+  height?: number;
+}
+
+/** A contact height from the engine, kept within what the court can show. */
+function heightOr(h: number | undefined, fallback: number, lo: number, hi: number): number {
+  return h === undefined ? fallback : Math.min(hi, Math.max(lo, h));
 }
 
 /** Who stands in each rotational zone for both sides — a live snapshot or a logged rally's. */
@@ -611,12 +629,14 @@ export function rallyBeats(
   // flat and fast, a float slower and higher.
   let serveFrom: Ball3 | null = null;
   let serveKmh = 0;
+  let radar: Radar | undefined;
   const serve = (t: 0 | 1, c: RallyContact): Local => {
     const p = c.player;
     const { hit, z } = servePoints(teams[t], p);
     forms[t].set(p, { ...hit });
     const style = serveStyle(p, teams[t].role(p), teams[t].serveKind(p));
-    const ball = air(t, hit, z);
+    const ball = air(t, hit, heightOr(c.height, z, 2.3, 3.6));
+    radar = { team: t, player: p, speed: c.speed, height: c.height };
     if (style === 'serve') {
       push(ball, p, 1150, 1.9, [[p, 'serve']]);
     } else {
@@ -654,7 +674,7 @@ export function rallyBeats(
         forms[t] = defenceFormation(teams[t]);
         const spot = air(o, holeIn(forms[o], seed), 0);
         const { ms, arc } = served(spot);
-        push(spot, null, ms, arc, [], { kind: 'ace', team: t, speed: serveKmh });
+        push(spot, null, ms, arc, [], { kind: 'ace', team: t, speed: radar?.speed, height: radar?.height });
         break;
       }
       case 'reception':
@@ -671,6 +691,8 @@ export function rallyBeats(
         const to = air(t, passer, stretched ? 0.45 : 0.7);
         const { ms, arc } = served(to);
         push(to, c.player, ms, arc, [[c.player, stretched ? 'dig' : 'receive']]);
+        // The radar reads the serve as it flies.
+        if (radar !== undefined) beats[beats.length - 1].radar = radar;
         if (c.kind === 'receptionError') {
           push(air(t, { u: passer.u < 0.5 ? -0.1 : 1.1, v: Math.min(1.1, passer.v + 0.3) }, 0), null, 620, 1.3);
         } else {
@@ -717,30 +739,34 @@ export function rallyBeats(
         // Team-mates crouch in under the hitter, ready for a ball off the block.
         const cover: Array<[number, Pose]> = [...forms[t].keys()].filter((p) => p !== c.player).map((p) => [p, 'cover']);
         const backRow = hit.v > 0.2;
+        // Struck as high as the hitter got to it.
+        const from = air(t, hit, heightOr(c.height, backRow ? 3.0 : 3.15, 2.6, 3.75));
         // A high ball to the pin hangs long enough for a full run-up; a quick is on the hitter at once.
-        push(air(t, hit, backRow ? 3.0 : 3.15), c.player, Math.round(380 + setArc * 380), setArc,
-          [...cover, [c.player, 'spike'], ...blockPoses]);
-        // The ball flies as fast as it was hit.
-        const spiked = (to: Ball3, slowest: number): number => {
-          const from = air(t, hit, backRow ? 3.0 : 3.15);
-          const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
-          return c.speed === undefined ? slowest
-            : Math.round(Math.min(slowest, Math.max(200, (d / ((c.speed / 3.6) * 0.85)) * 1000)));
+        push(from, c.player, Math.round(380 + setArc * 380), setArc, [...cover, [c.player, 'spike'], ...blockPoses]);
+        // The block goes up to meet it as high as the blocker's hands got.
+        if (c.kind === 'blocked' && c.blockHeight !== undefined) beats[beats.length - 1].blockReach = c.blockHeight;
+        // The ball flies as fast as it was hit — off a block, near enough as fast back.
+        const flies = (a: Ball3, to: Ball3, kmh: number | undefined, fastest: number, slowest: number): number => {
+          const d = Math.hypot(to.x - a.x, to.y - a.y, to.z - a.z);
+          return kmh === undefined ? slowest : Math.round(Math.min(slowest, Math.max(fastest, (d / ((kmh / 3.6) * 0.85)) * 1000)));
         };
         if (c.kind === 'kill') {
           const to = air(o, holeIn(forms[o], seed + i), 0);
-          push(to, null, spiked(to, 340), 0, blockPoses, { kind: 'kill', team: t, speed: c.speed });
+          push(to, null, flies(from, to, c.speed, 200, 340), 0, blockPoses, { kind: 'kill', team: t, speed: c.speed, height: c.height });
         } else if (c.kind === 'attackError') {
           const to = air(o, { u: Math.min(0.95, Math.max(0.05, 1 - hit.u)), v: 1.12 }, 0);
-          push(to, null, spiked(to, 420), 0.3, [], { kind: 'attackError', team: o });
+          push(to, null, flies(from, to, c.speed, 200, 420), 0.3, [], { kind: 'attackError', team: o });
         } else if (c.kind === 'blocked') {
           // The stuff block is the blocker who made it, when he is one of those up there.
           const blocker = c.by !== undefined && blockers.includes(c.by) ? c.by : blockers[0];
-          if (blocker !== undefined) {
-            const bl = at(o, blocker);
-            push(air(o, { u: bl.u, v: 0.02 }, 2.75), blocker, 200, 0, blockPoses, { kind: 'blocked', team: o });
-          }
-          push(air(t, { u: hit.u, v: 0.22 }, 0), null, 520, 0.6);
+          const u = blocker !== undefined ? 1 - at(o, blocker).u : 1 - hit.u;
+          // His hands are over the net, into the hitter's side: the ball meets them there…
+          const hands = air(t, { u, v: 0.03 }, heightOr(c.blockHeight, 3.15, 2.75, 3.5) - 0.1);
+          push(hands, blocker ?? null, flies(from, hands, c.speed, 110, 200), 0, blockPoses,
+            { kind: 'blocked', team: o, speed: c.speed, height: c.blockHeight });
+          // …and it is slammed straight down at the hitter's feet, nobody near it.
+          const lands = air(t, { u: Math.min(0.95, Math.max(0.05, u + wobble(seed, i) * 0.1)), v: 0.06 + (wobble(seed, i + 7) + 1) * 0.07 }, 0);
+          push(lands, null, flies(hands, lands, c.speed !== undefined ? c.speed * 0.75 : undefined, 120, 220), 0, blockPoses);
         }
         break;
       }
@@ -749,7 +775,7 @@ export function rallyBeats(
         // shown closing the block — whoever it is, they are up at the net.
         const bl = at(t, c.player);
         forms[t].set(c.player, { u: bl.u, v: 0.05 });
-        push(air(t, { u: bl.u, v: 0.02 }, 2.75), c.player, 220, 0, [[c.player, 'block']]);
+        push(air(t, { u: bl.u, v: 0.02 }, heightOr(c.height, 2.85, 2.6, 3.4) - 0.1), c.player, 160, 0, [[c.player, 'block']]);
         break;
       }
       case 'dig':

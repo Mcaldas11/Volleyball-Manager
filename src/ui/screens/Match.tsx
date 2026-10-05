@@ -299,15 +299,27 @@ export function describeRallyHighlight(
   store: NameLookup,
 ): { before: string; player: string; after: string } {
   const last = r.contacts[r.contacts.length - 1];
-  if (last?.kind === 'kill' && last.speed !== undefined && last.speed >= MONSTER_SPIKE_KMH) {
-    return { before: 'Monster spike — ', player: store.shortName(last.player), after: ` hammers it down at ${last.speed} km/h.` };
+  const reading = (speed?: number, height?: number): string =>
+    [speed !== undefined ? `${speed} km/h` : '', height !== undefined ? `${height.toFixed(2)} m` : ''].filter((x) => x !== '').join(', ');
+  if (last?.kind === 'kill' && last.speed !== undefined) {
+    const monster = last.speed >= MONSTER_SPIKE_KMH;
+    return {
+      before: monster ? 'Monster spike — ' : 'Kill — ', player: store.shortName(last.player),
+      after: `${monster ? ' hammers it down' : ' finishes it off'} (${reading(last.speed, last.height)}).`,
+    };
   }
   if (last?.kind === 'blocked' && last.by !== undefined) {
-    return { before: 'Stuffed at the net — ', player: store.shortName(last.by), after: ` blocks ${store.shortName(last.player)}.` };
+    return {
+      before: 'Stuffed at the net — ', player: store.shortName(last.by),
+      after: ` blocks ${store.shortName(last.player)}${last.blockHeight !== undefined ? `, hands at ${last.blockHeight.toFixed(2)} m` : ''}.`,
+    };
   }
   const serve = r.contacts[0];
-  if (last?.kind === 'ace' && serve?.detail === 'jump' && serve.speed !== undefined) {
-    return { before: 'Ace — ', player: store.shortName(last.player), after: ` jump-serves it through at ${serve.speed} km/h.` };
+  if (last?.kind === 'ace' && serve?.speed !== undefined) {
+    return {
+      before: 'Ace — ', player: store.shortName(last.player),
+      after: ` ${serve.detail === 'jump' ? 'jump-serves' : 'floats'} it through (${reading(serve.speed, serve.height)}).`,
+    };
   }
   const template = last !== undefined ? HIGHLIGHT_TEMPLATES[last.kind] : undefined;
   if (last === undefined || template === undefined) {

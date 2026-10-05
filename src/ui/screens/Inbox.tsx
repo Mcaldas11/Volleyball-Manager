@@ -678,7 +678,13 @@ function AwardSheet({ award: a }: { award: MonthAward }): JSX.Element {
               {clubTag(clubId)}
               <span className="award-desc">{what.charAt(0).toUpperCase() + what.slice(1)}.</span>
             </div>
-            {h.speed !== undefined && h.what !== 'block' && <span className="award-speed">{h.speed} km/h</span>}
+            {(h.speed !== undefined && h.what !== 'block') || h.height !== undefined ? (
+              <span className="award-speed">
+                {h.speed !== undefined && h.what !== 'block' && <>{h.speed} km/h</>}
+                {h.speed !== undefined && h.what !== 'block' && h.height !== undefined && <i> · </i>}
+                {h.height !== undefined && <>{h.what === 'block' ? 'Block ' : ''}{h.height.toFixed(2)} m</>}
+              </span>
+            ) : <span />}
             <button className="paper-btn primary-dark award-watch" onClick={() => g.openReplay(h, `${label} · ${a.month}`)}>
               <Icon name="play" size={13} /> Watch
             </button>

@@ -55,6 +55,11 @@ import {
 
 /** A left-hander's edge attacking from the right side. */
 const LEFTY_EDGE = 1.03;
+/** What a good other hand is worth to a hitter on a bad set — the ball off
+ *  his line he can still swing at, or tip, with the other one. Centred on
+ *  the usual weak other hand, so on average it changes nothing. */
+const OFF_HAND_EDGE = 0.06;
+const OFF_HAND_TYPICAL = 0.25;
 
 export enum MatchFormat {
   BestOf5 = 0,
@@ -133,8 +138,11 @@ export interface RallyContact {
   quality?: number;
   /** The ball's speed off the hand, km/h — serves and attacks. */
   speed?: number;
-  /** Who stuffed a blocked attack. */
+  /** How high the ball was struck, m — serves and attacks; a block touch's hands. */
+  height?: number;
+  /** Who stuffed a blocked attack, and how high his hands were. */
   by?: number;
+  blockHeight?: number;
 }
 
 export interface RallyLogEntry {
@@ -624,7 +632,7 @@ export class MatchSimulator {
         setTarget: this.setTarget, serveTeam: entry.serveTeam, winner: entry.winner,
         homeCourt: court.homeCourt, awayCourt: court.awayCourt, homeLibero: court.homeLibero, awayLibero: court.awayLibero,
         roles: players.map((p) => [p, this.roles[p]]),
-        contacts: entry.contacts, star: r.star, starTeam: r.starTeam, speed: r.speed,
+        contacts: entry.contacts, star: r.star, starTeam: r.starTeam, speed: r.speed, height: r.height,
         attacks: rated.attacks, digs: rated.digs,
       };
     };
@@ -640,6 +648,32 @@ export class MatchSimulator {
       : lane === AttackLane.Pipe || lane === AttackLane.BackRowRight ? -3 : 0;
     const v = 82 + kind + 0.4 * ar.attackPower * ar.fatigue + 0.12 * ar.spikeReachEdge + this.flair.gaussian(0, 4) + (kill ? 3 : 0);
     return Math.round(clamp(v, 60, 134));
+  }
+
+  /** How high a spike is struck, m: the hitter's reach, less what a poor set
+   *  and tired legs cost him — a quick is hit at the top of the jump. */
+  private spikeHeight(ar: PlayerMatchRatings, lane: number, setQuality: number): number | undefined {
+    if (!this.recording) return undefined;
+    const reach = this.store.spikeReachCm[ar.idx] / 100;
+    const loss = (lane === AttackLane.QuickMiddle ? 0.03 : 0.06) + (1 - setQuality) * 0.16 +
+      (1 - ar.fatigue) * 0.25 + Math.abs(this.flair.gaussian(0, 0.04));
+    return round2(clamp(reach - loss, reach - 0.5, reach));
+  }
+
+  /** How high a serve is struck, m: a jump server near the top of his jump,
+   *  a float server at full stretch, his feet on the floor. */
+  private serveHeight(sr: PlayerMatchRatings, jump: boolean): number | undefined {
+    if (!this.recording) return undefined;
+    const p = sr.idx;
+    if (jump) return round2(this.store.spikeReachCm[p] / 100 - 0.14 - Math.abs(this.flair.gaussian(0, 0.06)));
+    return round2((this.store.heightCm[p] * 1.33) / 100 + 0.04 + this.flair.gaussian(0, 0.03));
+  }
+
+  /** How high a blocker's hands are when the ball meets them, m. */
+  private blockHeightOf(def: TeamRuntime, blocker: number): number | undefined {
+    if (!this.recording) return undefined;
+    const reach = this.store.blockReachCm[blocker] / 100;
+    return round2(reach - 0.03 - (1 - def.rate(blocker).fatigue) * 0.2 - Math.abs(this.flair.gaussian(0, 0.04)));
   }
 
   /** How fast a serve leaves the hand, km/h: a jump serve driven, a float pushed. */
@@ -1182,13 +1216,14 @@ export class MatchSimulator {
       0.34,
     );
     const speed = this.serveSpeed(sr, jump);
+    const height = this.serveHeight(sr, jump);
     if (rng.chance(errorProb)) {
       sStats.serveErrors++;
       rcv.stats.opponentErrors++;
-      this.push({ kind: 'serveError', team: serving, player: server, detail: jump ? 'jump' : 'float', speed });
+      this.push({ kind: 'serveError', team: serving, player: server, detail: jump ? 'jump' : 'float', speed, height });
       return (1 - serving) as 0 | 1;
     }
-    this.push({ kind: 'serve', team: serving, player: server, detail: jump ? 'jump' : 'float', speed });
+    this.push({ kind: 'serve', team: serving, player: server, detail: jump ? 'jump' : 'float', speed, height });
 
     // ---- Reception ----
     const receiver = this.pickReceiver(rcv, srv.tactics, srvRotTactics(srv));
@@ -1338,8 +1373,10 @@ export class MatchSimulator {
     if (ar.leftHanded && (lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight)) attackBase *= LEFTY_EDGE;
     const attackRating =
       attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setQuality) *
+      (1 + OFF_HAND_EDGE * (ar.offHand - OFF_HAND_TYPICAL) * (1 - setQuality)) *
       (transition ? 1 + PREP_EDGE * atk.prep.transition : 1) +
       rng.gaussian(0, (1 - ar.consistency) * 9);
+    const height = this.spikeHeight(ar, lane, setQuality);
 
     // ---- Block ----
     const blockCount = this.blockersFor(lane, grade, def, rotTac, transition);
@@ -1377,25 +1414,27 @@ export class MatchSimulator {
       statsFor(def.stats, blocker).blockPoints++;
       this.push({
         kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane],
-        speed: this.spikeSpeed(ar, lane, false), by: blocker,
+        speed: this.spikeSpeed(ar, lane, false), height, by: blocker, blockHeight: this.blockHeightOf(def, blocker),
       });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError) {
       aStats.attackErrors++;
       def.stats.opponentErrors++;
-      this.push({ kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false) });
+      this.push({
+        kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false), height,
+      });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError + pKill) {
       aStats.attackKills++;
       setterStats.setAssists++;
-      this.push({ kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, true) });
+      this.push({ kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, true), height });
       return { point: attacking, nextQuality: 0, toucher: -1 };
     }
 
     // ---- Dug: the rally continues ----
-    this.push({ kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false) });
+    this.push({ kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false), height });
     const digger = this.pickDigger(def);
     const dr = def.rate(digger);
     statsFor(def.stats, digger).digsTotal++;
@@ -1405,7 +1444,7 @@ export class MatchSimulator {
     if (touched) {
       const blocker = this.pickBlocker(def, lane);
       statsFor(def.stats, blocker).blockTouches++;
-      this.push({ kind: 'blockTouch', team: (1 - attacking) as 0 | 1, player: blocker });
+      this.push({ kind: 'blockTouch', team: (1 - attacking) as 0 | 1, player: blocker, height: this.blockHeightOf(def, blocker) });
     }
     // Transition balls are messier than serve reception, so the ceiling is lower.
     const digQuality = clamp(
@@ -1830,6 +1869,11 @@ export class MatchSimulator {
 }
 
 // ---- Free functions -------------------------------------------------------
+
+/** To the centimetre. */
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
