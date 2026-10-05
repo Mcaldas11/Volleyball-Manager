@@ -10,7 +10,9 @@
  * skeleton courtMotion.ts works out; the net with its tapes, antennas and
  * posts; the ball, spinning as it was struck; and real shadows cast on to the
  * painted floor. The camera is the same pinhole the painted hall is projected
- * with (courtCamera.ts), so the two layers line up to the pixel.
+ * with (courtCamera.ts), so the two layers line up to the pixel. On the bench
+ * side: each team's bench along the boards, in its colours, with the water
+ * bottles on the floor in front of it, and its coach.
  */
 
 import {
@@ -20,7 +22,7 @@ import {
   SphereGeometry, SRGBColorSpace, Vector2, Vector3, WebGLRenderer, type Material,
 } from 'three';
 import { fitCamera } from './courtCamera.ts';
-import { REFEREE_STAND, type Body, type CourtMotion } from './courtMotion.ts';
+import { REFEREE_STAND, SIDELINE, type Body, type CourtMotion } from './courtMotion.ts';
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
 import { BONES } from './playerRig.ts';
 
@@ -430,6 +432,56 @@ function buildRefereeStand(): Group {
   return stand;
 }
 
+/**
+ * A team's bench by the boards: a padded bench in its colours, towels over
+ * it, and the water bottles lined up on the floor in front — `side` the half
+ * it is on.
+ */
+function buildBench(kit: Kit, side: number): Group {
+  const g = new Group();
+  const b = SIDELINE.bench;
+  const length = b.y1 - b.y0;
+  const mid = side * (b.y0 + length / 2);
+  const steel = new MeshStandardMaterial({ color: '#9aa4b2', roughness: 0.4, metalness: 0.55 });
+  const seat = new Mesh(new BoxGeometry(0.42, length, 0.09), new MeshStandardMaterial({ color: kit.shirt, roughness: 0.55 }));
+  seat.position.set(b.x, mid, 0.46);
+  seat.castShadow = true;
+  seat.receiveShadow = true;
+  g.add(seat);
+  for (const dy of [-length / 2 + 0.25, 0, length / 2 - 0.25]) {
+    for (const dx of [-0.16, 0.16]) g.add(tube([b.x + dx, mid + dy, 0], [b.x + dx, mid + dy, 0.42], 0.02, steel));
+  }
+  // Towels thrown over it.
+  const towel = new MeshStandardMaterial({ color: '#f1f3f6', roughness: 0.95 });
+  for (const at of [0.18, 0.47, 0.8]) {
+    const t = new Mesh(new BoxGeometry(0.46, 0.34, 0.025), towel);
+    t.position.set(b.x, side * (b.y0 + length * at), 0.52);
+    t.rotation.z = (at - 0.5) * 0.4;
+    t.castShadow = true;
+    g.add(t);
+  }
+  // The bottles: clear blue, a cap in the team's colour, a crate at the end.
+  const bottle = new CylinderGeometry(0.037, 0.04, 0.24, 14).rotateX(Math.PI / 2);
+  const cap = new CylinderGeometry(0.022, 0.022, 0.04, 10).rotateX(Math.PI / 2);
+  const plastic = new MeshStandardMaterial({ color: '#7fb6e8', roughness: 0.15, metalness: 0, transparent: true, opacity: 0.85 });
+  const capMat = new MeshStandardMaterial({ color: kit.shirt, roughness: 0.5 });
+  for (let i = 0; i < 7; i++) {
+    const y = side * (b.y0 + 0.3 + i * 0.42);
+    const x = b.x + 0.42 + (i % 2) * 0.07;
+    const body = new Mesh(bottle, plastic);
+    body.position.set(x, y, 0.12);
+    body.castShadow = true;
+    const top = new Mesh(cap, capMat);
+    top.position.set(x, y, 0.26);
+    g.add(body, top);
+  }
+  const crate = new Mesh(new BoxGeometry(0.36, 0.5, 0.26), new MeshStandardMaterial({ color: '#2a3342', roughness: 0.7 }));
+  crate.position.set(b.x + 0.05, side * (b.y1 + 0.45), 0.13);
+  crate.castShadow = true;
+  g.add(crate);
+  return g;
+}
+
 /** A volleyball's panels: three bands of curved stripes, blue and yellow on white. */
 function ballTexture(): CanvasTexture {
   const c = document.createElement('canvas');
@@ -462,6 +514,11 @@ export class Court3D {
   private readonly camera = new PerspectiveCamera();
   private readonly figures = new Map<number, Figure>();
   private readonly referee = new Figure(REFEREE_LOOK);
+  /** Each side's coach, made the first time the court is drawn. */
+  private coaches: [Figure, Figure] | null = null;
+  /** The benches, rebuilt when the kits or the halves change. */
+  private benches: Group | null = null;
+  private benchKey = '';
   private readonly ball: Mesh;
   private readonly trail: Mesh[] = [];
   private readonly actorRing: Mesh;
@@ -547,8 +604,37 @@ export class Court3D {
     courtCamera(width, height, this.camera);
   }
 
-  /** Draw the court at `now`; `look` says how each player looks. */
-  render(motion: CourtMotion, now: number, dt: number, look: (p: number) => Look): void {
+  /** The benches for these kits, the near team (`sides[t]` the half team `t` is on) on its own. */
+  setBenches(kits: [Kit, Kit], sides: [number, number]): void {
+    const key = JSON.stringify([kits, sides]);
+    if (key === this.benchKey) return;
+    this.benchKey = key;
+    if (this.benches !== null) {
+      this.scene.remove(this.benches);
+      this.benches.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        o.geometry.dispose();
+        (o.material as Material).dispose();
+      });
+    }
+    this.benches = new Group();
+    this.benches.add(buildBench(kits[0], sides[0]), buildBench(kits[1], sides[1]));
+    this.scene.add(this.benches);
+  }
+
+  /** Draw the court at `now`; `look` says how each player looks — and, for
+   *  `coachLook(t)`, each side's coach. */
+  render(motion: CourtMotion, now: number, dt: number, look: (p: number) => Look, coachLook?: (t: 0 | 1) => Look): void {
+    if (coachLook !== undefined) {
+      if (this.coaches === null) {
+        this.coaches = [new Figure(coachLook(0)), new Figure(coachLook(1))];
+        for (const f of this.coaches) this.scene.add(f.root);
+      }
+      this.coaches.forEach((f, t) => {
+        f.restyle(coachLook(t as 0 | 1));
+        f.pose(motion.coaches[t]);
+      });
+    }
     for (const [p, b] of motion.bodies) {
       let f = this.figures.get(p);
       if (f === undefined) {
@@ -634,6 +720,7 @@ export class Court3D {
   dispose(): void {
     for (const f of this.figures.values()) f.dispose();
     this.referee.dispose();
+    for (const f of this.coaches ?? []) f.dispose();
     this.figures.clear();
     this.scene.traverse((o) => {
       if (!(o instanceof Mesh)) return;

@@ -51,6 +51,8 @@ export const enum InjuryType {
   KneeCartilage = 6,
   AchillesTear = 7,
   ACLTear = 8,
+  /** Pulled coming on without warming up. */
+  MuscleStrain = 9,
 }
 
 export const INJURY_NAMES: Readonly<Record<number, string>> = {
@@ -63,6 +65,7 @@ export const INJURY_NAMES: Readonly<Record<number, string>> = {
   [InjuryType.KneeCartilage]: 'Knee Cartilage Damage',
   [InjuryType.AchillesTear]: 'Achilles Tear',
   [InjuryType.ACLTear]: 'ACL Tear',
+  [InjuryType.MuscleStrain]: 'Muscle Strain',
 };
 
 /**

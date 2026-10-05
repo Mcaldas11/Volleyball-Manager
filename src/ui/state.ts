@@ -15,7 +15,7 @@ import {
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
-import { NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
+import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { type Position } from '../engine/model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
@@ -67,6 +67,9 @@ import {
   declineJobOffer as turnDownJobOffer, isUnemployed, resign as resignFromClub,
 } from '../engine/world/career.ts';
 import { positionTarget, setPositionTarget } from '../engine/world/training.ts';
+import { effectivePlayerAt } from '../engine/match/court.ts';
+import { injuryNotice } from '../engine/world/inbox.ts';
+import type { CourtSideline } from './courtMotion.ts';
 import {
   academyOffers, sellAcademyPlayer, userYouthLeague, type AcademyOffer, type YouthLeague,
 } from '../engine/world/youth.ts';
@@ -349,7 +352,22 @@ export interface MatchdayState {
   /** The user's last shout from the touchline and how it landed, for the banner;
    *  `rally` is the log length it was made at, for the wait before the next. */
   lastShout?: { kind: ShoutKind; effect: 'lifted' | 'flat' | 'tense'; seq: number; rally: number } | null;
+  /** How warm each of the user's players is, 0-1: everyone warmed up before the
+   *  match; on court they stay warm, on the bench they cool. Missing: warm. */
+  warmth?: Map<number, number>;
+  /** The user's substitutes sent to warm up. */
+  warming?: Set<number>;
 }
+
+/** Rallies' worth of warm-up from cold to ready, and how fast a substitute cools on the bench. */
+const WARM_PER_RALLY = 0.2;
+const COOL_PER_RALLY = 0.02;
+/** Warm enough to come on without risk. */
+export const WARM_READY = 0.7;
+/** How many can be warming up at once. */
+export const MAX_WARMING = 4;
+/** The chance of a strain coming on stone cold — less the warmer he is, none once ready. */
+const COLD_STRAIN = 0.18;
 
 const COURT_VIEW_KEY = 'vm.courtView';
 
@@ -1937,6 +1955,7 @@ class Game {
     };
     md.log.push(logEntry);
     md.snapshot = sim.snapshot();
+    this.warmUpBench();
     // The final point is left for the viewer to play out; it calls
     // completeMatchday() once it has been shown.
     if (!md.snapshot.matchOver) {
@@ -2082,15 +2101,105 @@ class Game {
     return result;
   }
 
-  /** Bring on a bench player for the user's own side, mid-match. */
+  /** Bring on a bench player for the user's own side, mid-match — one who
+   *  hasn't warmed up risks a strain. */
   substitute(outPlayerIdx: number, inPlayerIdx: number): void {
     const md = this.matchday;
     // Once a set is won, changes wait for the set break's team sheet.
     if (md === null || md.stage !== 'live' || md.setBreakPending) return;
     const teamIdx = md.userIsHome ? 0 : 1;
+    const warmth = this.warmthOf(inPlayerIdx);
     const result = this.performSubstitution(teamIdx, outPlayerIdx, inPlayerIdx);
     if (!result.ok) this.notice = result.reason ?? 'That substitution is not allowed.';
+    else if (warmth < WARM_READY && Math.random() < ((WARM_READY - warmth) / WARM_READY) * COLD_STRAIN) {
+      this.coldStrain(teamIdx, inPlayerIdx);
+    }
     this.emit();
+  }
+
+  /** On cold, and it went: a strain — he plays on hampered, and misses the days after. */
+  private coldStrain(team: 0 | 1, p: number): void {
+    const world = this.world;
+    const sim = this.liveSim;
+    if (world === null || sim === null) return;
+    const store = world.players;
+    const days = 5 + Math.floor(Math.random() * 12);
+    store.injuryDaysLeft[p] = Math.max(store.injuryDaysLeft[p], days);
+    store.injuryType[p] = InjuryType.MuscleStrain;
+    sim.strain(team, p);
+    injuryNotice(world, p, InjuryType.MuscleStrain, days);
+    this.notice = `${store.shortName(p)} came on without warming up and has felt a muscle — he is struggling, ` +
+      `and will be out for about ${Math.max(1, Math.round(days / 7))} week${days >= 11 ? 's' : ''} after the match.`;
+  }
+
+  /** How warm one of the user's players is, 0-1. */
+  warmthOf(p: number): number {
+    return this.matchday?.warmth?.get(p) ?? 1;
+  }
+
+  /** Whether one of the user's substitutes is warming up. */
+  isWarming(p: number): boolean {
+    return this.matchday?.warming?.has(p) ?? false;
+  }
+
+  /** Send a substitute to warm up — or bring him back to stand. */
+  toggleWarmup(p: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'live') return;
+    md.warming ??= new Set();
+    if (md.warming.has(p)) md.warming.delete(p);
+    else if (md.warming.size >= MAX_WARMING) this.notice = `Only ${MAX_WARMING} players can warm up at once.`;
+    else md.warming.add(p);
+    this.emit();
+  }
+
+  /** After every rally: those on court stay warm, those warming up get warmer, the rest of the bench cools. */
+  private warmUpBench(): void {
+    const md = this.matchday;
+    const snap = md?.snapshot;
+    if (md === null || snap === null || snap === undefined) return;
+    md.warmth ??= new Map();
+    md.warming ??= new Set();
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const court = new Set([...(team === 0 ? snap.homeCourt : snap.awayCourt), team === 0 ? snap.homeLibero : snap.awayLibero]);
+    for (const p of md.sides[team].players) {
+      if (court.has(p)) {
+        md.warmth.set(p, 1);
+        md.warming.delete(p);
+        continue;
+      }
+      const w = md.warmth.get(p) ?? 1;
+      md.warmth.set(p, md.warming.has(p) ? Math.min(1, w + WARM_PER_RALLY) : Math.max(0, w - COOL_PER_RALLY));
+    }
+  }
+
+  /**
+   * Who is off the court for each side, for the bench side of the live
+   * court: the substitutes, in the warm-up area; a libero, or the middle he
+   * has replaced, waiting by the bench; and who is warming up — the user's
+   * as he sent them, the other side's best two.
+   */
+  liveSideline(): CourtSideline | null {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    const snap = md?.snapshot;
+    if (md === null || sim === null || snap === null || snap === undefined) return null;
+    const out: CourtSideline = { bench: [[], []], waiting: [[], []], warming: new Set(md.warming ?? []) };
+    const store = this.world!.players;
+    for (const team of [0, 1] as const) {
+      const court = team === 0 ? snap.homeCourt : snap.awayCourt;
+      const libero = team === 0 ? snap.homeLibero : snap.awayLibero;
+      const floor = new Set(court.map((_, z) => effectivePlayerAt(court, z, sim.roles, libero)));
+      const liberos = sim.liberos(team);
+      for (const p of [...court, liberos.reception, liberos.defence]) {
+        if (p >= 0 && !floor.has(p) && !out.waiting[team].includes(p)) out.waiting[team].push(p);
+      }
+      out.bench[team] = sim.benchFor(team).filter((p) => !floor.has(p) && !out.waiting[team].includes(p));
+    }
+    const other: 0 | 1 = md.userIsHome ? 1 : 0;
+    const warmers = [...out.bench[other]].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 2);
+    for (const p of warmers) (out.warming as Set<number>).add(p);
+    return out;
   }
 
   /**

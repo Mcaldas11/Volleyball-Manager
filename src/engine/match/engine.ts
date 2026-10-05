@@ -702,6 +702,12 @@ export class MatchSimulator {
     return this.teams[team].fourTwo && swap ? own : was;
   }
 
+  /** A player who has picked up a strain: he plays on, well below himself. */
+  strain(team: 0 | 1, p: number): void {
+    const r = this.teams[team].ratings.get(p);
+    if (r !== undefined) r.fatigue = Math.min(r.fatigue, 0.74);
+  }
+
   /** The position a player is playing in this match. */
   roleOf(p: number): Position {
     return this.roles[p] as Position;

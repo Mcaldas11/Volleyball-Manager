@@ -18,6 +18,14 @@
  * reach (they are scaled to their real height) puts the hands on the ball.
  * When the ball lands, the side that won the point celebrates and the other
  * lets it sink in.
+ *
+ * Off the court, the bench side: the substitutes stand in the warm-up area,
+ * a square in the corner — volleyball players don't sit — those sent to warm
+ * up sprinting and jumping in it; a libero, or the middle he has replaced,
+ * waits by the coach, who stands at the front of the bench and claps a point
+ * won or puts his hands on his hips at one lost. A substitution goes through
+ * the substitution zone at the sideline: the player coming on meets the one
+ * coming off there, hands slap, and each goes on his way.
  */
 
 import {
@@ -107,6 +115,10 @@ const FLOAT_HIT = shape(FLOAT_COCK, {
 const FLOAT_HOLD = shape(FLOAT_HIT, { lean: 0.15, hFlex: 2.3, hElbow: 0.1 });
 
 const ARMS_UP = shape(STAND, { lean: -0.12, nod: -0.4, ...arms(2.85, 0.62, 0.2) });
+/** A coach between points: arms folded, watching. */
+const COACH_IDLE = shape(STAND, { nod: 0.06, ...arms(0.62, -0.32, 2.15) });
+/** One hand up for a slap as a substitute comes on. */
+const SLAP = shape(STAND, { lean: 0.05, nod: -0.1, hFlex: 2.6, hAbd: 0.35, hElbow: 0.35, oFlex: 0.3, oAbd: 0.25, oElbow: 0.6 });
 const FIST = shape(STAND, { crouch: 0.06, lean: -0.1, nod: -0.25, hFlex: 1.75, hAbd: 0.35, hElbow: 2.3, oFlex: 0.4, oAbd: 0.3, oElbow: 1.2 });
 const FIST_DOWN = shape(FIST, { crouch: 0.16, lean: 0.18, nod: 0.1, hFlex: 1.05, hElbow: 2.4 });
 const CLAP_OPEN = shape(STAND, { nod: -0.1, ...arms(1.35, 0.32, 1.1) });
@@ -289,6 +301,54 @@ export interface Body {
   seed: number;
   /** Every joint's angle, this frame. */
   rig: Rig;
+  /** Off the court: in the warm-up area as a substitute, or by the bench to go back on — null on it. */
+  side: 'bench' | 'wait' | null;
+  /** A point to pass through on the way to the mark: the substitution zone, on a change. */
+  via: { x: number; y: number } | null;
+  /** Their place by the bench, that a substitute warming up runs from and back to. */
+  home: { x: number; y: number } | null;
+}
+
+/** Who is off the court for each side, and what they are doing. */
+export interface CourtSideline {
+  /** The substitutes, by side: they wait in the warm-up area. */
+  bench: [number[], number[]];
+  /** A libero, or the middle he has replaced, waiting by the bench to go back on. */
+  waiting: [number[], number[]];
+  /** Those sent to warm up. */
+  warming: ReadonlySet<number>;
+}
+
+/**
+ * The bench side of the hall: the far sideline, each team along its own half.
+ * The warm-up area is a white square in the corner beyond the end line, the
+ * bench along the boards, the coach at its front by the attack line, a
+ * libero's waiting spot beside him, and the substitution zone at the sideline
+ * between the attack line and the net. `y` is for the team on the positive
+ * half; the other's is mirrored.
+ */
+export const SIDELINE = {
+  warmup: { x0: -7.15, x1: -5.05, y0: 9.85, y1: 12.15 },
+  bench: { x: -6.95, y0: 4.7, y1: 8.7 },
+  coach: { x: -6.05, y: 4.05 },
+  wait: { x: -5.55, y: 4.95, step: 0.75 },
+  sub: { x: -4.95, in: 2.3, out: 1.35 },
+} as const;
+
+/** A substitute's place in the warm-up area: three abreast, rows back towards the end boards. */
+function warmupSpot(i: number, side: number): { x: number; y: number } {
+  // Two staggered rows along the end line, so from the camera across the
+  // court no one stands right behind another.
+  const w = SIDELINE.warmup;
+  const row = i % 2;
+  const col = Math.floor(i / 2) % 4;
+  const deep = Math.floor(i / 8) * 0.3;
+  return { x: w.x0 + 0.5 + row * 1.05 + deep, y: side * (w.y0 + 0.3 + col * 0.52 + row * 0.26) };
+}
+
+/** The coach of a team, by the side its bench is on. */
+export function coachSpot(side: number): { x: number; y: number } {
+  return { x: SIDELINE.coach.x, y: side * SIDELINE.coach.y };
 }
 
 export interface Flight {
@@ -408,6 +468,13 @@ export class CourtMotion {
 
   /** The first referee, up on the stand, facing the court. */
   readonly referee: Body;
+  /** Each side's coach, at the front of its bench. */
+  readonly coaches: [Body, Body];
+  /** Who is off the court, and the half each team plays on: -1 the near (negative y) one. */
+  private sideline: CourtSideline | null = null;
+  private sides: [number, number] = [-1, 1];
+  /** Who was on the court in the last scene. */
+  private onCourt = new Set<number>();
   /** What they are signalling now, if anything. */
   signal: Signal | null = null;
   /** How fast the match is being shown: the referee's signals keep pace. */
@@ -431,8 +498,72 @@ export class CourtMotion {
       x: r.x, y: r.y, tx: r.x, ty: r.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: -Math.PI / 2, lift: r.height, vz: 0,
       pose: 'stand', posture: REF_REST, shape: REF_REST, gait: 0, running: 0, action: null, reaction: null, fade: null,
       alpha: 1, leaving: false, scale: 1.85 / REF_HEIGHT, hand: 1, seed: 7,
-      rig: buildRig(REF_REST, STILL),
+      rig: buildRig(REF_REST, STILL), side: null, via: null, home: null,
     };
+    this.coaches = [this.coachBody(0, -1), this.coachBody(1, 1)];
+  }
+
+  /** A coach, standing at the front of his bench and facing the court. */
+  private coachBody(team: 0 | 1, side: number): Body {
+    const at = coachSpot(side);
+    return {
+      x: at.x, y: at.y, tx: at.x, ty: at.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: yawTo(1, -side * 0.35), lift: 0, vz: 0,
+      pose: 'stand', posture: COACH_IDLE, shape: COACH_IDLE, gait: 0, running: 0, action: null, reaction: null,
+      fade: null, alpha: 1, leaving: false, scale: 1.82 / REF_HEIGHT, hand: 1, seed: 11 + team,
+      rig: buildRig(COACH_IDLE, STILL), side: null, via: null, home: null,
+    };
+  }
+
+  /**
+   * Who is off the court, and which half each team is on (the near team on
+   * the negative one): everyone not playing goes to their place by the
+   * bench, anyone new there appears at it, and the coaches stand by theirs.
+   */
+  setSideline(sl: CourtSideline, nearTeam: 0 | 1, now: number): void {
+    this.sideline = sl;
+    this.sides = nearTeam === 0 ? [-1, 1] : [1, -1];
+    this.coaches.forEach((c, t) => {
+      const at = coachSpot(this.sides[t]);
+      c.x = at.x;
+      c.y = at.y;
+      c.tx = at.x;
+      c.ty = at.y;
+      c.yaw = yawTo(1, -this.sides[t] * 0.35);
+    });
+    for (const [p, spot] of this.sideSpots()) {
+      if (this.onCourt.has(p)) continue;
+      let b = this.bodies.get(p);
+      if (b === undefined) {
+        b = this.spawn(p, spot.x, spot.y, 'stand');
+        b.x = spot.x;
+        b.y = spot.y;
+        this.bodies.set(p, b);
+      }
+      b.side = spot.kind;
+      b.home = { x: spot.x, y: spot.y };
+      b.tx = spot.x;
+      b.ty = spot.y;
+      b.ox = 0;
+      b.oy = 0;
+      b.pose = 'stand';
+      b.leaving = false;
+    }
+    void now;
+  }
+
+  /** Where everyone off the court belongs: substitutes in the warm-up area, the rest by the coach. */
+  private sideSpots(): Map<number, { x: number; y: number; kind: 'bench' | 'wait' }> {
+    const out = new Map<number, { x: number; y: number; kind: 'bench' | 'wait' }>();
+    const sl = this.sideline;
+    if (sl === null) return out;
+    for (const t of [0, 1] as const) {
+      const side = this.sides[t];
+      sl.bench[t].forEach((p, i) => out.set(p, { ...warmupSpot(i, side), kind: 'bench' }));
+      sl.waiting[t].forEach((p, i) => out.set(p, {
+        x: SIDELINE.wait.x, y: side * (SIDELINE.wait.y + i * SIDELINE.wait.step), kind: 'wait',
+      }));
+    }
+    return out;
   }
 
   /** Play stopped or not, and a time-out called: the referee signals the
@@ -479,6 +610,7 @@ export class CourtMotion {
       this.live = true;
     }
 
+    const sideOf = (p: number): number => this.sides[this.teamOf(p)];
     for (const [p, g] of sc.positions) {
       const pose = sc.poses.get(p) ?? 'stand';
       let b = this.bodies.get(p);
@@ -486,6 +618,10 @@ export class CourtMotion {
         b = this.spawn(p, g.x, g.y, pose);
         this.bodies.set(p, b);
       }
+      // Coming on from the warm-up area: through the substitution zone.
+      if (b.side === 'bench' && !this.first) b.via = { x: SIDELINE.sub.x, y: sideOf(p) * SIDELINE.sub.in };
+      b.side = null;
+      b.home = null;
       b.tx = g.x;
       b.ty = g.y;
       b.leaving = false;
@@ -509,15 +645,28 @@ export class CourtMotion {
         b.y = b.ty + b.oy;
       }
     }
+    const spots = this.sideSpots();
     for (const [p, b] of this.bodies) {
       if (sc.positions.has(p)) continue;
-      // Substituted: off to the nearer sideline.
-      b.leaving = true;
-      b.tx = Math.sign(b.x || 1) * 6.3;
       b.ox = 0;
       b.oy = 0;
       b.pose = 'stand';
+      const spot = spots.get(p);
+      if (spot === undefined) {
+        // Gone from the match: off to the nearer sideline.
+        b.leaving = true;
+        b.tx = Math.sign(b.x || 1) * 6.3;
+        continue;
+      }
+      // Off the court: a substitute through the zone to the warm-up area, a libero's man to the bench.
+      if (b.side === null && spot.kind === 'bench') b.via = { x: SIDELINE.sub.x, y: sideOf(p) * SIDELINE.sub.out };
+      b.side = spot.kind;
+      b.home = { x: spot.x, y: spot.y };
+      b.tx = spot.x;
+      b.ty = spot.y;
+      b.leaving = false;
     }
+    this.onCourt = new Set(sc.positions.keys());
     this.first = false;
   }
 
@@ -531,7 +680,7 @@ export class CourtMotion {
       pose, posture, shape: posture, gait: 0, running: 0, action: null, reaction: null, fade: null,
       alpha: this.first ? 1 : 0, leaving: false,
       scale: Math.min(1.12, Math.max(0.85, f.height / REF_HEIGHT)), hand: f.hand, seed: p,
-      rig: buildRig(posture, { ...STILL, hand: f.hand }),
+      rig: buildRig(posture, { ...STILL, hand: f.hand }), side: null, via: null, home: null,
     };
   }
 
@@ -731,6 +880,13 @@ export class CourtMotion {
       const last = keys[keys.length - 1].t;
       b.reaction = { kind: won ? 'celebrate' : 'dejected', t0: now, tc: now, keys, jump, yaw: null, path: null, end: last + 60 };
     }
+    this.coaches.forEach((c, t) => {
+      const keys = t === winner
+        ? timeline(0, [[0, c.shape], [160, CLAP_OPEN], [300, CLAP], [440, CLAP_OPEN], [580, CLAP], [1100, COACH_IDLE]])
+        : timeline(0, [[0, c.shape], [340, HIPS], [1400, HIPS], [1900, COACH_IDLE]]);
+      c.reaction = { kind: t === winner ? 'celebrate' : 'dejected', t0: now, tc: now, keys, jump: null, yaw: null, path: null,
+        end: keys[keys.length - 1].t + 60 };
+    });
   }
 
   /** The ball, where it is now. */
@@ -761,7 +917,9 @@ export class CourtMotion {
     if (this.signal !== null && now > this.signal.end) this.signal = null;
     const ball = this.ballAt(now);
     this.stepReferee(now, ball);
+    for (const c of this.coaches) this.stepStill(c, now, ball);
     for (const [p, b] of this.bodies) {
+      if (b.side === 'bench' && b.home !== null && b.via === null) this.warmUp(p, b, now);
       this.stepBody(b, dt, now, ball);
       if (b.leaving && b.alpha < 0.02) this.bodies.delete(p);
     }
@@ -769,6 +927,45 @@ export class CourtMotion {
       this.trail.push(ball);
       if (this.trail.length > 7) this.trail.shift();
     }
+  }
+
+  /**
+   * A substitute in the warm-up area: standing at his place — or, sent to
+   * warm up, sprinting out and back across the square, with a jump now and
+   * then.
+   */
+  private warmUp(p: number, b: Body, now: number): void {
+    const home = b.home!;
+    if (this.sideline?.warming.has(p) !== true) {
+      b.tx = home.x;
+      b.ty = home.y;
+      return;
+    }
+    const out = Math.floor(now / 1300 + (b.seed % 7) * 0.37) % 2 === 1;
+    const dir = home.x < (SIDELINE.warmup.x0 + SIDELINE.warmup.x1) / 2 ? 1 : -1;
+    b.tx = home.x + (out ? 0.85 * dir : 0);
+    b.ty = home.y;
+    if (b.reaction === null && (now + b.seed * 977) % 4600 < 34) {
+      const keys = timeline(0, [[0, b.shape], [130, ARMS_UP], [520, ARMS_UP], [800, STAND]]);
+      b.reaction = { kind: 'celebrate', t0: now, tc: now, keys, jump: { up: 120, peak: 330, down: 540, h: 0.42 }, yaw: null, path: null, end: 860 };
+    }
+  }
+
+  /** Someone who stays put — a coach at his bench — following the ball with his eyes, and reacting to the points. */
+  private stepStill(r: Body, now: number, ball: Ball3 | null): void {
+    if (r.reaction !== null && now - r.reaction.tc > r.reaction.end) r.reaction = null;
+    let s = r.posture;
+    if (r.reaction !== null) s = mixShape(s, sample(r.reaction.keys, now - r.reaction.tc), weight(r.reaction, now));
+    r.shape = s;
+    let lookYaw = 0;
+    let lookPitch = 0;
+    if (ball !== null) {
+      const dx = ball.x - r.x;
+      const dy = ball.y - r.y;
+      lookYaw = Math.max(-1.2, Math.min(1.2, wrap(yawTo(dx, dy) - r.yaw)));
+      lookPitch = 0.4 * Math.atan2(ball.z - 1.7, Math.max(0.5, Math.hypot(dx, dy)));
+    }
+    r.rig = buildRig(s, { ...STILL, lookYaw, lookPitch });
   }
 
   /** The referee stays put on the stand, following the ball with their eyes
@@ -823,8 +1020,16 @@ export class CourtMotion {
       }
     } else {
       const waiting = path !== null && rel < path.go;
-      const dx = (waiting ? path.from.x : b.tx + b.ox) - b.x;
-      const dy = (waiting ? path.from.y : b.ty + b.oy) - b.y;
+      if (b.via !== null && Math.hypot(b.via.x - b.x, b.via.y - b.y) < 0.3) {
+        // At the substitution zone: a slap of hands, and on.
+        b.via = null;
+        const keys = timeline(0, [[0, b.shape], [140, SLAP], [380, SLAP], [620, b.posture]]);
+        b.reaction = { kind: 'celebrate', t0: now, tc: now, keys, jump: null, yaw: null, path: null, end: 680 };
+      }
+      const goalX = b.via !== null ? b.via.x : b.tx + b.ox;
+      const goalY = b.via !== null ? b.via.y : b.ty + b.oy;
+      const dx = (waiting ? path.from.x : goalX) - b.x;
+      const dy = (waiting ? path.from.y : goalY) - b.y;
       const dist = Math.hypot(dx, dy);
       if (dist > 0.001 && b.lift < 0.05) {
         const move = Math.min(dist, Math.min(MAX_SPEED, dist / SETTLE) * dt);
@@ -844,7 +1049,8 @@ export class CourtMotion {
     const remaining = Math.hypot(b.tx + b.ox - b.x, b.ty + b.oy - b.y);
     let face: number;
     if (action !== null && action.yaw !== null && rel > -Math.max(350, (action.tc - action.t0) * 0.6)) face = action.yaw;
-    else if (speed > 2.6 && remaining > 1.5) face = yawTo(b.vx, b.vy);
+    else if ((speed > 2.6 && remaining > 1.5) || (b.via !== null && speed > 0.8)) face = yawTo(b.vx, b.vy);
+    else if (b.side !== null) face = yawTo(-b.x, -b.y * 0.5);
     else if (ball !== null && b.pose !== 'stand' && b.pose !== 'hold') face = clampYaw(yawTo(ball.x - b.x, ball.y - b.y), net, 1.2);
     else face = net;
     const turn = wrap(face - b.yaw);

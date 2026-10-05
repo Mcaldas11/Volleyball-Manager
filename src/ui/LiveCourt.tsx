@@ -26,7 +26,9 @@ import type { PlayerStore } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
-import { CourtMotion, flightAt, handOf, type Body } from './courtMotion.ts';
+import {
+  type Body, CourtMotion, type CourtSideline, flightAt, handOf, SIDELINE,
+} from './courtMotion.ts';
 import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, NET_HEIGHT, type Ball3, type Scene } from './matchCourt.ts';
 
 export type { Kit } from './court3d.ts';
@@ -70,6 +72,9 @@ export type CourtView = '3d' | '2d';
 
 interface CourtProps {
   store: PlayerStore;
+  /** Who is off the court, and the team playing on the near (negative) half — the bench side. */
+  sideline?: CourtSideline | null;
+  nearTeam?: 0 | 1;
   /** The position each player is playing in this match, if not his own. */
   roles?: ArrayLike<number>;
   kits: [Kit, Kit];
@@ -84,11 +89,15 @@ interface CourtProps {
 
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
-  teamNames = ['Home', 'Away'], view = '3d',
+  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0,
 }: {
   scene: Scene;
   store: PlayerStore;
   roles?: ArrayLike<number>;
+  /** Who is off the court — substitutes, a libero waiting — and who is warming up. */
+  sideline?: CourtSideline | null;
+  /** The team on the near half. */
+  nearTeam?: 0 | 1;
   kits: [Kit, Kit];
   teamOf: (p: number) => 0 | 1;
   ratings: Map<number, number>;
@@ -105,8 +114,19 @@ export function LiveCourt({
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view });
-  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view };
+  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam });
+  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam };
+  /** The bench side as last handed to the motion. */
+  const sidelineKey = useRef('');
+  const applySideline = (now: number): void => {
+    const sl = props.current.sideline;
+    const m = motion.current;
+    if (sl === null || sl === undefined || m === null) return;
+    const key = JSON.stringify([sl.bench, sl.waiting, [...sl.warming], props.current.nearTeam]);
+    if (key === sidelineKey.current) return;
+    sidelineKey.current = key;
+    m.setSideline(sl, props.current.nearTeam ?? 0, now);
+  };
   const motion = useRef<CourtMotion | null>(null);
   if (motion.current === null) {
     motion.current = new CourtMotion(
@@ -117,6 +137,8 @@ export function LiveCourt({
 
   // Hand each new scene to the motion: new marks, new moves, a new flight.
   useEffect(() => {
+    // Who is off the court first: a substitution's two players find each other in the zone.
+    applySideline(performance.now());
     motion.current?.scene(scene, performance.now());
   }, [scene]);
 
@@ -170,11 +192,11 @@ export function LiveCourt({
       hall.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (props.current.view === '2d') {
         hall.clearRect(0, 0, cssW, cssH);
-        drawTopFloor(hall, topProjector(cssW, cssH));
+        drawTopFloor(hall, topProjector(cssW, cssH), props.current.kits, props.current.nearTeam ?? 0);
       } else {
         drawHall(hall, cssW, cssH, dpr, project, props.current.kits);
       }
-      hallKits = JSON.stringify(props.current.kits);
+      hallKits = JSON.stringify([props.current.kits, props.current.nearTeam]);
       shownView = props.current.view;
       glCanvas.style.display = shownView === '2d' ? 'none' : '';
     };
@@ -204,17 +226,20 @@ export function LiveCourt({
     const frame = (now: number): void => {
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
-      if (JSON.stringify(props.current.kits) !== hallKits) {
+      if (JSON.stringify([props.current.kits, props.current.nearTeam]) !== hallKits) {
         looks.clear();
         paintHall();
       }
       if (props.current.view !== shownView) paintHall();
+      applySideline(now);
       m.step(dt, now);
       top.clearRect(0, 0, cssW, cssH);
       if (shownView === '2d') {
         drawTopDown(top, topProjector(cssW, cssH), m, props.current, now);
       } else if (court !== null) {
-        court.render(m, now, dt, lookOf);
+        const near = props.current.nearTeam ?? 0;
+        court.setBenches(props.current.kits, near === 0 ? [-1, 1] : [1, -1]);
+        court.render(m, now, dt, lookOf, (t) => coachLook(props.current.kits[t]));
         const c = court;
         drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
         drawCall(top, m, props.current, c.refereeOnScreen(), now);
@@ -251,8 +276,8 @@ interface TopProjector {
 }
 
 /** The free zone around the court that the view takes in, in metres from the centre. */
-const TOP_HALF_W = 6.4;
-const TOP_HALF_L = 11.8;
+const TOP_HALF_W = 7.6;
+const TOP_HALF_L = 12.5;
 
 function topProjector(w: number, h: number): TopProjector {
   const s = Math.min((w * 0.94) / (2 * TOP_HALF_W), (h * 0.96) / (2 * TOP_HALF_L));
@@ -260,7 +285,7 @@ function topProjector(w: number, h: number): TopProjector {
 }
 
 /** The floor seen from above: the free zone, the court, its lines, and the net across the middle. */
-function drawTopFloor(ctx: CanvasRenderingContext2D, P: TopProjector): void {
+function drawTopFloor(ctx: CanvasRenderingContext2D, P: TopProjector, kits: [Kit, Kit], nearTeam: 0 | 1): void {
   const rect = (x0: number, y0: number, x1: number, y1: number, fill: string, radius = 0): void => {
     const X = P.X(Math.min(x0, x1));
     const Y = P.Y(Math.max(y0, y1));
@@ -270,8 +295,30 @@ function drawTopFloor(ctx: CanvasRenderingContext2D, P: TopProjector): void {
     ctx.fillStyle = fill;
     ctx.fill();
   };
-  // The free zone, and the hall's shade around it.
-  rect(-TOP_HALF_W, -TOP_HALF_L, TOP_HALF_W, TOP_HALF_L, '#235fa3', 10);
+  // The hall's floor, the free zone on it.
+  rect(-TOP_HALF_W, -TOP_HALF_L, TOP_HALF_W, TOP_HALF_L, FLOOR.arena, 10);
+  rect(-6.6, -11.4, 6.6, 11.4, '#235fa3', 6);
+  // The bench side: each team's warm-up square in the corner, its bench, its bottles.
+  const sides: [number, number] = nearTeam === 0 ? [-1, 1] : [1, -1];
+  for (const t of [0, 1] as const) {
+    const side = sides[t];
+    const w = SIDELINE.warmup;
+    const X = P.X(w.x0);
+    const Y = P.Y(Math.max(side * w.y0, side * w.y1));
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.fillRect(X, Y, (w.x1 - w.x0) * P.s, (w.y1 - w.y0) * P.s);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = Math.max(1.2, P.s * 0.05);
+    ctx.strokeRect(X, Y, (w.x1 - w.x0) * P.s, (w.y1 - w.y0) * P.s);
+    const b = SIDELINE.bench;
+    rect(b.x - 0.21, side * b.y0, b.x + 0.21, side * b.y1, kits[t].shirt, 3);
+    for (let i = 0; i < 7; i++) {
+      ctx.beginPath();
+      ctx.arc(P.X(b.x + 0.42 + (i % 2) * 0.07), P.Y(side * (b.y0 + 0.3 + i * 0.42)), Math.max(1.5, P.s * 0.05), 0, Math.PI * 2);
+      ctx.fillStyle = '#9cc8f0';
+      ctx.fill();
+    }
+  }
   rect(-COURT_HALF_WIDTH, -COURT_HALF_LENGTH, COURT_HALF_WIDTH, COURT_HALF_LENGTH, FLOOR.court, 6);
   rect(-COURT_HALF_WIDTH, -3, COURT_HALF_WIDTH, 3, FLOOR.frontZone);
 
@@ -326,6 +373,21 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
 
   const r = Math.max(7, P.s * 0.36);
   const { store, kits, teamOf } = props;
+  // The coaches, at the front of their benches.
+  m.coaches.forEach((c, t) => {
+    ctx.beginPath();
+    ctx.arc(P.X(c.x), P.Y(c.y), r * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = '#1b2130';
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = kits[t].shirt;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `800 ${Math.max(9, r * 0.9)}px Archivo, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('C', P.X(c.x), P.Y(c.y) + 0.5);
+  });
   for (const [p, b] of m.bodies) {
     const X = P.X(b.x);
     const Y = P.Y(b.y);
@@ -354,7 +416,7 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
     ctx.stroke();
     ctx.restore();
 
-    if (props.labels === 'off') continue;
+    if (props.labels === 'off' || b.side !== null) continue;
     const name = store.shortName(p).split(' ').pop() ?? '';
     const rating = props.ratings.get(p);
     ctx.save();
@@ -451,6 +513,14 @@ function lookFor(p: number, props: CourtProps, numbers: ShirtNumbers): Look {
   };
 }
 
+/** A coach: a polo in his team's colours, dark trousers, no number. */
+function coachLook(kit: Kit): Look {
+  return {
+    kit: { shirt: kit.shirt, shorts: '#1b2130', libero: kit.shirt },
+    libero: false, trim: '#1b2130', number: 0, skin: '#d9a97c', hair: '#3a2a1c', hairStyle: 1, trousers: true,
+  };
+}
+
 /** Each player's live rating, and their name when asked for (always for the
  *  player on the ball), riding over their head. */
 function drawLabels(
@@ -459,6 +529,8 @@ function drawLabels(
 ): void {
   if (props.labels === 'off') return;
   for (const [p, b] of m.bodies) {
+    // Nothing over those off the court.
+    if (b.side !== null) continue;
     const at = head(p);
     if (at === null) continue;
     ctx.save();
@@ -609,6 +681,17 @@ function drawHall(
       segment(ctx, project, [x0, y, 0], [x0 + 0.15, y, 0], 'rgba(255,255,255,0.7)', 1.4);
       segment(ctx, project, [-x0, y, 0], [-x0 - 0.15, y, 0], 'rgba(255,255,255,0.7)', 1.4);
     }
+  }
+
+  // ---- The warm-up areas: a white square in each far corner ----
+  for (const side of [-1, 1]) {
+    const w = SIDELINE.warmup;
+    polygon(ctx, project, [[w.x0, side * w.y0, 0], [w.x0, side * w.y1, 0], [w.x1, side * w.y1, 0], [w.x1, side * w.y0, 0]]);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
   }
 
   // ---- Advertising boards: along the far side, and across both ends ----

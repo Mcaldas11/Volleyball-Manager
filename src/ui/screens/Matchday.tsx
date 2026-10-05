@@ -18,7 +18,7 @@ import {
 } from './Manage.tsx';
 import { Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, type TeamTactics } from '../../engine/match/tactics.ts';
 import { describeRallyHighlight } from './Match.tsx';
-import { useGame, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
+import { useGame, WARM_READY, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 
 /** National teams play in something like their flag's colour. */
@@ -1030,6 +1030,8 @@ function LiveMatchView(): JSX.Element {
           <div className="card court-panel lv-court">
             <LiveCourt
               scene={scene} store={store} roles={g.liveRoles()} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
+              sideline={g.liveSideline()}
+              nearTeam={nearTeam}
               // The referee sees a stoppage — and signals a time-out — once
               // the rally it followed has been shown.
               timeout={pending === null ? md.timeoutActive : null}
@@ -1183,12 +1185,14 @@ function LiveMatchView(): JSX.Element {
  *  onto another (in either direction — bench-to-court or court-to-bench) subs
  *  them in one motion; clicking both, then confirming, does the same thing. */
 function SubCard({
-  playerIdx, store, rating, selected, isDragOver, onClick, onDropPlayer, onDragOverCard, onDragLeaveCard,
+  playerIdx, store, rating, selected, isDragOver, onClick, onDropPlayer, onDragOverCard, onDragLeaveCard, warm,
 }: {
   playerIdx: number;
   store: PlayerStore;
   /** Live match rating, if the player has played yet. */
   rating?: number;
+  /** A substitute's warm-up: how warm he is, whether he is warming up, and the button to send him. */
+  warm?: { level: number; warming: boolean; onToggle: () => void };
   selected: boolean;
   isDragOver: boolean;
   onClick: () => void;
@@ -1216,8 +1220,23 @@ function SubCard({
       <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>
       <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={26} />
       <span className="bench-token-name">
-        {store.shortName(playerIdx)}
-        {rating !== undefined && <RatingBadge value={rating} size="sm" />}
+        <span className="sub-name-line">
+          {store.shortName(playerIdx)}
+          {rating !== undefined && <RatingBadge value={rating} size="sm" />}
+        </span>
+        {warm !== undefined && (
+          <span className={`sub-warm ${warm.level >= WARM_READY ? 'ready' : warm.warming ? 'warming' : 'cold'}`}>
+            <span className="sub-warm-bar"><i style={{ width: `${Math.round(warm.level * 100)}%` }} /></span>
+            <span className="sub-warm-text">{warm.level >= WARM_READY ? 'Ready' : warm.warming ? 'Warming up' : 'Cold'}</span>
+            <button
+              className="sm ghost sub-warm-btn"
+              onClick={(e) => { e.stopPropagation(); warm.onToggle(); }}
+              title={warm.warming ? 'Back to stand in the warm-up area' : 'Send him to warm up — on cold, he risks a strain'}
+            >
+              {warm.warming ? 'Stop' : 'Warm up'}
+            </button>
+          </span>
+        )}
       </span>
       <Pos pos={pos} />
       <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
@@ -1300,6 +1319,9 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   // Reads the engine's own per-set counter — it resets every set, unlike a
   // UI-tracked total would (that used to be the bug here: it never reset).
   const remaining = g.subsRemaining();
+  // The warm-up is the user's own side's.
+  const userSide = teamIdx === (md.userIsHome ? 0 : 1);
+  const coldIn = inPlayer !== null && userSide && g.warmthOf(inPlayer) < WARM_READY;
 
   const makeSub = (): void => {
     if (outPlayer === null || inPlayer === null) return;
@@ -1370,6 +1392,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
                   rating={ratings.get(p)}
                   selected={inPlayer === p}
                   onClick={() => setInPlayer(inPlayer === p ? null : p)}
+                  warm={userSide ? { level: g.warmthOf(p), warming: g.isWarming(p), onToggle: () => g.toggleWarmup(p) } : undefined}
                   {...dragProps(p)}
                 />
               ))}
@@ -1447,6 +1470,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
           {inPlayer !== null
             ? <><span className="good">▲ {store.shortName(inPlayer)}</span> on</>
             : <span className="faint">Pick who comes on</span>}
+          {coldIn && <span className="sub-cold-warning"><Icon name="alert" size={13} /> Not warmed up — he risks a strain</span>}
         </span>
         <button
           className="primary"
