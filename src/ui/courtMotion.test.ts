@@ -4,7 +4,8 @@ import { MatchFormat, MatchSimulator } from '../engine/match/engine.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
-import { CourtMotion, handOf, REFEREE_STAND, type Body, type Signal } from './courtMotion.ts';
+import { CourtMotion, REFEREE_STAND, type Body, type Signal } from './courtMotion.ts';
+import { PlayerFlag } from '../engine/model/players.ts';
 import { rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
 import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL } from './playerRig.ts';
 
@@ -53,7 +54,7 @@ interface Contact {
  */
 function playRallies(seed: number, rallies: number, check?: (m: CourtMotion, beat: Beat, now: number) => void): Contact[] {
   const { sim, store, teamOf } = liveMatch(seed);
-  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: handOf(p) }), teamOf);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
   const contacts: Contact[] = [];
   let now = 0;
   const run = (ms: number, beat: Beat | null): void => {
@@ -150,7 +151,7 @@ test('blockers are up in the air as the hitter strikes, and nobody crosses the n
 
 test('when the ball goes down, the winners celebrate and the losers take it in', () => {
   const { sim, store, teamOf } = liveMatch(14);
-  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: handOf(p) }), teamOf);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
   const pre = sim.snapshot();
   m.scene(setupScene(pre, pre.serving, store.position, 0), 0);
   const entry = sim.step()!;
@@ -193,7 +194,7 @@ test('running flat out a player runs tall; shuffling a step or two they stay low
 /** A match played through the motion rally by rally, noting every call the referee makes. */
 function refereeing(seed: number) {
   const { sim, store, teamOf } = liveMatch(seed);
-  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: handOf(p) }), teamOf);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
   const calls: Signal[] = [];
   let now = 0;
   const run = (ms: number): void => {

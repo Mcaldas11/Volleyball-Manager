@@ -14,7 +14,7 @@
  */
 
 import { ATTR_COUNT, ATTR_INDEX } from '../model/attributes.ts';
-import type { PlayerStore } from '../model/players.ts';
+import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position, positionalEffectiveness } from '../model/positions.ts';
 
 /** Reference anthropometrics for a top-flight men's league, used to normalise. */
@@ -46,6 +46,9 @@ export interface PlayerMatchRatings {
   quickAttack: number;
   backRowAttack: number;
   pipeAttack: number;
+
+  /** Hits with his left hand. */
+  leftHanded: boolean;
 
   /** Reach differentials above league reference, in cm. */
   spikeReachEdge: number;
@@ -134,6 +137,7 @@ export function computeRatings(
     backRowAttack: mk(0.6 * g(A.backRowAttack) + 0.25 * athleticism + 0.15 * technique),
     pipeAttack: mk(0.6 * g(A.pipeAttack) + 0.25 * athleticism + 0.15 * technique),
 
+    leftHanded: store.hasFlag(idx, PlayerFlag.LeftHanded),
     spikeReachEdge: spikeEdge,
     blockReachEdge: blockEdge,
 
@@ -169,4 +173,12 @@ export function contest(a: number, b: number, scale = 14): number {
 export function live(p: PlayerMatchRatings, base: number, noise: number): number {
   const variance = (1 - p.consistency) * 16;
   return base * p.fatigue * p.confidence + noise * variance;
+}
+
+/** Whether a player serves with a jump serve: the engine has him serve with
+ *  whichever weapon he is better at, and both are scaled alike by how he is
+ *  on the day and where he plays — so his attributes alone decide it. */
+export function servesJump(store: PlayerStore, idx: number): boolean {
+  const r = computeRatings(store, idx, store.position[idx] as Position);
+  return r.serveJump > r.serveFloat;
 }

@@ -2,8 +2,8 @@
  * The live court's players, net and ball in 3D, drawn with WebGL over the
  * painted hall.
  *
- * The hall — floor, lines, boards and the crowd — stays a painted canvas
- * underneath; this layer is transparent everywhere else and adds what moves
+ * The hall — floor, lines and boards — stays a painted canvas underneath,
+ * the crowd standing in its stand in 3D (crowd3d.ts); this layer is transparent everywhere else and adds what moves
  * and stands up: every player as a jointed body in their side's kit (the
  * libero in theirs), numbered on the back, their role's colour across the
  * shoulders, built to their real height and posed each frame from the
@@ -22,6 +22,7 @@ import {
   SphereGeometry, SRGBColorSpace, Vector2, Vector3, WebGLRenderer, type Material,
 } from 'three';
 import { fitCamera } from './courtCamera.ts';
+import { Crowd } from './crowd3d.ts';
 import { REFEREE_STAND, SIDELINE, type Body, type CourtMotion } from './courtMotion.ts';
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
 import { BONES } from './playerRig.ts';
@@ -519,6 +520,8 @@ export class Court3D {
   /** The benches, rebuilt when the kits or the halves change. */
   private benches: Group | null = null;
   private benchKey = '';
+  /** The people in the stand, made the first time the court is drawn. */
+  private crowd: Crowd | null = null;
   private readonly ball: Mesh;
   private readonly trail: Mesh[] = [];
   private readonly actorRing: Mesh;
@@ -604,6 +607,15 @@ export class Court3D {
     courtCamera(width, height, this.camera);
   }
 
+  /** The crowd in the stand, `fill` full, in these sides' colours. */
+  setCrowd(kits: [Kit, Kit], fill: number): void {
+    if (this.crowd === null) {
+      this.crowd = new Crowd(fill);
+      this.scene.add(this.crowd.group);
+    }
+    this.crowd.setKits(kits);
+  }
+
   /** The benches for these kits, the near team (`sides[t]` the half team `t` is on) on its own. */
   setBenches(kits: [Kit, Kit], sides: [number, number]): void {
     const key = JSON.stringify([kits, sides]);
@@ -659,7 +671,7 @@ export class Court3D {
     const flight = motion.flight;
     if (ball !== null) {
       this.ball.position.set(ball.x, ball.y, Math.max(0.13, ball.z));
-      if (flight !== null && now < flight.t0 + flight.ms) {
+      if (flight !== null && now >= flight.t0 && now < flight.t0 + flight.ms) {
         const dx = flight.to.x - flight.from.x;
         const dy = flight.to.y - flight.from.y;
         const l = Math.hypot(dx, dy);
@@ -693,6 +705,10 @@ export class Court3D {
     }
 
     this.referee.pose(motion.referee);
+    if (this.crowd !== null) {
+      this.crowd.react(motion.cheer);
+      this.crowd.update(now);
+    }
 
     this.renderer.render(this.scene, this.camera);
   }

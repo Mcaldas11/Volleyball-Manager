@@ -30,6 +30,7 @@ import {
   rotate,
   rotationOf,
 } from './court.ts';
+import { pressureOf, rateRally, type Highlight } from './highlights.ts';
 import { matchRating } from './playerRating.ts';
 import { computeRatings, contest, type PlayerMatchRatings } from './ratings.ts';
 import {
@@ -51,6 +52,9 @@ import {
   statsFor,
   type TeamMatchStats,
 } from './stats.ts';
+
+/** A left-hander's edge attacking from the right side. */
+const LEFTY_EDGE = 1.03;
 
 export enum MatchFormat {
   BestOf5 = 0,
@@ -85,6 +89,9 @@ export interface TeamSetup {
   read?: number;
   /** What the side worked on for this match in the days before it, each 0-1 — see training.ts. */
   prep?: { reception: number; transition: number; block: number };
+  /** Players the club has promised games — a loanee promised a starting
+   *  place: an engine-run bench takes them off only when they are spent. */
+  promised?: readonly number[];
 }
 
 export interface MatchSetup {
@@ -96,6 +103,9 @@ export interface MatchSetup {
   neutralVenue: boolean;
   /** Set true to record a full point-by-point log. Costs memory; off for background sim. */
   collectLog: boolean;
+  /** Keep the match's best point and best play, rally and all, to be shown
+   *  again — see highlights.ts. */
+  highlights?: boolean;
   seed: number;
   /**
    * Sides whose bench the engine runs itself, [home, away]: changes during a
@@ -117,10 +127,14 @@ export interface RallyContact {
     | 'blockTouch' | 'dig' | 'digError' | 'freeball';
   team: 0 | 1;
   player: number;
-  /** Lane for attacks, reception grade for passes. */
+  /** Lane for attacks, reception grade for passes; `jump` or `float` for a serve. */
   detail?: string;
   /** How good a pass or dig was, 0 to 1. */
   quality?: number;
+  /** The ball's speed off the hand, km/h — serves and attacks. */
+  speed?: number;
+  /** Who stuffed a blocked attack. */
+  by?: number;
 }
 
 export interface RallyLogEntry {
@@ -146,6 +160,8 @@ export interface MatchResult {
   mvp: number;
   /** The position each player in the two squads played — or would have, off the bench. */
   roles?: Map<number, Position>;
+  /** The match's best point and best play, when asked for. */
+  highlights?: Highlight[];
 }
 
 /**
@@ -400,8 +416,15 @@ class TeamRuntime {
 
 export class MatchSimulator {
   private readonly rng: Rng;
+  /** Dice for what only shows — how fast a ball was struck, which of two
+   *  near-equal rallies was better — so the match itself rolls the same. */
+  private readonly flair: Rng;
   private readonly teams: [TeamRuntime, TeamRuntime];
   private readonly log: RallyLogEntry[] | null;
+  /** Whether the contacts of each rally are written down — for the log or the highlights. */
+  private readonly recording: boolean;
+  /** The best point and play so far, when the match keeps them. */
+  private readonly best: { point: Highlight | null; play: Highlight | null } | null;
   private readonly setScores: Array<[number, number]> = [];
   private contacts: RallyContact[] = [];
   private totalRallies = 0;
@@ -450,9 +473,12 @@ export class MatchSimulator {
     private readonly setup: MatchSetup,
   ) {
     this.rng = new Rng(setup.seed);
+    this.flair = new Rng((setup.seed ^ 0x5bd1e995) >>> 0);
     this.roles = store.position.slice(0, store.count);
     this.teams = [new TeamRuntime(setup.home, store, this.roles), new TeamRuntime(setup.away, store, this.roles)];
     this.log = setup.collectLog ? [] : null;
+    this.best = setup.highlights === true ? { point: null, play: null } : null;
+    this.recording = setup.collectLog || this.best !== null;
     this.autoCoached = [setup.autoCoach?.[0] ?? false, setup.autoCoach?.[1] ?? false];
 
     // Home advantage: a real but modest effect, applied as a confidence bump to
@@ -520,8 +546,12 @@ export class MatchSimulator {
     if (this.matchOver) return null;
 
     const serving = this.serving;
+    const before = this.best !== null
+      ? { court: this.snapshot(), sets: [this.teams[0].setsWon, this.teams[1].setsWon] as [number, number] }
+      : null;
     const entry = this.playRally(serving);
     const winner = entry.winner;
+    if (before !== null) this.weighHighlight(entry, before.court, before.sets);
 
     this.teams[winner].score++;
     this.teams[winner].currentRun++;
@@ -579,6 +609,44 @@ export class MatchSimulator {
     }
 
     return entry;
+  }
+
+  /** A rally just played, against the match's best point and best play so far. */
+  private weighHighlight(entry: RallyLogEntry, court: ReturnType<MatchSimulator['snapshot']>, sets: [number, number]): void {
+    const best = this.best;
+    if (best === null) return;
+    const pressure = pressureOf(entry.scoreBefore, sets, this.setTarget, this.setsToWin);
+    const rated = rateRally(entry.contacts, pressure, this.flair.float() * 0.5);
+    const make = (kind: 'point' | 'play', r: NonNullable<typeof rated.point>): Highlight => {
+      const players = [...court.homeCourt, ...court.awayCourt, court.homeLibero, court.awayLibero].filter((p) => p >= 0);
+      return {
+        kind, what: r.what, score: r.score, set: entry.set, scoreBefore: entry.scoreBefore, setsBefore: sets,
+        setTarget: this.setTarget, serveTeam: entry.serveTeam, winner: entry.winner,
+        homeCourt: court.homeCourt, awayCourt: court.awayCourt, homeLibero: court.homeLibero, awayLibero: court.awayLibero,
+        roles: players.map((p) => [p, this.roles[p]]),
+        contacts: entry.contacts, star: r.star, starTeam: r.starTeam, speed: r.speed,
+        attacks: rated.attacks, digs: rated.digs,
+      };
+    };
+    if (rated.point !== null && rated.point.score > (best.point?.score ?? -Infinity)) best.point = make('point', rated.point);
+    if (rated.play !== null && rated.play.score > (best.play?.score ?? -Infinity)) best.play = make('play', rated.play);
+  }
+
+  /** How fast a spike leaves the hand, km/h: the hitter's power and reach, the
+   *  kind of attack — a quick is snapped, not swung — and a ball put away hit hardest. */
+  private spikeSpeed(ar: PlayerMatchRatings, lane: number, kill: boolean): number | undefined {
+    if (!this.recording) return undefined;
+    const kind = lane === AttackLane.QuickMiddle ? -10 : lane === AttackLane.SecondTempoOutside ? -6
+      : lane === AttackLane.Pipe || lane === AttackLane.BackRowRight ? -3 : 0;
+    const v = 82 + kind + 0.4 * ar.attackPower * ar.fatigue + 0.12 * ar.spikeReachEdge + this.flair.gaussian(0, 4) + (kill ? 3 : 0);
+    return Math.round(clamp(v, 60, 134));
+  }
+
+  /** How fast a serve leaves the hand, km/h: a jump serve driven, a float pushed. */
+  private serveSpeed(sr: PlayerMatchRatings, jump: boolean): number | undefined {
+    if (!this.recording) return undefined;
+    const v = jump ? 78 + 0.45 * sr.serveJump + this.flair.gaussian(0, 4) : 58 + 0.15 * sr.serveFloat + this.flair.gaussian(0, 3);
+    return Math.round(clamp(v, 50, 132));
   }
 
   /** An engine-coached side's change between rallies, if one is warranted and the last has settled. */
@@ -647,6 +715,9 @@ export class MatchSimulator {
       mvp: this.findMvp(),
       roles: new Map([...this.teams[0].ratings.keys(), ...this.teams[1].ratings.keys()]
         .map((p) => [p, this.roles[p] as Position])),
+      highlights: this.best !== null
+        ? [this.best.point, this.best.play].filter((h): h is Highlight => h !== null)
+        : undefined,
     };
   }
 
@@ -762,6 +833,7 @@ export class MatchSimulator {
     let best: SubstitutionPlan | null = null;
     let bestExcess = 0;
     for (const out of t.court) {
+      if (this.keptOn(team, out)) continue;
       const outValue = this.currentValue(team, out);
       for (const inc of t.ratings.keys()) {
         const shift = this.crossShift(team, out, inc, t.court);
@@ -802,6 +874,7 @@ export class MatchSimulator {
     const changes: SubstitutionPlan[] = [];
     for (let slot = 0; slot < lineup.length; slot++) {
       const starter = lineup[slot];
+      if (this.keptOn(team, starter)) continue;
       const starterValue = Math.max(1, this.currentValue(team, starter));
       let pick = -1;
       let pickExcess = 0;
@@ -838,6 +911,12 @@ export class MatchSimulator {
     }
     if (pos[out] === Position.Opposite && pos[inc] === Position.Setter && setters < 2) return -SYSTEM_CHANGE_MARGIN;
     return null;
+  }
+
+  /** A player promised his games stays on, unless he is spent. */
+  private keptOn(team: 0 | 1, p: number): boolean {
+    const promised = this.teams[team].setup.promised;
+    return promised !== undefined && promised.includes(p) && this.reasonToReplace(team, p) !== 'fatigue';
   }
 
   /** What a player is worth on court right now, as a coach sees it. */
@@ -1102,13 +1181,14 @@ export class MatchSimulator {
       0.015,
       0.34,
     );
+    const speed = this.serveSpeed(sr, jump);
     if (rng.chance(errorProb)) {
       sStats.serveErrors++;
       rcv.stats.opponentErrors++;
-      this.push({ kind: 'serveError', team: serving, player: server });
+      this.push({ kind: 'serveError', team: serving, player: server, detail: jump ? 'jump' : 'float', speed });
       return (1 - serving) as 0 | 1;
     }
-    this.push({ kind: 'serve', team: serving, player: server, detail: jump ? 'jump' : 'float' });
+    this.push({ kind: 'serve', team: serving, player: server, detail: jump ? 'jump' : 'float', speed });
 
     // ---- Reception ----
     const receiver = this.pickReceiver(rcv, srv.tactics, srvRotTactics(srv));
@@ -1253,6 +1333,9 @@ export class MatchSimulator {
       default:
         attackBase = ar.attackPower * 0.62 + ar.attackControl * 0.38;
     }
+    // A left-hander on the right side takes the set without it crossing his
+    // body, and swings at the line the block finds hardest to close.
+    if (ar.leftHanded && (lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight)) attackBase *= LEFTY_EDGE;
     const attackRating =
       attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setQuality) *
       (transition ? 1 + PREP_EDGE * atk.prep.transition : 1) +
@@ -1292,24 +1375,27 @@ export class MatchSimulator {
       aStats.attackBlocked++;
       const blocker = this.pickBlocker(def, lane);
       statsFor(def.stats, blocker).blockPoints++;
-      this.push({ kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
+      this.push({
+        kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane],
+        speed: this.spikeSpeed(ar, lane, false), by: blocker,
+      });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError) {
       aStats.attackErrors++;
       def.stats.opponentErrors++;
-      this.push({ kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
+      this.push({ kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false) });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError + pKill) {
       aStats.attackKills++;
       setterStats.setAssists++;
-      this.push({ kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
+      this.push({ kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, true) });
       return { point: attacking, nextQuality: 0, toucher: -1 };
     }
 
     // ---- Dug: the rally continues ----
-    this.push({ kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
+    this.push({ kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false) });
     const digger = this.pickDigger(def);
     const dr = def.rate(digger);
     statsFor(def.stats, digger).digsTotal++;
@@ -1739,7 +1825,7 @@ export class MatchSimulator {
   }
 
   private push(c: RallyContact): void {
-    if (this.log) this.contacts.push(c);
+    if (this.recording) this.contacts.push(c);
   }
 }
 

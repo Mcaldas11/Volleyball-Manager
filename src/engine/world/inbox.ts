@@ -32,6 +32,7 @@ export const CATEGORY_SENDER: Readonly<Record<MessageCategory, string>> = {
   board: 'Board of Directors',
   career: 'Your Agent',
   international: 'International Desk',
+  awards: 'League Office',
 };
 
 /** Who a message is from. */

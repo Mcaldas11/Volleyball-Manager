@@ -75,14 +75,21 @@ export interface Scene {
   out?: boolean;
   /** How long the flight (and the players' moves) to this scene take, ms. */
   ms: number;
+  /** How long of that the actor keeps the ball in their hands before it
+   *  leaves them, ms — a float server holds it, then tosses late. */
+  release?: number;
+  /** The rally ends on something to bring the crowd up: a spike put away, a
+   *  block, an ace, a long rally won. */
+  big?: boolean;
   /** Changes with every beat, so a renderer can tell repeat scenes apart. */
   seq?: number;
 }
 
 /** One step of a scripted rally. */
 export interface Beat extends Scene {
-  /** A contact worth a big on-screen callout, and the side it is good news for. */
-  callout: { kind: RallyContact['kind']; team: 0 | 1 } | null;
+  /** A contact worth a big on-screen callout, the side it is good news for,
+   *  and how fast the ball was struck, km/h, when it was. */
+  callout: { kind: RallyContact['kind']; team: 0 | 1; speed?: number } | null;
 }
 
 /** Who stands in each rotational zone for both sides — a live snapshot or a logged rally's. */
@@ -201,9 +208,14 @@ interface Team {
   zoneOf: (p: number) => number;
   /** Receiving in P1 in a 5-1: the front row keeps its rotational places all rally. */
   noSwitch: boolean;
+  /** How a player serves, when it is known. */
+  serveKind: ServeKind;
 }
 
-function buildTeam(near: boolean, court: number[], libero: number, positions: Uint8Array): Team {
+/** How a player serves — a jump serve or a float — when it is known. */
+export type ServeKind = (p: number) => 'jump' | 'float' | undefined;
+
+function buildTeam(near: boolean, court: number[], libero: number, positions: Uint8Array, serveKind: ServeKind): Team {
   const zones = [0, 1, 2, 3, 4, 5].map((z) => effectivePlayerAt(court, z, positions, libero));
   const role = (p: number): Position => positions[p] as Position;
   const out = [0, 0, 0];
@@ -218,6 +230,7 @@ function buildTeam(near: boolean, court: number[], libero: number, positions: Ui
     role,
     zoneOf: (p) => zones.indexOf(p),
     noSwitch: false,
+    serveKind,
   };
 }
 
@@ -292,20 +305,27 @@ function receiveFormation(t: Team): Formation {
 }
 
 /**
- * How a player serves: most hitters jump-serve off a run-up, most setters,
- * middles and liberos float it — with a few of each doing the other, so a
- * side's serves don't all look alike.
+ * How a player serves: as the engine has him serve when that is known — the
+ * weapon he is better with — and otherwise most hitters jump-serve off a
+ * run-up and most setters, middles and liberos float it, with a few of each
+ * doing the other, so a side's serves don't all look alike.
  */
-export function serveStyle(p: number, role: Position): 'serve' | 'float' {
+export function serveStyle(p: number, role: Position, kind?: 'jump' | 'float'): 'serve' | 'float' {
+  if (kind !== undefined) return kind === 'jump' ? 'serve' : 'float';
   const hitter = role === Position.OutsideHitter || role === Position.Opposite;
   return hitter ? (p % 5 === 0 ? 'float' : 'serve') : (p % 3 === 0 ? 'serve' : 'float');
+}
+
+/** Whether a float server tosses with both hands, or lifts the ball with the other one. */
+export function tossesWithBothHands(p: number): boolean {
+  return (Math.imul(p + 17, 0x2c1b3c6d) >>> 0) % 5 < 2;
 }
 
 /** Where a server starts, and where they strike the ball: a jump server
  *  leaves room for the run-up and hits over the baseline; a float server
  *  stands just behind it. */
 function servePoints(t: Team, server: number): { from: Local; hit: Local; z: number } {
-  return serveStyle(server, t.role(server)) === 'serve'
+  return serveStyle(server, t.role(server), t.serveKind(server)) === 'serve'
     ? { from: { u: 0.84, v: 1.17 }, hit: { u: 0.82, v: 1.01 }, z: 3.05 }
     : { from: { u: 0.84, v: 1.08 }, hit: { u: 0.84, v: 1.05 }, z: 2.55 };
 }
@@ -435,10 +455,13 @@ function wobble(seed: number, i: number): number {
   return (x - Math.floor(x)) * 2 - 1;
 }
 
-function teamsOf(court: CourtState, positions: Uint8Array, nearTeam: 0 | 1, receiving: 0 | 1 | null = null): [Team, Team] {
+function teamsOf(
+  court: CourtState, positions: Uint8Array, nearTeam: 0 | 1, receiving: 0 | 1 | null = null,
+  serveKind: ServeKind = () => undefined,
+): [Team, Team] {
   const teams: [Team, Team] = [
-    buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, positions),
-    buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, positions),
+    buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, positions, serveKind),
+    buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, positions, serveKind),
   ];
   // A 5-1 receiving in P1 — its one setter in zone 1 — keeps its places.
   if (receiving !== null) {
@@ -466,9 +489,12 @@ function toPositions(teams: [Team, Team], forms: [Formation, Formation]): Map<nu
 }
 
 /** The court between rallies: both sides set up for the next serve, the ball
- *  in the server's hands. `nearTeam` plays in the half closest to the camera. */
-export function setupScene(court: CourtState, serving: 0 | 1, positions: Uint8Array, nearTeam: 0 | 1): Scene {
-  const teams = teamsOf(court, positions, nearTeam);
+ *  in the server's hands. `nearTeam` plays in the half closest to the camera;
+ *  `serveKind`, when given, stands the server where his own serve starts. */
+export function setupScene(
+  court: CourtState, serving: 0 | 1, positions: Uint8Array, nearTeam: 0 | 1, serveKind?: ServeKind,
+): Scene {
+  const teams = teamsOf(court, positions, nearTeam, null, serveKind);
   const forms = openingFormations(teams, serving);
   const server = teams[serving].zones[0];
   const hand = forms[serving].get(server);
@@ -505,7 +531,11 @@ export function rallyBeats(
   nearTeam: 0 | 1,
   winner: 0 | 1 | null = null,
 ): Beat[] {
-  const teams = teamsOf(court, positions, nearTeam, (1 - serveTeam) as 0 | 1);
+  // The server stands where his serve — as the engine played it — starts.
+  const first = contacts[0];
+  const kindOf: ServeKind = (p) =>
+    first !== undefined && first.player === p && (first.detail === 'jump' || first.detail === 'float') ? first.detail : undefined;
+  const teams = teamsOf(court, positions, nearTeam, (1 - serveTeam) as 0 | 1, kindOf);
   const forms = openingFormations(teams, serveTeam);
   const beats: Beat[] = [];
   const at = (t: 0 | 1, p: number): Local => forms[t].get(p) ?? { u: 0.5, v: 0.5 };
@@ -574,14 +604,36 @@ export function rallyBeats(
     pass = null;
   };
 
-  // The toss: up out of the server's hands and down to where they strike it —
-  // forward over the baseline for a jump server, who runs in under it.
-  const serve = (t: 0 | 1, p: number): Local => {
+  // The toss: up out of the server's hands and down to where they strike it.
+  // A jump server throws it early, high and forward over the baseline, and
+  // runs in under it; a float server holds it, then tosses it late and low.
+  // The serve then flies at the speed it was struck — a jump serve driven
+  // flat and fast, a float slower and higher.
+  let serveFrom: Ball3 | null = null;
+  let serveKmh = 0;
+  const serve = (t: 0 | 1, c: RallyContact): Local => {
+    const p = c.player;
     const { hit, z } = servePoints(teams[t], p);
     forms[t].set(p, { ...hit });
-    const style = serveStyle(p, teams[t].role(p));
-    push(air(t, hit, z), p, style === 'serve' ? 900 : 700, style === 'serve' ? 1.3 : 0.7, [[p, style]]);
+    const style = serveStyle(p, teams[t].role(p), teams[t].serveKind(p));
+    const ball = air(t, hit, z);
+    if (style === 'serve') {
+      push(ball, p, 1150, 1.9, [[p, 'serve']]);
+    } else {
+      push(ball, p, 1050, 0.55, [[p, 'float']]);
+      beats[beats.length - 1].release = 540;
+    }
+    serveFrom = ball;
+    serveKmh = c.speed ?? (style === 'serve' ? 104 : 68);
     return hit;
+  };
+  /** How long a serve takes to reach `to`, and how high it flies. */
+  const served = (to: Ball3): { ms: number; arc: number } => {
+    const from = serveFrom ?? to;
+    const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
+    // It slows through the air: a fifth off its speed over the flight, near enough.
+    const ms = (d / ((serveKmh / 3.6) * 0.8)) * 1000;
+    return { ms: Math.round(Math.min(1250, Math.max(480, ms))), arc: serveKmh >= 88 ? 0.45 : 0.9 };
   };
 
   contacts.forEach((c, i) => {
@@ -589,19 +641,22 @@ export function rallyBeats(
     const o = (1 - t) as 0 | 1;
     switch (c.kind) {
       case 'serve':
-        serve(t, c.player);
+        serve(t, c);
         break;
       case 'serveError': {
-        const from = serve(t, c.player);
+        const from = serve(t, c);
         // Into the net: the ball dies against the tape on the server's own side.
-        push({ ...toWorld(teams[t].near, { u: from.u, v: 0.02 }), z: 1.7 }, null, 760, 0.6, [],
-          { kind: 'serveError', team: o });
+        const net = { ...toWorld(teams[t].near, { u: from.u, v: 0.02 }), z: 1.7 };
+        push(net, null, served(net).ms, 0.6, [], { kind: 'serveError', team: o });
         break;
       }
-      case 'ace':
+      case 'ace': {
         forms[t] = defenceFormation(teams[t]);
-        push(air(o, holeIn(forms[o], seed), 0), null, 900, 0.9, [], { kind: 'ace', team: t });
+        const spot = air(o, holeIn(forms[o], seed), 0);
+        const { ms, arc } = served(spot);
+        push(spot, null, ms, arc, [], { kind: 'ace', team: t, speed: serveKmh });
         break;
+      }
       case 'reception':
       case 'receptionError': {
         // The serving side switches into its specialist spots as the serve crosses,
@@ -613,7 +668,9 @@ export function rallyBeats(
         // A bad pass is a stretch: the passer lunges for it, low.
         const q = c.kind === 'receptionError' ? 0 : c.quality ?? 0.6;
         const stretched = q < 0.3;
-        push(air(t, passer, stretched ? 0.45 : 0.7), c.player, 900, 0.9, [[c.player, stretched ? 'dig' : 'receive']]);
+        const to = air(t, passer, stretched ? 0.45 : 0.7);
+        const { ms, arc } = served(to);
+        push(to, c.player, ms, arc, [[c.player, stretched ? 'dig' : 'receive']]);
         if (c.kind === 'receptionError') {
           push(air(t, { u: passer.u < 0.5 ? -0.1 : 1.1, v: Math.min(1.1, passer.v + 0.3) }, 0), null, 620, 1.3);
         } else {
@@ -663,13 +720,22 @@ export function rallyBeats(
         // A high ball to the pin hangs long enough for a full run-up; a quick is on the hitter at once.
         push(air(t, hit, backRow ? 3.0 : 3.15), c.player, Math.round(380 + setArc * 380), setArc,
           [...cover, [c.player, 'spike'], ...blockPoses]);
+        // The ball flies as fast as it was hit.
+        const spiked = (to: Ball3, slowest: number): number => {
+          const from = air(t, hit, backRow ? 3.0 : 3.15);
+          const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
+          return c.speed === undefined ? slowest
+            : Math.round(Math.min(slowest, Math.max(200, (d / ((c.speed / 3.6) * 0.85)) * 1000)));
+        };
         if (c.kind === 'kill') {
-          push(air(o, holeIn(forms[o], seed + i), 0), null, 340, 0, blockPoses, { kind: 'kill', team: t });
+          const to = air(o, holeIn(forms[o], seed + i), 0);
+          push(to, null, spiked(to, 340), 0, blockPoses, { kind: 'kill', team: t, speed: c.speed });
         } else if (c.kind === 'attackError') {
-          push(air(o, { u: Math.min(0.95, Math.max(0.05, 1 - hit.u)), v: 1.12 }, 0), null, 420, 0.3, [],
-            { kind: 'attackError', team: o });
+          const to = air(o, { u: Math.min(0.95, Math.max(0.05, 1 - hit.u)), v: 1.12 }, 0);
+          push(to, null, spiked(to, 420), 0.3, [], { kind: 'attackError', team: o });
         } else if (c.kind === 'blocked') {
-          const blocker = blockers[0];
+          // The stuff block is the blocker who made it, when he is one of those up there.
+          const blocker = c.by !== undefined && blockers.includes(c.by) ? c.by : blockers[0];
           if (blocker !== undefined) {
             const bl = at(o, blocker);
             push(air(o, { u: bl.u, v: 0.02 }, 2.75), blocker, 200, 0, blockPoses, { kind: 'blocked', team: o });
@@ -713,7 +779,10 @@ export function rallyBeats(
   const last = beats[beats.length - 1];
   if (last !== undefined) {
     last.point = winner;
-    last.out = contacts[contacts.length - 1]?.kind === 'attackError';
+    const end = contacts[contacts.length - 1]?.kind;
+    last.out = end === 'attackError';
+    const attacks = contacts.filter((c) => c.kind === 'attack' || c.kind === 'kill' || c.kind === 'blocked').length;
+    last.big = end === 'kill' || end === 'blocked' || end === 'ace' || attacks >= 3;
   }
   return beats;
 }

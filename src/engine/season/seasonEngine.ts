@@ -41,6 +41,7 @@ import { expireStaleInterviews, generateInterviewSessions } from '../world/inter
 import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices, tacticReadNotice } from '../world/inbox.ts';
 import { readLevel, studyTactic } from '../model/tacticRead.ts';
 import { recordFixture } from '../world/records.ts';
+import { collectHighlights, inManagersLeague } from '../world/monthAwards.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 
 /** Season-long statistics, keyed by player index. */
@@ -195,6 +196,7 @@ export function toTeamSetup(store: PlayerStore, club: Club, mustStart?: Readonly
     defensiveLibero,
     bench,
     tactics: club.tactics,
+    promised: mustStart !== undefined && mustStart.size > 0 ? [...mustStart] : undefined,
   };
 }
 
@@ -219,22 +221,26 @@ export function playFixture(
   const homeOwed = loanStarters(world, home);
   const awayOwed = loanStarters(world, away);
 
-  // Friendlies are only ever the user's, and always played in full.
+  // Friendlies are only ever the user's, and always played in full. So is
+  // every match in the user's own league: its best points and plays go in
+  // the running for the month's awards — kept, not the whole log.
   const friendly = isFriendly(world, fixture);
-  if (detailed || friendly) {
+  const ownLeague = inManagersLeague(world, fixture);
+  if (detailed || friendly || ownLeague) {
     const result = simulateMatch(store, {
       home: { ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home), prep: matchPrep(world, home, fixture.day) },
       away: { ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away), prep: matchPrep(world, away, fixture.day) },
       format: fixture.format,
       importance: fixture.importance,
       neutralVenue: fixture.neutralVenue,
-      collectLog: true,
+      collectLog: detailed || friendly,
+      highlights: ownLeague,
       seed: world.rng.next(),
       // Nobody is on the bench to make the changes: the engine makes them for both sides.
       autoCoach: [true, true],
       friendly,
     });
-    ctx.detailedResults.set(fixture.id, result);
+    if (detailed || friendly) ctx.detailedResults.set(fixture.id, result);
     applyMatchResult(world, ctx, fixture, result);
     return;
   }
@@ -277,6 +283,7 @@ export function applyMatchResult(
   fixture.awaySets = result.awaySets;
   fixture.setScores = result.setScores;
   fixture.mvp = result.mvp;
+  collectHighlights(world, fixture, result);
 
   const homeStats = result.stats.home.players;
   const awayStats = result.stats.away.players;

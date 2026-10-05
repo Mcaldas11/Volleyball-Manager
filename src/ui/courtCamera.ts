@@ -38,6 +38,9 @@ const FIT_PROBES: ReadonlyArray<readonly [number, number, number]> = [
   [-4.6, -9.9, 0], [4.6, -9.9, 0], [-4.6, 9.9, 0], [4.6, 9.9, 0],
   [0, -9.8, 2.6], [0, 9.8, 2.6],
   [-4.6, 0, 3.6], [5, 0, 0],
+  // The near side's server behind its baseline, up to his head: the user's
+  // own side plays the near half, and its serves are worth seeing.
+  [3.1, -10.6, 2.3],
 ];
 
 function sub(a: V3, b: V3): V3 {

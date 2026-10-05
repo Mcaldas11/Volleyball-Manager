@@ -29,12 +29,13 @@
  */
 
 import {
-  ballAlong, flightBulge, NET_HEIGHT, type Ball3, type Pose, type Scene,
+  ballAlong, flightBulge, NET_HEIGHT, tossesWithBothHands, type Ball3, type Pose, type Scene,
 } from './matchCourt.ts';
 import {
   arms, buildRig, COVER, HOLD, jointPositions, mixShape, READY, REF_HEIGHT, shape, STAND, STILL, strideLength,
   type Rig, type Shape, type V3,
 } from './playerRig.ts';
+import type { Cheer } from './crowd3d.ts';
 
 // ---- Shapes the contacts pass through ----------------------------------------------
 
@@ -106,6 +107,10 @@ const TOSS = shape(STAND, {
 /** A float serve: the other hand lifts the ball, the hitting arm draws back… */
 const FLOAT_TOSS = shape(STAND, {
   crouch: 0.06, nod: -0.6, stride: 0.3, twist: 0.35, hFlex: 2.4, hAbd: 0.9, hElbow: 1.9, oFlex: 2.4, oAbd: 0.1, oElbow: 0.15,
+});
+/** …or both hands lift it, together, up past the face. */
+const FLOAT_TOSS_BOTH = shape(STAND, {
+  crouch: 0.04, nod: -0.65, stride: 0.26, twist: 0.1, hFlex: 2.55, hAbd: 0.22, hElbow: 0.35, oFlex: 2.55, oAbd: 0.22, oElbow: 0.35,
 });
 const FLOAT_COCK = shape(FLOAT_TOSS, { hFlex: 3.2, hAbd: 0.85, hElbow: 2.0, oFlex: 2.2, twist: 0.45, lean: -0.1, stride: 0.34 });
 /** …and punches through the middle of the ball, stopping dead. */
@@ -360,11 +365,20 @@ export interface Flight {
   ms: number;
   /** Spin about the horizontal axis across the flight, rad/s — topspin positive. */
   spin: number;
+  /** A float serve: no spin, so it wobbles off its line in the air. */
+  float?: boolean;
 }
 
 export function flightAt(f: Flight, now: number): Ball3 {
   const t = f.ms <= 0 ? 1 : Math.min(1, Math.max(0, (now - f.t0) / f.ms));
-  return ballAlong(f.from, f.to, f.bulge, t);
+  const at = ballAlong(f.from, f.to, f.bulge, t);
+  if (f.float === true) {
+    // Knuckling: a drift either way that grows and dies away, back on line as it arrives.
+    const w = Math.sin(t * Math.PI) * Math.sin(t * Math.PI * 3.4) * 0.16;
+    at.x += w;
+    at.z += w * 0.35;
+  }
+  return at;
 }
 
 /** Top running speed and how quickly players close on their mark. */
@@ -464,7 +478,9 @@ export class CourtMotion {
   actor: number | null = null;
   private actorPose: Pose | null = null;
   private first = true;
-  private point: { team: 0 | 1; at: number; out: boolean } | null = null;
+  private point: { team: 0 | 1; at: number; out: boolean; big: boolean } | null = null;
+  /** The last point won, for the crowd: whose, when, and whether it was one to get up for. */
+  cheer: Cheer | null = null;
 
   /** The first referee, up on the stand, facing the court. */
   readonly referee: Body;
@@ -586,16 +602,19 @@ export class CourtMotion {
     const struck = this.actorPose;
     const from = this.flight !== null ? flightAt(this.flight, now) : sc.ball;
     if (sc.ball !== null && from !== null) {
+      // A ball still in the server's hands leaves them only at the toss.
+      const held = Math.min(sc.release ?? 0, sc.ms * 0.8);
       this.flight = {
-        from, to: sc.ball, bulge: flightBulge(from, sc.ball, sc.arc), t0: now, ms: sc.ms,
+        from, to: sc.ball, bulge: flightBulge(from, sc.ball, sc.arc), t0: now + held, ms: sc.ms - held,
         spin: (struck !== null ? SPIN[struck] : undefined) ?? 4,
+        float: struck === 'float',
       };
     } else {
       this.flight = null;
     }
     this.actor = sc.actor;
     this.actorPose = sc.actor !== null ? sc.poses.get(sc.actor) ?? null : null;
-    if (sc.point !== null && sc.point !== undefined) this.point = { team: sc.point, at: now + sc.ms, out: sc.out === true };
+    if (sc.point !== null && sc.point !== undefined) this.point = { team: sc.point, at: now + sc.ms, out: sc.out === true, big: sc.big === true };
     for (const [p, pose] of sc.poses) {
       if (pose !== 'hold') continue;
       // Ball in the server's hands: the serve gets waved on shortly.
@@ -720,7 +739,8 @@ export class CourtMotion {
         const T = hangTime(h, pre * (serving ? 0.4 : 0.5));
         const keys = timeline(pre, [
           [-pre, serving ? HOLD : APPROACH],
-          ...(serving ? [[-pre + 200, TOSS] as [number, Shape]] : []),
+          // A jump server throws the ball up at once — early, high and forward.
+          ...(serving ? [[-pre + Math.min(160, pre * 0.15), TOSS] as [number, Shape]] : []),
           // Arms thrown back only over the last two steps.
           [-T - 320, APPROACH], [-T - 110, LOAD], [-T, TAKEOFF], [-T * 0.45, COCKED], [0, STRIKE, 'whip'], [120, FOLLOW],
           [T + 30, LAND], [T + 430, READY],
@@ -742,8 +762,14 @@ export class CourtMotion {
           h = Math.min(0.4, Math.max(0, ball.z - hand[2]));
         }
         const T = hangTime(h, 260);
+        // He holds the ball, settles, and only then tosses it — short and
+        // late — lifting it with his other hand, or with both together.
+        const held = Math.min(sc.release ?? 0, pre * 0.8);
+        const air = pre - held;
+        const toss = isActor && tossesWithBothHands(p) ? FLOAT_TOSS_BOTH : FLOAT_TOSS;
         const keys = timeline(pre, [
-          [-pre, HOLD], [-pre + 220, FLOAT_TOSS], [-220, FLOAT_COCK], [0, FLOAT_HIT, 'whip'], [220, FLOAT_HOLD], [620, READY],
+          [-pre, HOLD], [-air - Math.min(60, held * 0.3), HOLD], [-air + air * 0.3, toss],
+          [-air * 0.4, FLOAT_COCK], [0, FLOAT_HIT, 'whip'], [220, FLOAT_HOLD], [620, READY],
         ]);
         act('float', keys, 740, yaw, h > 0.08 ? { up: -T, peak: 0, down: T, h } : null);
         break;
@@ -898,6 +924,7 @@ export class CourtMotion {
   step(dt: number, now: number): void {
     if (this.point !== null && now >= this.point.at) {
       this.react(now, this.point.team);
+      this.cheer = { team: this.point.team, t0: now, big: this.point.big };
       // The ball is down: whistle, and the point to the side that won it.
       this.calls.unshift({ kind: 'point', team: this.point.team, out: this.point.out });
       this.live = false;
@@ -1116,9 +1143,4 @@ function weight(a: Action, now: number): number {
   const rel = now - a.tc;
   const wOut = 1 - smooth((rel - (a.end - 280)) / 280);
   return Math.min(wIn, wOut);
-}
-
-/** Left-handers: about one player in eight, always the same ones. */
-export function handOf(p: number): 1 | -1 {
-  return (Math.imul(p, 0x9e3779b1) >>> 0) % 8 === 3 ? -1 : 1;
 }

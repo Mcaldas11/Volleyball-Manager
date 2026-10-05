@@ -23,6 +23,7 @@ import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world
 import type { WorldScale } from '../engine/world/worldGen.ts';
 import { cancelOffCycleClubWorld, ensureCupCompetitions } from '../engine/season/cups.ts';
 import { backfillCareer } from '../engine/world/career.ts';
+import { rollHandedness } from '../engine/world/playerGen.ts';
 import {
   newSeasonContext, recordSeasonStartAbility, type SeasonContext, type SeasonStats,
 } from '../engine/season/seasonEngine.ts';
@@ -234,6 +235,11 @@ export function reviveWorld(raw: World): World {
   raw.nextNewsId ??= 0;
   // Saves from before international duty needed a ninth player flag.
   if (!(raw.players.flags instanceof Uint16Array)) raw.players.flags = Uint16Array.from(raw.players.flags);
+  // Saves from before players had a hitting hand: each is given one, as a new world would.
+  if (raw.handedness !== true) {
+    for (let i = 0; i < raw.players.count; i++) rollHandedness(raw.players, i);
+    raw.handedness = true;
+  }
   // Saves from before the manager had a career: the club being managed
   // becomes the first job on record.
   backfillCareer(raw);

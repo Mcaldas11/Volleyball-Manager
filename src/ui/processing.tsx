@@ -21,7 +21,7 @@ import { useGame } from './state.ts';
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /** The kinds of post that make the news: results, the club, the media, the board. */
-const NEWSWORTHY: ReadonlySet<MessageCategory> = new Set<MessageCategory>(['matchday', 'news', 'interview', 'career', 'board']);
+const NEWSWORTHY: ReadonlySet<MessageCategory> = new Set<MessageCategory>(['matchday', 'news', 'interview', 'career', 'board', 'awards']);
 
 export function ProcessingWindow(): JSX.Element | null {
   const g = useGame();

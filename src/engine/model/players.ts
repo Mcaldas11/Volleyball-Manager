@@ -38,6 +38,8 @@ export const enum PlayerFlag {
   LoanListed = 1 << 7,
   /** Away with his national team at a tournament: not available to his club. */
   OnDuty = 1 << 8,
+  /** Hits with his left hand. */
+  LeftHanded = 1 << 9,
 }
 
 /** Injury categories, ordered roughly by severity of long-term consequence. */

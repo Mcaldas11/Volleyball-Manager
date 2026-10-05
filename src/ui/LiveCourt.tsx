@@ -22,12 +22,12 @@
  */
 
 import { useEffect, useRef, type JSX } from 'react';
-import type { PlayerStore } from '../engine/model/players.ts';
+import { PlayerFlag, type PlayerStore } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
 import {
-  type Body, CourtMotion, type CourtSideline, flightAt, handOf, SIDELINE,
+  type Body, CourtMotion, type CourtSideline, flightAt, SIDELINE,
 } from './courtMotion.ts';
 import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, NET_HEIGHT, type Ball3, type Scene } from './matchCourt.ts';
 
@@ -72,6 +72,8 @@ export type CourtView = '3d' | '2d';
 
 interface CourtProps {
   store: PlayerStore;
+  /** How full the stand is, 0-1. */
+  crowdFill?: number;
   /** Who is off the court, and the team playing on the near (negative) half — the bench side. */
   sideline?: CourtSideline | null;
   nearTeam?: 0 | 1;
@@ -89,10 +91,12 @@ interface CourtProps {
 
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
-  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0,
+  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85,
 }: {
   scene: Scene;
   store: PlayerStore;
+  /** How full the stand is, 0-1 — a title decider packed, a dead rubber half empty. */
+  crowdFill?: number;
   roles?: ArrayLike<number>;
   /** Who is off the court — substitutes, a libero waiting — and who is warming up. */
   sideline?: CourtSideline | null;
@@ -114,8 +118,8 @@ export function LiveCourt({
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam });
-  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam };
+  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill });
+  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill };
   /** The bench side as last handed to the motion. */
   const sidelineKey = useRef('');
   const applySideline = (now: number): void => {
@@ -130,7 +134,10 @@ export function LiveCourt({
   const motion = useRef<CourtMotion | null>(null);
   if (motion.current === null) {
     motion.current = new CourtMotion(
-      (p) => ({ height: (props.current.store.heightCm[p] || 195) / 100, hand: handOf(p) }),
+      (p) => ({
+        height: (props.current.store.heightCm[p] || 195) / 100,
+        hand: props.current.store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1,
+      }),
       (p) => props.current.teamOf(p),
     );
   }
@@ -194,7 +201,8 @@ export function LiveCourt({
         hall.clearRect(0, 0, cssW, cssH);
         drawTopFloor(hall, topProjector(cssW, cssH), props.current.kits, props.current.nearTeam ?? 0);
       } else {
-        drawHall(hall, cssW, cssH, dpr, project, props.current.kits);
+        // Without WebGL the crowd is painted into the stand instead.
+        drawHall(hall, cssW, cssH, dpr, project, props.current.kits, court === null);
       }
       hallKits = JSON.stringify([props.current.kits, props.current.nearTeam]);
       shownView = props.current.view;
@@ -239,6 +247,7 @@ export function LiveCourt({
       } else if (court !== null) {
         const near = props.current.nearTeam ?? 0;
         court.setBenches(props.current.kits, near === 0 ? [-1, 1] : [1, -1]);
+        court.setCrowd(props.current.kits, props.current.crowdFill ?? 0.85);
         court.render(m, now, dt, lookOf, (t) => coachLook(props.current.kits[t]));
         const c = court;
         drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
@@ -602,7 +611,7 @@ const BOARD_HEIGHT = 0.9;
 const END_BOARD_Y = 12.4;
 
 function drawHall(
-  ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number, project: Projector, kits: [Kit, Kit],
+  ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number, project: Projector, kits: [Kit, Kit], crowd: boolean,
 ): void {
   ctx.clearRect(0, 0, w, h);
 
@@ -620,9 +629,15 @@ function drawHall(
   tiers.addColorStop(1, '#17212f');
   ctx.fillStyle = tiers;
   ctx.fill();
+  // The rows of the stand, each step catching a little light.
+  for (let row = 0; row <= rows; row++) {
+    const x = BOARD_X - 0.5 - row * 0.8;
+    const z = 1.05 + row * 0.6 + 0.37;
+    segment(ctx, project, [x, -34, z], [x, 34, z], 'rgba(120, 140, 170, 0.10)', 1);
+  }
   const rand = seeded(20260728);
   const crowdColours = ['#c9ced6', '#3b4658', '#7d8796', '#e7e2d6', '#2a3342', '#9aa3b0'];
-  for (let row = 0; row < rows; row++) {
+  for (let row = 0; row < (crowd ? rows : 0); row++) {
     const x = BOARD_X - 0.9 - row * 0.8;
     const z = 1.35 + row * 0.6;
     for (let y = -33.5; y <= 33.5; y += 0.62) {

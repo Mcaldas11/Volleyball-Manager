@@ -23,6 +23,7 @@ import { POSITION_NAMES, type Position } from '../model/positions.ts';
 import { StaffRole, type Staff } from '../model/staff.ts';
 import { MONTH_NAMES, MONTH_STARTS } from './inbox.ts';
 import type { FanBrief } from './fans.ts';
+import { highlightAwards, managersLeague, playerOfMonthMessage, type MonthPlayerLine } from './monthAwards.ts';
 import { stageLabel } from '../season/cups.ts';
 import {
   contractEndSeason, dayOfSeason, seasonEndDay, seasonEndYear, type Competition, type Fixture, type World,
@@ -485,11 +486,10 @@ function monthlyAwards(world: World): void {
   const month = MONTH_NAMES[Math.max(0, MONTH_STARTS.findIndex((m) => m === d) - 1)];
   const store = world.players;
 
+  const own = managersLeague(world);
   for (const comp of leagues) {
     // Player of the month: the best average rating over three or more matches.
-    let best = -1;
-    let bestScore = 0;
-    let bestLine: [number, number, number] = [0, 0, 0];
+    const lines: Array<MonthPlayerLine & { score: number }> = [];
     for (const [p, l] of now.lines) {
       if (l[0] !== comp.id) continue;
       const was = before.lines.get(p) ?? [comp.id, 0, 0, 0];
@@ -497,12 +497,15 @@ function monthlyAwards(world: World): void {
       if (apps < 3) continue;
       const avg = (l[2] - was[2]) / apps;
       const pts = l[3] - was[3];
-      const score = avg + pts * 0.004;
-      if (score > bestScore) {
-        best = p;
-        bestScore = score;
-        bestLine = [apps, avg, pts];
-      }
+      lines.push({ p, clubId: store.clubId[p], apps, avg, points: pts, score: avg + pts * 0.004 });
+    }
+    lines.sort((a, b) => b.score - a.score);
+    const best = lines[0]?.p ?? -1;
+    const bestLine: [number, number, number] = lines[0] !== undefined ? [lines[0].apps, lines[0].avg, lines[0].points] : [0, 0, 0];
+    // The manager's own league's honours go to his inbox too — the point and play of the month with them.
+    if (comp.id === own) {
+      playerOfMonthMessage(world, comp.id, month, lines.slice(0, 3));
+      highlightAwards(world, comp.id, month);
     }
     const club = best >= 0 ? world.clubs[store.clubId[best]] : undefined;
     if (club !== undefined) {

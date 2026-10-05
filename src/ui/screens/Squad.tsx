@@ -6,7 +6,7 @@ import {
   type AttributeName,
 } from '../../engine/model/attributes.ts';
 import {
-  POSITION_NAMES, POSITIONS, familiarityLabel, type Position,
+  POSITION_NAMES, POSITIONS, familiarityLabel, Position,
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
@@ -461,6 +461,7 @@ export function PlayerDetail(): JSX.Element | null {
             </span>
             <span>{age} years old</span>
             <span>{store.heightCm[p]} cm</span>
+            <span title="The hand he hits with">{store.hasFlag(p, PlayerFlag.LeftHanded) ? 'Left-handed' : 'Right-handed'}</span>
             <span>{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</span>
             {loan !== null && (
               <span className="loan-note">
@@ -626,6 +627,12 @@ export function PlayerDetail(): JSX.Element | null {
           <Card title="Physical Profile" icon="user">
             <KV k="Height">{store.heightCm[p]} cm</KV>
             <KV k="Weight">{store.weightKg[p]} kg</KV>
+            <KV k="Preferred hand">
+              {store.hasFlag(p, PlayerFlag.LeftHanded) ? 'Left' : 'Right'}
+              {store.hasFlag(p, PlayerFlag.LeftHanded) && store.position[p] === Position.Opposite && (
+                <span className="faint"> · a left-hander on the right side</span>
+              )}
+            </KV>
             <KV k="Spike reach">{store.spikeReachCm[p]} cm</KV>
             <KV k="Block reach">{store.blockReachCm[p]} cm</KV>
           </Card>

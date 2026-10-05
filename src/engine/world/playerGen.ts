@@ -49,6 +49,17 @@ export interface PlayerGenOptions {
 /**
  * Create one player and return their store index.
  */
+/**
+ * Which hand a player hits with: about one in ten is left-handed, and nearly
+ * a third of opposites — a left-hander on the right is what every coach
+ * wants there. Rolled on his own dice, so the world's are untouched.
+ */
+export function rollHandedness(store: PlayerStore, i: number): void {
+  const own = new Rng((store.id[i] * 2246822519 + 0x27d4eb2f) >>> 0);
+  const chance = store.position[i] === Position.Opposite ? 0.3 : 0.1;
+  store.setFlag(i, PlayerFlag.LeftHanded, own.chance(chance));
+}
+
 export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOptions): number {
   const i = store.create();
   const nationDef = NATIONS[opts.nation] ?? NATIONS[0];
@@ -104,6 +115,8 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
     const near = PLAUSIBLE_SECONDARY[position].includes(pos);
     store.setFamiliarity(i, pos, store.secondary[i] === pos ? 100 : near ? own.int(5, 35) : own.int(0, 10));
   }
+
+  rollHandedness(store, i);
 
   // ---- Career state ----
   store.condition[i] = rng.int(88, 100);

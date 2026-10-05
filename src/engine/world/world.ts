@@ -11,6 +11,7 @@ import { Rng } from '../core/rng.ts';
 import type { Club, LeagueTableRow } from '../model/club.ts';
 import { PlayerStore } from '../model/players.ts';
 import type { Staff } from '../model/staff.ts';
+import type { Highlight } from '../match/highlights.ts';
 import { MatchFormat } from '../match/engine.ts';
 import type { ScoutAssignment, ScoutingKnowledge } from './scouting.ts';
 import type { IncomingOffer } from './negotiation.ts';
@@ -21,6 +22,7 @@ import type { NewsItem } from './news.ts';
 import type { Internationals, IntlReport } from './internationals.ts';
 import type { TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
+import type { MonthAward } from './monthAwards.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -307,7 +309,7 @@ export interface SeasonReview {
  *  approaches from other clubs, job applications, leaving a club. */
 export type MessageCategory =
   | 'news' | 'task' | 'offer' | 'interview' | 'contract'
-  | 'medical' | 'matchday' | 'finance' | 'board' | 'career' | 'international';
+  | 'medical' | 'matchday' | 'finance' | 'board' | 'career' | 'international' | 'awards';
 
 /** The finance office's month-end snapshot of the club's books. */
 export interface FinanceStatement {
@@ -383,6 +385,9 @@ export interface GameMessage {
   /** International news of the user's players — call-ups, match days with
    *  each player's numbers, the way home — drawn as a report in the inbox. */
   intl?: IntlReport;
+  /** A monthly honour in the manager's league — its shortlist, and the
+   *  points and plays on it to watch again. */
+  award?: MonthAward;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
    *  tabs existed still load — {@link messageCategory} derives it from the
    *  older fields when absent. */
@@ -602,6 +607,11 @@ export interface World {
   };
   /** Clubs without a head coach, looking for one. */
   vacancies: Vacancy[];
+  /** Every player has had his hitting hand settled — false on saves from before. */
+  handedness?: boolean;
+  /** The month's best points and plays in the manager's league so far, best
+   *  first, for the Point and Play of the Month. */
+  highlights?: { season: number; point: Highlight[]; play: Highlight[] };
 }
 
 export function dayOfSeason(world: World): number {
@@ -659,6 +669,7 @@ export function newWorld(seed: number, startYear: number, manager: ManagerProfil
     vacancies: [],
     news: [],
     nextNewsId: 0,
+    handedness: true,
   };
 }
 

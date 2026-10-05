@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import type { PlayerStore } from '../../engine/model/players.ts';
-import type { RallyContact, ShoutKind } from '../../engine/match/engine.ts';
+import type { ShoutKind } from '../../engine/match/engine.ts';
 import {
   abilityClass, Bar, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
   Segmented, StarMeter, useDismiss,
@@ -11,6 +11,8 @@ import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { kitsFor, LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { rallyBeats, setupScene, type Scene } from '../matchCourt.ts';
+import { bigPlayMs, playBeats, sleep, type BigPlay } from '../rallyPlayer.ts';
+import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import {
   ATTACKER_OPTIONS, BLOCK_OPTIONS, DEFENSE_OPTIONS, InstructionTiles, OFFENSE_OPTIONS, SERVE_OPTIONS,
@@ -48,32 +50,11 @@ function SideCrest({ side, size }: { side: MatchSide; size: number }): JSX.Eleme
   return club !== undefined ? <ClubCrest club={club} size={size} /> : null;
 }
 
-/** Beat counter shared by every rally, so each flight gets a fresh animation. */
-let beatSeq = 0;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Punchy callouts for the moments worth flashing on screen, not every touch of the ball. */
-const BIG_PLAY_CALLOUTS: Partial<Record<RallyContact['kind'], readonly string[]>> = {
-  kill: ['MONSTER SPIKE!', 'KILL!', 'CRUSHED!', 'UNSTOPPABLE!'],
-  blocked: ['HUGE BLOCK!', 'STUFFED!', 'DENIED!', 'REJECTED!'],
-  ace: ['ACE!', 'UNTOUCHABLE SERVE!'],
-  attackError: ['OUT!', 'WIDE!'],
-  serveError: ['OUT!', 'INTO THE NET!'],
-};
-
-function pickBigPlay(kind: RallyContact['kind']): string | null {
-  const options = BIG_PLAY_CALLOUTS[kind];
-  if (options === undefined) return null;
-  return options[Math.floor(Math.random() * options.length)];
-}
-
-/** Both sides set up for the next serve, from the live snapshot. */
-function sceneFor(snap: MatchdaySnapshot | null, roles: Uint8Array, nearTeam: 0 | 1): Scene {
+/** Both sides set up for the next serve, from the live snapshot — the
+ *  server where his own serve, jump or float, starts. */
+function sceneFor(snap: MatchdaySnapshot | null, roles: Uint8Array, nearTeam: 0 | 1, store: PlayerStore): Scene {
   if (snap === null) return { positions: new Map(), poses: new Map(), ball: null, arc: 0, actor: null, ms: 400 };
-  return setupScene(snap, snap.serving, roles, nearTeam);
+  return setupScene(snap, snap.serving, roles, nearTeam, (p) => (servesJump(store, p) ? 'jump' : 'float'));
 }
 
 /**
@@ -89,22 +70,34 @@ async function animateRally(
   speed: number,
   cancelled: { current: boolean },
   setScene: (scene: Scene) => void,
-  onBigPlay: (text: string, team: 0 | 1) => void,
+  onBigPlay: (play: BigPlay) => void,
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
   const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner);
-  for (const beat of beats) {
-    if (cancelled.current) return;
-    // Beat timings are tuned for 1x — slower speeds stretch them, faster squeeze.
-    const ms = (beat.ms * 1.15) / speed;
-    setScene({ ...beat, ms, seq: ++beatSeq });
-    if (beat.callout !== null) {
-      const text = pickBigPlay(beat.callout.kind);
-      if (text !== null) onBigPlay(text, beat.callout.team);
-    }
-    await sleep(ms);
-  }
+  await playBeats(beats, speed, cancelled, setScene, onBigPlay);
+}
+
+/** How full the stand is: a big competition draws a crowd, a big match fills the place. */
+export function crowdFor(world: World, competitionId: number, importance: number): number {
+  const comp = world.competitions[competitionId];
+  const draw = comp !== undefined ? Math.min(1, comp.reputation / 8000) : 0.7;
+  return Math.min(1, 0.42 + 0.38 * draw + 0.3 * importance);
+}
+
+/** A big moment flashed over the court — and, for a monster spike or a
+ *  booming ace, the radar's reading of the ball's speed. */
+export function BigPlayCallout({ play }: { play: BigPlay }): JSX.Element {
+  return (
+    <div
+      className={`big-play ${play.team === 0 ? 'home' : 'away'}${play.speed !== undefined ? ' with-speed' : ''}`}
+    >
+      {play.text}
+      {play.speed !== undefined && (
+        <span className="big-play-speed"><Icon name="ball" size={13} /> {play.speed} <small>km/h</small></span>
+      )}
+    </div>
+  );
 }
 
 export function MatchdayScreen(): JSX.Element | null {
@@ -767,14 +760,14 @@ function LiveMatchView(): JSX.Element {
   const logRef = useRef<HTMLDivElement>(null);
   // The user's side plays in the half nearest the camera.
   const nearTeam: 0 | 1 = md.userIsHome ? 0 : 1;
-  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, g.liveRoles(), nearTeam));
+  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, g.liveRoles(), nearTeam, store));
   const [labels, setLabels] = useState<CourtLabels>('ratings');
   const [overlay, setOverlay] = useState<'subs' | 'tactics' | null>(null);
   const [shoutOpen, setShoutOpen] = useState(false);
   const shoutRef = useDismiss(shoutOpen, () => setShoutOpen(false));
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
-  const [bigPlay, setBigPlay] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
+  const [bigPlay, setBigPlay] = useState<(BigPlay & { key: number }) | null>(null);
   const [subAnnouncement, setSubAnnouncement] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
   const [timeoutSecondsLeft, setTimeoutSecondsLeft] = useState(TIMEOUT_SECONDS);
   /** Rallies whose animation has finished — the scoreboard, commentary and
@@ -800,10 +793,10 @@ function LiveMatchView(): JSX.Element {
     if (md.timeoutActive !== null && timeoutSecondsLeft === 0) g.resumeFromTimeout();
   }, [md.timeoutActive, timeoutSecondsLeft]);
 
-  const triggerBigPlay = (text: string, team: 0 | 1): void => {
-    setBigPlay({ text, team, key: Date.now() });
+  const triggerBigPlay = (play: BigPlay): void => {
+    setBigPlay({ ...play, key: Date.now() });
     if (bigPlayTimer.current !== undefined) clearTimeout(bigPlayTimer.current);
-    bigPlayTimer.current = setTimeout(() => setBigPlay(null), 1100);
+    bigPlayTimer.current = setTimeout(() => setBigPlay(null), bigPlayMs(play));
   };
 
   // Announces every substitution live, either side — driven off state.ts's
@@ -896,7 +889,7 @@ function LiveMatchView(): JSX.Element {
         }
         // Everyone walks into position for the next serve — rotating on a
         // side-out — while the referee gives the point and waves the serve on.
-        setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam));
+        setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam, store));
         await sleep(1800 / current.speed);
       }
     };
@@ -920,7 +913,7 @@ function LiveMatchView(): JSX.Element {
 
   // A substitution or libero change between rallies redraws the set-up.
   useEffect(() => {
-    if (!animatingRef.current) setScene(sceneFor(md.snapshot, g.liveRoles(), nearTeam));
+    if (!animatingRef.current) setScene(sceneFor(md.snapshot, g.liveRoles(), nearTeam, store));
   }, [md.snapshot]);
 
   const [homeClub, awayClub] = md.sides;
@@ -966,6 +959,7 @@ function LiveMatchView(): JSX.Element {
   const last = shownLog[shownLog.length - 1]?.entry;
   const lastText = last !== undefined ? describeRallyHighlight(last, store) : null;
   const points = [...shownLog].reverse().map((l) => l.entry);
+  const crowdFill = crowdFor(world, md.fixture.competitionId, md.fixture.importance);
 
   return (
     <div className="lv" style={{ ["--lv-home" as string]: kits[0].shirt, ["--lv-away" as string]: kits[1].shirt } as CSSProperties}>
@@ -1032,6 +1026,7 @@ function LiveMatchView(): JSX.Element {
               scene={scene} store={store} roles={g.liveRoles()} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
               sideline={g.liveSideline()}
               nearTeam={nearTeam}
+              crowdFill={crowdFill}
               // The referee sees a stoppage — and signals a time-out — once
               // the rally it followed has been shown.
               timeout={pending === null ? md.timeoutActive : null}
@@ -1050,11 +1045,7 @@ function LiveMatchView(): JSX.Element {
               />
             </div>
 
-            {bigPlay !== null && (
-              <div key={bigPlay.key} className={`big-play ${bigPlay.team === 0 ? 'home' : 'away'}`}>
-                {bigPlay.text}
-              </div>
-            )}
+            {bigPlay !== null && <BigPlayCallout key={bigPlay.key} play={bigPlay} />}
             {subAnnouncement !== null && (
               <div
                 key={subAnnouncement.key}

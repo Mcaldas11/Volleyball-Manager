@@ -70,6 +70,7 @@ import { positionTarget, setPositionTarget } from '../engine/world/training.ts';
 import { effectivePlayerAt } from '../engine/match/court.ts';
 import { injuryNotice } from '../engine/world/inbox.ts';
 import type { CourtSideline } from './courtMotion.ts';
+import type { Highlight } from '../engine/match/highlights.ts';
 import {
   academyOffers, sellAcademyPlayer, userYouthLeague, type AcademyOffer, type YouthLeague,
 } from '../engine/world/youth.ts';
@@ -394,6 +395,8 @@ class Game {
   holidayDialog: { returnDay: number | null } | null = null;
   /** The dialog to invite a club to a friendly, while it is open. */
   friendlyDialog = false;
+  /** A point or play being shown again, and what it is. */
+  replay: { highlight: Highlight; title: string } | null = null;
   /** The instructions left last time, offered again next time. */
   holidayPlan: HolidayPlan = DEFAULT_HOLIDAY;
   /** The processing window, up while days pass — one on Continue, many on
@@ -1293,6 +1296,17 @@ class Game {
 
   // ---- Friendlies -------------------------------------------------------
 
+  /** Show a point or play again, on the live court. */
+  openReplay(highlight: Highlight, title: string): void {
+    this.replay = { highlight, title };
+    this.emit();
+  }
+
+  closeReplay(): void {
+    this.replay = null;
+    this.emit();
+  }
+
   openFriendlyDialog(): void {
     if (this.club === null) return;
     this.friendlyDialog = true;
@@ -1859,6 +1873,8 @@ class Game {
       importance: md.fixture.importance,
       neutralVenue: md.fixture.neutralVenue,
       collectLog: true,
+      // A league match's best point and play go in the running for the month's awards.
+      highlights: !isFriendly(world, md.fixture),
       seed: world.rng.next(),
       friendly: isFriendly(world, md.fixture),
     });

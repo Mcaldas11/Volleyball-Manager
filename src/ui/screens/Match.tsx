@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { RallyContact, RallyLogEntry } from '../../engine/match/engine.ts';
+import { MONSTER_SPIKE_KMH } from '../../engine/match/highlights.ts';
 import { matchRating } from '../../engine/match/playerRating.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
@@ -298,6 +299,16 @@ export function describeRallyHighlight(
   store: NameLookup,
 ): { before: string; player: string; after: string } {
   const last = r.contacts[r.contacts.length - 1];
+  if (last?.kind === 'kill' && last.speed !== undefined && last.speed >= MONSTER_SPIKE_KMH) {
+    return { before: 'Monster spike — ', player: store.shortName(last.player), after: ` hammers it down at ${last.speed} km/h.` };
+  }
+  if (last?.kind === 'blocked' && last.by !== undefined) {
+    return { before: 'Stuffed at the net — ', player: store.shortName(last.by), after: ` blocks ${store.shortName(last.player)}.` };
+  }
+  const serve = r.contacts[0];
+  if (last?.kind === 'ace' && serve?.detail === 'jump' && serve.speed !== undefined) {
+    return { before: 'Ace — ', player: store.shortName(last.player), after: ` jump-serves it through at ${serve.speed} km/h.` };
+  }
   const template = last !== undefined ? HIGHLIGHT_TEMPLATES[last.kind] : undefined;
   if (last === undefined || template === undefined) {
     return { before: describeRally(r, store), player: '', after: '' };

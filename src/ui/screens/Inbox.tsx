@@ -17,6 +17,7 @@ import { SeasonReviewPreview } from '../seasonReview.tsx';
 import { IntlReportSheet } from '../intlReport.tsx';
 import { nextTournamentFor, worldRanking } from '../../engine/world/internationals.ts';
 import { contractEndYear, currentJob } from '../../engine/world/career.ts';
+import { describeHighlight, type MonthAward } from '../../engine/world/monthAwards.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { useGame } from '../state.ts';
 
@@ -34,10 +35,11 @@ export const CATEGORY_META: Readonly<Record<MessageCategory, { label: string; ic
   finance: { label: 'Finance', icon: 'coin', color: '#d9b43c' },
   career: { label: 'Career', icon: 'career', color: '#2fbf9b' },
   international: { label: 'International', icon: 'world', color: '#5fb8ff' },
+  awards: { label: 'Awards', icon: 'star', color: '#f2c94c' },
 };
 
 const FOLDER_ORDER: readonly MessageCategory[] = [
-  'career', 'offer', 'contract', 'task', 'medical', 'matchday', 'international', 'interview', 'news', 'board', 'finance',
+  'career', 'offer', 'contract', 'task', 'medical', 'matchday', 'awards', 'international', 'interview', 'news', 'board', 'finance',
 ];
 
 type Folder = 'inbox' | 'starred' | 'archive' | MessageCategory;
@@ -342,6 +344,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
+  if (m.award !== undefined) return <AwardSheet award={m.award} />;
+
   if (m.nationalOffer !== undefined) {
     const offer = world.internationals?.offers.find((o) => o.id === m.nationalOffer!.id);
     const nation = m.nationalOffer.nation;
@@ -637,6 +641,68 @@ function LoanMonth({ label, stats: m, abilityChange }: { label: string; stats: L
     </div>
   );
 }
+/** What each monthly honour is called. */
+const AWARD_TITLES: Readonly<Record<MonthAward['kind'], string>> = {
+  point: 'Point of the Month',
+  play: 'Play of the Month',
+  player: 'Player of the Month',
+};
+
+/** A monthly honour's shortlist: the winner on top, every point and play on it there to watch. */
+function AwardSheet({ award: a }: { award: MonthAward }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const label = AWARD_TITLES[a.kind];
+  const comp = world.competitions[a.competitionId];
+  const rank = (i: number): JSX.Element => (
+    <span className={`award-rank${i === 0 ? ' first' : ''}`}>{i === 0 ? <Icon name="trophy" size={15} /> : i + 1}</span>
+  );
+  const clubTag = (clubId: number | undefined): JSX.Element | null => {
+    const club = clubId !== undefined ? world.clubs[clubId] : undefined;
+    return club !== undefined ? <span className="award-club"><ClubCrest club={club} size={14} /> {club.name}</span> : null;
+  };
+
+  return (
+    <div className="paper-report award-sheet">
+      <div className="paper-label">{label} · {a.month} · {comp?.name ?? 'League'}</div>
+      {a.highlights?.map((h, i) => {
+        const clubId = h.starTeam === 0 ? h.home : h.away;
+        const what = describeHighlight(world, h);
+        return (
+          <div key={i} className={`award-row${i === 0 ? ' winner' : ''}${clubId === world.userClubId ? ' ours' : ''}`}>
+            {rank(i)}
+            <PlayerFace playerId={store.id[h.star]} name={store.fullName(h.star)} size={40} />
+            <div className="award-main">
+              <strong className="player-link" onClick={() => g.select(h.star)}>{store.fullName(h.star)}</strong>
+              {clubTag(clubId)}
+              <span className="award-desc">{what.charAt(0).toUpperCase() + what.slice(1)}.</span>
+            </div>
+            {h.speed !== undefined && h.what !== 'block' && <span className="award-speed">{h.speed} km/h</span>}
+            <button className="paper-btn primary-dark award-watch" onClick={() => g.openReplay(h, `${label} · ${a.month}`)}>
+              <Icon name="play" size={13} /> Watch
+            </button>
+          </div>
+        );
+      })}
+      {a.players?.map((l, i) => (
+        <div key={l.p} className={`award-row${i === 0 ? ' winner' : ''}${l.clubId === world.userClubId ? ' ours' : ''}`}>
+          {rank(i)}
+          <PlayerFace playerId={store.id[l.p]} name={store.fullName(l.p)} size={40} />
+          <div className="award-main">
+            <strong className="player-link" onClick={() => g.select(l.p)}>{store.fullName(l.p)}</strong>
+            {clubTag(l.clubId)}
+            <span className="award-desc">
+              {POSITION_NAMES[store.position[l.p] as Position]} · {l.apps} matches · {l.points} points
+            </span>
+          </div>
+          <RatingBadge value={l.avg} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** A league matchday: every result, and the table as it left it. */
 function Roundup({ message: m }: { message: GameMessage }): JSX.Element {
   const g = useGame();
@@ -832,6 +898,14 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
 
   if (m.roundup !== undefined) {
     out.push(<button key="table" className="paper-btn primary-dark" onClick={() => g.go('table')}>Full table</button>);
+  }
+  const winner = m.award?.highlights?.[0];
+  if (m.award !== undefined && winner !== undefined) {
+    out.push(
+      <button key="watch" className="paper-btn primary-dark" onClick={() => g.openReplay(winner, `${AWARD_TITLES[m.award!.kind]} · ${m.award!.month}`)}>
+        <Icon name="play" size={15} /> Watch the {m.award.kind === 'point' ? 'point' : 'play'}
+      </button>,
+    );
   }
   if (m.statement !== undefined) {
     out.push(<button key="books" className="paper-btn primary-dark" onClick={() => g.go('finances')}>View finances</button>);
