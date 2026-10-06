@@ -84,7 +84,11 @@ export function describeHighlight(world: World, h: Highlight): string {
   const stake = won ? `to win ${setName(h)}` : `to make it ${own}–${other} in ${setName(h)}`;
   const speed = h.speed !== undefined ? `${h.speed} km/h ` : '';
   const jump = h.contacts.find((c) => c.kind === 'serve')?.detail === 'jump';
-  const what = h.what === 'spike' ? `a ${speed}spike`
+  const shot = h.contacts[h.contacts.length - 1]?.shot;
+  const spike = shot === 'blockout' ? `a ${speed}block-out` : shot === 'cut' ? 'a cut shot across the 3 m line'
+    : shot === 'tip' ? 'a tip over the block' : shot === 'roll' ? 'a roll shot into the open court'
+      : shot === 'line' ? `a ${speed}line shot` : `a ${speed}spike`;
+  const what = h.what === 'spike' ? spike
     : h.what === 'block' ? 'a stuff block'
       : h.what === 'ace' ? `${jump ? `a ${speed}jump serve` : 'a float serve'} for an ace`
         : `the ${h.contacts[h.contacts.length - 1]?.kind === 'blocked' ? 'block' : 'kill'} that ended a ${h.attacks}-attack rally`;

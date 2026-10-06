@@ -53,6 +53,12 @@ import {
   type TeamMatchStats,
 } from './stats.ts';
 
+/** A hitter recycles only when the block is winning — when a stuff or an
+ *  error is at least this much likelier than a kill — and then at most this
+ *  often, a hitter with perfect touch, less the less he has. */
+const RECYCLE_WHEN = 0.55;
+const RECYCLE_RATE = 0.22;
+
 /** A left-hander's edge attacking from the right side. */
 const LEFTY_EDGE = 1.03;
 /** What a good other hand is worth to a hitter on a bad set — the ball off
@@ -123,6 +129,18 @@ export interface MatchSetup {
   friendly?: boolean;
 }
 
+/**
+ * Where an attack went, and how. Put away or dug: hard cross-court, down the
+ * line, a short cut across the 3 m line by the sideline, a tip over the block,
+ * an off-speed roll shot into the open court, between the blockers, deep to
+ * the back line from the back row, a quick straight down — or off the block's
+ * outside hand and out (`blockout`), or softly into it on purpose to play the
+ * ball again (`recycle`). Missed: long, wide or into the net.
+ */
+export type Shot =
+  | 'cross' | 'line' | 'cut' | 'tip' | 'roll' | 'seam' | 'deep' | 'quick' | 'blockout' | 'recycle'
+  | 'long' | 'wide' | 'net';
+
 export interface RallyContact {
   kind:
     | 'serve' | 'ace' | 'serveError'
@@ -143,6 +161,8 @@ export interface RallyContact {
   /** Who stuffed a blocked attack, and how high his hands were. */
   by?: number;
   blockHeight?: number;
+  /** Where an attack went, and how — see Shot. A dig marked `cover` is a hitter's own side playing his recycled ball. */
+  shot?: Shot;
 }
 
 export interface RallyLogEntry {
@@ -642,12 +662,64 @@ export class MatchSimulator {
 
   /** How fast a spike leaves the hand, km/h: the hitter's power and reach, the
    *  kind of attack — a quick is snapped, not swung — and a ball put away hit hardest. */
-  private spikeSpeed(ar: PlayerMatchRatings, lane: number, kill: boolean): number | undefined {
+  private spikeSpeed(ar: PlayerMatchRatings, lane: number, kill: boolean, shot?: Shot): number | undefined {
     if (!this.recording) return undefined;
+    // The soft ones: a tip pushed over, a roll shot looped, a ball played into the block.
+    if (shot === 'tip' || shot === 'recycle') return Math.round(clamp(30 + this.flair.gaussian(0, 4), 20, 42));
+    if (shot === 'roll') return Math.round(clamp(55 + this.flair.gaussian(0, 5), 42, 70));
     const kind = lane === AttackLane.QuickMiddle ? -10 : lane === AttackLane.SecondTempoOutside ? -6
       : lane === AttackLane.Pipe || lane === AttackLane.BackRowRight ? -3 : 0;
-    const v = 82 + kind + 0.4 * ar.attackPower * ar.fatigue + 0.12 * ar.spikeReachEdge + this.flair.gaussian(0, 4) + (kill ? 3 : 0);
+    const angle = shot === 'cut' ? 0.92 : 1;
+    const v = (82 + kind + 0.4 * ar.attackPower * ar.fatigue + 0.12 * ar.spikeReachEdge + this.flair.gaussian(0, 4) + (kill ? 3 : 0)) * angle;
     return Math.round(clamp(v, 60, 134));
+  }
+
+  /**
+   * Where an attack went, given how it ended. A power hitter mostly hits
+   * through it — cross-court, down the line, between the blockers; a
+   * technician cuts it short, tips and rolls it, and uses the block, wiping
+   * the ball off its outside hand; a bad set means more soft shots; a quick
+   * goes straight down; the back row hits deep. Rolled on the match's own
+   * dice for what only shows, so it changes nothing about how the rally ends.
+   */
+  private pickShot(
+    lane: number, outcome: 'kill' | 'dug' | 'blocked' | 'error', blockers: number, setQuality: number, ar: PlayerMatchRatings,
+  ): Shot | undefined {
+    if (!this.recording) return undefined;
+    const style = clamp((ar.attackControl - ar.attackPower) / 20, -1, 1);
+    const bad = 1 - setQuality;
+    let w: Partial<Record<Shot, number>>;
+    if (outcome === 'error') w = { long: 4.5, wide: 3.5 + style, net: 1 + bad * 2 };
+    else if (outcome === 'blocked') w = { cross: 4, line: 3, seam: 3 };
+    else if (lane === AttackLane.QuickMiddle) w = { quick: 6, cut: 2 + style, tip: 1 + bad * 2, seam: 1 };
+    else if (lane === AttackLane.Pipe || lane === AttackLane.BackRowRight) {
+      w = { deep: 4, cross: 2.5, seam: 2, line: 1.5, roll: 0.5 + bad };
+    } else {
+      w = {
+        cross: 3.2 - style * 0.6, line: 2.2 - style * 0.3, cut: 1.3 + style * 0.6, tip: 0.5 + bad * 1.2 + style * 0.3,
+        roll: 0.5 + bad + style * 0.3, seam: 1 - style * 0.2,
+        // Off the block and out: only a ball put away, and the bigger the block the likelier.
+        blockout: outcome === 'kill' && blockers >= 1 ? (0.5 + blockers * 0.55) * (1 + style * 0.5) : 0,
+      };
+    }
+    const entries = Object.entries(w).filter(([, v]) => (v ?? 0) > 0) as Array<[Shot, number]>;
+    let r = this.flair.float() * entries.reduce((s, [, v]) => s + v, 0);
+    for (const [shot, v] of entries) {
+      r -= v;
+      if (r <= 0) return shot;
+    }
+    return entries[entries.length - 1]?.[0];
+  }
+
+  /** Who covers a hitter's recycled ball: the libero if he is on, else whoever is behind the hitter in the back row. */
+  private coverFor(atk: TeamRuntime, attacker: number): number {
+    const pos = this.roles;
+    const setter = atk.settingIdx();
+    for (const z of [5, 4, 0, 1, 2, 3]) {
+      const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx);
+      if (p >= 0 && p !== attacker && p !== setter) return p;
+    }
+    return attacker;
   }
 
   /** How high a spike is struck, m: the hitter's reach, less what a poor set
@@ -1287,8 +1359,9 @@ export class MatchSimulator {
     for (let contact = 0; contact < 24; contact++) {
       const outcome = this.resolveOffense(attacking, quality, grd, transition, firstTouch);
       if (outcome.point !== -1) return outcome.point as 0 | 1;
-      // Ball was dug; the other side now attacks off a transition ball.
-      attacking = (1 - attacking) as 0 | 1;
+      // Ball was dug; the other side now attacks off a transition ball — or,
+      // played off the block on purpose, it is back with the side that hit it.
+      if (outcome.again !== true) attacking = (1 - attacking) as 0 | 1;
       quality = outcome.nextQuality;
       grd = gradeOf(quality);
       transition = true;
@@ -1308,7 +1381,7 @@ export class MatchSimulator {
     grade: Grade,
     transition: boolean,
     firstTouch: number,
-  ): { point: number; nextQuality: number; toucher: number } {
+  ): { point: number; nextQuality: number; toucher: number; again?: boolean } {
     const atk = this.teams[attacking];
     const def = this.teams[1 - attacking];
     const rng = this.rng;
@@ -1407,34 +1480,64 @@ export class MatchSimulator {
     const pKillGivenLive = contest(attackRating + ATTACK_DEFENCE_BALANCE, digRating, 16);
     const pKill = remaining * pKillGivenLive;
 
+    // ---- Recycle ----
+    // Up against a big block on a ball he can't hit through it, a hitter with
+    // the touch for it plays it softly into the block instead: it drops back on
+    // his own side, his team-mates cover it, and they build the attack again.
+    if (lane !== AttackLane.QuickMiddle && blockCount >= 2 && pBlocked + pError > pKill * RECYCLE_WHEN &&
+      rng.chance(RECYCLE_RATE * (ar.attackControl / 100))) {
+      this.push({
+        kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot: 'recycle',
+        speed: this.spikeSpeed(ar, lane, false, 'recycle'), height,
+      });
+      const blocker = this.pickBlocker(def, lane);
+      statsFor(def.stats, blocker).blockTouches++;
+      this.push({ kind: 'blockTouch', team: (1 - attacking) as 0 | 1, player: blocker, height: this.blockHeightOf(def, blocker) });
+      const cover = this.coverFor(atk, attacker);
+      const coverQuality = clamp(rng.gaussian(0.62, 0.14), 0.2, 0.92);
+      this.push({ kind: 'dig', team: attacking, player: cover, quality: coverQuality, shot: 'recycle' });
+      return { point: -1, nextQuality: coverQuality, toucher: cover, again: true };
+    }
+
     const roll = rng.float();
     if (roll < pBlocked) {
       aStats.attackBlocked++;
       const blocker = this.pickBlocker(def, lane);
       statsFor(def.stats, blocker).blockPoints++;
+      const shot = this.pickShot(lane, 'blocked', blockCount, setQuality, ar);
       this.push({
-        kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane],
-        speed: this.spikeSpeed(ar, lane, false), height, by: blocker, blockHeight: this.blockHeightOf(def, blocker),
+        kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+        speed: this.spikeSpeed(ar, lane, false, shot), height, by: blocker, blockHeight: this.blockHeightOf(def, blocker),
       });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError) {
       aStats.attackErrors++;
       def.stats.opponentErrors++;
+      const shot = this.pickShot(lane, 'error', blockCount, setQuality, ar);
       this.push({
-        kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false), height,
+        kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+        speed: this.spikeSpeed(ar, lane, false, shot), height,
       });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     if (roll < pBlocked + pError + pKill) {
       aStats.attackKills++;
       setterStats.setAssists++;
-      this.push({ kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, true), height });
+      const shot = this.pickShot(lane, 'kill', blockCount, setQuality, ar);
+      this.push({
+        kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+        speed: this.spikeSpeed(ar, lane, true, shot), height,
+      });
       return { point: attacking, nextQuality: 0, toucher: -1 };
     }
 
     // ---- Dug: the rally continues ----
-    this.push({ kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], speed: this.spikeSpeed(ar, lane, false), height });
+    const shot = this.pickShot(lane, 'dug', blockCount, setQuality, ar);
+    this.push({
+      kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+      speed: this.spikeSpeed(ar, lane, false, shot), height,
+    });
     const digger = this.pickDigger(def);
     const dr = def.rate(digger);
     statsFor(def.stats, digger).digsTotal++;

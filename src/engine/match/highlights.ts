@@ -107,9 +107,10 @@ export function rateRally(
   if (last.kind === 'kill') {
     const speed = last.speed ?? 100;
     const backRow = last.detail === 'Pipe' || last.detail === 'Back-row right';
+    const touch = last.shot === 'blockout' ? 0.7 : last.shot === 'cut' ? 0.5 : last.shot === 'tip' || last.shot === 'roll' ? 0.3 : 0;
     point = {
       what: 'spike', star: last.player, starTeam: last.team, speed, height: last.height,
-      score: 1 + Math.max(0, speed - 100) * 0.12 + (backRow ? 0.3 : 0) + (attacks >= 2 ? 0.3 : 0),
+      score: 1 + Math.max(0, speed - 100) * 0.12 + (backRow ? 0.3 : 0) + (attacks >= 2 ? 0.3 : 0) + touch,
     };
   } else if (last.kind === 'blocked' && last.by !== undefined) {
     point = {

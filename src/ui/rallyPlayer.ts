@@ -6,7 +6,7 @@
  * serve is read by the radar too, as it flies.
  */
 
-import type { RallyContact } from '../engine/match/engine.ts';
+import type { RallyContact, Shot } from '../engine/match/engine.ts';
 import { MONSTER_SPIKE_KMH } from '../engine/match/highlights.ts';
 import type { Beat, Radar, Scene } from './matchCourt.ts';
 
@@ -38,6 +38,19 @@ const BIG_PLAY_CALLOUTS: Partial<Record<RallyContact['kind'], readonly string[]>
   serveError: ['OUT!', 'INTO THE NET!'],
 };
 
+/** A spike put away, called by how it was done. */
+const SHOT_CALLOUTS: Partial<Record<Shot, readonly string[]>> = {
+  tip: ['TIPPED IN!', 'SOFT HANDS!'],
+  roll: ['ROLL SHOT!', 'PLACED!'],
+  cut: ['CUT SHOT!', 'SHARP ANGLE!'],
+  line: ['DOWN THE LINE!', 'LINE SHOT!'],
+  blockout: ['BLOCK OUT!', 'OFF THE BLOCK!'],
+  seam: ['THROUGH THE SEAM!', 'SPLIT THE BLOCK!'],
+  long: ['LONG!', 'OUT!'],
+  wide: ['WIDE!', 'OUT!'],
+  net: ['INTO THE NET!'],
+};
+
 function pick(options: readonly string[]): string {
   return options[Math.floor(Math.random() * options.length)];
 }
@@ -47,13 +60,18 @@ function pick(options: readonly string[]): string {
  *  how high the hands were. */
 export function bigPlayFor(callout: Beat['callout']): BigPlay | null {
   if (callout === null) return null;
-  const { kind, team, speed, height } = callout;
+  const { kind, team, speed, height, shot } = callout;
+  // Played off the block on purpose, to go again.
+  if (shot === 'recycle') return { text: 'RECYCLED!', team };
   const options = BIG_PLAY_CALLOUTS[kind];
   if (options === undefined) return null;
+  const byShot = shot !== undefined ? SHOT_CALLOUTS[shot] : undefined;
   if (kind === 'kill') {
-    const text = speed !== undefined && speed >= MONSTER_SPIKE_KMH ? 'MONSTER SPIKE!' : pick(options);
+    const power = shot !== 'tip' && shot !== 'roll';
+    const text = power && speed !== undefined && speed >= MONSTER_SPIKE_KMH ? 'MONSTER SPIKE!' : pick(byShot ?? options);
     return { text, team, reading: 'strike', speed, height };
   }
+  if (kind === 'attackError' && byShot !== undefined) return { text: pick(byShot), team };
   if (kind === 'ace') return { text: pick(options), team, reading: 'strike', speed, height };
   if (kind === 'blocked') return { text: pick(options), team, reading: 'block', height };
   return { text: pick(options), team };
