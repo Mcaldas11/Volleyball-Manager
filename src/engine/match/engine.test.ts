@@ -396,11 +396,15 @@ test('a side whose tactic the opposition has read wins less often', () => {
   assert.ok(read < unread - 0.06, `read ${read} vs unread ${unread}`);
 });
 
+/** Matches enough to see a coach's changes: in a well-matched pair they are a few a season, not every night. */
+const COACHED_MATCHES = Array.from({ length: 30 }, (_, i) => i + 1);
+
 test('an engine-coached side makes its own changes; one left alone makes none', () => {
+  const { store, setup: base } = buildMatch(4, 0);
   const benchUsed = (autoCoach: boolean): number => {
     let used = 0;
-    for (const seed of [1, 2, 3, 4, 5]) {
-      const { store, setup } = buildMatch(4, seed);
+    for (const seed of COACHED_MATCHES) {
+      const setup = { ...base, seed };
       const r = new MatchSimulator(store, { ...setup, autoCoach: [autoCoach, autoCoach] }).run();
       for (const [side, team] of [[setup.home, r.stats.home], [setup.away, r.stats.away]] as const) {
         for (const p of side.bench) if ((team.players.get(p)?.ralliesPlayed ?? 0) > 0) used++;
@@ -413,9 +417,10 @@ test('an engine-coached side makes its own changes; one left alone makes none', 
 });
 
 test('a bench handed to the engine mid-match is coached from then on', () => {
+  const { store, setup: base } = buildMatch(4, 0);
   let used = 0;
-  for (const seed of [1, 2, 3, 4, 5]) {
-    const { store, setup } = buildMatch(4, seed);
+  for (const seed of COACHED_MATCHES) {
+    const setup = { ...base, seed };
     const sim = new MatchSimulator(store, setup);
     for (let i = 0; i < 20; i++) sim.step();
     sim.setAutoCoach(0, true);
