@@ -104,10 +104,10 @@ test('each side sees the court as it faces it: left and right mirror across the 
 });
 
 test('the ball goes to whoever touches it, and the second ball is set from wherever the pass went', () => {
-  const { sim, positions } = liveMatch(4);
   let rallies = 0;
   const setDepths: number[] = [];
-  for (let i = 0; i < 120; i++) {
+  // Two matches: one side's passing can have a bad night.
+  for (const { sim, positions } of [liveMatch(4), liveMatch(5)]) for (let i = 0; i < 150; i++) {
     const pre = sim.snapshot();
     const entry = sim.step();
     if (entry === null) break;

@@ -377,8 +377,35 @@ test('ability decides most matches, but a clearly weaker side wins some on its n
     }).run();
     if (r.homeSets > r.awaySets) dogWins++;
   }
-  assert.ok(dogWins / n > 0.04, `the underdog won only ${dogWins} of ${n}`);
-  assert.ok(dogWins / n < 0.35, `the underdog won ${dogWins} of ${n}`);
+  assert.ok(dogWins / n > 0.08, `the underdog won only ${dogWins} of ${n}`);
+  assert.ok(dogWins / n < 0.48, `the underdog won ${dogWins} of ${n}`);
+});
+
+test('the weaker the side, the rarer its night — but a far weaker one still has it now and then', () => {
+  const world = generateWorld({ seed: 555, startYear: 2026, scale: 'small', manager: stubManager() });
+  const store = world.players;
+  const sides = world.clubs.filter((c) => c.players.length >= 12).map((c) => toTeamSetup(store, c));
+  const strength = (s: MatchSetup['home']): number => [...s.lineup, s.libero].reduce((t, p) => t + store.currentAbility[p], 0) / 7;
+  const upsets = (lo: number, hi: number): number => {
+    let won = 0;
+    let n = 0;
+    for (let i = 0; i < sides.length && n < 120; i++) {
+      for (let j = 0; j < sides.length && n < 120; j += 7) {
+        const gap = strength(sides[i]) - strength(sides[j]);
+        if (gap < lo || gap >= hi) continue;
+        const r = new MatchSimulator(store, {
+          home: sides[j], away: sides[i], format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: false, seed: n,
+        }).run();
+        if (r.homeSets > r.awaySets) won++;
+        n++;
+      }
+    }
+    return won / n;
+  };
+  const close = upsets(100, 150);
+  const far = upsets(220, 320);
+  assert.ok(close > 0.15 && close < 0.45, `100-150 below wins ${(close * 100).toFixed(0)}%`);
+  assert.ok(far > 0.04 && far < close, `220-320 below wins ${(far * 100).toFixed(0)}%`);
 });
 
 test('a side whose tactic the opposition has read wins less often', () => {

@@ -126,7 +126,7 @@ function byZone(tactics: Partial<TeamTactics>, seeds: number[]): Array<{ c: Rall
 }
 
 test('off a pass at the net anything goes; from 3-6 m the middle gets only the quick; from deep, only the pins', () => {
-  const plays = byZone({}, [11, 12, 13]);
+  const plays = byZone({}, Array.from({ length: 12 }, (_, i) => 11 + i));
   const middle = plays.filter(({ c }) => c.detail === 'Quick (middle)');
   assert.ok(middle.length > 10);
   assert.ok(middle.every(({ zone }) => zone !== 'C'), 'no middle off a deep pass');

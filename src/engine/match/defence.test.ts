@@ -42,8 +42,10 @@ test('a defence in the wrong places concedes more points, and the points go wher
   const huddle: DefenceLayout = { lb: { u: 0.5, v: 0.5 }, mb: { u: 0.52, v: 0.5 }, rb: { u: 0.48, v: 0.5 }, free: { u: 0.5, v: 0.45 } };
   const bad: DefenceLayouts = { oh: huddle, mb: huddle, opp: huddle };
   const killRate = (cs: RallyContact[]): number => cs.filter((c) => c.kind === 'kill').length / cs.length;
-  const good = against(defaultDefenceLayouts(), [1, 2, 3, 4]);
-  const poor = against(bad, [1, 2, 3, 4]);
+  // Enough matches that a side's night — good or bad — doesn't hide it.
+  const seeds = Array.from({ length: 16 }, (_, i) => i + 1);
+  const good = against(defaultDefenceLayouts(), seeds);
+  const poor = against(bad, seeds);
   assert.ok(killRate(poor) > killRate(good) + 0.02, `${(killRate(poor) * 100).toFixed(1)}% against ${(killRate(good) * 100).toFixed(1)}%`);
 
   // Nobody deep on the line against the outside: the outside's points go down it.
