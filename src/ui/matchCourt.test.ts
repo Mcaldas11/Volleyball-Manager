@@ -94,11 +94,13 @@ test('the ball goes to whoever touches it, and the second ball is set from where
   }
   assert.ok(rallies > 50);
   assert.ok(setDepths.length > 20, 'plenty of sets should have been scripted');
-  assert.ok(setDepths.every((d) => d < 0.6), 'sets come from the front half of the side');
+  assert.ok(setDepths.every((d) => d < 1), 'sets are played inside the court');
   const atNet = setDepths.filter((d) => d < 0.15).length / setDepths.length;
-  const wellOff = setDepths.filter((d) => d > 0.25).length / setDepths.length;
-  assert.ok(atNet > 0.4, `most passes find the setter at the net (${atNet.toFixed(2)})`);
+  const wellOff = setDepths.filter((d) => d > 0.33).length / setDepths.length;
+  const deep = setDepths.filter((d) => d > 0.66).length / setDepths.length;
+  assert.ok(atNet > 0.3, `most passes find the setter at the net (${atNet.toFixed(2)})`);
   assert.ok(wellOff > 0.05, `but some leave them chasing well off it (${wellOff.toFixed(2)})`);
+  assert.ok(deep < wellOff, 'and fewer still are played from deep, 6 to 9 m back');
 });
 
 test('the better the pass, the closer to the net, the higher and the more on target it comes down', () => {
@@ -108,7 +110,8 @@ test('the better the pass, the closer to the net, the higher and the more on tar
     const bad = passSpot(0.15, j);
     assert.ok(perfect.at.v < 0.1, 'a perfect pass is on the target');
     assert.ok(perfect.at.v <= good.at.v && good.at.v < bad.at.v, 'a worse pass lands further off the net');
-    assert.ok(bad.at.v > 0.35, 'a bad one well off it');
+    assert.ok(bad.at.v > 0.66, 'a bad one deep, 6 m or more off the net');
+    assert.ok(good.at.v > 0.33 && good.at.v < 0.66, 'a fair one 3 to 6 m off it');
     assert.ok(perfect.z > good.z && good.z > bad.z, 'and lower');
   }
 });

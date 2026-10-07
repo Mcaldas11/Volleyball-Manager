@@ -27,7 +27,7 @@
 
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
 import type { RallyContact, Shot } from '../engine/match/engine.ts';
-import type { PlayCall } from '../engine/match/tactics.ts';
+import { passZone, type PlayCall } from '../engine/match/tactics.ts';
 import { Position } from '../engine/model/positions.ts';
 
 /** A point on the floor, in court metres. */
@@ -265,6 +265,8 @@ const PLAY_POINT: Partial<Record<PlayCall, (lane: string | undefined) => Local &
   tandem: () => ({ u: 0.5, v: 0.09, setArc: 0.6 }),
   shoot: (lane) => ({ u: lane === 'Opposite' ? 0.9 : 0.1, v: 0.07, setArc: 0.55 }),
   pipeQuick: () => ({ u: 0.5, v: 0.36, setArc: 0.75 }),
+  // A fast, flat set out to the pin the hitter is on.
+  fastSet: (lane) => ({ ...(HIT_POINT[lane ?? 'Outside'] ?? HIT_POINT.Outside), setArc: 0.7 }),
 };
 
 /** Where the middle jumps for the quick as the decoy. */
@@ -517,10 +519,17 @@ function holeIn(f: Formation, seed: number): Local {
  */
 export function passSpot(q: number, jitter: number): { at: Local; z: number; arc: number } {
   const miss = Math.min(1, Math.max(0, (0.66 - q) / 0.56));
+  // How far off the net follows the pass's zone (see passZone): a good one
+  // within 3 m, on the target if it is very good; a fair one 3 to 6 m out; a
+  // poor one 6 to 9 m back, with only the pins to set.
+  const zone = passZone(q);
+  const v = zone === 'A' ? TARGET.v + Math.min(1, Math.max(0, (0.66 - q) / 0.08)) * 0.12
+    : zone === 'B' ? 0.36 + ((0.58 - q) / 0.16) * 0.26
+      : 0.68 + Math.min(1, (0.42 - q) / 0.32) * 0.2;
   return {
     at: {
       u: Math.min(0.94, Math.max(0.12, TARGET.u + jitter * miss * 0.34)),
-      v: TARGET.v + miss * (0.34 + 0.1 * Math.abs(jitter)),
+      v: v + Math.abs(jitter) * 0.02 * miss,
     },
     z: 2.6 - miss * 0.85,
     // Mostly lower and flatter the worse it is; now and then shanked sky-high.

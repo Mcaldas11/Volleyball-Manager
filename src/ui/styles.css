@@ -5291,3 +5291,156 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .arm-box.lvl-3 .arm-pips i.on { background: #e0823a; }
 .arm-box.lvl-4 .arm-pips i.on { background: #e3c02b; }
 .arm-box.lvl-5 .arm-pips i.on, .arm-box.lvl-6 .arm-pips i.on { background: #3dbb5c; }
+
+/* ---- The team instructions board: with the ball and without it ---- */
+.tactics-page { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.tboard { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.tboard-phase {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.tboard-phase button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.tboard-phase button.active { background: var(--club-tint); color: #fff; box-shadow: inset 0 0 0 1px var(--club-bright); }
+.tboard-body { display: grid; grid-template-columns: 270px minmax(0, 1fr) 250px; gap: 16px; align-items: start; min-height: 0; }
+.tboard.compact .tboard-body { grid-template-columns: minmax(0, 1fr); }
+.tboard-cards { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tboard-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font: 700 12px/1 var(--font-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.tboard-head .faint { font: 500 12px/1 var(--font-body); letter-spacing: 0; text-transform: none; }
+.tboard-zones { display: inline-flex; gap: 4px; margin-left: auto; }
+.tboard-zones button { width: 32px; height: 26px; padding: 0; border-radius: 5px; font-weight: 800; }
+.tboard-zones button.active { border-color: var(--club-bright); background: var(--club-tint); color: #fff; }
+.tboard-note { margin: 2px 0 0; font-size: 12px; color: var(--text-dim); }
+
+.icard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.icard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 9px 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  color: var(--club-bright);
+  text-align: left;
+  cursor: pointer;
+}
+.icard:hover { border-color: var(--line-strong); }
+.icard.active { border-color: var(--club-bright); box-shadow: inset 0 0 0 1px var(--club-bright); }
+.icard-title { font: 700 12.5px/1.15 var(--font-display); letter-spacing: 0.03em; color: var(--club-bright); }
+.icard-visual { width: 100%; height: 46px; color: var(--club-bright); }
+.icard-value { overflow: hidden; color: var(--text); font-size: 12.5px; font-weight: 600; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.tboard.compact .icard-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.tboard.compact .icard-visual { height: 38px; }
+
+.tboard-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.tboard-pick-head { display: flex; flex-direction: column; gap: 3px; }
+.tboard-pick-head b { font: 700 14px/1.1 var(--font-display); letter-spacing: 0.03em; }
+.tboard-pick-head .faint { font-size: 12px; }
+.tboard-pick-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+
+/* The half court and its three pass zones. */
+.zcourt {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #16334f, #12283f);
+}
+.zcourt-net {
+  position: relative;
+  height: 14px;
+  margin: 0 -4px 6px;
+  border-bottom: 4px solid rgba(255, 255, 255, 0.85);
+}
+.zcourt-net span {
+  position: absolute;
+  right: 4px;
+  top: -2px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+.zcourt-band {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 2px 10px;
+  height: 104px;
+  padding: 10px;
+  border: 0;
+  border-bottom: 2px dashed rgba(255, 255, 255, 0.45);
+  border-radius: 0;
+  background: #c76f36;
+  text-align: left;
+}
+.zcourt-band:first-of-type { border-bottom-style: solid; background: #d27d42; }
+.zcourt-band:last-of-type { border-bottom: 2px solid rgba(255, 255, 255, 0.85); background: #b9652f; }
+.zcourt-band:hover { filter: brightness(1.08); }
+.zcourt-band.active { box-shadow: inset 0 0 0 3px var(--club-bright); filter: brightness(1.12); }
+.zcourt-zone { grid-row: span 2; font: 800 30px/1 var(--font-display); color: #fff; }
+.zcourt-depth { font-size: 12px; font-weight: 700; color: rgba(255, 255, 255, 0.85); }
+.zcourt-sum { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+.zcourt-sum i {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(10, 16, 24, 0.55);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+.zcourt-sum i.off { color: rgba(255, 255, 255, 0.45); text-decoration: line-through; }
+.zcourt-note { margin: 8px 0 0; font-size: 11.5px; color: var(--text-dim); }
+
+/* The overview down the side. */
+.tboard-overview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tov { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, 0.02); }
+.tov.clickable { cursor: pointer; }
+.tov.clickable:hover { border-color: var(--line-strong); }
+.tov.active { border-color: var(--club-bright); }
+.tov-title { margin-bottom: 4px; font: 700 11.5px/1.2 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--club-bright); }
+.tov-row { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-dim); }
+.tov-row b { overflow: hidden; color: var(--text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1180px) {
+  .tboard-body { grid-template-columns: 230px minmax(0, 1fr); }
+  .tboard-overview { display: none; }
+}
+.dcourt { color: var(--club-bright); }
+.dcourt-svg { width: 100%; height: auto; max-height: 360px; }
+.dcourt .zcourt-note b { color: var(--text); }

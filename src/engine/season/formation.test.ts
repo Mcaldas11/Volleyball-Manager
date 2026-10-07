@@ -56,18 +56,21 @@ function secondTouches(seed: number, formation: Formation) {
   const store = world.players;
   a.tactics.formation = formation;
   const home = toTeamSetup(store, a);
-  const result = simulateMatch(store, {
-    home, away: toTeamSetup(store, b), format: MatchFormat.BestOf5, importance: 0.5,
-    neutralVenue: false, collectLog: true, seed: 11,
-  });
   const pairs: Array<{ first: number; second: number; quality: number }> = [];
-  for (const r of result.log ?? []) {
-    let first = -1;
-    let quality = 1;
-    for (const c of r.contacts) {
-      if (c.team !== 0) continue;
-      if (c.kind === 'reception' || c.kind === 'dig') { first = c.player; quality = c.quality ?? 1; }
-      if ((c.kind === 'set' || c.kind === 'setError') && first >= 0) { pairs.push({ first, second: c.player, quality }); first = -1; }
+  // A few matches: a bad ball the setter can't reach is not an every-night thing.
+  for (const seed of [11, 12, 13]) {
+    const result = simulateMatch(store, {
+      home, away: toTeamSetup(store, b), format: MatchFormat.BestOf5, importance: 0.5,
+      neutralVenue: false, collectLog: true, seed,
+    });
+    for (const r of result.log ?? []) {
+      let first = -1;
+      let quality = 1;
+      for (const c of r.contacts) {
+        if (c.team !== 0) continue;
+        if (c.kind === 'reception' || c.kind === 'dig') { first = c.player; quality = c.quality ?? 1; }
+        if ((c.kind === 'set' || c.kind === 'setError') && first >= 0) { pairs.push({ first, second: c.player, quality }); first = -1; }
+      }
     }
   }
   return { store, home, pairs };

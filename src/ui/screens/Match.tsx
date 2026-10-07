@@ -318,7 +318,7 @@ export function describeRallyHighlight(
   if (last?.kind === 'kill' && last.speed !== undefined) {
     const shot = last.shot;
     const monster = last.speed >= MONSTER_SPIKE_KMH && shot !== 'tip' && shot !== 'roll';
-    const play = last.play !== undefined && last.play !== 'quick' ? last.play : undefined;
+    const play = last.play !== undefined && last.play !== 'quick' && last.play !== 'fastSet' ? last.play : undefined;
     const title = monster ? 'Monster spike' : play !== undefined ? PLAY_NAMES[play] : shot !== undefined ? SHOT_TITLES[shot] ?? 'Kill' : 'Kill';
     const how = shot !== undefined ? SHOT_VERBS[shot] : monster ? 'hammers it down' : 'finishes it off';
     const off = play !== undefined && !monster ? '' : play !== undefined ? ` off the ${PLAY_NAMES[play].toLowerCase()}` : '';

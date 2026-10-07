@@ -48,9 +48,14 @@ import {
   COMBINATION_PROFILE,
   combinationsOf,
   isCombination,
-  MiddlePlay,
-  middlePlayOf,
+  BackRowOption,
+  MiddleOption,
+  PinSet,
+  passZone,
   type PlayCall,
+  type ZonePlan,
+  zonePlansOf,
+  ZoneTarget,
   type TeamTactics,
 } from './tactics.ts';
 import {
@@ -64,6 +69,14 @@ import {
  *  often, a hitter with perfect touch, less the less he has. */
 const RECYCLE_WHEN = 0.55;
 const RECYCLE_RATE = 0.22;
+
+/** How much more the setter looks for a zone plan's target. */
+const ZONE_TARGET_PULL = 1.8;
+/** A fast set to the pin beats the block a little and is a little harder to hit; a high one the other way round. */
+const FAST_SET_BLOCK = 0.94;
+const FAST_SET_ERROR = 1.08;
+const HIGH_BALL_BLOCK = 1.03;
+const HIGH_BALL_ERROR = 0.95;
 
 /** A left-hander's edge attacking from the right side. */
 const LEFTY_EDGE = 1.03;
@@ -735,26 +748,30 @@ export class MatchSimulator {
    * now and then a combination off the middle — if there is a middle up front
    * to jump for the quick, and a pass good enough to run one off.
    */
-  private callPlay(atk: TeamRuntime, lane: number, setQuality: number): PlayCall | undefined {
+  private callPlay(atk: TeamRuntime, lane: number, setQuality: number, plan: ZonePlan): PlayCall | undefined {
     const rng = this.rng;
     if (lane === AttackLane.QuickMiddle) {
-      const mp = middlePlayOf(atk.tactics);
-      if (mp === MiddlePlay.Quick) return 'quick';
-      if (mp === MiddlePlay.Slide) return 'slide';
-      if (mp === MiddlePlay.BackQuick) return setQuality >= 0.45 ? 'backQuick' : 'quick';
+      if (plan.middle === MiddleOption.Quick) return 'quick';
+      if (plan.middle === MiddleOption.Slide) return 'slide';
+      if (plan.middle === MiddleOption.BackQuick) return setQuality >= 0.45 ? 'backQuick' : 'quick';
       const back = setQuality >= 0.55 ? 0.2 : 0;
       const roll = rng.float() * (0.55 + 0.25 + back);
       return roll < 0.55 ? 'quick' : roll < 0.8 ? 'slide' : 'backQuick';
     }
-    const rate = COMBINATION_PROFILE[combinationsOf(atk.tactics)].rate;
-    if (rate === 0 || setQuality < 0.55 || this.laneAttacker[AttackLane.QuickMiddle] < 0 || !rng.chance(rate)) return undefined;
-    switch (lane) {
-      case AttackLane.OutsideHigh: return rng.chance(0.55) ? 'x' : 'shoot';
-      case AttackLane.SecondTempoOutside: return 'x';
-      case AttackLane.OppositeRight: return rng.chance(0.6) ? 'tandem' : 'shoot';
-      case AttackLane.Pipe: return 'pipeQuick';
-      default: return undefined;
+    const pin = lane === AttackLane.OutsideHigh || lane === AttackLane.OppositeRight || lane === AttackLane.SecondTempoOutside;
+    const rate = plan.combos ? COMBINATION_PROFILE[combinationsOf(atk.tactics)].rate : 0;
+    if (rate > 0 && setQuality >= 0.55 && this.laneAttacker[AttackLane.QuickMiddle] >= 0 && rng.chance(rate)) {
+      switch (lane) {
+        case AttackLane.OutsideHigh: return rng.chance(0.55) ? 'x' : 'shoot';
+        case AttackLane.SecondTempoOutside: return 'x';
+        case AttackLane.OppositeRight: return rng.chance(0.6) ? 'tandem' : 'shoot';
+        case AttackLane.Pipe: return 'pipeQuick';
+        default: break;
+      }
     }
+    // The pins: a fast, flat set as instructed — or, left to the setter, off a set good enough for one.
+    if (pin && (plan.pins === PinSet.Fast || (plan.pins === PinSet.Mixed && setQuality >= 0.62))) return 'fastSet';
+    return undefined;
   }
 
   /** Who covers a hitter's recycled ball: the libero if he is on, else whoever is behind the hitter in the back row. */
@@ -1458,7 +1475,9 @@ export class MatchSimulator {
     this.push({ kind: 'set', team: attacking, player: setter });
 
     // ---- Attack lane selection ----
-    const lane = this.chooseLane(atk, grade, rotTac, setQuality, setter);
+    // What the setter may run depends on where the pass came down, and the coach's plan for that zone.
+    const plan = zonePlansOf(atk.tactics)[passZone(quality)];
+    const lane = this.chooseLane(atk, grade, rotTac, setQuality, setter, plan);
     if (lane === -1) {
       // No attacker available: send a free ball over and concede the initiative.
       this.push({ kind: 'freeball', team: attacking, player: setter });
@@ -1475,7 +1494,7 @@ export class MatchSimulator {
     // for the quick as the decoy. A combination beats the block if the side
     // has rehearsed it; if not, the timing goes, and the ball is hit off a
     // worse set.
-    const call = this.callPlay(atk, lane, setQuality);
+    const call = this.callPlay(atk, lane, setQuality, plan);
     const combo = isCombination(call);
     const decoy = combo ? this.laneAttacker[AttackLane.QuickMiddle] : -1;
     const rehearsed = atk.prep.combinations ?? 0;
@@ -1517,7 +1536,9 @@ export class MatchSimulator {
     const blockCount = combo
       ? Math.max(1, this.blockersFor(lane, grade, def, rotTac, transition) - 1)
       : this.blockersFor(lane, grade, def, rotTac, transition);
-    const beaten = combo ? 0.86 + 0.1 * atk.read : call === 'slide' ? 0.9 : call === 'backQuick' ? 0.95 : 1;
+    const high = call === undefined && (lane === AttackLane.OutsideHigh || lane === AttackLane.OppositeRight);
+    const beaten = combo ? 0.86 + 0.1 * atk.read : call === 'slide' ? 0.9 : call === 'backQuick' ? 0.95
+      : call === 'fastSet' ? FAST_SET_BLOCK : high ? HIGH_BALL_BLOCK : 1;
     // A block that knows the attack's patterns is there before the ball.
     const blockRating =
       this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay) * def.edge * (1 + READ_BLOCK * atk.read) *
@@ -1536,7 +1557,7 @@ export class MatchSimulator {
     const controlFactor = (ar.attackControl * ar.fatigue) / 100;
     const pError = clamp(
       (0.145 - controlFactor * 0.09) * tempo.executionDifficulty * (transition ? 1.12 : 1) *
-        (combo ? 1.12 - 0.12 * rehearsed : call === 'slide' ? 1.06 : 1) +
+        (combo ? 1.12 - 0.12 * rehearsed : call === 'slide' ? 1.06 : call === 'fastSet' ? FAST_SET_ERROR : high ? HIGH_BALL_ERROR : 1) +
         (1 - setOnIt) * 0.05,
       0.02,
       0.30,
@@ -1725,6 +1746,8 @@ export class MatchSimulator {
     setQuality: number,
     /** Whoever is setting this ball — he can't hit it too. */
     setter: number,
+    /** The coach's plan for a pass in this zone. */
+    plan: ZonePlan,
   ): number {
     const weights = this.laneWeights;
     const attackers = this.laneAttacker;
@@ -1745,8 +1768,8 @@ export class MatchSimulator {
 
       if (front) {
         if (role === Position.MiddleBlocker) {
-          // Quick attacks need a pass the setter can work with.
-          if (grade >= Grade.Positive && setQuality > 0.35) {
+          // Quick attacks need a pass the setter can work with — and the zone's plan to allow one.
+          if (plan.middle !== MiddleOption.None && setQuality > 0.35) {
             weights[AttackLane.QuickMiddle] = base[AttackLane.QuickMiddle] * fastBias * qual(r.quickAttack) *
               COMBINATION_PROFILE[combinationsOf(atk.tactics)].quickFeed;
             attackers[AttackLane.QuickMiddle] = p;
@@ -1776,13 +1799,17 @@ export class MatchSimulator {
           }
         }
       } else {
-        // Back-row attacks demand a good pass and a real jumper.
-        if (grade >= Grade.Positive && setQuality > 0.42) {
-          const backBias = 0.7 + (rotTac.transitionBackRow / 100) * 0.7;
-          if (role === Position.OutsideHitter && z === 5) {
+        // Back-row attacks, where the zone's plan allows them: the pipe from 6
+        // demands a good set and a real jumper; a high ball to the opposite in
+        // 1 can be had off a worse one.
+        const backBias = 0.7 + (rotTac.transitionBackRow / 100) * 0.7;
+        const pipe = plan.backRow === BackRowOption.Both || plan.backRow === BackRowOption.Pipe;
+        const one = plan.backRow === BackRowOption.Both || plan.backRow === BackRowOption.ZoneOne;
+        if (pipe || one) {
+          if (pipe && role === Position.OutsideHitter && z === 5 && setQuality > 0.42) {
             weights[AttackLane.Pipe] = base[AttackLane.Pipe] * backBias * qual(r.pipeAttack);
             attackers[AttackLane.Pipe] = p;
-          } else if (role === Position.Opposite && z === 0) {
+          } else if (one && role === Position.Opposite && z === 0 && setQuality > (grade >= Grade.Positive ? 0.42 : 0.3)) {
             weights[AttackLane.BackRowRight] =
               base[AttackLane.BackRowRight] * backBias * qual(r.backRowAttack);
             attackers[AttackLane.BackRowRight] = p;
@@ -1791,13 +1818,20 @@ export class MatchSimulator {
       }
     }
 
-    // On a poor pass the fast game is off; the ball goes high to the pin.
+    // On a poor pass the fast game is hard; the ball goes high to the pin.
     if (grade === Grade.Poor) {
-      weights[AttackLane.QuickMiddle] = 0;
+      weights[AttackLane.QuickMiddle] *= 0.25;
       weights[AttackLane.Pipe] *= 0.2;
       weights[AttackLane.BackRowRight] *= 0.2;
       weights[AttackLane.SecondTempoOutside] *= 2.2;
     }
+
+    // Who the setter looks for first off a pass in this zone.
+    const target: readonly number[] = plan.target === ZoneTarget.Outside ? [AttackLane.OutsideHigh, AttackLane.SecondTempoOutside]
+      : plan.target === ZoneTarget.Opposite ? [AttackLane.OppositeRight]
+        : plan.target === ZoneTarget.Middle ? [AttackLane.QuickMiddle]
+          : plan.target === ZoneTarget.BackRow ? [AttackLane.Pipe, AttackLane.BackRowRight] : [];
+    for (const l of target) weights[l] *= ZONE_TARGET_PULL;
 
     // The coach's per-rotation preference.
     if (rotTac.preferredAttacker !== -1) {

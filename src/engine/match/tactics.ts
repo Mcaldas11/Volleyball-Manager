@@ -135,22 +135,103 @@ export enum Combinations {
   Often = 2,
 }
 
-/** The play the setter called for an attack. */
-export type PlayCall = 'quick' | 'backQuick' | 'slide' | 'x' | 'tandem' | 'shoot' | 'pipeQuick';
+/** The play the setter called for an attack: the middle's kind of quick, a
+ *  combination, or a fast set out to a pin. */
+export type PlayCall = 'quick' | 'backQuick' | 'slide' | 'x' | 'tandem' | 'shoot' | 'pipeQuick' | 'fastSet';
 
 export const PLAY_NAMES: Readonly<Record<PlayCall, string>> = {
   quick: 'Quick', backQuick: 'Back quick', slide: 'Slide', x: 'X play', tandem: 'Tandem', shoot: 'Shoot',
-  pipeQuick: 'Pipe off the quick',
+  pipeQuick: 'Pipe off the quick', fastSet: 'Fast set',
 };
+
+// ---- Where the pass comes down --------------------------------------------------------------
+//
+// The setter's options depend on where the pass or dig puts the ball. Within
+// 3 m of the net (zone A) he can run anything: the middle's quicks, the pins,
+// combinations, the back row. Between 3 and 6 m (B) the middle can only get
+// the quick in front — the tensa — while the pins go on as ever. Deeper than
+// 6 m (C) it is the pins only, and a high ball to the back row from zone 1.
+// Each zone's plan is the coach's to set.
+
+/** Where a pass comes down: within 3 m of the net, 3 to 6 m, or 6 to 9 m. */
+export type PassZone = 'A' | 'B' | 'C';
+export const PASS_ZONES: readonly PassZone[] = ['A', 'B', 'C'];
+export const PASS_ZONE_NAMES: Readonly<Record<PassZone, string>> = { A: '0–3 m', B: '3–6 m', C: '6–9 m' };
+
+/** Where a pass or dig of quality `q` (0-1) comes down — a perfect one at the net, a poor one deep. */
+export function passZone(q: number): PassZone {
+  return q >= 0.58 ? 'A' : q >= 0.42 ? 'B' : 'C';
+}
+
+/** What the middle may hit off a pass in a zone. */
+export enum MiddleOption {
+  Any = 0,
+  Quick = 1,
+  BackQuick = 2,
+  Slide = 3,
+  None = 4,
+}
+
+/** How the ball goes out to the pins: high, fast and flat, or the setter's choice by the set he has. */
+export enum PinSet {
+  Mixed = 0,
+  High = 1,
+  Fast = 2,
+}
+
+/** Who attacks from the back row: the pipe from zone 6, the opposite from zone 1, both or neither. */
+export enum BackRowOption {
+  Both = 0,
+  Pipe = 1,
+  ZoneOne = 2,
+  None = 3,
+}
+
+/** Who the setter looks for first off a pass in a zone. */
+export enum ZoneTarget {
+  Auto = 0,
+  Outside = 1,
+  Opposite = 2,
+  Middle = 3,
+  BackRow = 4,
+}
+
+/** The coach's plan for a pass coming down in one zone. */
+export interface ZonePlan {
+  middle: MiddleOption;
+  pins: PinSet;
+  /** Combination plays may be run off a pass here. */
+  combos: boolean;
+  backRow: BackRowOption;
+  target: ZoneTarget;
+}
+
+export type ZonePlans = Record<PassZone, ZonePlan>;
+
+/** The usual plan: anything off a pass at the net; the tensa only from 3-6 m;
+ *  the pins and a high ball to zone 1 off a deep one. */
+export function defaultZonePlans(): ZonePlans {
+  return {
+    A: { middle: MiddleOption.Any, pins: PinSet.Mixed, combos: true, backRow: BackRowOption.Both, target: ZoneTarget.Auto },
+    B: { middle: MiddleOption.Quick, pins: PinSet.Mixed, combos: false, backRow: BackRowOption.Both, target: ZoneTarget.Auto },
+    C: { middle: MiddleOption.None, pins: PinSet.High, combos: false, backRow: BackRowOption.ZoneOne, target: ZoneTarget.Auto },
+  };
+}
+
+/** A team's zone plans: its own, or the usual — with the middle's attack set before the zones carried into zone A. */
+export function zonePlansOf(t: Pick<TeamTactics, 'zones' | 'middlePlay'> | undefined): ZonePlans {
+  if (t?.zones !== undefined) return t.zones;
+  const plans = defaultZonePlans();
+  const mp = t?.middlePlay;
+  if (mp === MiddlePlay.Quick) plans.A.middle = MiddleOption.Quick;
+  else if (mp === MiddlePlay.BackQuick) plans.A.middle = MiddleOption.BackQuick;
+  else if (mp === MiddlePlay.Slide) plans.A.middle = MiddleOption.Slide;
+  return plans;
+}
 
 /** A combination play — one with the middle as the decoy. */
 export function isCombination(call: PlayCall | undefined): boolean {
   return call === 'x' || call === 'tandem' || call === 'shoot' || call === 'pipeQuick';
-}
-
-/** The middle's attack — mixed, on saves from before it could be set. */
-export function middlePlayOf(t: Pick<TeamTactics, 'middlePlay'> | undefined): MiddlePlay {
-  return t?.middlePlay ?? MiddlePlay.Mixed;
 }
 
 /** How often combinations are run — now and then, on saves from before it could be set. */
@@ -186,8 +267,10 @@ export interface TeamTactics {
   defense: DefensiveSystem;
   serve: ServeStrategy;
   tempo: Tempo;
-  /** What the middle hits — see MiddlePlay. Absent on older saves: mixed. */
+  /** What the middle hit, before the zone plans: kept only to carry into zone A — see zonePlansOf. */
   middlePlay?: MiddlePlay;
+  /** The plan for each zone a pass can come down in — see ZonePlan. Absent: the usual plan. */
+  zones?: ZonePlans;
   /** How often combination plays are run — see Combinations. Absent on older saves: now and then. */
   combinations?: Combinations;
   /** Instructions for rotations P1..P6, indexed 0-5. */
@@ -212,8 +295,8 @@ export function defaultTactics(): TeamTactics {
     defense: DefensiveSystem.Conservative,
     serve: ServeStrategy.Balanced,
     tempo: Tempo.Balanced,
-    middlePlay: MiddlePlay.Mixed,
     combinations: Combinations.Some,
+    zones: defaultZonePlans(),
     rotations: Array.from({ length: 6 }, defaultRotationTactics),
   };
 }

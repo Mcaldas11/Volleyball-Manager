@@ -16,12 +16,13 @@ import type { Kit } from '../court3d.ts';
 import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import {
-  ATTACKER_OPTIONS, BLOCK_OPTIONS, COMBINATION_OPTIONS, DEFENSE_OPTIONS, InstructionTiles, MIDDLE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS,
+  ATTACKER_OPTIONS, BLOCK_OPTIONS, COMBINATION_OPTIONS, DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS,
   SERVE_TARGET_OPTIONS, SHAPE_OPTIONS, SliderField, TEMPO_OPTIONS,
 } from './Manage.tsx';
 import {
-  combinationsOf, Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, middlePlayOf, type TeamTactics,
+  combinationsOf, Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, type TeamTactics,
 } from '../../engine/match/tactics.ts';
+import { TacticsBoard } from '../tacticsBoard.tsx';
 import { describeRallyHighlight } from './Match.tsx';
 import { useGame, WARM_READY, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -404,12 +405,6 @@ function TimeoutPanel({
           options={TEMPO_OPTIONS}
         />
         <ChoiceField
-          label="Middle's attack"
-          value={middlePlayOf(t)}
-          onChange={(v) => { t.middlePlay = v; g.touch(); }}
-          options={MIDDLE_OPTIONS}
-        />
-        <ChoiceField
           label="Combination plays"
           value={combinationsOf(t)}
           onChange={(v) => { t.combinations = v; g.touch(); }}
@@ -736,10 +731,6 @@ function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | nul
   if (t === null) return null;
   const saved = md.national === null ? g.savedTactics() : null;
   const rotation = (md.userIsHome ? md.snapshot?.homeRotation : md.snapshot?.awayRotation) ?? 0;
-  const set = <K extends 'offense' | 'tempo' | 'defense' | 'serve'>(key: K) => (v: TeamTactics[K]): void => {
-    t[key] = v;
-    g.touch();
-  };
   return (
     <div className="lv-overlay lv-tac">
       <header className="lv-overlay-head">
@@ -769,24 +760,7 @@ function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | nul
           ? (
             <>
               <LiveSystem tactics={t} target={target} onTarget={setTarget} />
-              <div className="lv-tac-grid">
-                <div>
-                  <InstructionTiles label="Offensive system" value={t.offense} onChange={set('offense')} options={OFFENSE_OPTIONS} />
-                  <InstructionTiles label="Tempo" value={t.tempo} onChange={set('tempo')} options={TEMPO_OPTIONS} />
-                  <InstructionTiles
-                    label="Middle's attack" value={middlePlayOf(t)} options={MIDDLE_OPTIONS}
-                    onChange={(v) => { t.middlePlay = v; g.touch(); }}
-                  />
-                  <InstructionTiles
-                    label="Combination plays" value={combinationsOf(t)} options={COMBINATION_OPTIONS}
-                    onChange={(v) => { t.combinations = v; g.touch(); }}
-                  />
-                </div>
-                <div>
-                  <InstructionTiles label="Defensive system" value={t.defense} onChange={set('defense')} options={DEFENSE_OPTIONS} />
-                  <InstructionTiles label="Serve strategy" value={t.serve} onChange={set('serve')} options={SERVE_OPTIONS} />
-                </div>
-              </div>
+              <TacticsBoard tactics={t} onChange={() => g.touch()} compact />
             </>
           )
           : <LiveRotations tactics={t} current={rotation} />}

@@ -5,7 +5,9 @@ import { toTeamSetup } from '../season/seasonEngine.ts';
 import { generateWorld } from '../world/worldGen.ts';
 import { stubManager } from '../world/world.ts';
 import { MatchFormat, MatchSimulator, type MatchSetup, type RallyContact } from './engine.ts';
-import { Combinations, defaultTactics, isCombination, MiddlePlay, type TeamTactics } from './tactics.ts';
+import {
+  Combinations, defaultTactics, defaultZonePlans, isCombination, MiddleOption, passZone, ZoneTarget, type PassZone, type TeamTactics,
+} from './tactics.ts';
 
 const world = generateWorld({ seed: 71, startYear: 2026, scale: 'small', manager: stubManager() });
 const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
@@ -30,7 +32,9 @@ function attacks(tactics: Partial<TeamTactics>, seeds: number[]): RallyContact[]
 test("the middle hits the quick, the back quick and the slide — or just the one he's told to", () => {
   const mixed = attacks({}, [1, 2, 3]).filter((c) => c.detail === 'Quick (middle)');
   for (const play of ['quick', 'backQuick', 'slide'] as const) assert.ok(mixed.some((c) => c.play === play), `some ${play}`);
-  const slides = attacks({ middlePlay: MiddlePlay.Slide }, [1, 2]).filter((c) => c.detail === 'Quick (middle)');
+  const slideZones = defaultZonePlans();
+  for (const z of ['A', 'B'] as const) slideZones[z] = { ...slideZones[z], middle: MiddleOption.Slide };
+  const slides = attacks({ zones: slideZones }, [1, 2]).filter((c) => c.detail === 'Quick (middle)');
   assert.ok(slides.length > 10 && slides.every((c) => c.play === 'slide'));
 });
 
@@ -64,4 +68,50 @@ test('combination plays rehearsed in training beat a side that runs none', () =>
     if (r.homeSets > r.awaySets) won++;
   }
   assert.ok(won / N > 0.52, `${((won / N) * 100).toFixed(1)}% won`);
+});
+
+/** Each attack with the zone its pass came down in — the last pass, dig or cover before it. */
+function byZone(tactics: Partial<TeamTactics>, seeds: number[]): Array<{ c: RallyContact; zone: PassZone }> {
+  const out: Array<{ c: RallyContact; zone: PassZone }> = [];
+  for (const seed of seeds) {
+    const home = toTeamSetup(world.players, a);
+    home.tactics = { ...defaultTactics(), ...tactics };
+    const r = new MatchSimulator(world.players, {
+      home, away: toTeamSetup(world.players, b), format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: false,
+      collectLog: true, seed,
+    }).run();
+    for (const e of r.log!) {
+      let zone: PassZone | null = null;
+      for (const c of e.contacts) {
+        if ((c.kind === 'reception' || c.kind === 'dig') && c.quality !== undefined) zone = c.team === 0 ? passZone(c.quality) : null;
+        if (c.team === 0 && zone !== null && ['attack', 'kill', 'attackError', 'blocked'].includes(c.kind)) out.push({ c, zone });
+      }
+    }
+  }
+  return out;
+}
+
+test('off a pass at the net anything goes; from 3-6 m the middle gets only the quick; from deep, only the pins', () => {
+  const plays = byZone({}, [11, 12, 13]);
+  const middle = plays.filter(({ c }) => c.detail === 'Quick (middle)');
+  assert.ok(middle.length > 10);
+  assert.ok(middle.every(({ zone }) => zone !== 'C'), 'no middle off a deep pass');
+  assert.ok(middle.filter(({ zone }) => zone === 'B').every(({ c }) => c.play === 'quick'), 'only the tensa from 3-6 m');
+  assert.ok(middle.some(({ zone, c }) => zone === 'A' && c.play !== 'quick'), 'the slide and back quick off a pass at the net');
+  assert.ok(plays.some(({ zone, c }) => zone === 'C' && c.detail === 'Back-row right'), 'a high ball to zone 1 off a deep one');
+});
+
+test("a zone's plan is the coach's: the middle off a deep pass, or the opposite looked for first", () => {
+  const zones = defaultZonePlans();
+  zones.C = { ...zones.C, middle: MiddleOption.Slide };
+  const deepMiddle = byZone({ zones }, [14, 15, 16]).filter(({ zone, c }) => zone === 'C' && c.detail === 'Quick (middle)');
+  assert.ok(deepMiddle.length > 0 && deepMiddle.every(({ c }) => c.play === 'slide'));
+
+  const share = (tactics: Partial<TeamTactics>): number => {
+    const all = byZone(tactics, [17, 18, 19]);
+    return all.filter(({ c }) => c.detail === 'Opposite').length / all.length;
+  };
+  const toOpp = defaultZonePlans();
+  for (const z of ['A', 'B', 'C'] as const) toOpp[z] = { ...toOpp[z], target: ZoneTarget.Opposite };
+  assert.ok(share({ zones: toOpp }) > share({}) + 0.05, 'the opposite gets more of the ball');
 });

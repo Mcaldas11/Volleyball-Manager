@@ -1,7 +1,6 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import {
-  BlockAssignment, Combinations, combinationsOf, DefensiveShape, DefensiveSystem, Formation, formationOf, MiddlePlay,
-  middlePlayOf, OffensiveSystem,
+  BlockAssignment, Combinations, DefensiveShape, DefensiveSystem, Formation, OffensiveSystem,
   ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
 import {
@@ -17,6 +16,7 @@ import {
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
+import { TacticsBoard } from '../tacticsBoard.tsx';
 
 export const FORMATION_OPTIONS: Array<[Formation, string]> = [
   [Formation.FiveOne, '5-1 (one setter)'],
@@ -33,13 +33,6 @@ export const OFFENSE_OPTIONS: Array<[OffensiveSystem, string]> = [
   [OffensiveSystem.MiddleFocused, 'Middle focused'],
   [OffensiveSystem.PipeHeavy, 'Pipe heavy'],
   [OffensiveSystem.BackRowHeavy, 'Back-row heavy'],
-];
-
-export const MIDDLE_OPTIONS: Array<[MiddlePlay, string]> = [
-  [MiddlePlay.Mixed, 'Mixed'],
-  [MiddlePlay.Quick, 'Quick in front'],
-  [MiddlePlay.BackQuick, 'Back quick'],
-  [MiddlePlay.Slide, 'Slide'],
 ];
 
 export const COMBINATION_OPTIONS: Array<[Combinations, string]> = [
@@ -97,109 +90,17 @@ export const SHAPE_OPTIONS: Array<[DefensiveShape, string]> = [
   [DefensiveShape.ManUpDefense, 'Man-up'],
 ];
 
-/** A team instruction as a row of toggle tiles — every option visible at
- *  once, the current one lit — rather than hidden behind a dropdown. */
-export function InstructionTiles<T extends number>({
-  label, hint, value, options, onChange,
-}: {
-  label: string;
-  hint?: string;
-  value: T;
-  options: Array<[T, string]>;
-  onChange: (v: T) => void;
-}): JSX.Element {
-  return (
-    <div className="instr">
-      <div className="instr-head">
-        <span className="instr-label">{label}</span>
-        <span className="instr-current">{options.find(([v]) => v === value)?.[1] ?? ''}</span>
-      </div>
-      <div className="instr-tiles">
-        {options.map(([v, l]) => (
-          <button key={v} className={`instr-tile${v === value ? ' active' : ''}`} onClick={() => onChange(v)}>
-            {v === value && <Icon name="check" size={13} />}
-            {l}
-          </button>
-        ))}
-      </div>
-      {hint !== undefined && <p className="field-hint">{hint}</p>}
-    </div>
-  );
-}
-
 export function TacticsScreen(): JSX.Element {
   const g = useGame();
   const club = g.club!;
-  const t = club.tactics;
-
   return (
-    <>
+    <div className="tactics-page">
       <p className="page-intro">
-        These instructions feed straight into the rally engine — they change which attacker the
-        setter picks and how the block forms, not a hidden team rating.
+        These instructions feed straight into the rally engine — what the setter can run off each pass, who he
+        looks for, how the block forms — not a hidden team rating.
       </p>
-
-      <div className="grid2">
-        <Card title="In Possession" icon="ball">
-          <InstructionTiles
-            label="Formation"
-            value={formationOf(t)}
-            onChange={(v) => g.setFormation(v)}
-            hint="5-1: one setter runs the offence, with an opposite diagonal to him. 4-2: two setters diagonal — the one in the back row comes up to set, and the one at the net attacks on the right."
-            options={FORMATION_OPTIONS}
-          />
-          <InstructionTiles
-            label="Offensive system"
-            value={t.offense}
-            onChange={(v) => { t.offense = v; g.touch(); }}
-            hint="Determines how the setter distributes the ball across the available attack lanes."
-            options={OFFENSE_OPTIONS}
-          />
-          <InstructionTiles
-            label="Tempo"
-            value={t.tempo}
-            onChange={(v) => { t.tempo = v; g.touch(); }}
-            hint="Faster tempo beats the block but demands a better pass and a better setter."
-            options={TEMPO_OPTIONS}
-          />
-        </Card>
-
-        <div className="stack">
-          <Card title="Defence and Serve" icon="club">
-            <InstructionTiles
-              label="Defensive system"
-              value={t.defense}
-              onChange={(v) => { t.defense = v; g.touch(); }}
-              hint="Trades block pressure against floor coverage."
-              options={DEFENSE_OPTIONS}
-            />
-            <InstructionTiles
-              label="Serve strategy"
-              value={t.serve}
-              onChange={(v) => { t.serve = v; g.touch(); }}
-              hint="Risky serving buys aces and pays for them in errors."
-              options={SERVE_OPTIONS}
-            />
-          </Card>
-          <Card title="The Middle and Combinations" icon="tactics">
-            <InstructionTiles
-              label="Middle's attack"
-              value={middlePlayOf(t)}
-              onChange={(v) => { t.middlePlay = v; g.touch(); }}
-              hint="Quick in front of the setter, back quick behind him, or the slide out to the right pin."
-              options={MIDDLE_OPTIONS}
-            />
-            <InstructionTiles
-              label="Combination plays"
-              value={combinationsOf(t)}
-              onChange={(v) => { t.combinations = v; g.touch(); }}
-              hint="X, tandem, shoot and pipe off a decoy middle — rehearse them in training."
-              options={COMBINATION_OPTIONS}
-            />
-          </Card>
-        </div>
-      </div>
-    </>
+      <TacticsBoard tactics={club.tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} />
+    </div>
   );
 }
 

@@ -237,7 +237,7 @@ test('suggestStartingLineup() is only offered before a set\'s first serve, and k
 
 test('suggestStartingLineup() only proposes legal like-for-like line-ups, and does change some', () => {
   let changes = 0;
-  for (let seed = 0; seed < 6; seed++) {
+  for (let seed = 0; seed < 12; seed++) {
     const { store, setup } = buildMatch(30 + seed, 3000 + seed);
     const sim = new MatchSimulator(store, setup);
     while (playToNextSet(sim)) {
@@ -254,7 +254,7 @@ test('suggestStartingLineup() only proposes legal like-for-like line-ups, and do
       }
     }
   }
-  assert.ok(changes > 0, 'over six full matches, some starter should have needed a rest');
+  assert.ok(changes > 0, 'over a dozen full matches, some starter should have needed a rest');
 });
 
 test('a setter substituted in one set does not go on setting from the bench the next', () => {
