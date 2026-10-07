@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchFormat, MatchSimulator } from '../engine/match/engine.ts';
 import { Position } from '../engine/model/positions.ts';
+import { Formation } from '../engine/match/tactics.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
@@ -39,6 +40,40 @@ test('receiving side hides its setter at the net, whatever the rotation', () => 
     const at = depth(scene.positions.get(setter)!.y);
     assert.ok(at <= 0.3, `setter in zone ${court.indexOf(setter) + 1} should start at the net (${at})`);
     if (sim.step() === null) break;
+  }
+});
+
+test('receiving with the setter in 1 and an outside in 2, the outside hits on the right and zone 4 on the left — a 5-1 and a 4-2 alike', () => {
+  for (const formation of [Formation.FiveOne, Formation.FourTwo]) {
+    const world = generateWorld({ seed: 74, startYear: 2026, scale: 'small', manager: stubManager() });
+    const store = world.players;
+    const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
+    a.tactics = { ...a.tactics, formation };
+    const sim = new MatchSimulator(store, {
+      home: toTeamSetup(store, a), away: toTeamSetup(store, b), format: MatchFormat.BestOf5,
+      importance: 0.5, neutralVenue: false, collectLog: true, seed: 9,
+    });
+    let right = 0;
+    let left = 0;
+    for (let i = 0; i < 400; i++) {
+      const pre = sim.snapshot();
+      if (pre.matchOver) break;
+      const entry = sim.step();
+      if (entry === null) break;
+      const court = pre.homeCourt;
+      const stays = entry.serveTeam === 1 && store.position[court[0]] === Position.Setter
+        && store.position[court[1]] === Position.OutsideHitter;
+      if (!stays) continue;
+      // Home is the near side: its right is +x. A combination behind the
+      // middle's quick is hit at the centre; never at the other pin.
+      for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0)) {
+        if (beat.actor === null || beat.poses.get(beat.actor) !== 'spike') continue;
+        const x = beat.positions.get(beat.actor)!.x;
+        if (beat.actor === court[1]) { assert.ok(x > -1, `the outside from zone 2 never hits from the left (${formation}, ${x.toFixed(1)})`); right++; }
+        if (beat.actor === court[3]) { assert.ok(x < 1, `zone 4 never hits from the right (${formation}, ${x.toFixed(1)})`); left++; }
+      }
+    }
+    assert.ok(right > 0 && left > 0, `both seen hitting (${formation})`);
   }
 });
 

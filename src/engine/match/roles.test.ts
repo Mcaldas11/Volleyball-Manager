@@ -42,6 +42,40 @@ test('receiving in P1 a 5-1 stays put: the outside passing in zone 2 hits on the
   assert.ok(where.served.oh.has('Outside'), 'serving in P1, they switch as usual');
 });
 
+test('a 4-2 receiving with its setter in zone 1 stays put too — each outside, passing in zone 2, hits on the right, the setter at the net on the left', () => {
+  const { world, home, away } = sides(74);
+  const store = world.players;
+  home.tactics = { ...home.tactics, formation: Formation.FourTwo };
+  const fourTwo: TeamSetup = { ...home, lineup: pickLineup(store, { ...world.clubs[home.clubId], tactics: home.tactics }).lineup };
+  // Per outside: where he hit from, receiving in zone 2 with the setter behind him in 1.
+  const fromTwo = new Map<number, Set<string>>();
+  const atNet = new Set<string>();
+  let switched = 0;
+  for (const seed of [1, 2, 3]) {
+    const sim = new MatchSimulator(store, {
+      home: fourTwo, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: true, seed,
+    });
+    for (;;) {
+      const before = sim.snapshot();
+      if (before.matchOver) break;
+      const court = before.homeCourt;
+      const stays = before.serving === 1 && store.position[court[0]] === Position.Setter && store.position[court[1]] === Position.OutsideHitter;
+      const rally = sim.step();
+      if (rally === null) break;
+      for (const c of rally.contacts) {
+        if (c.team !== 0 || !ATTACKS.has(c.kind) || c.detail === undefined) continue;
+        if (stays && c.player === court[1]) (fromTwo.get(c.player) ?? fromTwo.set(c.player, new Set()).get(c.player)!).add(c.detail);
+        if (stays && c.player === court[3]) atNet.add(c.detail);
+        if (!stays && before.serving === 0 && c.player === court[1] && store.position[c.player] === Position.OutsideHitter && c.detail === 'Outside') switched++;
+      }
+    }
+  }
+  assert.equal(fromTwo.size, 2, 'both outsides, each in his turn');
+  for (const lanes of fromTwo.values()) assert.deepEqual([...lanes], ['Opposite'], 'from the right, all rally');
+  assert.deepEqual([...atNet], ['Outside'], 'the setter at the net hits from the left');
+  assert.ok(switched > 0, 'serving, they switch as usual');
+});
+
 test('whoever starts in a slot plays its position — an outside as opposite, a libero as an outside — and so does whoever replaces him', () => {
   const { world, home, away } = sides(72);
   const store = world.players;

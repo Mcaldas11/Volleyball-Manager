@@ -7,9 +7,10 @@
  * the setter tucked in at the net behind a front-row team-mate, ready to
  * release — and the instant the ball is served both sides switch into their
  * specialist spots: outside hitter left, middle in the middle, opposite and
- * setter right. All but one: a 5-1 receiving in P1 stays put — the outside
- * passing in zone 2 attacks on the right, the opposite on the left — until
- * it wins the point. This module turns the engine's rotational court (who is in
+ * setter right. All but one: a side receiving with its setter in zone 1 and
+ * an outside in zone 2 — a 5-1 in P1, a 4-2 twice round — stays put: the
+ * outside passing in zone 2 attacks on the right, whoever is in zone 4 on the
+ * left, until it wins the point. This module turns the engine's rotational court (who is in
  * zones 1-6) into those real positions for every beat of a rally — serve
  * receive for the current rotation, base defence, the setter running to the
  * target whenever their side has the ball, hitters on their approach,
@@ -259,7 +260,7 @@ interface Team {
   passers: number[];
   role: (p: number) => Position;
   zoneOf: (p: number) => number;
-  /** Receiving in P1 in a 5-1: the front row keeps its rotational places all rally. */
+  /** Receiving with the setter in zone 1 and an outside in zone 2: the front row keeps its rotational places all rally. */
   noSwitch: boolean;
   /** How a player serves, when it is known. */
   serveKind: ServeKind;
@@ -535,11 +536,11 @@ function teamsOf(
     buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, positions, serveKind),
     buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, positions, serveKind),
   ];
-  // A 5-1 receiving in P1 — its one setter in zone 1 — keeps its places.
+  // Receiving with the setter in zone 1 and an outside in zone 2 — a 5-1 in
+  // P1, a 4-2 twice round — a side keeps its places.
   if (receiving !== null) {
     const t = teams[receiving];
-    const setters = t.zones.filter((p) => t.role(p) === Position.Setter).length;
-    t.noSwitch = setters === 1 && t.role(t.zones[0]) === Position.Setter;
+    t.noSwitch = t.role(t.zones[0]) === Position.Setter && t.role(t.zones[1]) === Position.OutsideHitter;
   }
   return teams;
 }

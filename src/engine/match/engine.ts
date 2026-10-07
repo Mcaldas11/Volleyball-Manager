@@ -1810,10 +1810,13 @@ export class MatchSimulator {
    * three rotations are structurally weaker — exactly the pattern a real
    * coach sees in their rotation report.
    *
-   * Receiving in P1 a 5-1 doesn't switch: the outside hitter passing in zone 2
-   * is too far from the left to get there, so he attacks on the right and the
-   * opposite on the left, and they stay that way until the side wins the
-   * point — the lane is where he hits from, his share of the sets his own.
+   * Receiving with the setter in zone 1 and an outside hitter in zone 2, a
+   * side doesn't switch: the outside passing from the right is too far from
+   * the left to get there, so he attacks on the right — and whoever is in
+   * zone 4, the opposite in a 5-1, the other setter in a 4-2, on the left —
+   * and they stay that way until the side wins the point. A 5-1 is there in
+   * P1; a 4-2 twice round, once for each of its outsides. The lane is where
+   * he hits from, his share of the sets his own.
    */
   private chooseLane(
     atk: TeamRuntime,
@@ -1835,7 +1838,8 @@ export class MatchSimulator {
     const base = OFFENSE_LANE_WEIGHTS[atk.tactics.offense];
     const pos = this.roles;
     const fastBias = 0.6 + (rotTac.setterTempoBias / 100) * 0.8;
-    const noSwitch = !atk.fourTwo && atk.rotation() === 0 && atk !== this.teams[this.serving];
+    const noSwitch = atk !== this.teams[this.serving] &&
+      pos[atk.court[0]] === Position.Setter && pos[atk.court[1]] === Position.OutsideHitter;
 
     for (let z = 0; z < 6; z++) {
       const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx);
@@ -1856,7 +1860,8 @@ export class MatchSimulator {
           // On the right, off his wrong hand side: a touch less than from the left.
           weights[AttackLane.OppositeRight] = base[AttackLane.OutsideHigh] * qual(r.attackPower) * OFF_SIDE;
           attackers[AttackLane.OppositeRight] = p;
-        } else if (role === Position.Opposite && noSwitch) {
+        } else if ((role === Position.Opposite || (role === Position.Setter && atk.fourTwo)) && noSwitch) {
+          // The opposite — in a 4-2 the setter at the net — stays on the left.
           weights[AttackLane.OutsideHigh] = base[AttackLane.OppositeRight] * qual(r.attackPower) * OFF_SIDE;
           attackers[AttackLane.OutsideHigh] = p;
         } else if (role === Position.OutsideHitter) {
