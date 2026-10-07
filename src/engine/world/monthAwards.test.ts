@@ -60,7 +60,8 @@ test("a match's best point is a spike, a block or an ace, kept whole to be shown
 test('spikes and serves leave the hand at believable speeds, the best hitters hardest', () => {
   const w = world(63);
   const result = simulateMatch(w.players, { ...setup(w, 8, false), collectLog: true });
-  const spikes = result.log!.flatMap((r) => r.contacts).filter((c) => c.kind === 'kill').map((c) => c.speed!);
+  const spikes = result.log!.flatMap((r) => r.contacts)
+    .filter((c) => c.kind === 'kill' && c.shot !== 'tip' && c.shot !== 'roll').map((c) => c.speed!);
   const jumps = result.log!.flatMap((r) => r.contacts).filter((c) => c.kind === 'serve' && c.detail === 'jump').map((c) => c.speed!);
   const floats = result.log!.flatMap((r) => r.contacts).filter((c) => c.kind === 'serve' && c.detail === 'float').map((c) => c.speed!);
   const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length;

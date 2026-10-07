@@ -23,6 +23,7 @@ import {
   combinationsOf, Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, type TeamTactics,
 } from '../../engine/match/tactics.ts';
 import { TacticsBoard } from '../tacticsBoard.tsx';
+import { defenceLayoutsOf, type DefenceLayouts } from '../../engine/match/defence.ts';
 import { describeRallyHighlight } from './Match.tsx';
 import { useGame, WARM_READY, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -76,10 +77,11 @@ async function animateRally(
   setScene: (scene: Scene) => void,
   onBigPlay: (play: BigPlay) => void,
   onRadar: (radar: Radar) => void,
+  defenceOf?: (team: 0 | 1) => DefenceLayouts | undefined,
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner);
+  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf);
   await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar);
 }
 
@@ -896,7 +898,13 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = true;
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
-        await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay, triggerRadar);
+        await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay, triggerRadar, (team) => {
+          // The user's side defends as set now; the other as its club has it.
+          const userTeam = current.userIsHome ? 0 : 1;
+          if (team === userTeam) return defenceLayoutsOf(g.matchTactics() ?? undefined);
+          const club = current.sides[team].clubId >= 0 ? world.clubs[current.sides[team].clubId] : undefined;
+          return club !== undefined ? defenceLayoutsOf(club.tactics) : undefined;
+        });
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);

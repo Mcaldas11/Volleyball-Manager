@@ -8,6 +8,7 @@
  */
 
 import { Position } from '../model/positions.ts';
+import type { DefenceLayouts } from './defence.ts';
 
 /**
  * The team's system: how many setters, and so who sets. In a 5-1 one setter
@@ -196,9 +197,25 @@ export enum ZoneTarget {
   BackRow = 4,
 }
 
+/**
+ * The setter's rotations, named for the zone he stands in: at the net in P4,
+ * P3 and P2 — and only then is the right side free for the middle to run the
+ * slide behind him — and in the back row in P1, P6 and P5.
+ */
+export const SETTER_FRONT_ROTATIONS: readonly number[] = [3, 2, 1];
+export const SETTER_BACK_ROTATIONS: readonly number[] = [0, 5, 4];
+
+/** Whether the setter stands in the front row in rotation `r` (0 for P1). */
+export function setterAtNet(r: number): boolean {
+  return r >= 1 && r <= 3;
+}
+
 /** The coach's plan for a pass coming down in one zone. */
 export interface ZonePlan {
+  /** What the middle may hit with the setter at the net (P2, P3, P4). */
   middle: MiddleOption;
+  /** …and with the setter in the back row (P1, P6, P5) — never the slide. Absent: as at the net, the slide made a quick. */
+  middleBack?: MiddleOption;
   pins: PinSet;
   /** Combination plays may be run off a pass here. */
   combos: boolean;
@@ -212,10 +229,26 @@ export type ZonePlans = Record<PassZone, ZonePlan>;
  *  the pins and a high ball to zone 1 off a deep one. */
 export function defaultZonePlans(): ZonePlans {
   return {
-    A: { middle: MiddleOption.Any, pins: PinSet.Mixed, combos: true, backRow: BackRowOption.Both, target: ZoneTarget.Auto },
-    B: { middle: MiddleOption.Quick, pins: PinSet.Mixed, combos: false, backRow: BackRowOption.Both, target: ZoneTarget.Auto },
-    C: { middle: MiddleOption.None, pins: PinSet.High, combos: false, backRow: BackRowOption.ZoneOne, target: ZoneTarget.Auto },
+    A: {
+      middle: MiddleOption.Any, middleBack: MiddleOption.Any, pins: PinSet.Mixed, combos: true, backRow: BackRowOption.Both,
+      target: ZoneTarget.Auto,
+    },
+    B: {
+      middle: MiddleOption.Quick, middleBack: MiddleOption.Quick, pins: PinSet.Mixed, combos: false, backRow: BackRowOption.Both,
+      target: ZoneTarget.Auto,
+    },
+    C: {
+      middle: MiddleOption.None, middleBack: MiddleOption.None, pins: PinSet.High, combos: false, backRow: BackRowOption.ZoneOne,
+      target: ZoneTarget.Auto,
+    },
   };
+}
+
+/** What the middle may hit in a zone, with the setter at the net or not: never the slide with him in the back row. */
+export function middleOptionFor(plan: ZonePlan, setterFront: boolean): MiddleOption {
+  if (setterFront) return plan.middle;
+  const back = plan.middleBack ?? plan.middle;
+  return back === MiddleOption.Slide ? MiddleOption.Quick : back;
 }
 
 /** A team's zone plans: its own, or the usual — with the middle's attack set before the zones carried into zone A. */
@@ -271,6 +304,8 @@ export interface TeamTactics {
   middlePlay?: MiddlePlay;
   /** The plan for each zone a pass can come down in — see ZonePlan. Absent: the usual plan. */
   zones?: ZonePlans;
+  /** Where the defence stands behind the block against each kind of attack — see defence.ts. Absent: perimeter. */
+  defence?: DefenceLayouts;
   /** How often combination plays are run — see Combinations. Absent on older saves: now and then. */
   combinations?: Combinations;
   /** Instructions for rotations P1..P6, indexed 0-5. */

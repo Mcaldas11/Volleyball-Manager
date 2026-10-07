@@ -28,6 +28,7 @@
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
 import type { RallyContact, Shot } from '../engine/match/engine.ts';
 import { passZone, type PlayCall } from '../engine/match/tactics.ts';
+import { shotSpot, type AttackSource, type DefenceLayout, type DefenceLayouts } from '../engine/match/defence.ts';
 import { Position } from '../engine/model/positions.ts';
 
 /** A point on the floor, in court metres. */
@@ -106,36 +107,11 @@ export interface Radar {
   height?: number;
 }
 
-/**
- * Where a shot comes down, in the defending side's own frame — `hu` is where
- * the hitter is across the court in that frame, `r1` and `r2` (-1 to 1) vary
- * it. Down the line stays on the hitter's sideline, deep; cross-court goes to
- * the far side; a cut is the sharpest angle, short by the far sideline at the
- * 3 m line; a tip drops just behind the block; a roll shot into the open middle;
- * a seam between the blockers; the back row deep. Off the block, out wide or
- * deep; a miss long or wide.
- */
-export function shotSpot(shot: Shot, hu: number, r1: number, r2: number): Local {
-  const right = hu >= 0.5;
-  const line = right ? 0.93 : 0.07;
-  const far = right ? 0.07 : 0.93;
-  const a1 = Math.abs(r1);
-  const a2 = Math.abs(r2);
-  switch (shot) {
-    case 'line': return { u: line + r1 * 0.025, v: 0.8 + a2 * 0.15 };
-    case 'shortLine': return { u: line + r1 * 0.02, v: 0.27 + a2 * 0.1 };
-    case 'cross': return { u: right ? 0.12 + a1 * 0.22 : 0.88 - a1 * 0.22, v: 0.58 + a2 * 0.32 };
-    case 'cut': return { u: far + (right ? a1 : -a1) * 0.05, v: 0.22 + a2 * 0.14 };
-    case 'tip': return { u: hu + (0.5 - hu) * 0.4 + r1 * 0.08, v: 0.08 + a2 * 0.14 };
-    case 'roll': return { u: 0.5 + r1 * 0.22, v: 0.42 + a2 * 0.18 };
-    case 'seam': return { u: hu + (0.5 - hu) * 0.6 + r1 * 0.08, v: 0.48 + a2 * 0.25 };
-    case 'deep': return { u: 0.5 + r1 * 0.38, v: 0.86 + a2 * 0.1 };
-    case 'quick': return { u: hu + r1 * 0.22, v: 0.2 + a2 * 0.25 };
-    case 'blockout': return r2 >= 0 ? { u: right ? 1.2 : -0.2, v: 0.35 + a1 * 0.8 } : { u: line, v: 1.28 + a1 * 0.15 };
-    case 'long': return { u: r1 >= 0 ? line : 0.5 + (right ? -a2 : a2) * 0.35, v: 1.12 + a2 * 0.12 };
-    case 'wide': return { u: r1 >= 0 ? (right ? 1.12 : -0.12) : (right ? -0.12 : 1.12), v: 0.4 + a2 * 0.5 };
-    default: return { u: 0.5 + r1 * 0.3, v: 0.5 + a2 * 0.3 };
-  }
+/** Which kind of attack a lane is, for the defence: the outside, the middle or the opposite. */
+function sourceOfLaneName(lane: string | undefined): AttackSource {
+  if (lane === 'Quick (middle)' || lane === 'Pipe') return 'mb';
+  if (lane === 'Opposite' || lane === 'Back-row right') return 'opp';
+  return 'oh';
 }
 
 /** A spot kept on the court, for a defender to dig it from. */
@@ -472,7 +448,7 @@ function attackFormation(
 /** Defending an attack aimed from `hitU` (in this team's own frame): the two
  *  closest front-row players close the block on the hitter, the back row sets
  *  up a perimeter shaded towards the ball. */
-function blockFormation(t: Team, hitU: number, count = 2): { f: Formation; blockers: number[] } {
+function blockFormation(t: Team, hitU: number, count = 2, layout?: DefenceLayout): { f: Formation; blockers: number[] } {
   const f = defenceFormation(t);
   const front = t.zones
     .filter((_, z) => isFrontRow(z))
@@ -482,17 +458,25 @@ function blockFormation(t: Team, hitU: number, count = 2): { f: Formation; block
   const n = Math.max(1, Math.min(3, count, front.length));
   const blockers = front.slice(0, n);
   const spots = n === 1 ? [0] : n === 2 ? [-0.06, 0.06] : [-0.11, 0, 0.11];
+  // Whoever doesn't block drops off the net to where the coach has him — and
+  // the back three stand where the coach's layout for this attack puts them.
+  let free = 0;
   front.forEach((p, i) => {
     if (i < n) f.set(p, { u: target + spots[i], v: 0.05 });
+    else if (layout !== undefined) f.set(p, free++ === 0 ? { ...layout.free } : { u: 1 - layout.free.u, v: layout.free.v });
     else f.set(p, { u: f.get(p)?.u ?? 0.5, v: 0.14 });
   });
   const perimeter = [{ u: 0.14, v: 0.7 }, { u: 0.5, v: 0.88 }, { u: 0.86, v: 0.7 }];
   const back = t.zones.filter((_, z) => !isFrontRow(z));
   for (const [p, lane] of assignLanes(back, (p) => BACK_LANE[t.role(p)])) {
+    if (layout !== undefined) {
+      f.set(p, { ...[layout.lb, layout.mb, layout.rb][lane] });
+      continue;
+    }
     const spot = perimeter[lane];
     f.set(p, { u: spot.u + (hitU - spot.u) * 0.15, v: spot.v });
   }
-  return { f: spread(f), blockers };
+  return { f: layout !== undefined ? f : spread(f), blockers };
 }
 
 /** A gap in a formation: the candidate spot furthest from every player, with
@@ -618,6 +602,8 @@ export function rallyBeats(
   seed: number,
   nearTeam: 0 | 1,
   winner: 0 | 1 | null = null,
+  /** Where each side's coach has the defence stand behind the block, against each kind of attack. */
+  defenceOf?: (team: 0 | 1) => DefenceLayouts | undefined,
 ): Beat[] {
   // The server stands where his serve — as the engine played it — starts.
   const first = contacts[0];
@@ -816,7 +802,7 @@ export function rallyBeats(
         if (setFrom !== null && setFrom.p !== c.player) f.set(setFrom.p, { ...setFrom.at });
         setFrom = null;
         forms[t] = f;
-        const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u, c.blockers ?? 2);
+        const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u, c.blockers ?? 2, defenceOf?.(o)?.[sourceOfLaneName(c.detail)]);
         forms[o] = block;
         const blockPoses: Array<[number, Pose]> = blockers.map((b) => [b, 'block']);
         // Team-mates crouch in under the hitter, ready for a ball off the block.

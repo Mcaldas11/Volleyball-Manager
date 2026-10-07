@@ -5444,3 +5444,34 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .dcourt { color: var(--club-bright); }
 .dcourt-svg { width: 100%; height: auto; max-height: 360px; }
 .dcourt .zcourt-note b { color: var(--text); }
+
+/* The setter's rotations under the zones: at the net in P2-P4. */
+.zrot { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.zrot-label { font: 700 11px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 255, 255, 0.7); }
+.zrot-chips { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.zrot-chips i {
+  padding: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 800;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+}
+.zrot-chips i.front { border-color: var(--club-bright); background: var(--club-tint); color: #fff; }
+.zrot-note { font-size: 11px; color: var(--text-dim); }
+
+/* The defence editor: drag the back three and the off-blocker. */
+.dedit { gap: 8px; color: var(--club-bright); }
+.dedit-head { display: flex; flex-direction: column; gap: 6px; }
+.dedit-head .tboard-zones { margin-left: 0; }
+.tboard-zones button.wide { width: auto; padding: 0 10px; font-weight: 700; }
+.dedit-svg { width: 100%; height: auto; touch-action: none; user-select: none; }
+.dedit-man { cursor: grab; }
+.dedit-man.dragging { cursor: grabbing; }
+.dedit-presets { display: flex; gap: 6px; }
+.dedit-presets button { flex: 1; }
+.dedit-presets button.active { border-color: var(--club-bright); background: var(--club-tint); color: #fff; }
+.dedit .zcourt-note b { color: var(--text); }
+.tboard.compact.phase-out .tboard-body { grid-template-columns: 250px minmax(0, 1fr); }

@@ -30,6 +30,7 @@ import {
   rotate,
   rotationOf,
 } from './court.ts';
+import { coverage, coverEdge, defenceLayoutsOf, type AttackSource } from './defence.ts';
 import { pressureOf, rateRally, type Highlight } from './highlights.ts';
 import { matchRating } from './playerRating.ts';
 import { computeRatings, contest, type PlayerMatchRatings } from './ratings.ts';
@@ -53,6 +54,7 @@ import {
   PinSet,
   passZone,
   type PlayCall,
+  middleOptionFor,
   type ZonePlan,
   zonePlansOf,
   ZoneTarget,
@@ -709,6 +711,8 @@ export class MatchSimulator {
   private pickShot(
     lane: number, outcome: 'kill' | 'dug' | 'blocked' | 'error', blockers: number, setQuality: number, ar: PlayerMatchRatings,
     call?: PlayCall,
+    /** How well the defence covers each shot: a point goes where it doesn't, a dug ball where it does. */
+    covered?: Map<Shot, number>,
   ): Shot | undefined {
     if (!this.recording) return undefined;
     const style = clamp((ar.attackControl - ar.attackPower) / 20, -1, 1);
@@ -732,6 +736,12 @@ export class MatchSimulator {
         blockout: outcome === 'kill' && blockers >= 1 ? (0.5 + blockers * 0.55) * (1 + style * 0.5) : 0,
       };
     }
+    if (covered !== undefined && (outcome === 'kill' || outcome === 'dug')) {
+      for (const [shot, c] of covered) {
+        const v = w[shot];
+        if (v !== undefined) w[shot] = v * (outcome === 'kill' ? 1.1 - 0.5 * c : 0.6 + 0.6 * c);
+      }
+    }
     const entries = Object.entries(w).filter(([, v]) => (v ?? 0) > 0) as Array<[Shot, number]>;
     let r = this.flair.float() * entries.reduce((s, [, v]) => s + v, 0);
     for (const [shot, v] of entries) {
@@ -748,15 +758,19 @@ export class MatchSimulator {
    * now and then a combination off the middle — if there is a middle up front
    * to jump for the quick, and a pass good enough to run one off.
    */
-  private callPlay(atk: TeamRuntime, lane: number, setQuality: number, plan: ZonePlan): PlayCall | undefined {
+  private callPlay(
+    atk: TeamRuntime, lane: number, setQuality: number, plan: ZonePlan, middle: MiddleOption, setterFront: boolean,
+  ): PlayCall | undefined {
     const rng = this.rng;
     if (lane === AttackLane.QuickMiddle) {
-      if (plan.middle === MiddleOption.Quick) return 'quick';
-      if (plan.middle === MiddleOption.Slide) return 'slide';
-      if (plan.middle === MiddleOption.BackQuick) return setQuality >= 0.45 ? 'backQuick' : 'quick';
+      if (middle === MiddleOption.Quick) return 'quick';
+      // The slide runs behind a setter at the net — only then is the right side free.
+      if (middle === MiddleOption.Slide) return setterFront ? 'slide' : 'quick';
+      if (middle === MiddleOption.BackQuick) return setQuality >= 0.45 ? 'backQuick' : 'quick';
+      const slide = setterFront ? 0.25 : 0;
       const back = setQuality >= 0.55 ? 0.2 : 0;
-      const roll = rng.float() * (0.55 + 0.25 + back);
-      return roll < 0.55 ? 'quick' : roll < 0.8 ? 'slide' : 'backQuick';
+      const roll = rng.float() * (0.55 + slide + back);
+      return roll < 0.55 ? 'quick' : roll < 0.55 + slide ? 'slide' : 'backQuick';
     }
     const pin = lane === AttackLane.OutsideHigh || lane === AttackLane.OppositeRight || lane === AttackLane.SecondTempoOutside;
     const rate = plan.combos ? COMBINATION_PROFILE[combinationsOf(atk.tactics)].rate : 0;
@@ -1477,7 +1491,12 @@ export class MatchSimulator {
     // ---- Attack lane selection ----
     // What the setter may run depends on where the pass came down, and the coach's plan for that zone.
     const plan = zonePlansOf(atk.tactics)[passZone(quality)];
-    const lane = this.chooseLane(atk, grade, rotTac, setQuality, setter, plan);
+    // The setter setting it from the net (zones 2-4, P2-P4) leaves the right
+    // side free behind him — for the slide. Not anyone else who has to set it.
+    const setterZone = atk.court.indexOf(setter);
+    const setterFront = this.roles[setter] === Position.Setter && setterZone >= 1 && setterZone <= 3;
+    const middle = middleOptionFor(plan, setterFront);
+    const lane = this.chooseLane(atk, grade, rotTac, setQuality, setter, plan, middle);
     if (lane === -1) {
       // No attacker available: send a free ball over and concede the initiative.
       this.push({ kind: 'freeball', team: attacking, player: setter });
@@ -1494,7 +1513,7 @@ export class MatchSimulator {
     // for the quick as the decoy. A combination beats the block if the side
     // has rehearsed it; if not, the timing goes, and the ball is hit off a
     // worse set.
-    const call = this.callPlay(atk, lane, setQuality, plan);
+    const call = this.callPlay(atk, lane, setQuality, plan, middle, setterFront);
     const combo = isCombination(call);
     const decoy = combo ? this.laneAttacker[AttackLane.QuickMiddle] : -1;
     const rehearsed = atk.prep.combinations ?? 0;
@@ -1545,8 +1564,14 @@ export class MatchSimulator {
       (1 + PREP_EDGE * def.prep.block) * beaten;
 
     // ---- Dig ----
+    // Where the coach has the defence stand against an attack from this side,
+    // against where the shots from there come down.
+    const source = sourceOf(lane);
+    const layout = defenceLayoutsOf(def.tactics)[source];
     const digRating =
-      this.digStrength(def) * DEFENSE_PROFILE[def.tactics.defense].digCoverage * def.edge * (1 + READ_DIG * atk.read);
+      this.digStrength(def) * DEFENSE_PROFILE[def.tactics.defense].digCoverage * def.edge * (1 + READ_DIG * atk.read) *
+      coverEdge(layout, source, clamp((ar.attackControl - ar.attackPower) / 20, -1, 1));
+    const covered = this.recording ? coverage(layout, source) : undefined;
 
     // ---- Outcome ----
     // Blocked balls and attack errors are resolved first; whatever probability
@@ -1593,7 +1618,7 @@ export class MatchSimulator {
       aStats.attackBlocked++;
       const blocker = this.pickBlocker(def, lane);
       statsFor(def.stats, blocker).blockPoints++;
-      const shot = this.pickShot(lane, 'blocked', blockCount, setOnIt, ar, call);
+      const shot = this.pickShot(lane, 'blocked', blockCount, setOnIt, ar, call, covered);
       this.push({
         ...tags, kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
         speed: this.spikeSpeed(ar, lane, false, shot), height, by: blocker, blockHeight: this.blockHeightOf(def, blocker),
@@ -1603,7 +1628,7 @@ export class MatchSimulator {
     if (roll < pBlocked + pError) {
       aStats.attackErrors++;
       def.stats.opponentErrors++;
-      const shot = this.pickShot(lane, 'error', blockCount, setOnIt, ar, call);
+      const shot = this.pickShot(lane, 'error', blockCount, setOnIt, ar, call, covered);
       this.push({
         ...tags, kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
         speed: this.spikeSpeed(ar, lane, false, shot), height,
@@ -1613,7 +1638,7 @@ export class MatchSimulator {
     if (roll < pBlocked + pError + pKill) {
       aStats.attackKills++;
       setterStats.setAssists++;
-      const shot = this.pickShot(lane, 'kill', blockCount, setOnIt, ar, call);
+      const shot = this.pickShot(lane, 'kill', blockCount, setOnIt, ar, call, covered);
       this.push({
         ...tags, kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
         speed: this.spikeSpeed(ar, lane, true, shot), height,
@@ -1622,7 +1647,7 @@ export class MatchSimulator {
     }
 
     // ---- Dug: the rally continues ----
-    const shot = this.pickShot(lane, 'dug', blockCount, setOnIt, ar, call);
+    const shot = this.pickShot(lane, 'dug', blockCount, setOnIt, ar, call, covered);
     this.push({
       ...tags, kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
       speed: this.spikeSpeed(ar, lane, false, shot), height,
@@ -1748,6 +1773,8 @@ export class MatchSimulator {
     setter: number,
     /** The coach's plan for a pass in this zone. */
     plan: ZonePlan,
+    /** What the middle may hit off it, where the setter stands. */
+    middle: MiddleOption,
   ): number {
     const weights = this.laneWeights;
     const attackers = this.laneAttacker;
@@ -1769,7 +1796,7 @@ export class MatchSimulator {
       if (front) {
         if (role === Position.MiddleBlocker) {
           // Quick attacks need a pass the setter can work with — and the zone's plan to allow one.
-          if (plan.middle !== MiddleOption.None && setQuality > 0.35) {
+          if (middle !== MiddleOption.None && setQuality > 0.35) {
             weights[AttackLane.QuickMiddle] = base[AttackLane.QuickMiddle] * fastBias * qual(r.quickAttack) *
               COMBINATION_PROFILE[combinationsOf(atk.tactics)].quickFeed;
             attackers[AttackLane.QuickMiddle] = p;
@@ -2075,6 +2102,13 @@ export class MatchSimulator {
 }
 
 // ---- Free functions -------------------------------------------------------
+
+/** Which side of the court an attack in a lane comes from, for the defence. */
+function sourceOf(lane: number): AttackSource {
+  if (lane === AttackLane.QuickMiddle || lane === AttackLane.Pipe) return 'mb';
+  if (lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight) return 'opp';
+  return 'oh';
+}
 
 /** To the centimetre. */
 function round2(v: number): number {

@@ -14,12 +14,17 @@
  * open underneath. The overview down the side has everything at a glance.
  */
 
-import { useState, type JSX, type ReactNode } from 'react';
+import { useRef, useState, type JSX, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import {
   BackRowOption, Combinations, combinationsOf, defaultZonePlans, DEFENSE_PROFILE, DefensiveSystem, Formation, formationOf,
-  MiddleOption, OFFENSE_LANE_WEIGHTS, OffensiveSystem, PASS_ZONE_NAMES, PASS_ZONES, PinSet, SERVE_PROFILE, ServeStrategy, Tempo,
-  ZoneTarget, zonePlansOf, type PassZone, type TeamTactics, type ZonePlan,
+  MiddleOption, middleOptionFor, OFFENSE_LANE_WEIGHTS, OffensiveSystem, PASS_ZONE_NAMES, PASS_ZONES, PinSet, SERVE_PROFILE,
+  ServeStrategy, setterAtNet, Tempo, ZoneTarget, zonePlansOf, type PassZone, type TeamTactics, type ZonePlan,
 } from '../engine/match/tactics.ts';
+import {
+  ATTACK_SOURCE_NAMES, ATTACK_SOURCES, COVER_SHOTS, coverage, coverageScore, DEFENCE_PRESET_NAMES, defenceLayoutsOf, hitterAcross,
+  presetLayout, shotSpot, type AttackSource, type DefenceLayout, type DefenceLayouts, type DefencePreset, type Spot,
+} from '../engine/match/defence.ts';
+import type { Shot } from '../engine/match/engine.ts';
 import { Icon } from './icons.tsx';
 import {
   COMBINATION_OPTIONS, DEFENSE_OPTIONS, FORMATION_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS,
@@ -32,6 +37,9 @@ export const MIDDLE_ZONE_OPTIONS: Array<[MiddleOption, string]> = [
   [MiddleOption.Slide, 'Slide (china)'],
   [MiddleOption.None, 'No middle'],
 ];
+
+/** With the setter in the back row the right side is taken: no slide. */
+export const MIDDLE_BACK_OPTIONS: Array<[MiddleOption, string]> = MIDDLE_ZONE_OPTIONS.filter(([v]) => v !== MiddleOption.Slide);
 
 export const PIN_OPTIONS: Array<[PinSet, string]> = [
   [PinSet.Mixed, 'Mixed'],
@@ -62,7 +70,8 @@ const HINTS: Readonly<Record<string, string>> = {
   offense: 'How the setter shares the ball out across the attack lanes.',
   tempo: 'Faster tempo beats the block but asks more of the pass and the setter.',
   combos: 'How often a pin attack off a good pass is run as a combination off the middle — X, tandem, shoot, pipe. Rehearse them in training.',
-  middle: 'The quick in front of the setter (tensa), the back quick behind him (costas), the slide along the net to the right pin (china) — or the setter mixes them.',
+  middle: 'With the setter at the net — P2, P3, P4 — the right side is free: the quick in front (tensa), the back quick (costas) or the slide behind him (china). Any: the setter mixes them.',
+  middleBack: 'With the setter in the back row — P1, P6, P5 — the opposite is up at the net on the right, so there is no slide: the quick in front or the back quick.',
   pins: 'A high ball gives the hitter time and the block time too; a fast, flat set beats the block but is harder to hit.',
   zoneCombos: 'Whether combinations may be run off a pass coming down in this zone.',
   backRow: 'Back-row attacks: the pipe from zone 6, a ball to the opposite in zone 1, or both.',
@@ -143,8 +152,9 @@ function combosVisual(on: boolean, level = 2): JSX.Element {
   );
 }
 
-function middleVisual(m: MiddleOption): JSX.Element {
-  // Along the net, left to right: the setter's spot, and where the middle hits.
+function middleVisual(m: MiddleOption, front: boolean): JSX.Element {
+  // Along the net, left to right: the setter's spot, and where the middle hits;
+  // the setter's rotations along the bottom.
   const setter = 51;
   const spots = m === MiddleOption.Quick ? [42] : m === MiddleOption.BackQuick ? [61] : m === MiddleOption.Slide ? [72]
     : m === MiddleOption.Any ? [42, 61, 72] : [];
@@ -155,7 +165,9 @@ function middleVisual(m: MiddleOption): JSX.Element {
       {spots.map((x) => <circle key={x} cx={x} cy="14" r="4.5" fill={C.lit} opacity={m === MiddleOption.Any ? 0.75 : 1} />)}
       {m === MiddleOption.Slide && <path d="M 40 32 Q 58 26 70 18" fill="none" stroke={C.lit} strokeWidth="2" strokeDasharray="3 2" />}
       {m === MiddleOption.None && <path d="M 30 18 L 50 38 M 50 18 L 30 38" stroke="#e5484d" strokeWidth="3" />}
-      {m !== MiddleOption.None && m !== MiddleOption.Slide && <line x1="42" y1="38" x2="42" y2="22" stroke={C.line} strokeWidth="2" />}
+      {m !== MiddleOption.None && m !== MiddleOption.Slide && <line x1="42" y1="34" x2="42" y2="22" stroke={C.line} strokeWidth="2" />}
+      {!front && <path d="M 51 40 L 51 22" stroke={C.gold} strokeWidth="1.5" strokeDasharray="2 2" />}
+      <text x="6" y="45" fontSize="7.5" fontWeight="700" fill={C.line}>{front ? 'P2 · P3 · P4' : 'P1 · P6 · P5'}</text>
     </>
   );
 }
@@ -226,7 +238,9 @@ function serveVisual(s: ServeStrategy): JSX.Element {
 
 // ---- The board -------------------------------------------------------------------------
 
-type CardKey = 'formation' | 'offense' | 'tempo' | 'combos' | 'middle' | 'pins' | 'zoneCombos' | 'backRow' | 'target' | 'defense' | 'serve';
+type CardKey =
+  | 'formation' | 'offense' | 'tempo' | 'combos' | 'middle' | 'middleBack' | 'pins' | 'zoneCombos' | 'backRow' | 'target'
+  | 'defense' | 'serve';
 
 const label = <T extends number>(options: Array<[T, string]>, v: T): string => options.find(([o]) => o === v)?.[1] ?? '';
 
@@ -242,7 +256,10 @@ function ZoneCourt({ plans, zone, onZone }: { plans: Record<PassZone, ZonePlan>;
             <span className="zcourt-zone">{z}</span>
             <span className="zcourt-depth">{PASS_ZONE_NAMES[z]}</span>
             <span className="zcourt-sum">
-              <i className={p.middle === MiddleOption.None ? 'off' : ''}>MB {label(MIDDLE_ZONE_OPTIONS, p.middle).split(' ')[0]}</i>
+              <i className={p.middle === MiddleOption.None ? 'off' : ''}>
+                MB {label(MIDDLE_ZONE_OPTIONS, p.middle).split(' ')[0]}
+                {middleOptionFor(p, false) !== p.middle && ` / ${label(MIDDLE_ZONE_OPTIONS, middleOptionFor(p, false)).split(' ')[0]}`}
+              </i>
               <i>Pins {label(PIN_OPTIONS, p.pins).split(' ')[0]}</i>
               <i className={p.combos ? '' : 'off'}>Combos</i>
               <i className={p.backRow === BackRowOption.None ? 'off' : ''}>
@@ -252,41 +269,156 @@ function ZoneCourt({ plans, zone, onZone }: { plans: Record<PassZone, ZonePlan>;
           </button>
         );
       })}
+      <div className="zrot">
+        <span className="zrot-label">Setter's rotations</span>
+        <span className="zrot-chips">
+          {[0, 1, 2, 3, 4, 5].map((r) => (
+            <i key={r} className={setterAtNet(r) ? 'front' : ''} title={setterAtNet(r) ? 'Setter at the net' : 'Setter in the back row'}>P{r + 1}</i>
+          ))}
+        </span>
+        <span className="zrot-note">At the net in P2–P4: the slide is on. In P1, P6 and P5 it is not.</span>
+      </div>
       <p className="zcourt-note">Where the pass or dig comes down decides what the setter can run.</p>
     </div>
   );
 }
 
-/** What each defensive system asks of the side, in a line. */
-const DEFENSE_LINES: Readonly<Record<DefensiveSystem, string>> = {
-  [DefensiveSystem.Conservative]: 'A steady block and plenty on the floor behind it.',
-  [DefensiveSystem.Aggressive]: 'Up to stuff it: a bigger block, fewer left to dig.',
-  [DefensiveSystem.TripleBlockPriority]: 'Three up on the big hitters; the floor behind is thin.',
-  [DefensiveSystem.ServicePressure]: 'The serve does the defending; the rest stays balanced.',
-  [DefensiveSystem.ReceptionStability]: 'A safer serve and a cleaner pass; a lighter block.',
+/** The shots on the editor, in a letter or two. */
+const SHOT_MARKS: Partial<Record<Shot, [string, string]>> = {
+  cross: ['X', 'Cross-court'], line: ['L', 'Down the line'], shortLine: ['SL', 'Short line'], cut: ['C', 'Cut shot'],
+  tip: ['T', 'Tip'], roll: ['R', 'Roll shot'], seam: ['S', 'Seam'], deep: ['D', 'Deep'], quick: ['Q', 'Quick'],
 };
 
-/** The half court without the ball: the block at the net, the defence behind it, the serve going over. */
-function DefenceCourt({ defense, serve }: { defense: DefensiveSystem; serve: ServeStrategy }): JSX.Element {
-  const p = DEFENSE_PROFILE[defense];
-  const three = defense === DefensiveSystem.TripleBlockPriority;
-  const blockers = three ? [30, 50, 70] : [42, 58];
-  // The more of the floor the system covers, the deeper and wider the defence stands.
-  const spread = 22 + (p.digCoverage - 0.78) * 50;
-  const risky = SERVE_PROFILE[serve].power;
+/** The front-row player who doesn't block against each kind of attack, by his zone. */
+const FREE_ZONE: Readonly<Record<AttackSource, string>> = { oh: '4', mb: '4', opp: '2' };
+
+/** The standard layout a side's layout is, if it is one. */
+function presetOf(layout: DefenceLayout, source: AttackSource): DefencePreset | null {
+  const same = (a: Spot, b: Spot): boolean => Math.abs(a.u - b.u) < 0.005 && Math.abs(a.v - b.v) < 0.005;
+  for (const p of ['perimeter', 'rotation', 'manUp'] as const) {
+    const q = presetLayout(p, source);
+    if (same(layout.lb, q.lb) && same(layout.mb, q.mb) && same(layout.rb, q.rb) && same(layout.free, q.free)) return p;
+  }
+  return null;
+}
+
+const SHORT_PRESET: Readonly<Record<string, string>> = { Perimeter: 'Perim.', Rotation: 'Rot.', 'Man-up': 'Man-up', Custom: 'Custom' };
+
+/** A layout's name: the standard one it is, or custom. */
+export function defenceName(layout: DefenceLayout, source: AttackSource): string {
+  const p = presetOf(layout, source);
+  return p !== null ? DEFENCE_PRESET_NAMES[p] : 'Custom';
+}
+
+/**
+ * Where the defence stands against each kind of attack — the outside, the
+ * middle, the opposite: the back three and the front-row player who doesn't
+ * block, each dragged where the coach wants him, or a standard layout. The
+ * shots from that side are marked where they come down, green where someone
+ * covers them, red where the court is open.
+ */
+function DefenceEditor({ tactics: t, onChange }: { tactics: TeamTactics; onChange: () => void }): JSX.Element {
+  const [source, setSource] = useState<AttackSource>('oh');
+  const [drag, setDrag] = useState<keyof DefenceLayout | null>(null);
+  const [, redraw] = useState(0);
+  const svg = useRef<SVGSVGElement>(null);
+  const layouts = defenceLayoutsOf(t);
+  const layout = layouts[source];
+  const hu = hitterAcross(source);
+  const cover = coverage(layout, source);
+  const score = coverageScore(layout, source);
+  /** The side's own layouts, made the first time one is changed. */
+  const own = (): DefenceLayouts => {
+    if (t.defence === undefined) {
+      const c = (l: DefenceLayout): DefenceLayout => ({ lb: { ...l.lb }, mb: { ...l.mb }, rb: { ...l.rb }, free: { ...l.free } });
+      t.defence = { oh: c(layouts.oh), mb: c(layouts.mb), opp: c(layouts.opp) };
+    }
+    return t.defence;
+  };
+  const move = (e: ReactPointerEvent<SVGSVGElement>): void => {
+    const el = svg.current;
+    if (drag === null || el === null) return;
+    const ctm = el.getScreenCTM();
+    if (ctm === null) return;
+    const pt = el.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const p = pt.matrixTransform(ctm.inverse());
+    own()[source][drag] = { u: Math.min(0.97, Math.max(0.03, p.x / 100)), v: Math.min(1, Math.max(0.04, p.y / 100)) };
+    redraw((n) => n + 1);
+  };
+  const drop = (): void => {
+    if (drag === null) return;
+    setDrag(null);
+    onChange();
+  };
+  const men: Array<[keyof DefenceLayout, string]> = [['lb', '5'], ['mb', '6'], ['rb', '1'], ['free', FREE_ZONE[source]]];
+  const blockers = source === 'mb' ? [hu] : [hu - 0.07, hu + 0.07];
+  const preset = presetOf(layout, source);
+
   return (
-    <div className="zcourt dcourt">
-      <svg viewBox="0 0 100 130" className="dcourt-svg" aria-hidden="true">
-        <rect x="6" y="10" width="88" height="114" fill="#c76f36" />
-        <line x1="6" y1="48" x2="94" y2="48" stroke="rgba(255,255,255,0.85)" strokeWidth="1.2" />
-        <rect x="2" y="6" width="96" height="4" fill="rgba(255,255,255,0.9)" />
-        {blockers.map((x) => <rect key={x} x={x - 6} y="11" width="12" height="7" rx="2" fill="currentColor" />)}
-        {[[50 - spread, 80], [50, 108], [50 + spread, 80]].map(([x, y]) => <circle key={x} cx={x} cy={y} r="5" fill="#fff" />)}
-        {!three && <circle cx={defense === DefensiveSystem.Aggressive ? 50 : 22} cy="34" r="5" fill="#fff" opacity="0.8" />}
-        <path d={`M 80 128 Q 70 ${60 - risky * 20} 40 2`} fill="none" stroke="#ffd66e" strokeWidth="1.6" strokeDasharray="3 2" />
+    <div className="zcourt dedit">
+      <div className="dedit-head">
+        <span className="zrot-label">Attack from</span>
+        <span className="tboard-zones">
+          {ATTACK_SOURCES.map((s) => (
+            <button key={s} className={s === source ? 'active wide' : 'wide'} onClick={() => setSource(s)}>{ATTACK_SOURCE_NAMES[s]}</button>
+          ))}
+        </span>
+      </div>
+      <svg ref={svg} className="dedit-svg" viewBox="-4 -16 108 122" onPointerMove={move} onPointerUp={drop} onPointerLeave={drop}>
+        <rect x="0" y="0" width="100" height="100" fill="#c76f36" />
+        <line x1="0" y1="33.3" x2="100" y2="33.3" stroke="rgba(255,255,255,0.85)" strokeWidth="0.8" />
+        <rect x="-3" y="-1.5" width="106" height="3" fill="rgba(255,255,255,0.92)" />
+        {/* Their hitter across the net, and the block going up to him. */}
+        <circle cx={hu * 100} cy="-8" r="4.5" fill="#e5484d" />
+        <text x={hu * 100} y="-6.4" textAnchor="middle" fontSize="4.2" fontWeight="800" fill="#fff">
+          {source === 'oh' ? 'OH' : source === 'mb' ? 'MB' : 'OP'}
+        </text>
+        {blockers.map((b) => <rect key={b} x={b * 100 - 4} y="1.5" width="8" height="4" rx="1" fill="rgba(255,255,255,0.75)" />)}
+        {/* Where the shots come down: covered, partly, open. */}
+        {COVER_SHOTS[source].map(([shot]) => {
+          const at = shotSpot(shot, hu, 0, 0.5);
+          const c = cover.get(shot) ?? 0;
+          const mark = SHOT_MARKS[shot];
+          return (
+            <g key={shot}>
+              <title>{`${mark?.[1] ?? shot}: ${c >= 0.55 ? 'covered' : c >= 0.25 ? 'partly covered' : 'open'}`}</title>
+              <circle cx={at.u * 100} cy={at.v * 100} r="3.6" fill={c >= 0.55 ? '#3dbb5c' : c >= 0.25 ? '#e3a82b' : '#e5484d'} opacity="0.9" />
+              <text x={at.u * 100} y={at.v * 100 + 1.4} textAnchor="middle" fontSize="3.4" fontWeight="800" fill="#0b1018">{mark?.[0] ?? '?'}</text>
+            </g>
+          );
+        })}
+        {/* Against the middle the other pin doesn't block either: he mirrors the 4. */}
+        {source === 'mb' && (
+          <g opacity="0.55">
+            <circle cx={(1 - layout.free.u) * 100} cy={layout.free.v * 100} r="6" fill="#d7a73f" stroke="#fff" strokeWidth="0.8" />
+            <text x={(1 - layout.free.u) * 100} y={layout.free.v * 100 + 2} textAnchor="middle" fontSize="5.5" fontWeight="800" fill="#0b1018">2</text>
+          </g>
+        )}
+        {/* The defence: drag each one where he should stand. */}
+        {men.map(([key, zone]) => {
+          const at = layout[key];
+          return (
+            <g key={key} className={`dedit-man${drag === key ? ' dragging' : ''}`}
+              onPointerDown={(e) => { (e.currentTarget as SVGGElement).setPointerCapture(e.pointerId); setDrag(key); }}>
+              <circle cx={at.u * 100} cy={at.v * 100} r="6" fill={key === 'free' ? '#d7a73f' : 'currentColor'} stroke="#fff" strokeWidth="0.8" />
+              <text x={at.u * 100} y={at.v * 100 + 2} textAnchor="middle" fontSize="5.5" fontWeight="800" fill="#0b1018">{zone}</text>
+            </g>
+          );
+        })}
       </svg>
-      <p className="zcourt-note"><b>{label(DEFENSE_OPTIONS, defense)}.</b> {DEFENSE_LINES[defense]}</p>
-      <p className="zcourt-note"><b>{label(SERVE_OPTIONS, serve)} serve.</b> {serve === ServeStrategy.Risky ? 'Hit hard: aces, and errors.' : serve === ServeStrategy.Conservative ? 'In play, every time.' : 'Pressure without the risk.'}</p>
+      <div className="dedit-presets">
+        {(['perimeter', 'rotation', 'manUp'] as const).map((p) => (
+          <button key={p} className={`sm${preset === p ? ' active' : ''}`} onClick={() => { own()[source] = presetLayout(p, source); onChange(); }}>
+            {DEFENCE_PRESET_NAMES[p]}
+          </button>
+        ))}
+      </div>
+      <p className="zcourt-note">
+        Covers <b>{Math.round(score * 100)}%</b> of what comes from the {ATTACK_SOURCE_NAMES[source].toLowerCase()} —
+        drag 5, 6, 1 and the {FREE_ZONE[source]} who doesn't block.
+      </p>
     </div>
   );
 }
@@ -333,8 +465,13 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
       options: COMBINATION_OPTIONS, current: combos, set: (v) => { t.combinations = v; onChange(); },
     },
     middle: {
-      title: "Middle's ball", value: label(MIDDLE_ZONE_OPTIONS, plan.middle), visual: middleVisual(plan.middle),
+      title: 'Middle · setter at net', value: label(MIDDLE_ZONE_OPTIONS, plan.middle), visual: middleVisual(plan.middle, true),
       options: MIDDLE_ZONE_OPTIONS, current: plan.middle, set: (v) => setPlan({ middle: v }),
+    },
+    middleBack: {
+      title: 'Middle · setter back', value: label(MIDDLE_BACK_OPTIONS, middleOptionFor(plan, false)),
+      visual: middleVisual(middleOptionFor(plan, false), false),
+      options: MIDDLE_BACK_OPTIONS, current: middleOptionFor(plan, false), set: (v) => setPlan({ middleBack: v }),
     },
     pins: {
       title: 'Ball to the pins', value: label(PIN_OPTIONS, plan.pins), visual: pinsVisual(plan.pins),
@@ -362,7 +499,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
     },
   };
   const teamKeys: CardKey[] = onFormation !== undefined ? ['formation', 'offense', 'tempo', 'combos'] : ['offense', 'tempo', 'combos'];
-  const zoneKeys: CardKey[] = ['middle', 'pins', 'zoneCombos', 'backRow', 'target'];
+  const zoneKeys: CardKey[] = ['middle', 'middleBack', 'pins', 'zoneCombos', 'backRow', 'target'];
   const outKeys: CardKey[] = ['defense', 'serve'];
   const shown = phase === 'in' ? [...teamKeys, ...zoneKeys] : outKeys;
   const picked = open !== null && shown.includes(open) ? cards[open] : null;
@@ -376,7 +513,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
   );
 
   return (
-    <div className={`tboard${compact ? ' compact' : ''}`}>
+    <div className={`tboard phase-${phase}${compact ? ' compact' : ''}`}>
       <div className="tboard-phase" role="tablist">
         <button role="tab" aria-selected={phase === 'in'} className={phase === 'in' ? 'active' : ''} onClick={() => setPhase('in')}>
           <Icon name="ball" size={14} /> In Possession
@@ -387,7 +524,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
       </div>
       <div className="tboard-body">
         {phase === 'in' && !compact && <ZoneCourt plans={plans} zone={zone} onZone={setZone} />}
-        {phase === 'out' && !compact && <DefenceCourt defense={t.defense} serve={t.serve} />}
+        {phase === 'out' && <DefenceEditor tactics={t} onChange={onChange} />}
         <div className="tboard-cards">
           {phase === 'in' ? (
             <>
@@ -410,7 +547,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
               <div className="tboard-head">Defence and serve</div>
               {grid(outKeys)}
               <p className="tboard-note">
-                The block, the defence behind it and where to serve are set rotation by rotation, in Rotations.
+                Place the defence behind the block on the court, for each kind of attack. The block assignment and where to serve are set rotation by rotation, in Rotations.
               </p>
             </>
           )}
@@ -437,7 +574,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
               return (
                 <Overview key={z} title={`Zone ${z} · ${PASS_ZONE_NAMES[z]}`} active={phase === 'in' && z === zone} onClick={() => { setPhase('in'); setZone(z); }}
                   rows={[
-                    ["Middle's ball", label(MIDDLE_ZONE_OPTIONS, p.middle)],
+                    ['Middle (net / back)', `${label(MIDDLE_ZONE_OPTIONS, p.middle).split(' ')[0]} / ${label(MIDDLE_BACK_OPTIONS, middleOptionFor(p, false)).split(' ')[0]}`],
                     ['Pins', label(PIN_OPTIONS, p.pins)],
                     ['Combinations', p.combos ? 'Allowed' : 'Not here'],
                     ['Back row', label(BACK_ROW_OPTIONS, p.backRow)],
@@ -445,7 +582,10 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
                   ]} />
               );
             })}
-            <Overview title="Out of possession" rows={outKeys.map((k) => [cards[k].title, cards[k].value])} />
+            <Overview title="Out of possession" active={phase === 'out'} onClick={() => setPhase('out')} rows={[
+              ...outKeys.map((k) => [cards[k].title, cards[k].value] as [string, string]),
+              ['Behind block', ATTACK_SOURCES.map((s) => SHORT_PRESET[defenceName(defenceLayoutsOf(t)[s], s)] ?? 'Custom').join(' · ')],
+            ]} />
           </aside>
         )}
       </div>

@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react';
 import type { Highlight } from '../engine/match/highlights.ts';
+import { defenceLayoutsOf } from '../engine/match/defence.ts';
 import { describeHighlight } from '../engine/world/monthAwards.ts';
 import { ClubCrest, clubHue, Segmented } from './components.tsx';
 import { Icon } from './icons.tsx';
@@ -81,7 +82,8 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
       await sleep(1300 / pace);
       if (cancelled.current) return;
       const seed = h.set * 1000 + h.scoreBefore[0] * 31 + h.scoreBefore[1];
-      const beats = rallyBeats(court, h.serveTeam, h.contacts, roles, seed, nearTeam, h.winner);
+      const beats = rallyBeats(court, h.serveTeam, h.contacts, roles, seed, nearTeam, h.winner,
+        (team) => defenceLayoutsOf((team === 0 ? home : away)?.tactics));
       await playBeats(beats, pace, cancelled, setScene, (play) => {
         setBigPlay({ ...play, key: Date.now() });
         clearTimeout(timer.current);

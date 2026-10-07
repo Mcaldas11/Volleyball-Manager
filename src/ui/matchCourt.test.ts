@@ -153,3 +153,28 @@ test('everyone on court has something to do in every beat, contacts aim where th
     });
   }
 });
+
+test('the defence stands behind the block where its coach has put it', () => {
+  const { sim, positions } = liveMatch(9);
+  // Everyone in the back row of the defending side at mid-court, 4.5 m off the net.
+  const mid = { u: 0.5, v: 0.5 };
+  const layout = { lb: { u: 0.2, v: 0.5 }, mb: mid, rb: { u: 0.8, v: 0.5 }, free: { u: 0.5, v: 0.3 } };
+  const defence = { oh: layout, mb: layout, opp: layout };
+  let checked = 0;
+  for (let i = 0; i < 60 && checked < 10; i++) {
+    const pre = sim.snapshot();
+    const entry = sim.step();
+    if (entry === null) break;
+    const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, positions, i, 0, entry.winner, () => defence);
+    for (const beat of beats) {
+      const hitter = beat.actor !== null && beat.poses.get(beat.actor) === 'spike' ? beat.actor : null;
+      if (hitter === null) continue;
+      const hitterSide = Math.sign(beat.positions.get(hitter)!.y);
+      // The defending side's players at 4.5 m back.
+      const back = [...beat.positions.values()].filter((g) => Math.sign(g.y) === -hitterSide && Math.abs(Math.abs(g.y) - 4.5) < 0.01);
+      assert.ok(back.length >= 3, `the back three at 4.5 m (${back.length})`);
+      checked++;
+    }
+  }
+  assert.ok(checked > 0);
+});

@@ -6,11 +6,31 @@ import { generateWorld } from '../world/worldGen.ts';
 import { stubManager } from '../world/world.ts';
 import { MatchFormat, MatchSimulator, type MatchSetup, type RallyContact } from './engine.ts';
 import {
-  Combinations, defaultTactics, defaultZonePlans, isCombination, MiddleOption, passZone, ZoneTarget, type PassZone, type TeamTactics,
+  Combinations, defaultTactics, defaultZonePlans, isCombination, MiddleOption, passZone, setterAtNet, ZoneTarget, type PassZone,
+  type TeamTactics,
 } from './tactics.ts';
 
 const world = generateWorld({ seed: 71, startYear: 2026, scale: 'small', manager: stubManager() });
 const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
+
+/** Each of the home side's attacks, with the rotation it was played in (0 for P1 — the setter's zone). */
+function attacksIn(tactics: Partial<TeamTactics>, seeds: number[]): Array<{ c: RallyContact; rot: number }> {
+  const out: Array<{ c: RallyContact; rot: number }> = [];
+  for (const seed of seeds) {
+    const home = toTeamSetup(world.players, a);
+    home.tactics = { ...defaultTactics(), ...tactics };
+    const r = new MatchSimulator(world.players, {
+      home, away: toTeamSetup(world.players, b), format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: false,
+      collectLog: true, seed,
+    }).run();
+    for (const e of r.log!) {
+      for (const c of e.contacts) {
+        if (c.team === 0 && ['attack', 'kill', 'attackError', 'blocked'].includes(c.kind)) out.push({ c, rot: e.homeRotation });
+      }
+    }
+  }
+  return out;
+}
 
 function attacks(tactics: Partial<TeamTactics>, seeds: number[]): RallyContact[] {
   const out: RallyContact[] = [];
@@ -32,10 +52,24 @@ function attacks(tactics: Partial<TeamTactics>, seeds: number[]): RallyContact[]
 test("the middle hits the quick, the back quick and the slide — or just the one he's told to", () => {
   const mixed = attacks({}, [1, 2, 3]).filter((c) => c.detail === 'Quick (middle)');
   for (const play of ['quick', 'backQuick', 'slide'] as const) assert.ok(mixed.some((c) => c.play === play), `some ${play}`);
-  const slideZones = defaultZonePlans();
-  for (const z of ['A', 'B'] as const) slideZones[z] = { ...slideZones[z], middle: MiddleOption.Slide };
-  const slides = attacks({ zones: slideZones }, [1, 2]).filter((c) => c.detail === 'Quick (middle)');
-  assert.ok(slides.length > 10 && slides.every((c) => c.play === 'slide'));
+  // Told to slide with the setter at the net and to hit the quick with him at the back.
+  const zones = defaultZonePlans();
+  for (const z of ['A', 'B'] as const) zones[z] = { ...zones[z], middle: MiddleOption.Slide, middleBack: MiddleOption.Quick };
+  const told = attacksIn({ zones }, [1, 2, 3]).filter(({ c }) => c.detail === 'Quick (middle)');
+  const front = told.filter(({ rot }) => setterAtNet(rot));
+  const back = told.filter(({ rot }) => !setterAtNet(rot));
+  assert.ok(front.length > 5 && back.length > 5);
+  assert.ok(front.every(({ c }) => c.play === 'slide' || c.play === 'quick'), 'the slide — or a quick when the libero sets');
+  assert.ok(front.some(({ c }) => c.play === 'slide'));
+  assert.ok(back.every(({ c }) => c.play === 'quick'));
+});
+
+test('the slide is run only with the setter at the net — P2, P3, P4', () => {
+  const zones = defaultZonePlans();
+  for (const z of ['A', 'B', 'C'] as const) zones[z] = { ...zones[z], middle: MiddleOption.Slide, middleBack: MiddleOption.Slide };
+  const slides = attacksIn({ zones }, [4, 5, 6]).filter(({ c }) => c.play === 'slide');
+  assert.ok(slides.length > 10);
+  assert.ok(slides.every(({ rot }) => setterAtNet(rot)), 'never with the setter in P1, P6 or P5');
 });
 
 test('combinations run off a middle up front as the decoy, and not at all when they are off', () => {
