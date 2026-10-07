@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import {
-  BlockAssignment, DefensiveShape, DefensiveSystem, Formation, formationOf, OffensiveSystem,
+  BlockAssignment, Combinations, combinationsOf, DefensiveShape, DefensiveSystem, Formation, formationOf, MiddlePlay,
+  middlePlayOf, OffensiveSystem,
   ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
 import {
@@ -32,6 +33,19 @@ export const OFFENSE_OPTIONS: Array<[OffensiveSystem, string]> = [
   [OffensiveSystem.MiddleFocused, 'Middle focused'],
   [OffensiveSystem.PipeHeavy, 'Pipe heavy'],
   [OffensiveSystem.BackRowHeavy, 'Back-row heavy'],
+];
+
+export const MIDDLE_OPTIONS: Array<[MiddlePlay, string]> = [
+  [MiddlePlay.Mixed, 'Mixed'],
+  [MiddlePlay.Quick, 'Quick in front'],
+  [MiddlePlay.BackQuick, 'Back quick'],
+  [MiddlePlay.Slide, 'Slide'],
+];
+
+export const COMBINATION_OPTIONS: Array<[Combinations, string]> = [
+  [Combinations.Off, 'Off'],
+  [Combinations.Some, 'Now and then'],
+  [Combinations.Often, 'Often'],
 ];
 
 export const TEMPO_OPTIONS: Array<[Tempo, string]> = [
@@ -151,7 +165,7 @@ export function TacticsScreen(): JSX.Element {
         </Card>
 
         <div className="stack">
-          <Card title="Out of Possession" icon="club">
+          <Card title="Defence and Serve" icon="club">
             <InstructionTiles
               label="Defensive system"
               value={t.defense}
@@ -159,14 +173,28 @@ export function TacticsScreen(): JSX.Element {
               hint="Trades block pressure against floor coverage."
               options={DEFENSE_OPTIONS}
             />
-          </Card>
-          <Card title="Serving" icon="fastForward">
             <InstructionTiles
               label="Serve strategy"
               value={t.serve}
               onChange={(v) => { t.serve = v; g.touch(); }}
               hint="Risky serving buys aces and pays for them in errors."
               options={SERVE_OPTIONS}
+            />
+          </Card>
+          <Card title="The Middle and Combinations" icon="tactics">
+            <InstructionTiles
+              label="Middle's attack"
+              value={middlePlayOf(t)}
+              onChange={(v) => { t.middlePlay = v; g.touch(); }}
+              hint="Quick in front of the setter, back quick behind him, or the slide out to the right pin."
+              options={MIDDLE_OPTIONS}
+            />
+            <InstructionTiles
+              label="Combination plays"
+              value={combinationsOf(t)}
+              onChange={(v) => { t.combinations = v; g.touch(); }}
+              hint="X, tandem, shoot and pipe off a decoy middle — rehearse them in training."
+              options={COMBINATION_OPTIONS}
             />
           </Card>
         </div>

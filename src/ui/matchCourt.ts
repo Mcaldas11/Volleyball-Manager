@@ -27,6 +27,7 @@
 
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
 import type { RallyContact, Shot } from '../engine/match/engine.ts';
+import type { PlayCall } from '../engine/match/tactics.ts';
 import { Position } from '../engine/model/positions.ts';
 
 /** A point on the floor, in court metres. */
@@ -92,7 +93,7 @@ export interface Beat extends Scene {
   /** A contact worth a big on-screen callout, the side it is good news for,
    *  how fast the ball was struck, km/h, and how high, m — for a block, how
    *  high the hands were. */
-  callout: { kind: RallyContact['kind']; team: 0 | 1; speed?: number; height?: number; shot?: Shot } | null;
+  callout: { kind: RallyContact['kind']; team: 0 | 1; speed?: number; height?: number; shot?: Shot; play?: PlayCall } | null;
   /** A serve on the radar as it leaves the hand: who, how fast, how high. */
   radar?: Radar;
 }
@@ -122,6 +123,7 @@ export function shotSpot(shot: Shot, hu: number, r1: number, r2: number): Local 
   const a2 = Math.abs(r2);
   switch (shot) {
     case 'line': return { u: line + r1 * 0.025, v: 0.8 + a2 * 0.15 };
+    case 'shortLine': return { u: line + r1 * 0.02, v: 0.27 + a2 * 0.1 };
     case 'cross': return { u: right ? 0.12 + a1 * 0.22 : 0.88 - a1 * 0.22, v: 0.58 + a2 * 0.32 };
     case 'cut': return { u: far + (right ? a1 : -a1) * 0.05, v: 0.22 + a2 * 0.14 };
     case 'tip': return { u: hu + (0.5 - hu) * 0.4 + r1 * 0.08, v: 0.08 + a2 * 0.14 };
@@ -248,6 +250,25 @@ const HIT_POINT: Readonly<Record<string, Local & { setArc: number }>> = {
   'Pipe': { u: 0.5, v: 0.38, setArc: 1.0 },
   'Back-row right': { u: 0.84, v: 0.38, setArc: 1.1 },
 };
+
+/**
+ * Where a called play is hit from, when it changes it: the back quick just
+ * behind the setter; the slide out at the right pin, the middle having run
+ * along the net to it; the X with the outside crossed in behind the middle's
+ * quick; the tandem with the opposite right behind it; the shoot flat and
+ * fast out to the pin; the pipe off the quick.
+ */
+const PLAY_POINT: Partial<Record<PlayCall, (lane: string | undefined) => Local & { setArc: number }>> = {
+  backQuick: () => ({ u: 0.77, v: 0.07, setArc: 0.3 }),
+  slide: () => ({ u: 0.91, v: 0.09, setArc: 0.45 }),
+  x: () => ({ u: 0.44, v: 0.08, setArc: 0.6 }),
+  tandem: () => ({ u: 0.5, v: 0.09, setArc: 0.6 }),
+  shoot: (lane) => ({ u: lane === 'Opposite' ? 0.9 : 0.1, v: 0.07, setArc: 0.55 }),
+  pipeQuick: () => ({ u: 0.5, v: 0.36, setArc: 0.75 }),
+};
+
+/** Where the middle jumps for the quick as the decoy. */
+const DECOY_POINT: Local = { u: 0.56, v: 0.07 };
 
 interface Team {
   /** Plays in the half closest to the camera. */
@@ -432,9 +453,11 @@ function attackFormation(
   t: Team,
   attacker: number,
   lane: string | undefined,
+  play?: PlayCall,
 ): { f: Formation; hit: Local; setArc: number } {
   const f = offenceFormation(t);
-  const known = lane !== undefined ? HIT_POINT[lane] : undefined;
+  const called = play !== undefined ? PLAY_POINT[play]?.(lane) : undefined;
+  const known = called ?? (lane !== undefined ? HIT_POINT[lane] : undefined);
   const hit: Local = known ?? { u: f.get(attacker)?.u ?? 0.5, v: 0.07 };
   for (const [p, l] of f) {
     if (p === attacker || p === t.setter) continue;
@@ -447,16 +470,18 @@ function attackFormation(
 /** Defending an attack aimed from `hitU` (in this team's own frame): the two
  *  closest front-row players close the block on the hitter, the back row sets
  *  up a perimeter shaded towards the ball. */
-function blockFormation(t: Team, hitU: number): { f: Formation; blockers: number[] } {
+function blockFormation(t: Team, hitU: number, count = 2): { f: Formation; blockers: number[] } {
   const f = defenceFormation(t);
   const front = t.zones
     .filter((_, z) => isFrontRow(z))
     .sort((a, b) => Math.abs((f.get(a)?.u ?? 0.5) - hitU) - Math.abs((f.get(b)?.u ?? 0.5) - hitU));
   const target = Math.min(0.9, Math.max(0.1, hitU));
-  const blockers = front.slice(0, 2);
+  // One, two or three up — as many as the engine says got there.
+  const n = Math.max(1, Math.min(3, count, front.length));
+  const blockers = front.slice(0, n);
+  const spots = n === 1 ? [0] : n === 2 ? [-0.06, 0.06] : [-0.11, 0, 0.11];
   front.forEach((p, i) => {
-    if (i === 0) f.set(p, { u: target - 0.06, v: 0.05 });
-    else if (i === 1) f.set(p, { u: target + 0.06, v: 0.05 });
+    if (i < n) f.set(p, { u: target + spots[i], v: 0.05 });
     else f.set(p, { u: f.get(p)?.u ?? 0.5, v: 0.14 });
   });
   const perimeter = [{ u: 0.14, v: 0.7 }, { u: 0.5, v: 0.88 }, { u: 0.86, v: 0.7 }];
@@ -611,6 +636,8 @@ export function rallyBeats(
   // where the first touch sent the ball and who made it — and, once set, who
   // set it from where.
   let needsSet = false;
+  // The middle going up for the quick as the decoy, as the next set goes out.
+  let decoyNext: number | null = null;
   // The last attack: where it went and from where — for whoever digs it, or covers it.
   let lastAttack: { shot?: Shot; hu: number; team: 0 | 1; speed?: number; from: Ball3 } | null = null;
   let pass: { spot: ReturnType<typeof passSpot>; ms: number } | null = null;
@@ -653,9 +680,15 @@ export function rallyBeats(
       }
     }
     setFrom = setter >= 0 ? { p: setter, at: spot.at } : null;
+    // The decoy runs in and jumps for the quick just as the setter takes it.
+    const decoy = decoyNext;
+    decoyNext = null;
+    if (decoy !== null && decoy !== setter && forms[t].has(decoy)) forms[t].set(decoy, { ...DECOY_POINT });
     // Chasing the ball down: a pass too low to take overhead gets bumped up.
-    push(air(t, spot.at, spot.z), setter >= 0 ? setter : null, ms, spot.arc,
-      setter >= 0 ? [[setter, spot.z >= 2.25 ? 'set' : 'pass']] : []);
+    push(air(t, spot.at, spot.z), setter >= 0 ? setter : null, ms, spot.arc, [
+      ...(setter >= 0 ? [[setter, spot.z >= 2.25 ? 'set' : 'pass'] as [number, Pose]] : []),
+      ...(decoy !== null && decoy !== setter ? [[decoy, 'spike'] as [number, Pose]] : []),
+    ]);
     needsSet = false;
     pass = null;
   };
@@ -765,13 +798,16 @@ export function rallyBeats(
       case 'kill':
       case 'attackError':
       case 'blocked': {
-        const { f, hit, setArc } = attackFormation(teams[t], c.player, c.detail);
+        const { f, hit, setArc } = attackFormation(teams[t], c.player, c.detail, c.play);
+        if (c.decoy !== undefined) decoyNext = c.decoy;
         if (needsSet) setBall(t, c.player);
+        // The decoy lands where he jumped, out of the hitter's way.
+        if (c.decoy !== undefined && c.decoy !== c.player) f.set(c.decoy, { u: DECOY_POINT.u, v: 0.16 });
         // Whoever set stays where they set from, to cover.
         if (setFrom !== null && setFrom.p !== c.player) f.set(setFrom.p, { ...setFrom.at });
         setFrom = null;
         forms[t] = f;
-        const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u);
+        const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u, c.blockers ?? 2);
         forms[o] = block;
         const blockPoses: Array<[number, Pose]> = blockers.map((b) => [b, 'block']);
         // Team-mates crouch in under the hitter, ready for a ball off the block.
@@ -806,7 +842,7 @@ export function rallyBeats(
           const to = air(o, c.shot !== undefined ? shotSpot(c.shot, hu, r1, r2) : holeIn(forms[o], seed + i), 0);
           // A tip drops over the block, a roll shot loops: neither is hit through the court.
           push(to, null, flies(from, to, c.speed, soft ? 380 : 200, soft ? 760 : 380), c.shot === 'tip' ? 0.45 : c.shot === 'roll' ? 1.0 : 0,
-            blockPoses, { kind: 'kill', team: t, speed: c.speed, height: c.height, shot: c.shot });
+            blockPoses, { kind: 'kill', team: t, speed: c.speed, height: c.height, shot: c.shot, play: c.play });
         } else if (c.kind === 'attackError' && c.shot === 'net') {
           // Into the net on his own side, and down.
           push(air(t, { u: hit.u, v: 0.02 }, 1.85), null, flies(from, air(t, { u: hit.u, v: 0.02 }, 1.85), c.speed, 120, 260), 0, [],

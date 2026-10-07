@@ -30,6 +30,7 @@
 import { ATTR_COUNT, ATTR_INDEX, type AttributeName } from '../model/attributes.ts';
 import type { Club } from '../model/club.ts';
 import { Position } from '../model/positions.ts';
+import { Combinations, combinationsOf } from '../match/tactics.ts';
 import { postMessage } from './inbox.ts';
 import { DAYS_PER_SEASON, type Fixture, type World } from './world.ts';
 
@@ -39,8 +40,9 @@ export type Intensity = 'low' | 'normal' | 'high';
 export type IndividualFocus =
   | 'auto' | 'serving' | 'reception' | 'attacking' | 'blocking' | 'setting' | 'defence' | 'physical' | 'mental';
 export type PlayerLoad = 'rest' | 'reduced' | 'normal' | 'extra';
-/** The part of the game a day's match preparation works on. */
-export type PrepArea = 'reception' | 'transition' | 'block';
+/** The part of the game a day's match preparation works on — the last the
+ *  combination plays off the middle, with the outside and the opposite. */
+export type PrepArea = 'reception' | 'transition' | 'block' | 'combinations';
 
 export interface TrainingPlan {
   /** Each week's focus and intensity, by the absolute day its Monday falls on. */
@@ -95,6 +97,7 @@ export const PREP_AREAS: ReadonlyArray<readonly [PrepArea, string]> = [
   ['reception', 'Serve receive'],
   ['transition', 'Attack transition'],
   ['block', 'Block defence'],
+  ['combinations', 'Combination plays'],
 ];
 
 /** The attributes each individual focus works on. */
@@ -265,7 +268,11 @@ export function autoPrep(world: World, club: Club, fixture: Fixture | undefined)
   const serve = avg(['jumpServe', 'powerServe', 'servingAccuracy']);
   const attack = avg(['spikeTechnique', 'quickAttack']);
   const block = avg(['blocking']);
-  return serve >= attack && serve >= block ? 'reception' : attack >= block ? 'block' : 'transition';
+  if (serve >= attack && serve >= block) return 'reception';
+  if (attack >= block) return 'block';
+  // A big block: beat it in transition — or, for a side that lives on its
+  // combinations, with the combinations.
+  return combinationsOf(club.tactics) === Combinations.Often ? 'combinations' : 'transition';
 }
 
 /**
@@ -522,7 +529,7 @@ const POSITION_NAME_LOWER: Readonly<Record<Position, string>> = {
  * side a little more in each.
  */
 export function prepCoverage(world: World, club: Club, matchDay: number): Record<PrepArea, number> {
-  const out: Record<PrepArea, number> = { reception: 0, transition: 0, block: 0 };
+  const out: Record<PrepArea, number> = { reception: 0, transition: 0, block: 0, combinations: 0 };
   for (let d = matchDay - 3; d < matchDay; d++) {
     const day = weekPlan(world, club, weekStartOf(world, d)).find((x) => x.day === d);
     if (day?.session === 'preparation' && day.prep !== undefined) {

@@ -16,10 +16,12 @@ import type { Kit } from '../court3d.ts';
 import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import {
-  ATTACKER_OPTIONS, BLOCK_OPTIONS, DEFENSE_OPTIONS, InstructionTiles, OFFENSE_OPTIONS, SERVE_OPTIONS,
+  ATTACKER_OPTIONS, BLOCK_OPTIONS, COMBINATION_OPTIONS, DEFENSE_OPTIONS, InstructionTiles, MIDDLE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS,
   SERVE_TARGET_OPTIONS, SHAPE_OPTIONS, SliderField, TEMPO_OPTIONS,
 } from './Manage.tsx';
-import { Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, type TeamTactics } from '../../engine/match/tactics.ts';
+import {
+  combinationsOf, Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, middlePlayOf, type TeamTactics,
+} from '../../engine/match/tactics.ts';
 import { describeRallyHighlight } from './Match.tsx';
 import { useGame, WARM_READY, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -402,6 +404,18 @@ function TimeoutPanel({
           options={TEMPO_OPTIONS}
         />
         <ChoiceField
+          label="Middle's attack"
+          value={middlePlayOf(t)}
+          onChange={(v) => { t.middlePlay = v; g.touch(); }}
+          options={MIDDLE_OPTIONS}
+        />
+        <ChoiceField
+          label="Combination plays"
+          value={combinationsOf(t)}
+          onChange={(v) => { t.combinations = v; g.touch(); }}
+          options={COMBINATION_OPTIONS}
+        />
+        <ChoiceField
           label="Defensive system"
           value={t.defense}
           onChange={(v) => { t.defense = v; g.touch(); }}
@@ -759,6 +773,14 @@ function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | nul
                 <div>
                   <InstructionTiles label="Offensive system" value={t.offense} onChange={set('offense')} options={OFFENSE_OPTIONS} />
                   <InstructionTiles label="Tempo" value={t.tempo} onChange={set('tempo')} options={TEMPO_OPTIONS} />
+                  <InstructionTiles
+                    label="Middle's attack" value={middlePlayOf(t)} options={MIDDLE_OPTIONS}
+                    onChange={(v) => { t.middlePlay = v; g.touch(); }}
+                  />
+                  <InstructionTiles
+                    label="Combination plays" value={combinationsOf(t)} options={COMBINATION_OPTIONS}
+                    onChange={(v) => { t.combinations = v; g.touch(); }}
+                  />
                 </div>
                 <div>
                   <InstructionTiles label="Defensive system" value={t.defense} onChange={set('defense')} options={DEFENSE_OPTIONS} />

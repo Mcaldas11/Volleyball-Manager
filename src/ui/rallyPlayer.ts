@@ -7,6 +7,7 @@
  */
 
 import type { RallyContact, Shot } from '../engine/match/engine.ts';
+import type { PlayCall } from '../engine/match/tactics.ts';
 import { MONSTER_SPIKE_KMH } from '../engine/match/highlights.ts';
 import type { Beat, Radar, Scene } from './matchCourt.ts';
 
@@ -44,11 +45,22 @@ const SHOT_CALLOUTS: Partial<Record<Shot, readonly string[]>> = {
   roll: ['ROLL SHOT!', 'PLACED!'],
   cut: ['CUT SHOT!', 'SHARP ANGLE!'],
   line: ['DOWN THE LINE!', 'LINE SHOT!'],
+  shortLine: ['SHORT LINE!', 'DOWN THE LINE, SHORT!'],
   blockout: ['BLOCK OUT!', 'OFF THE BLOCK!'],
   seam: ['THROUGH THE SEAM!', 'SPLIT THE BLOCK!'],
   long: ['LONG!', 'OUT!'],
   wide: ['WIDE!', 'OUT!'],
   net: ['INTO THE NET!'],
+};
+
+/** A point off a play worth naming: the middle's slide or back quick, or a combination. */
+const PLAY_CALLOUTS: Partial<Record<PlayCall, readonly string[]>> = {
+  slide: ['SLIDE!', 'OFF THE SLIDE!'],
+  backQuick: ['BACK QUICK!'],
+  x: ['X PLAY!', 'CROSSED THEM UP!'],
+  tandem: ['TANDEM!'],
+  shoot: ['SHOOT!', 'TOO FAST!'],
+  pipeQuick: ['PIPE!'],
 };
 
 function pick(options: readonly string[]): string {
@@ -60,7 +72,7 @@ function pick(options: readonly string[]): string {
  *  how high the hands were. */
 export function bigPlayFor(callout: Beat['callout']): BigPlay | null {
   if (callout === null) return null;
-  const { kind, team, speed, height, shot } = callout;
+  const { kind, team, speed, height, shot, play } = callout;
   // Played off the block on purpose, to go again.
   if (shot === 'recycle') return { text: 'RECYCLED!', team };
   const options = BIG_PLAY_CALLOUTS[kind];
@@ -68,7 +80,9 @@ export function bigPlayFor(callout: Beat['callout']): BigPlay | null {
   const byShot = shot !== undefined ? SHOT_CALLOUTS[shot] : undefined;
   if (kind === 'kill') {
     const power = shot !== 'tip' && shot !== 'roll';
-    const text = power && speed !== undefined && speed >= MONSTER_SPIKE_KMH ? 'MONSTER SPIKE!' : pick(byShot ?? options);
+    const byPlay = play !== undefined ? PLAY_CALLOUTS[play] : undefined;
+    const text = power && speed !== undefined && speed >= MONSTER_SPIKE_KMH ? 'MONSTER SPIKE!'
+      : pick(power && byPlay !== undefined ? byPlay : byShot ?? options);
     return { text, team, reading: 'strike', speed, height };
   }
   if (kind === 'attackError' && byShot !== undefined) return { text: pick(byShot), team };

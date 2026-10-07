@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { RallyContact, RallyLogEntry, Shot } from '../../engine/match/engine.ts';
+import { PLAY_NAMES } from '../../engine/match/tactics.ts';
 import { MONSTER_SPIKE_KMH } from '../../engine/match/highlights.ts';
 import { matchRating } from '../../engine/match/playerRating.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
@@ -284,13 +285,15 @@ function describeContact(c: RallyContact, store: NameLookup): string {
 
 /** How each shot is told in the ticker. */
 const SHOT_VERBS: Readonly<Record<Shot, string>> = {
-  cross: 'hammers it cross-court', line: 'rips it down the line', cut: 'cuts it short across the 3 m line',
+  cross: 'hammers it cross-court', line: 'rips it down the line', shortLine: 'drops it down the line, short at the 3 m line',
+  cut: 'cuts it short across the 3 m line',
   tip: 'tips it over the block', roll: 'rolls it into the open court', seam: 'splits the block',
   deep: 'drives it to the back line', quick: 'slams the quick straight down', blockout: 'wipes it off the block and out',
   recycle: 'plays it back off the block', long: 'hits it long', wide: 'puts it wide', net: 'hits it into the net',
 };
 const SHOT_TITLES: Partial<Record<Shot, string>> = {
-  tip: 'Tip', roll: 'Roll shot', cut: 'Cut shot', line: 'Line shot', blockout: 'Block-out', seam: 'Kill', quick: 'Quick',
+  tip: 'Tip', roll: 'Roll shot', cut: 'Cut shot', line: 'Line shot', shortLine: 'Short line', blockout: 'Block-out', seam: 'Kill',
+  quick: 'Quick',
 };
 
 /** One-line headline for a rally, built around whoever decided the point — for the live ticker. */
@@ -315,9 +318,11 @@ export function describeRallyHighlight(
   if (last?.kind === 'kill' && last.speed !== undefined) {
     const shot = last.shot;
     const monster = last.speed >= MONSTER_SPIKE_KMH && shot !== 'tip' && shot !== 'roll';
-    const title = monster ? 'Monster spike' : shot !== undefined ? SHOT_TITLES[shot] ?? 'Kill' : 'Kill';
+    const play = last.play !== undefined && last.play !== 'quick' ? last.play : undefined;
+    const title = monster ? 'Monster spike' : play !== undefined ? PLAY_NAMES[play] : shot !== undefined ? SHOT_TITLES[shot] ?? 'Kill' : 'Kill';
     const how = shot !== undefined ? SHOT_VERBS[shot] : monster ? 'hammers it down' : 'finishes it off';
-    return { before: `${title} — `, player: store.shortName(last.player), after: ` ${how} (${reading(last.speed, last.height)}).` };
+    const off = play !== undefined && !monster ? '' : play !== undefined ? ` off the ${PLAY_NAMES[play].toLowerCase()}` : '';
+    return { before: `${title} — `, player: store.shortName(last.player), after: ` ${how}${off} (${reading(last.speed, last.height)}).` };
   }
   if (last?.kind === 'attackError' && last.shot !== undefined) {
     return { before: 'Attack error — ', player: store.shortName(last.player), after: ` ${SHOT_VERBS[last.shot]}.` };

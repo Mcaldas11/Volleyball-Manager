@@ -45,6 +45,12 @@ import {
   TEMPO_PROFILE,
   Formation,
   formationOf,
+  COMBINATION_PROFILE,
+  combinationsOf,
+  isCombination,
+  MiddlePlay,
+  middlePlayOf,
+  type PlayCall,
   type TeamTactics,
 } from './tactics.ts';
 import {
@@ -99,7 +105,7 @@ export interface TeamSetup {
    */
   read?: number;
   /** What the side worked on for this match in the days before it, each 0-1 — see training.ts. */
-  prep?: { reception: number; transition: number; block: number };
+  prep?: { reception: number; transition: number; block: number; combinations?: number };
   /** Players the club has promised games — a loanee promised a starting
    *  place: an engine-run bench takes them off only when they are spent. */
   promised?: readonly number[];
@@ -138,7 +144,7 @@ export interface MatchSetup {
  * ball again (`recycle`). Missed: long, wide or into the net.
  */
 export type Shot =
-  | 'cross' | 'line' | 'cut' | 'tip' | 'roll' | 'seam' | 'deep' | 'quick' | 'blockout' | 'recycle'
+  | 'cross' | 'line' | 'shortLine' | 'cut' | 'tip' | 'roll' | 'seam' | 'deep' | 'quick' | 'blockout' | 'recycle'
   | 'long' | 'wide' | 'net';
 
 export interface RallyContact {
@@ -161,8 +167,13 @@ export interface RallyContact {
   /** Who stuffed a blocked attack, and how high his hands were. */
   by?: number;
   blockHeight?: number;
-  /** Where an attack went, and how — see Shot. A dig marked `cover` is a hitter's own side playing his recycled ball. */
+  /** Where an attack went, and how — see Shot. A dig marked `recycle` is a hitter's own side playing his recycled ball. */
   shot?: Shot;
+  /** The play the setter called for an attack — and, for a combination, the middle who jumped for the quick as the decoy. */
+  play?: PlayCall;
+  decoy?: number;
+  /** How many went up to block it. */
+  blockers?: number;
 }
 
 export interface RallyLogEntry {
@@ -343,7 +354,7 @@ class TeamRuntime {
   /** How well the opposition reads this side's tactic, 0-1. */
   readonly read: number;
   /** What it prepared for. */
-  readonly prep: { reception: number; transition: number; block: number };
+  readonly prep: { reception: number; transition: number; block: number; combinations?: number };
   private readonly startRotation: number;
 
   constructor(
@@ -684,6 +695,7 @@ export class MatchSimulator {
    */
   private pickShot(
     lane: number, outcome: 'kill' | 'dug' | 'blocked' | 'error', blockers: number, setQuality: number, ar: PlayerMatchRatings,
+    call?: PlayCall,
   ): Shot | undefined {
     if (!this.recording) return undefined;
     const style = clamp((ar.attackControl - ar.attackPower) / 20, -1, 1);
@@ -691,12 +703,17 @@ export class MatchSimulator {
     let w: Partial<Record<Shot, number>>;
     if (outcome === 'error') w = { long: 4.5, wide: 3.5 + style, net: 1 + bad * 2 };
     else if (outcome === 'blocked') w = { cross: 4, line: 3, seam: 3 };
+    // Off the slide the middle is out at the right pin, the block chasing: the line, short or deep, and the cut back.
+    else if (call === 'slide') w = { line: 2.4, shortLine: 1.4, cut: 1.2, cross: 1, tip: 0.5 + bad };
+    // Behind the setter, the back quick goes straight down or down the line.
+    else if (call === 'backQuick') w = { quick: 2.5, line: 1.5, cut: 1.2, tip: 0.8 + bad };
     else if (lane === AttackLane.QuickMiddle) w = { quick: 6, cut: 2 + style, tip: 1 + bad * 2, seam: 1 };
     else if (lane === AttackLane.Pipe || lane === AttackLane.BackRowRight) {
       w = { deep: 4, cross: 2.5, seam: 2, line: 1.5, roll: 0.5 + bad };
     } else {
       w = {
-        cross: 3.2 - style * 0.6, line: 2.2 - style * 0.3, cut: 1.3 + style * 0.6, tip: 0.5 + bad * 1.2 + style * 0.3,
+        cross: 3.2 - style * 0.6, line: 2.2 - style * 0.3, shortLine: 0.9 + style * 0.4, cut: 1.3 + style * 0.6,
+        tip: 0.5 + bad * 1.2 + style * 0.3,
         roll: 0.5 + bad + style * 0.3, seam: 1 - style * 0.2,
         // Off the block and out: only a ball put away, and the bigger the block the likelier.
         blockout: outcome === 'kill' && blockers >= 1 ? (0.5 + blockers * 0.55) * (1 + style * 0.5) : 0,
@@ -709,6 +726,35 @@ export class MatchSimulator {
       if (r <= 0) return shot;
     }
     return entries[entries.length - 1]?.[0];
+  }
+
+  /**
+   * The play the setter calls for an attack in `lane`: for the middle, his
+   * kind of quick — as instructed, or mixed: mostly the quick in front, the
+   * slide, and the back quick off a good pass; for a pin hitter or the pipe,
+   * now and then a combination off the middle — if there is a middle up front
+   * to jump for the quick, and a pass good enough to run one off.
+   */
+  private callPlay(atk: TeamRuntime, lane: number, setQuality: number): PlayCall | undefined {
+    const rng = this.rng;
+    if (lane === AttackLane.QuickMiddle) {
+      const mp = middlePlayOf(atk.tactics);
+      if (mp === MiddlePlay.Quick) return 'quick';
+      if (mp === MiddlePlay.Slide) return 'slide';
+      if (mp === MiddlePlay.BackQuick) return setQuality >= 0.45 ? 'backQuick' : 'quick';
+      const back = setQuality >= 0.55 ? 0.2 : 0;
+      const roll = rng.float() * (0.55 + 0.25 + back);
+      return roll < 0.55 ? 'quick' : roll < 0.8 ? 'slide' : 'backQuick';
+    }
+    const rate = COMBINATION_PROFILE[combinationsOf(atk.tactics)].rate;
+    if (rate === 0 || setQuality < 0.55 || this.laneAttacker[AttackLane.QuickMiddle] < 0 || !rng.chance(rate)) return undefined;
+    switch (lane) {
+      case AttackLane.OutsideHigh: return rng.chance(0.55) ? 'x' : 'shoot';
+      case AttackLane.SecondTempoOutside: return 'x';
+      case AttackLane.OppositeRight: return rng.chance(0.6) ? 'tandem' : 'shoot';
+      case AttackLane.Pipe: return 'pipeQuick';
+      default: return undefined;
+    }
   }
 
   /** Who covers a hitter's recycled ball: the libero if he is on, else whoever is behind the hitter in the back row. */
@@ -1423,11 +1469,25 @@ export class MatchSimulator {
     const aStats = statsFor(atk.stats, attacker);
     aStats.attacksTotal++;
 
+    // ---- The play called ----
+    // The middle hits the quick in front, the back quick or the slide; a pin
+    // attack off a good pass may be run as a combination, the middle jumping
+    // for the quick as the decoy. A combination beats the block if the side
+    // has rehearsed it; if not, the timing goes, and the ball is hit off a
+    // worse set.
+    const call = this.callPlay(atk, lane, setQuality);
+    const combo = isCombination(call);
+    const decoy = combo ? this.laneAttacker[AttackLane.QuickMiddle] : -1;
+    const rehearsed = atk.prep.combinations ?? 0;
+    const timing = combo ? 0.07 : call === 'slide' ? 0.04 : call === 'backQuick' ? 0.03 : 0;
+    const setOnIt = clamp(setQuality - timing * (1 - rehearsed), 0, 1);
+
     // ---- Attack strength ----
     let attackBase: number;
     switch (lane) {
       case AttackLane.QuickMiddle:
-        attackBase = ar.quickAttack;
+        // A slide is swung at, not snapped: power counts as well as timing.
+        attackBase = call === 'slide' ? ar.quickAttack * 0.65 + ar.attackPower * 0.35 : ar.quickAttack;
         break;
       case AttackLane.Pipe:
         attackBase = ar.pipeAttack;
@@ -1445,18 +1505,23 @@ export class MatchSimulator {
     // body, and swings at the line the block finds hardest to close.
     if (ar.leftHanded && (lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight)) attackBase *= LEFTY_EDGE;
     const attackRating =
-      attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setQuality) *
-      (1 + OFF_HAND_EDGE * (ar.offHand - OFF_HAND_TYPICAL) * (1 - setQuality)) *
+      attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setOnIt) *
+      (1 + OFF_HAND_EDGE * (ar.offHand - OFF_HAND_TYPICAL) * (1 - setOnIt)) *
       (transition ? 1 + PREP_EDGE * atk.prep.transition : 1) +
       rng.gaussian(0, (1 - ar.consistency) * 9);
-    const height = this.spikeHeight(ar, lane, setQuality);
+    const height = this.spikeHeight(ar, lane, setOnIt);
 
     // ---- Block ----
-    const blockCount = this.blockersFor(lane, grade, def, rotTac, transition);
+    // The decoy takes a blocker with him; a slide runs away from the block, a
+    // back quick goes up where the middle blocker isn't looking.
+    const blockCount = combo
+      ? Math.max(1, this.blockersFor(lane, grade, def, rotTac, transition) - 1)
+      : this.blockersFor(lane, grade, def, rotTac, transition);
+    const beaten = combo ? 0.86 + 0.1 * atk.read : call === 'slide' ? 0.9 : call === 'backQuick' ? 0.95 : 1;
     // A block that knows the attack's patterns is there before the ball.
     const blockRating =
       this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay) * def.edge * (1 + READ_BLOCK * atk.read) *
-      (1 + PREP_EDGE * def.prep.block);
+      (1 + PREP_EDGE * def.prep.block) * beaten;
 
     // ---- Dig ----
     const digRating =
@@ -1470,11 +1535,14 @@ export class MatchSimulator {
 
     const controlFactor = (ar.attackControl * ar.fatigue) / 100;
     const pError = clamp(
-      (0.145 - controlFactor * 0.09) * tempo.executionDifficulty * (transition ? 1.12 : 1) +
-        (1 - setQuality) * 0.05,
+      (0.145 - controlFactor * 0.09) * tempo.executionDifficulty * (transition ? 1.12 : 1) *
+        (combo ? 1.12 - 0.12 * rehearsed : call === 'slide' ? 1.06 : 1) +
+        (1 - setOnIt) * 0.05,
       0.02,
       0.30,
     );
+    // What every contact of this attack says about it.
+    const tags = { play: call, decoy: decoy >= 0 ? decoy : undefined, blockers: blockCount };
 
     const remaining = Math.max(0.05, 1 - pBlocked - pError);
     const pKillGivenLive = contest(attackRating + ATTACK_DEFENCE_BALANCE, digRating, 16);
@@ -1488,7 +1556,7 @@ export class MatchSimulator {
       rng.chance(RECYCLE_RATE * (ar.attackControl / 100))) {
       this.push({
         kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot: 'recycle',
-        speed: this.spikeSpeed(ar, lane, false, 'recycle'), height,
+        speed: this.spikeSpeed(ar, lane, false, 'recycle'), height, ...tags,
       });
       const blocker = this.pickBlocker(def, lane);
       statsFor(def.stats, blocker).blockTouches++;
@@ -1504,9 +1572,9 @@ export class MatchSimulator {
       aStats.attackBlocked++;
       const blocker = this.pickBlocker(def, lane);
       statsFor(def.stats, blocker).blockPoints++;
-      const shot = this.pickShot(lane, 'blocked', blockCount, setQuality, ar);
+      const shot = this.pickShot(lane, 'blocked', blockCount, setOnIt, ar, call);
       this.push({
-        kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+        ...tags, kind: 'blocked', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
         speed: this.spikeSpeed(ar, lane, false, shot), height, by: blocker, blockHeight: this.blockHeightOf(def, blocker),
       });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
@@ -1514,9 +1582,9 @@ export class MatchSimulator {
     if (roll < pBlocked + pError) {
       aStats.attackErrors++;
       def.stats.opponentErrors++;
-      const shot = this.pickShot(lane, 'error', blockCount, setQuality, ar);
+      const shot = this.pickShot(lane, 'error', blockCount, setOnIt, ar, call);
       this.push({
-        kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+        ...tags, kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
         speed: this.spikeSpeed(ar, lane, false, shot), height,
       });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
@@ -1524,18 +1592,18 @@ export class MatchSimulator {
     if (roll < pBlocked + pError + pKill) {
       aStats.attackKills++;
       setterStats.setAssists++;
-      const shot = this.pickShot(lane, 'kill', blockCount, setQuality, ar);
+      const shot = this.pickShot(lane, 'kill', blockCount, setOnIt, ar, call);
       this.push({
-        kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+        ...tags, kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
         speed: this.spikeSpeed(ar, lane, true, shot), height,
       });
       return { point: attacking, nextQuality: 0, toucher: -1 };
     }
 
     // ---- Dug: the rally continues ----
-    const shot = this.pickShot(lane, 'dug', blockCount, setQuality, ar);
+    const shot = this.pickShot(lane, 'dug', blockCount, setOnIt, ar, call);
     this.push({
-      kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
+      ...tags, kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
       speed: this.spikeSpeed(ar, lane, false, shot), height,
     });
     const digger = this.pickDigger(def);
@@ -1679,7 +1747,8 @@ export class MatchSimulator {
         if (role === Position.MiddleBlocker) {
           // Quick attacks need a pass the setter can work with.
           if (grade >= Grade.Positive && setQuality > 0.35) {
-            weights[AttackLane.QuickMiddle] = base[AttackLane.QuickMiddle] * fastBias * qual(r.quickAttack);
+            weights[AttackLane.QuickMiddle] = base[AttackLane.QuickMiddle] * fastBias * qual(r.quickAttack) *
+              COMBINATION_PROFILE[combinationsOf(atk.tactics)].quickFeed;
             attackers[AttackLane.QuickMiddle] = p;
           }
         } else if (role === Position.OutsideHitter && noSwitch) {

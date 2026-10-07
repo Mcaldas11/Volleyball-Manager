@@ -109,6 +109,63 @@ export enum BlockAssignment {
   ReleaseToLine = 3,
 }
 
+/**
+ * What the middle hits: the quick in front of the setter (the "tensa"), the
+ * back quick behind him (the "costas"), the slide — off one foot, running
+ * along the net behind the setter (the "china") — or a mix of them, by what
+ * each middle does best and how good the pass is.
+ */
+export enum MiddlePlay {
+  Mixed = 0,
+  Quick = 1,
+  BackQuick = 2,
+  Slide = 3,
+}
+
+/**
+ * How often the setter runs combination plays off the middle: the X — the
+ * outside crossing behind the middle's quick; the tandem — the opposite
+ * hitting right behind it; the shoot — a fast, flat set out to the pin while
+ * the middle pulls the block; and the pipe off the quick. They beat the block,
+ * if the side has rehearsed them; if not, the timing goes.
+ */
+export enum Combinations {
+  Off = 0,
+  Some = 1,
+  Often = 2,
+}
+
+/** The play the setter called for an attack. */
+export type PlayCall = 'quick' | 'backQuick' | 'slide' | 'x' | 'tandem' | 'shoot' | 'pipeQuick';
+
+export const PLAY_NAMES: Readonly<Record<PlayCall, string>> = {
+  quick: 'Quick', backQuick: 'Back quick', slide: 'Slide', x: 'X play', tandem: 'Tandem', shoot: 'Shoot',
+  pipeQuick: 'Pipe off the quick',
+};
+
+/** A combination play — one with the middle as the decoy. */
+export function isCombination(call: PlayCall | undefined): boolean {
+  return call === 'x' || call === 'tandem' || call === 'shoot' || call === 'pipeQuick';
+}
+
+/** The middle's attack — mixed, on saves from before it could be set. */
+export function middlePlayOf(t: Pick<TeamTactics, 'middlePlay'> | undefined): MiddlePlay {
+  return t?.middlePlay ?? MiddlePlay.Mixed;
+}
+
+/** How often combinations are run — now and then, on saves from before it could be set. */
+export function combinationsOf(t: Pick<TeamTactics, 'combinations'> | undefined): Combinations {
+  return t?.combinations ?? Combinations.Some;
+}
+
+/** How often a pin attack off a good pass is run as a combination, and how
+ *  much more the middle is fed — he is in every one of them. */
+export const COMBINATION_PROFILE: Readonly<Record<Combinations, { rate: number; quickFeed: number }>> = {
+  [Combinations.Off]: { rate: 0, quickFeed: 1 },
+  [Combinations.Some]: { rate: 0.22, quickFeed: 1.1 },
+  [Combinations.Often]: { rate: 0.42, quickFeed: 1.22 },
+};
+
 /** Per-rotation instructions. Rotations differ enormously in practice. */
 export interface RotationTactics {
   /** Position the setter should prioritise in this rotation, or -1 for auto. */
@@ -129,6 +186,10 @@ export interface TeamTactics {
   defense: DefensiveSystem;
   serve: ServeStrategy;
   tempo: Tempo;
+  /** What the middle hits — see MiddlePlay. Absent on older saves: mixed. */
+  middlePlay?: MiddlePlay;
+  /** How often combination plays are run — see Combinations. Absent on older saves: now and then. */
+  combinations?: Combinations;
   /** Instructions for rotations P1..P6, indexed 0-5. */
   rotations: RotationTactics[];
 }
@@ -151,6 +212,8 @@ export function defaultTactics(): TeamTactics {
     defense: DefensiveSystem.Conservative,
     serve: ServeStrategy.Balanced,
     tempo: Tempo.Balanced,
+    middlePlay: MiddlePlay.Mixed,
+    combinations: Combinations.Some,
     rotations: Array.from({ length: 6 }, defaultRotationTactics),
   };
 }

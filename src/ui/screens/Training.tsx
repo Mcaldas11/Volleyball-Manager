@@ -23,7 +23,9 @@ const FOCUS_OPTIONS: ReadonlyArray<readonly [WeeklyFocus, string]> = [
 const INTENSITY_OPTIONS: ReadonlyArray<readonly [Intensity, string]> = [['low', 'Low'], ['normal', 'Normal'], ['high', 'High']];
 const SESSION_CHOICES: readonly SessionType[] = ['rest', 'recovery', 'physical', 'technical', 'tactical', 'balanced', 'preparation'];
 const LOADS: readonly PlayerLoad[] = ['rest', 'reduced', 'normal', 'extra'];
-const PREP_SHORT: Readonly<Record<PrepArea, string>> = { reception: 'Reception', transition: 'Transition', block: 'Block' };
+const PREP_SHORT: Readonly<Record<PrepArea, string>> = {
+  reception: 'Reception', transition: 'Transition', block: 'Block', combinations: 'Combinations',
+};
 const FOCUSES: readonly IndividualFocus[] = ['auto', 'serving', 'reception', 'attacking', 'blocking', 'setting', 'defence', 'physical', 'mental'];
 
 /** The colour a session is written in on the plan. */
