@@ -5,9 +5,10 @@
  * both look and behave identically and neither reimplements the drag-and-drop.
  */
 
-import { useState, type CSSProperties, type JSX } from 'react';
-import { familiarityLabel, Position, POSITION_SHORT } from '../engine/model/positions.ts';
+import { useState, type CSSProperties, type JSX, type ReactNode } from 'react';
+import { familiarityLabel, MATCHDAY_SQUAD, Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import type { PlayerStore } from '../engine/model/players.ts';
+import { registeredLiberos } from '../engine/match/engine.ts';
 import { LINEUP_SLOT_POSITIONS } from '../engine/season/seasonEngine.ts';
 import { Bar, initials, PlayerFace, Pos, POSITION_ACCENT, starRating } from './components.tsx';
 import { playerFaceUrl } from './faces.ts';
@@ -127,17 +128,22 @@ export function LineupCard({
 
 /** A bench row, draggable onto any starting slot unless told otherwise. */
 export function BenchCard({
-  playerIdx, store, tag, draggable = true,
+  playerIdx, store, tag, tagTitle, draggable = true, action, out = false,
 }: {
   playerIdx: number;
   store: PlayerStore;
   tag?: string;
+  tagTitle?: string;
   draggable?: boolean;
+  /** A button at the end of the row — into the squad, or out of it. */
+  action?: ReactNode;
+  /** Not in the matchday squad: shown faded. */
+  out?: boolean;
 }): JSX.Element {
   const pos = store.position[playerIdx] as Position;
   return (
     <div
-      className={`bench-token${draggable ? ' draggable' : ''}`}
+      className={`bench-token${draggable ? ' draggable' : ''}${action !== undefined ? ' with-action' : ''}${out ? ' out' : ''}`}
       style={{ '--token-accent': POSITION_ACCENT[pos] } as CSSProperties}
       draggable={draggable}
       onDragStart={draggable ? (e) => e.dataTransfer.setData('text/plain', String(playerIdx)) : undefined}
@@ -146,11 +152,12 @@ export function BenchCard({
       <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
       <span className="bench-token-name">
         {store.shortName(playerIdx)}
-        {tag !== undefined && <span className="bench-token-tag">{tag}</span>}
+        {tag !== undefined && <span className="bench-token-tag" title={tagTitle}>{tag}</span>}
       </span>
       <Pos pos={pos} />
       <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
       <Bar value={store.condition[playerIdx]} />
+      {action}
     </div>
   );
 }
@@ -179,6 +186,14 @@ export interface TeamSheetProps {
   restrictSwapsByPosition?: boolean;
   /** Each slot's position for the team's system — the 5-1 unless told otherwise. */
   slotPositions?: readonly Position[];
+  /** Fit players left out of the matchday squad — given with the two below,
+   *  the fourteen can be picked here. */
+  outOfSquad?: number[];
+  onAddToSquad?: (playerIdx: number) => void;
+  onDropFromSquad?: (playerIdx: number) => void;
+  /** The liberos named for the match, once it is under way: only they may take
+   *  the libero slots, and none of them a zone. Absent: worked out as picked. */
+  registered?: number[];
 }
 
 /**
@@ -196,12 +211,16 @@ export interface TeamSheetProps {
 export function TeamSheet({
   lineup, libero, defensiveLibero, bench, store, onSetPlayer, onSwapPlayers, onSetLibero,
   onSetDefensiveLibero, restrictSwapsByPosition = false, slotPositions = LINEUP_SLOT_POSITIONS,
+  outOfSquad, onAddToSquad, onDropFromSquad, registered,
 }: TeamSheetProps): JSX.Element {
   const [dragOverZone, setDragOverZone] = useState<number | null>(null);
   const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
+  // Once the match is on, the liberos named for it are fixed: they play libero and nothing else.
+  const fixed = new Set(registered ?? []);
+  const namedLiberos = registered ?? registeredLiberos(store, { libero, defensiveLibero, bench });
 
   const dropOnZone = (targetZone: number, draggedPlayerIdx: number): void => {
-    if (draggedPlayerIdx === lineup[targetZone]) return;
+    if (draggedPlayerIdx === lineup[targetZone] || fixed.has(draggedPlayerIdx)) return;
     if (restrictSwapsByPosition && store.position[draggedPlayerIdx] !== slotPositions[targetZone]) return;
     const sourceZone = lineup.indexOf(draggedPlayerIdx);
     if (sourceZone === -1) onSetPlayer(targetZone, draggedPlayerIdx);
@@ -230,7 +249,7 @@ export function TeamSheet({
     }
     const swapOptions = restrictSwapsByPosition
       ? bench.filter((b) => store.position[b] === slotPositions[z])
-      : bench;
+      : bench.filter((b) => !fixed.has(b));
     return (
       <LineupCard
         key={z}
@@ -248,9 +267,22 @@ export function TeamSheet({
     );
   };
 
-  const benchLiberos = [...bench].sort((a, b) =>
-    Number(store.position[b] === Position.Libero) - Number(store.position[a] === Position.Libero));
-  const isLibero = (p: number): boolean => p >= 0;
+  const benchLiberos = registered !== undefined
+    ? bench.filter((b) => fixed.has(b))
+    : [...bench].sort((a, b) =>
+      Number(store.position[b] === Position.Libero) - Number(store.position[a] === Position.Libero));
+  const isLibero = (p: number): boolean => p >= 0 && (registered === undefined || fixed.has(p));
+  const starters = lineup.filter((p) => p >= 0).length;
+  const inSquad = starters + (libero >= 0 ? 1 : 0) + (defensiveLibero >= 0 ? 1 : 0) + bench.length;
+  const full = inSquad >= MATCHDAY_SQUAD;
+  /** What a reserve is down as, when it isn't obvious: the spare libero, or a libero playing in the six. */
+  const benchTag = (p: number): { tag?: string; title?: string } => {
+    if (namedLiberos.includes(p)) return { tag: 'Spare', title: 'Named as the second libero for the match: plays libero, and nothing else' };
+    if (store.position[p] === Position.Libero) {
+      return { tag: 'Outfield', title: `Only ${namedLiberos.length} liberos can be named — he is down to play in the six` };
+    }
+    return {};
+  };
   const frontZones = ZONE_ORDER.slice(0, 3);
   const backZones = ZONE_ORDER.slice(3);
   const liberoDrop = (role: 'reception' | 'defence') => ({
@@ -348,12 +380,50 @@ export function TeamSheet({
       <section className="card ts-bench">
         <header className="card-head">
           <h3 className="card-title">Substitutes</h3>
-          <span className="card-actions faint">{bench.length}</span>
+          <span className={`card-actions${outOfSquad !== undefined && full ? '' : ' faint'}`}>
+            {outOfSquad !== undefined ? `Squad ${inSquad}/${MATCHDAY_SQUAD}` : bench.length}
+          </span>
         </header>
-        <p className="ts-bench-hint">Drag a player onto a court slot to bring them in, or use ⇅ on a card.</p>
+        <p className="ts-bench-hint">
+          {outOfSquad !== undefined
+            ? `${MATCHDAY_SQUAD} can be named, two of them liberos. Drag a player onto a court slot, or use ⇅ on a card.`
+            : 'Drag a player onto a court slot to bring them in, or use ⇅ on a card.'}
+        </p>
         <div className="ts-bench-list">
-          {bench.map((p) => <BenchCard key={p} playerIdx={p} store={store} />)}
+          {bench.map((p) => (
+            <BenchCard
+              key={p}
+              playerIdx={p}
+              store={store}
+              draggable={!fixed.has(p)}
+              {...benchTag(p)}
+              action={onDropFromSquad !== undefined ? (
+                <button className="ts-squad-btn" title="Leave out of the squad" onClick={() => onDropFromSquad(p)}>−</button>
+              ) : undefined}
+            />
+          ))}
           {bench.length === 0 && <p className="empty">No other players available.</p>}
+          {outOfSquad !== undefined && outOfSquad.length > 0 && (
+            <>
+              <div className="ts-out-label">Not in the squad <span>{outOfSquad.length}</span></div>
+              {outOfSquad.map((p) => (
+                <BenchCard
+                  key={p}
+                  playerIdx={p}
+                  store={store}
+                  out
+                  action={onAddToSquad !== undefined ? (
+                    <button
+                      className="ts-squad-btn add"
+                      disabled={full}
+                      title={full ? `The squad is full — leave someone out first` : 'Name in the squad'}
+                      onClick={() => onAddToSquad(p)}
+                    >+</button>
+                  ) : undefined}
+                />
+              ))}
+            </>
+          )}
         </div>
       </section>
     </div>

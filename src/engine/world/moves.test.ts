@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Position } from '../model/positions.ts';
+import { MAX_SQUAD, Position } from '../model/positions.ts';
 import { newSeasonContext, startSeason } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
 import { generateWorld } from './worldGen.ts';
@@ -18,7 +18,8 @@ const WINTER_OPENS = 184;
 
 function setup(seed: number): { world: World; club: Club } {
   const world = generateWorld({ seed, startYear: 2026, scale: 'small', manager: stubManager() });
-  const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12 && c.players.length < 15)!;
+  // Room in the squad for a signing or two.
+  const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12 && c.players.length <= MAX_SQUAD - 2)!;
   world.userClubId = club.id;
   club.finances.balance = 20_000_000;
   club.finances.transferBudget = 20_000_000;

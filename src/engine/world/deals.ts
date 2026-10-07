@@ -734,7 +734,7 @@ function processSales(world: World): void {
     const level = store.currentAbility[p] / 2000;
     const suitors = world.clubs.filter((c) =>
       c.id !== world.userClubId && !bids.some((o) => o.buyingClubId === c.id) &&
-      c.reputation / 10000 >= level - 0.15 && c.players.length < 16);
+      c.reputation / 10000 >= level - 0.15 && c.players.length < MAX_SQUAD);
     if (suitors.length === 0) continue;
     const club = world.rng.pick(suitors);
     const fee = Math.round((top * world.rng.range(1.05, 1.2)) / 1000) * 1000;

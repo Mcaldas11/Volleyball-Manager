@@ -19,7 +19,7 @@ import type { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
 import { awardLeaguePoints, type Club, type LeagueTableRow } from '../model/club.ts';
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
-import { Position } from '../model/positions.ts';
+import { MATCHDAY_SQUAD, Position } from '../model/positions.ts';
 import { simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
 import { formationOf, lineupSlotPositions, type TeamTactics } from '../match/tactics.ts';
 import { addToSeason, newSeasonLine, type PlayerMatchStats, type SeasonStatLine } from '../match/stats.ts';
@@ -44,6 +44,7 @@ import { recordFixture } from '../world/records.ts';
 import { collectHighlights, inManagersLeague } from '../world/monthAwards.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
+import { coachesSetUp } from '../world/aiTactics.ts';
 
 /** Season-long statistics, keyed by player index. */
 export type SeasonStats = Map<number, SeasonStatLine>;
@@ -74,11 +75,11 @@ export { LINEUP_SLOT_POSITIONS, LINEUP_SLOT_POSITIONS_42, lineupSlotPositions } 
 export function pickLineup(
   store: PlayerStore,
   club: Pick<Club, 'players' | 'preferredLineup' | 'preferredLibero' | 'preferredDefensiveLibero'>
-    & { tactics?: Pick<TeamTactics, 'formation'>; preferredFormation?: Club['preferredFormation'] },
+    & { tactics?: Pick<TeamTactics, 'formation'>; preferredFormation?: Club['preferredFormation']; preferredBench?: number[] },
   mustStart?: ReadonlySet<number>,
   /** Who can play — a club's fit players by default; a national team's own. */
   canPlay: (p: number) => boolean = (p) => store.isAvailable(p),
-): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[] } {
+): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[]; out: number[] } {
   const SLOTS = lineupSlotPositions(formationOf(club.tactics));
   const available = club.players.filter(canPlay);
   const availableSet = new Set(available);
@@ -164,8 +165,50 @@ export function pickLineup(
   if (defensiveLibero !== -1) used.add(defensiveLibero);
 
   const finalLineup = lineup.filter((p) => p !== -1);
-  const bench = available.filter((p) => !used.has(p));
-  return { lineup: finalLineup, libero, defensiveLibero, bench };
+  const bench = pickBench(store, club, available.filter((p) => !used.has(p)),
+    MATCHDAY_SQUAD - finalLineup.length - (libero >= 0 ? 1 : 0) - (defensiveLibero >= 0 ? 1 : 0), defensiveLibero < 0);
+  const named = new Set(bench);
+  const out = available.filter((p) => !used.has(p) && !named.has(p));
+  return { lineup: finalLineup, libero, defensiveLibero, bench, out };
+}
+
+/** Cover each position wants on the bench, in the order it is filled. */
+const BENCH_COVER: ReadonlyArray<readonly [Position, number]> = [
+  [Position.Setter, 1], [Position.OutsideHitter, 1], [Position.MiddleBlocker, 1], [Position.Opposite, 1],
+  [Position.OutsideHitter, 2], [Position.MiddleBlocker, 2],
+];
+
+/**
+ * The reserves named for a match, `room` of them at most. A coach who has
+ * named his own gets them — and, for any who can't play, the next best fit.
+ * Otherwise cover for each position — a setter, an outside, a middle, an
+ * opposite, a second outside and middle — and a spare libero when only one
+ * plays; then the best of the rest. Everyone else watches from the stand.
+ */
+function pickBench(
+  store: PlayerStore,
+  club: { preferredBench?: number[] },
+  rest: number[],
+  room: number,
+  spareLibero: boolean,
+): number[] {
+  const bench: number[] = [];
+  const limit = Math.min(room, club.preferredBench?.length ?? room);
+  if (limit <= 0) return bench;
+  const ranked = [...rest].sort((a, b) => selectionScore(store, b) - selectionScore(store, a));
+  const take = (p: number | undefined): void => {
+    if (p !== undefined && bench.length < limit && !bench.includes(p)) bench.push(p);
+  };
+  for (const p of club.preferredBench ?? []) if (rest.includes(p)) take(p);
+  const count = (pos: Position): number => bench.filter((p) => store.position[p] === pos).length;
+  for (const [pos, want] of BENCH_COVER) {
+    if (count(pos) < want) take(ranked.find((p) => store.position[p] === pos && !bench.includes(p)));
+  }
+  if (spareLibero && count(Position.Libero) === 0) take(ranked.find((p) => store.position[p] === Position.Libero));
+  // The best of the rest — a libero beyond the spare only plays in the six, so last.
+  for (const p of ranked) if (store.position[p] !== Position.Libero) take(p);
+  for (const p of ranked) take(p);
+  return bench;
 }
 
 /** What a club worked on for a match in the days before it. */
@@ -533,6 +576,8 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
   scheduleCupSeason(world);
   // Every board sets its target for the season, the divisions settled.
   setBoardExpectations(world);
+  // And every other coach sets his side up for the players the summer left him.
+  coachesSetUp(world, (club) => pickLineup(world.players, club).lineup);
 
   if (ctx !== undefined) recordSeasonStartAbility(world, ctx);
 }

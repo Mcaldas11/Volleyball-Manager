@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SQUAD } from '../model/positions.ts';
 import { generateWorld } from './worldGen.ts';
 import { seasonEndDay, stubManager, type World } from './world.ts';
 import { evaluateFeeOffer } from './negotiation.ts';
@@ -9,7 +10,7 @@ import {
 
 function setup(seed: number): { world: World; club: World['clubs'][number] } {
   const world = generateWorld({ seed, startYear: 2026, scale: 'small', manager: stubManager() });
-  const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12 && c.players.length < 16)!;
+  const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12 && c.players.length < MAX_SQUAD)!;
   world.userClubId = club.id;
   club.finances.balance = 20_000_000;
   club.finances.transferBudget = 20_000_000;
@@ -93,7 +94,7 @@ test('selling a player: the fee agreed, he takes days to decide; a counter waits
   const { world, club } = setup(35);
   world.day = 5; // summer window
   const [a, b] = club.players;
-  const buyer = world.clubs.find((c) => c.id !== club.id && c.players.length < 16)!;
+  const buyer = world.clubs.find((c) => c.id !== club.id && c.players.length < MAX_SQUAD)!;
   world.incomingOffers.push(
     { id: 100, playerIdx: a, buyingClubId: buyer.id, fee: world.players.value[a], expiresOnDay: world.day + 14, status: 'open' },
     { id: 101, playerIdx: b, buyingClubId: buyer.id, fee: world.players.value[b], expiresOnDay: world.day + 14, status: 'open' },

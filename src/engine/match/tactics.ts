@@ -342,7 +342,7 @@ export function defaultTactics(): TeamTactics {
  * ace chance and error chance); `accuracy` scales control.
  */
 export const SERVE_PROFILE: Readonly<Record<ServeStrategy, { power: number; accuracy: number }>> = {
-  [ServeStrategy.Risky]: { power: 1.18, accuracy: 0.84 },
+  [ServeStrategy.Risky]: { power: 1.1, accuracy: 0.8 },
   [ServeStrategy.Balanced]: { power: 1.0, accuracy: 1.0 },
   [ServeStrategy.Conservative]: { power: 0.82, accuracy: 1.14 },
 };
@@ -405,16 +405,19 @@ export const DEFENSE_PROFILE: Readonly<
   [DefensiveSystem.Conservative]: {
     blockPressure: 0.95, digCoverage: 1.08, servePressure: 0.95, receptionBonus: 1.0,
   },
+  // Each a trade against the conservative default, none of them a trap:
+  // played against it by an equal side, every one wins close to half its
+  // matches — engine.test.ts pins it.
   [DefensiveSystem.Aggressive]: {
-    blockPressure: 1.18, digCoverage: 0.9, servePressure: 1.06, receptionBonus: 0.97,
+    blockPressure: 1.15, digCoverage: 1.02, servePressure: 1.06, receptionBonus: 0.98,
   },
   [DefensiveSystem.TripleBlockPriority]: {
-    blockPressure: 1.3, digCoverage: 0.78, servePressure: 1.0, receptionBonus: 0.98,
+    blockPressure: 1.3, digCoverage: 1.02, servePressure: 1.0, receptionBonus: 0.99,
   },
   [DefensiveSystem.ServicePressure]: {
     blockPressure: 1.0, digCoverage: 0.95, servePressure: 1.22, receptionBonus: 0.95,
   },
   [DefensiveSystem.ReceptionStability]: {
-    blockPressure: 0.9, digCoverage: 1.0, servePressure: 0.86, receptionBonus: 1.12,
+    blockPressure: 0.95, digCoverage: 1.04, servePressure: 0.93, receptionBonus: 1.1,
   },
 };

@@ -4,7 +4,7 @@ import {
   ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
 import {
-  POSITION_NAMES, POSITION_SHORT, POSITIONS, type Position,
+  MAX_SQUAD, POSITION_NAMES, POSITION_SHORT, POSITIONS, type Position,
 } from '../../engine/model/positions.ts';
 import { STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff } from '../../engine/model/staff.ts';
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
@@ -909,7 +909,7 @@ export function TransfersScreen(): JSX.Element {
       <div className="tiles">
         <StatTile label="Transfer budget" value={money(Math.min(club.finances.transferBudget, club.finances.balance))} sub="available to spend" />
         <StatTile label="Wage room" value={money(wageRoom)} tone={wageRoom < 0 ? 'bad' : 'good'} sub={`of ${money(club.finances.wageBudget)}`} />
-        <StatTile label="Squad" value={`${squadSize}/16`} tone={squadSize >= 16 ? 'warn' : undefined} sub={squadSize >= 16 ? 'full — release to sign' : 'places available'} />
+        <StatTile label="Squad" value={`${squadSize}/${MAX_SQUAD}`} tone={squadSize >= MAX_SQUAD ? 'warn' : undefined} sub={squadSize >= MAX_SQUAD ? 'full — release to sign' : 'places available'} />
         <StatTile label="Offers received" value={offers.length} tone={offers.length > 0 ? 'gold' : undefined} sub="awaiting a decision" />
         <StatTile
           label="Transfer window"

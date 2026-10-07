@@ -88,6 +88,9 @@ export interface Club {
   /** Optional second libero who replaces the first whenever the team serves,
    *  to dig rather than pass. -1 to play one libero throughout. */
   preferredDefensiveLibero: number;
+  /** The reserves the manager names for a match ahead of anyone else, best
+   *  first — the rest of the fourteen is picked for him. Absent: all picked. */
+  preferredBench?: number[];
   /** The manager's saved tactics, up to three — see tacticSlots.ts. The loaded
    *  one is the fields above; absent until he first saves one. */
   tacticSlots?: SavedTactic[];
@@ -161,13 +164,26 @@ export function awardLeaguePoints(_winnerSets: number, loserSets: number): [numb
   return [2, 1];
 }
 
+/** The income a squad of up to twenty is paid for from, against the fourteen it once was. */
+const SQUAD_INCOME = 1.06;
+
+/** What sponsors pay a club of this standing in a season. Success compounds, decline bites. */
+export function sponsorshipFor(reputation: number): number {
+  return Math.round((180_000 + Math.pow(reputation / 10000, 2.1) * 6_500_000) * SQUAD_INCOME);
+}
+
+/** What television pays a club of this standing in a season. */
+export function tvRightsFor(reputation: number): number {
+  return Math.round(Math.pow(reputation / 10000, 2.6) * 2_800_000 * SQUAD_INCOME);
+}
+
 export function newFinances(reputation: number, arenaCapacity: number): Finances {
   const scale = reputation / 10000;
-  const sponsorship = Math.round(180_000 + Math.pow(scale, 2.1) * 6_500_000);
-  const tv = Math.round(Math.pow(scale, 2.6) * 2_800_000);
+  const sponsorship = sponsorshipFor(reputation);
+  const tv = tvRightsFor(reputation);
   return {
     balance: Math.round(sponsorship * 0.35),
-    wageBudget: Math.round(sponsorship * 0.62 + tv * 0.6),
+    wageBudget: Math.round(sponsorship * 0.64 + tv * 0.62),
     transferBudget: Math.round(sponsorship * 0.08),
     sponsorshipIncome: sponsorship,
     ticketIncomePerMatch: Math.round(arenaCapacity * (6 + scale * 26) * 0.72),

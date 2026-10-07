@@ -122,16 +122,24 @@ export function buildNextRound(prevRound: PlayoffTie[]): PlayoffTie[] {
   return ties;
 }
 
-/** Finishing order from a resolved bracket: champion, runner-up, then each
- *  earlier round's losers (better seed first) — the standard placement
- *  convention for a bracket with no third-place playoff. */
+/** Finishing order from a resolved bracket: champion, runner-up, the third-
+ *  place match's winner and loser where one was played, then each earlier
+ *  round's losers (better seed first). */
 export function computeFinalOrder(group: PlayoffGroup): number[] {
   const rounds = group.rounds;
   const final = rounds[rounds.length - 1][0];
   const runnerUpSeed = final.winnerSeed === final.homeSeed ? final.awaySeed : final.homeSeed;
   const order = [final.winnerSeed, runnerUpSeed];
 
-  for (let r = rounds.length - 2; r >= 0; r--) {
+  // The semi-finalists' places were played for.
+  const third = group.thirdPlace;
+  let from = rounds.length - 2;
+  if (third !== undefined && third.winnerSeed !== -1) {
+    order.push(third.winnerSeed, third.winnerSeed === third.homeSeed ? third.awaySeed : third.homeSeed);
+    from--;
+  }
+
+  for (let r = from; r >= 0; r--) {
     const losers: number[] = [];
     for (const tie of rounds[r]) {
       if (tie.homeSeed === -1 || tie.awaySeed === -1) continue; // a bye has no loser
@@ -217,13 +225,14 @@ function createPlayoffGroups(world: World, comp: Competition): void {
  *  band, once every tie in it has a winner. */
 function advanceGroup(world: World, comp: Competition, group: PlayoffGroup): void {
   const round = group.rounds[group.rounds.length - 1];
-  for (const tie of round) {
+  const ties = group.thirdPlace !== undefined && round.length === 1 ? [...round, group.thirdPlace] : round;
+  for (const tie of ties) {
     if (tie.winnerSeed !== -1 || tie.fixtureId === -1) continue;
     const fixture = world.fixtures[tie.fixtureId];
     if (fixture === undefined || !fixture.played) continue;
     tie.winnerSeed = fixture.homeSets > fixture.awaySets ? tie.homeSeed : tie.awaySeed;
   }
-  if (!round.every((t) => t.winnerSeed !== -1)) return;
+  if (!ties.every((t) => t.winnerSeed !== -1)) return;
 
   if (round.length === 1) {
     group.resolved = true;
@@ -236,6 +245,25 @@ function advanceGroup(world: World, comp: Competition, group: PlayoffGroup): voi
   for (const tie of next) {
     tie.fixtureId = schedulePlayoffFixture(world, comp, day, group.rounds.length, group.seeds[tie.homeSeed], group.seeds[tie.awaySeed]);
   }
+  // Into the title final: the two beaten semi-finalists play for third the same day.
+  if (next.length === 1 && group.id === 'championship' && round.every((t) => t.homeSeed !== -1 && t.awaySeed !== -1)) {
+    const [a, b] = round.map((t) => (t.winnerSeed === t.homeSeed ? t.awaySeed : t.homeSeed)).sort((x, y) => x - y);
+    group.thirdPlace = { homeSeed: a, awaySeed: b, fixtureId: -1, winnerSeed: -1 };
+    group.thirdPlace.fixtureId = schedulePlayoffFixture(world, comp, day, group.rounds.length, group.seeds[a], group.seeds[b]);
+  }
   group.rounds.push(next);
   group.currentRound++;
+}
+
+/** The playoff tie a fixture decides, the group it is in and what it is for. */
+export function playoffTieOf(comp: Competition, fixtureId: number):
+  { group: PlayoffGroup; tie: PlayoffTie; stage: 'final' | 'thirdPlace' | 'semi' | 'earlier' } | null {
+  for (const group of comp.playoffGroups) {
+    if (group.thirdPlace?.fixtureId === fixtureId) return { group, tie: group.thirdPlace, stage: 'thirdPlace' };
+    for (const round of group.rounds) {
+      const tie = round.find((t) => t.fixtureId === fixtureId);
+      if (tie !== undefined) return { group, tie, stage: round.length === 1 ? 'final' : round.length === 2 ? 'semi' : 'earlier' };
+    }
+  }
+  return null;
 }

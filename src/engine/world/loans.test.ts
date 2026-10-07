@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PlayerFlag } from '../model/players.ts';
-import { Position } from '../model/positions.ts';
+import { MAX_SQUAD, Position } from '../model/positions.ts';
 import { newPlayerStats, type PlayerMatchStats } from '../match/stats.ts';
 import { generateWorld } from './worldGen.ts';
 import { seasonEndDay, stubManager, type Fixture, type World } from './world.ts';
@@ -22,7 +22,7 @@ type Club = World['clubs'][number];
 
 function setup(seed: number): { world: World; club: Club } {
   const world = generateWorld({ seed, startYear: 2026, scale: 'small', manager: stubManager() });
-  const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12 && c.players.length < 16)!;
+  const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12 && c.players.length < MAX_SQUAD)!;
   world.userClubId = club.id;
   club.finances.balance = 20_000_000;
   club.finances.transferBudget = 20_000_000;
@@ -47,7 +47,7 @@ function outsides(world: World, club: Club): number[] {
 
 /** Another club with an outside hitter to spare: not one of its two starters, with cover behind them. */
 function lenderWithFringeOutside(world: World, club: Club): { lender: Club; p: number } {
-  const lender = world.clubs.find((c) => c.id !== club.id && c.players.length < 16 && outsides(world, c).length >= 4)!;
+  const lender = world.clubs.find((c) => c.id !== club.id && c.players.length < MAX_SQUAD && outsides(world, c).length >= 4)!;
   assert.ok(lender !== undefined, 'this test needs a club with four outside hitters');
   return { lender, p: outsides(world, lender)[3] };
 }
@@ -108,11 +108,15 @@ test('loan talks: the lending club answers days later, and a fringe player joins
 test('listed players draw bids and loan offers while the window is open, and an accepted loan sends him out', () => {
   const { world, club } = setup(44);
   const store = world.players;
-  const [listed, loanListed] = [...club.players].sort((a, b) => store.currentAbility[a] - store.currentAbility[b]);
+  // Two of the cheapest — under contract past this season, as a loan needs.
+  const [listed, loanListed] = club.players.filter((p) => store.contractUntil[p] > seasonEndDay(world.season))
+    .sort((a, b) => store.value[a] - store.value[b]);
   store.setFlag(listed, PlayerFlag.Transferable, true);
   store.setFlag(loanListed, PlayerFlag.LoanListed, true);
 
-  for (let week = 0; week < 8; week++) {
+  // Week by week, until both have drawn interest — not every week brings a buyer who can pay.
+  const interest = (p: number): boolean => world.incomingOffers.some((o) => o.playerIdx === p);
+  for (let week = 0; week < 20 && !(interest(listed) && interest(loanListed)); week++) {
     generateListedBids(world);
     generateLoanOffers(world);
     world.day += 7;
@@ -142,7 +146,7 @@ test('contract warnings cover our players out on loan, never a player only here 
   const store = world.players;
   const { lender, p: borrowedP } = lenderWithFringeOutside(world, club);
   const ours = outsides(world, club)[outsides(world, club).length - 1];
-  const borrower = world.clubs.find((c) => c.id !== club.id && c.id !== lender.id && c.players.length < 16)!;
+  const borrower = world.clubs.find((c) => c.id !== club.id && c.id !== lender.id && c.players.length < MAX_SQUAD)!;
   store.contractUntil[borrowedP] = seasonEndDay(world.season);
   store.contractUntil[ours] = seasonEndDay(world.season);
   startLoan(world, lender, club, borrowedP, 0.5);
@@ -170,7 +174,7 @@ test('the season rollover sends every loan home', () => {
 function fringeOutAndBorrower(world: World, club: Club): { p: number; borrower: Club } {
   const store = world.players;
   const p = outsides(world, club)[outsides(world, club).length - 1];
-  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < 16 &&
+  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < MAX_SQUAD &&
     outsides(world, c).filter((q) => store.currentAbility[q] > store.currentAbility[p]).length >= 2)!;
   assert.ok(borrower !== undefined, 'this test needs a club with two better outside hitters');
   return { p, borrower };
@@ -236,7 +240,7 @@ test('a loan offer can be countered for more playing time, and the agreed terms 
   const p = outsides(world, club)[outsides(world, club).length - 1];
   store.contractUntil[p] = seasonEndDay(world.season + 1);
   // A club where he would start: none of its outside hitters is better than him.
-  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < 16 &&
+  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < MAX_SQUAD &&
     playingTimeOnOffer(world, c, p) === 'starter')!;
   assert.ok(borrower !== undefined);
   const offer: IncomingOffer = {
@@ -426,7 +430,7 @@ function loanedForRotation(seed: number, promise: 'starter' | 'rotation' | 'back
   startSeason(world, newSeasonContext());
   const store = world.players;
   const p = outsides(world, club)[outsides(world, club).length - 1];
-  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < 16 &&
+  const borrower = world.clubs.find((c) => c.id !== club.id && c.players.length < MAX_SQUAD &&
     outsides(world, c).filter((q) => store.currentAbility[q] > store.currentAbility[p]).length === 2)!;
   assert.ok(borrower !== undefined, 'this test needs a club with exactly two better outside hitters');
   const loan = startLoan(world, club, borrower, p, 0.5, undefined, promise);

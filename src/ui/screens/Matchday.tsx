@@ -151,11 +151,10 @@ function LineupSetup(): JSX.Element {
   const store = world.players;
 
   const [home, away] = md.sides;
-  const mine = md.sides[md.userIsHome ? 0 : 1];
   const opponent = md.sides[md.userIsHome ? 1 : 0];
-  const available = mine.players.filter((p) => g.matchAvailable(p));
-  const bench = available.filter((p) =>
-    !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
+  // The reserves named for today; everyone else fit is left out, to be called up instead.
+  const bench = md.homeBench.filter((p) =>
+    g.matchAvailable(p) && !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
 
   const starters = md.homeLineup.filter((p): p is number => p !== undefined);
   const teamAvg = starters.length > 0
@@ -217,6 +216,9 @@ function LineupSetup(): JSX.Element {
         onSetLibero={(p) => g.setMatchdayLibero(p)}
         onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
         slotPositions={lineupSlotPositions(formationOf(g.matchTactics() ?? undefined))}
+        outOfSquad={g.matchdayLeftOut()}
+        onAddToSquad={(p) => g.addToMatchdaySquad(p)}
+        onDropFromSquad={(p) => g.dropFromMatchdaySquad(p)}
       />
     </div>
   );
@@ -280,7 +282,8 @@ function SetBreak(): JSX.Element {
   const [home, away] = md.sides;
   const setsPlayed = md.snapshot?.set ?? 0;
   const setScores = completedSets(md.log, setsPlayed, false);
-  const bench = md.sides[md.userIsHome ? 0 : 1].players.filter((p) =>
+  // Only the fourteen named at kickoff can play.
+  const bench = g.matchSquadOf(md.userIsHome ? 0 : 1).filter((p) =>
     g.matchAvailable(p) && !md.homeLineup.includes(p) && p !== md.homeLibero && p !== md.homeDefensiveLibero);
   const teamAvg = Math.round(
     md.homeLineup.reduce((s, p) => s + store.currentAbility[p], 0) / Math.max(1, md.homeLineup.length));
@@ -361,6 +364,7 @@ function SetBreak(): JSX.Element {
         onSetLibero={(p) => g.setMatchdayLibero(p)}
         onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
         slotPositions={lineupSlotPositions(formationOf(g.matchTactics() ?? undefined))}
+        registered={md.homeLiberos ?? g.matchLiberosOf(md.userIsHome ? 0 : 1)}
       />
     </div>
   );
@@ -586,8 +590,9 @@ function LiveSystem({ tactics, target, onTarget }: {
   const court = (team === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
   const liberos = g.liveLiberos();
   const roles = g.liveRoles();
-  const bench = md.sides[team].players.filter((p) => !court.includes(p) && g.matchAvailable(p)
-    && store.position[p] !== Position.Libero && p !== liberos.reception && p !== liberos.defence);
+  const named = new Set(g.matchLiberosOf(team));
+  const bench = g.matchSquadOf(team).filter((p) => !court.includes(p) && g.matchAvailable(p)
+    && !named.has(p) && p !== liberos.reception && p !== liberos.defence);
   const playing = formationOf(tactics);
   const pending = target !== null && target !== playing ? target : null;
   const change = pending !== null ? systemChangeFor(store, roles, pending, court, bench) : null;
@@ -1325,22 +1330,23 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const md = g.matchday!;
-  const squad = md.sides[teamIdx].players;
+  // Only the fourteen named for the match.
+  const squad = g.matchSquadOf(teamIdx);
+  const named = new Set(g.matchLiberosOf(teamIdx));
   const store = world.players;
   const [outPlayer, setOutPlayer] = useState<number | null>(null);
   const [inPlayer, setInPlayer] = useState<number | null>(null);
   const [dragOverPlayer, setDragOverPlayer] = useState<number | null>(null);
 
   const onCourt = (teamIdx === 0 ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
-  // Liberos are changed in their own section below — they can never take an
-  // ordinary rotation spot, so they never appear on this bench.
-  const bench = squad.filter((p) =>
-    !onCourt.includes(p) && g.matchAvailable(p) && store.position[p] !== Position.Libero);
+  // The liberos named for the match are changed in their own section below —
+  // they can never take an ordinary rotation spot, so they never appear on
+  // this bench. A libero beyond the two is in the squad to play in the six.
+  const bench = squad.filter((p) => !onCourt.includes(p) && g.matchAvailable(p) && !named.has(p));
   const ratings = g.liveRatings();
   const liberos = g.liveLiberos();
   const spareLiberos = squad.filter((p) =>
-    store.position[p] === Position.Libero && g.matchAvailable(p) && !onCourt.includes(p)
-    && p !== liberos.reception && p !== liberos.defence);
+    named.has(p) && g.matchAvailable(p) && !onCourt.includes(p) && p !== liberos.reception && p !== liberos.defence);
   const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
   // Reads the engine's own per-set counter — it resets every set, unlike a
   // UI-tracked total would (that used to be the bug here: it never reset).

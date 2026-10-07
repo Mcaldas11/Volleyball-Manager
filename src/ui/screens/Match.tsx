@@ -690,6 +690,13 @@ export function BracketView({ group, world }: { group: PlayoffGroup; world: Worl
                     <span className="faint">TBD</span>
                   </div>
                 ))}
+              {/* The beaten semi-finalists play for third alongside the final. */}
+              {ri === totalRounds - 1 && group.thirdPlace !== undefined && (
+                <div className="bracket-third">
+                  <div className="bracket-round-label">3rd place</div>
+                  <BracketTie tie={group.thirdPlace} group={group} world={world} />
+                </div>
+              )}
             </div>
           </div>
         );

@@ -23,7 +23,7 @@ import {
   type Competition, type CompetitionKind, type CupGroup, type CupState, type Fixture, type PlayoffGroup,
   type PlayoffTie, type World,
 } from '../world/world.ts';
-import { buildFirstRound, buildNextRound, computeFinalOrder, finalStandingsOrder } from './playoffs.ts';
+import { buildFirstRound, buildNextRound, computeFinalOrder, finalStandingsOrder, playoffTieOf } from './playoffs.ts';
 import { PLAYOFF_ROUND_BASE, roundRobin } from './schedule.ts';
 
 // ---- Formats ----------------------------------------------------------------
@@ -697,7 +697,13 @@ export function stageLabel(world: World, fixture: Fixture): string {
   if (comp === undefined) return '';
   if (comp.kind === 'friendly') return 'Pre-season';
   if (comp.kind === 'league' || comp.kind === 'international') {
-    return fixture.round >= PLAYOFF_ROUND_BASE ? 'Playoffs' : `Matchday ${fixture.round + 1}`;
+    if (fixture.round < PLAYOFF_ROUND_BASE) return `Matchday ${fixture.round + 1}`;
+    const at = playoffTieOf(comp, fixture.id);
+    if (at === null) return 'Playoffs';
+    if (at.group.id === 'relegation') return 'Relegation playoff';
+    if (at.group.id === 'placement') return 'Placement playoff';
+    return at.stage === 'final' ? 'Playoff final' : at.stage === 'thirdPlace' ? 'Third-place match'
+      : at.stage === 'semi' ? 'Playoff semi-final' : 'Playoff quarter-final';
   }
   const cup = comp.cup;
   if (fixture.round < PLAYOFF_ROUND_BASE) {

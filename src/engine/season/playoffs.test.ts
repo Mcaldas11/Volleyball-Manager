@@ -41,6 +41,26 @@ test('every playoff bracket resolves to a full, duplicate-free ordering of its o
   }
 });
 
+test('the beaten semi-finalists play for third place, alongside the final, and finish where it leaves them', () => {
+  const { world, league } = simulateOneSeason(106);
+  const champ = league.playoffGroups.find((g) => g.id === 'championship')!;
+  const semis = champ.rounds[champ.rounds.length - 2];
+  const final = champ.rounds[champ.rounds.length - 1][0];
+  const third = champ.thirdPlace;
+  assert.ok(third !== undefined, 'a third-place match');
+  // The two who lost the semi-finals, on the day of the final.
+  const losers = semis.map((t) => (t.winnerSeed === t.homeSeed ? t.awaySeed : t.homeSeed)).sort((a, b) => a - b);
+  assert.deepEqual([third.homeSeed, third.awaySeed].sort((a, b) => a - b), losers);
+  assert.equal(world.fixtures[third.fixtureId].day, world.fixtures[final.fixtureId].day);
+  assert.ok(world.fixtures[third.fixtureId].played);
+  // Third and fourth go by that match, not by the table.
+  const loser = third.winnerSeed === third.homeSeed ? third.awaySeed : third.homeSeed;
+  assert.deepEqual(champ.finalOrder.slice(2, 4), [champ.seeds[third.winnerSeed], champ.seeds[loser]]);
+  assert.deepEqual(finalStandingsOrder(league).slice(2, 4), champ.finalOrder.slice(2, 4));
+  // Only the title playoff has one.
+  for (const g of league.playoffGroups) if (g.id !== 'championship') assert.equal(g.thirdPlace, undefined);
+});
+
 test('finalStandingsOrder is a permutation of every club in the table', () => {
   const { league } = simulateOneSeason(103);
   const order = finalStandingsOrder(league);

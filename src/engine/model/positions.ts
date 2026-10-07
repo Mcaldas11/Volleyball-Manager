@@ -128,12 +128,22 @@ export const PLAUSIBLE_SECONDARY: Readonly<Record<Position, readonly Position[]>
  * wants under contract. Used by squad building and the transfer AI.
  */
 export const SQUAD_TARGET: Readonly<Record<Position, number>> = {
-  [Position.Setter]: 2,
-  [Position.Opposite]: 2,
-  [Position.OutsideHitter]: 4,
-  [Position.MiddleBlocker]: 4,
+  [Position.Setter]: 3,
+  [Position.Opposite]: 3,
+  [Position.OutsideHitter]: 5,
+  [Position.MiddleBlocker]: 5,
   [Position.Libero]: 2,
 };
+
+/** Most players a club can have on its books — its own out on loan included. */
+export const MAX_SQUAD = 20;
+
+/** Players a side can name for a match: the six, the liberos and the bench. */
+export const MATCHDAY_SQUAD = 14;
+
+/** Players who can be named liberos for a match. Anyone else in the fourteen —
+ *  a natural libero too — is down to play in the six. */
+export const MAX_LIBEROS = 2;
 
 /** The six on-court roles in a standard rotation, excluding the libero. */
 export const COURT_SIZE = 6;

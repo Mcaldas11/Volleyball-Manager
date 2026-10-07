@@ -6,7 +6,7 @@ import {
   type AttributeName,
 } from '../../engine/model/attributes.ts';
 import {
-  POSITION_NAMES, POSITIONS, familiarityLabel, Position,
+  MAX_SQUAD, POSITION_NAMES, POSITIONS, familiarityLabel, Position,
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
@@ -97,11 +97,11 @@ export function SquadScreen(): JSX.Element {
       <div className="tiles">
         <StatTile
           label="Squad size"
-          value={`${squadSize}/16`}
+          value={`${squadSize}/${MAX_SQUAD}`}
           sub={[
             arriving.length > 0 ? `${arriving.length} arriving` : '',
             away.length > 0 ? `${away.length} out on loan` : '',
-            `${16 - squadSize} ${away.length + arriving.length > 0 ? 'free' : 'places free'}`,
+            `${MAX_SQUAD - squadSize} ${away.length + arriving.length > 0 ? 'free' : 'places free'}`,
           ].filter((s) => s !== '').join(' · ')}
         />
         <StatTile label="Average age" value={avgAge.toFixed(1)} sub="years" />

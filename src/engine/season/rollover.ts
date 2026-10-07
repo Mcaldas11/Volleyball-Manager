@@ -13,9 +13,9 @@
 
 import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
-import { compareTableRows, type Club } from '../model/club.ts';
+import { compareTableRows, sponsorshipFor, tvRightsFor, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
-import { Position, SQUAD_TARGET } from '../model/positions.ts';
+import { MAX_SQUAD, Position, SQUAD_TARGET } from '../model/positions.ts';
 import { finalStandingsOrder } from './playoffs.ts';
 import { isCupCompetition, qualifyForCups } from './cups.ts';
 import {
@@ -208,16 +208,15 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
     else f.seasonsInDebt = 0;
 
     // The board recalculates next season's budget from what the club can bear.
-    f.wageBudget = Math.max(60_000, Math.round((income * 0.68 + Math.max(0, f.balance) * 0.2)));
+    f.wageBudget = Math.max(60_000, Math.round((income * 0.7 + Math.max(0, f.balance) * 0.2)));
     f.transferBudget = Math.max(0, Math.round(f.balance * 0.25));
     f.seasonIncome = 0;
     f.seasonExpenditure = 0;
     f.prizeMoney = 0;
 
     // Sponsorship follows reputation, so success compounds and decline bites.
-    const scale = club.reputation / 10000;
-    f.sponsorshipIncome = Math.round(180_000 + Math.pow(scale, 2.1) * 6_500_000);
-    f.tvRightsIncome = Math.round(Math.pow(scale, 2.6) * 2_800_000);
+    f.sponsorshipIncome = sponsorshipFor(club.reputation);
+    f.tvRightsIncome = tvRightsFor(club.reputation);
 
     if (f.seasonsInDebt >= 3 && f.balance < -500_000) dissolved.push(club);
   }
@@ -306,14 +305,9 @@ function moveClub(world: World, clubId: number, fromComp: number, toComp: number
 
 // ---- Youth and squads -----------------------------------------------------
 
-/**
- * Maximum senior squad size.
- *
- * Without a cap, clubs absorb every academy graduate every year and squads
- * grow without bound — which quietly doubles the world's player population
- * over a couple of decades. Real rosters are tightly bounded, so this is too.
- */
-const MAX_SQUAD = 16;
+// Squads are capped at MAX_SQUAD: without a cap, clubs absorb every academy
+// graduate every year and squads grow without bound — which quietly doubles
+// the world's player population over a couple of decades.
 
 /** Move youth players who have come of age into the senior squad. */
 function promoteYouth(world: World): void {
@@ -445,11 +439,13 @@ function runTransferWindow(world: World): number {
     });
   }
 
-  // Clubs shop in order of standing.
+  // Clubs shop in order of standing — twice round: first every club fills out
+  // its core, then the depth behind it, from whoever is left. Otherwise the
+  // richest would take the players who start elsewhere to sit on their bench.
   const shoppers = [...world.clubs].sort((a, b) => b.reputation - a.reputation);
   const available = new Set(freeAgents);
 
-  for (const club of shoppers) {
+  for (const [pass, club] of [...shoppers.map((c) => [0, c] as const), ...shoppers.map((c) => [1, c] as const)]) {
     let wageRoom = club.finances.wageBudget - wageBill(world, club);
 
     for (const posKey of [
@@ -457,7 +453,8 @@ function runTransferWindow(world: World): number {
       Position.MiddleBlocker, Position.Libero,
     ]) {
       const have = club.players.filter((p) => store.position[p] === posKey).length;
-      let need = SQUAD_TARGET[posKey] - have;
+      const target = pass === 0 && posKey !== Position.Libero ? SQUAD_TARGET[posKey] - 1 : SQUAD_TARGET[posKey];
+      let need = target - have;
       if (need <= 0) continue;
 
       const candidates = [...available]
@@ -465,7 +462,7 @@ function runTransferWindow(world: World): number {
         .sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
 
       for (const p of candidates) {
-        if (need <= 0) break;
+        if (need <= 0 || club.players.length >= MAX_SQUAD) break;
         // A player will not drop far below their level for no reason.
         const playerLevel = store.currentAbility[p] / 2000;
         const clubLevel = club.reputation / 10000;
@@ -485,7 +482,7 @@ function runTransferWindow(world: World): number {
     }
 
     // Rebuild the preferred lineup around whoever is now at the club.
-    refreshPreferredLineup(world, club);
+    if (pass === 1) refreshPreferredLineup(world, club);
   }
 
   newsSignings(world, signings);

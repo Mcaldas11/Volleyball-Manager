@@ -343,10 +343,14 @@ test('setLibero() swaps liberos freely — and whoever is named libero plays lib
   assert.deepEqual(sim.liberos(0), { reception: defence, defence: -1 });
   assert.equal(sim.subsRemaining(0), 5);
 
-  // An outside hitter named libero plays it.
+  // Only the two named for the match play libero: an outside hitter off the bench can't…
   const outfield = setup.home.bench.find((p) => store.position[p] === Position.OutsideHitter)!;
-  assert.equal(sim.setLibero(0, 'reception', outfield).ok, true);
-  assert.equal(sim.roleOf(outfield), Position.Libero);
+  assert.equal(sim.setLibero(0, 'reception', outfield).ok, false);
+  // …but one named libero for it plays it.
+  const named = new MatchSimulator(store, {
+    ...setup, home: { ...setup.home, libero: outfield, defensiveLibero: -1, bench: setup.home.bench.filter((p) => p !== outfield) },
+  });
+  assert.equal(named.roleOf(outfield), Position.Libero);
 });
 
 /** Two top-flight sides of one league, the first clearly the stronger. */

@@ -22,7 +22,7 @@
 import { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
 import type { PlayerStore } from '../model/players.ts';
-import { Position } from '../model/positions.ts';
+import { MAX_LIBEROS, Position } from '../model/positions.ts';
 import {
   BACK_ROW_ZONES,
   effectivePlayerAt,
@@ -109,7 +109,10 @@ export interface TeamSetup {
    * Omitted or -1: the one libero plays throughout.
    */
   defensiveLibero?: number;
+  /** The reserves named for the match — with the six and the liberos, at most fourteen. */
   bench: number[];
+  /** The liberos named for the match, at most two — see registeredLiberos. Absent: worked out from the rest. */
+  liberos?: number[];
   tactics: TeamTactics;
   /** Rotation the team starts each set in, 0-5. */
   startingRotation?: number;
@@ -310,6 +313,16 @@ const READ_DIG = 0.06;
 /** A side fully prepared for a part of the game is this much sharper at it. */
 const PREP_EDGE = 0.03;
 
+/**
+ * Serving at a man: how often the serve finds the weakest passer or the
+ * setter it was aimed at, and what aiming costs — a serve placed, not just
+ * hit, has less margin for error. Together worth a few points a match, not
+ * the match: engine.test.ts pins it.
+ */
+const AIMED_AT_PASSER = 0.6;
+const AIMED_AT_SETTER = 0.2;
+const AIMING_ERROR = 0.01;
+
 /** Rallies an engine-coached side lets a change settle before making another. */
 const AUTO_SUB_COOLDOWN_RALLIES = 4;
 
@@ -336,6 +349,24 @@ const UNDERDOG_LIFT_MAX = 0.2;
 /** The home crowd's lift, and the away trip's cost. */
 const HOME_EDGE = 1.01;
 const AWAY_EDGE = 0.999;
+
+/**
+ * The liberos a side names for a match — never more than two: whoever plays
+ * the libero roles, then the best natural libero among the reserves, as the
+ * spare. Anyone else in the squad, a third libero too, is down to play in the
+ * six. A setup that names them itself is taken at its word.
+ */
+export function registeredLiberos(
+  store: PlayerStore,
+  setup: Pick<TeamSetup, 'libero' | 'defensiveLibero' | 'bench' | 'liberos'>,
+): number[] {
+  if (setup.liberos !== undefined) return setup.liberos.filter((p) => p >= 0).slice(0, MAX_LIBEROS);
+  const named = [setup.libero, setup.defensiveLibero ?? -1].filter((p) => p >= 0);
+  const spares = setup.bench
+    .filter((p) => store.position[p] === Position.Libero && !named.includes(p))
+    .sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
+  return [...named, ...spares].slice(0, MAX_LIBEROS);
+}
 
 /** Per-team mutable state for the duration of one match. */
 class TeamRuntime {
@@ -370,6 +401,8 @@ class TeamRuntime {
   readonly read: number;
   /** What it prepared for. */
   readonly prep: { reception: number; transition: number; block: number; combinations?: number };
+  /** The liberos named for the match: only they play libero, and they play nothing else. */
+  readonly registeredLiberos: ReadonlySet<number>;
   private readonly startRotation: number;
 
   constructor(
@@ -385,6 +418,7 @@ class TeamRuntime {
     this.liberoIdx = setup.libero;
     this.receptionLibero = setup.libero;
     this.defensiveLibero = setup.defensiveLibero ?? -1;
+    this.registeredLiberos = new Set(registeredLiberos(store, setup));
 
     // Ratings for everyone who might take the floor: the six and the liberos
     // in the positions they were picked for, the bench in their own.
@@ -973,6 +1007,7 @@ export class MatchSimulator {
     if (!t.court.includes(outPlayerIdx)) return 'That player is not on court.';
     if (!t.ratings.has(inPlayerIdx)) return 'That player is not part of the squad.';
     if (t.court.includes(inPlayerIdx)) return 'That player is already on court.';
+    if (t.registeredLiberos.has(inPlayerIdx)) return 'A libero named for the match cannot play in the six.';
     if (this.subsUsedThisSet[team] >= 5) return 'No substitutions left this set.';
 
     const pairing = this.subPairing[team];
@@ -1062,7 +1097,7 @@ export class MatchSimulator {
       let pick = -1;
       let pickExcess = 0;
       for (const p of t.ratings.keys()) {
-        if (lineup.includes(p) || p === t.receptionLibero || p === t.defensiveLibero) continue;
+        if (lineup.includes(p) || t.registeredLiberos.has(p)) continue;
         const shift = this.crossShift(team, starter, p, lineup);
         if (shift === null) continue;
         const excess = this.currentValue(team, p) / starterValue - 1 - margin - shift;
@@ -1170,6 +1205,7 @@ export class MatchSimulator {
     }
     if (!t.ratings.has(playerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
     if (t.court.includes(playerIdx)) return { ok: false, reason: 'That player is already on court.' };
+    if (!t.registeredLiberos.has(playerIdx)) return { ok: false, reason: 'Only the two liberos named for the match can play libero.' };
     // Whoever is named libero plays libero, whatever he is by trade.
     t.assign(playerIdx, Position.Libero);
 
@@ -1214,10 +1250,12 @@ export class MatchSimulator {
       return { ok: false, reason: 'Pick six different players to start the set.' };
     }
     if (lineup.some((p) => !t.ratings.has(p))) return { ok: false, reason: 'That player is not part of the squad.' };
+    if (lineup.some((p) => t.registeredLiberos.has(p))) return { ok: false, reason: 'A libero named for the match cannot play in the six.' };
     for (const l of [libero, defensiveLibero]) {
       if (l < 0) continue;
       if (!t.ratings.has(l)) return { ok: false, reason: 'That player is not part of the squad.' };
       if (lineup.includes(l)) return { ok: false, reason: 'A libero cannot also start in the six.' };
+      if (!t.registeredLiberos.has(l)) return { ok: false, reason: 'Only the two liberos named for the match can play libero.' };
     }
     if (defensiveLibero >= 0 && (libero < 0 || defensiveLibero === libero)) {
       return { ok: false, reason: 'Name a different libero for reception first.' };
@@ -1247,6 +1285,17 @@ export class MatchSimulator {
   benchFor(team: 0 | 1): number[] {
     const t = this.teams[team];
     return t.setup.bench.filter((p) => !t.court.includes(p));
+  }
+
+  /** Everyone a team named for the match — the six it started with, the liberos and the bench. */
+  squadFor(team: 0 | 1): number[] {
+    const s = this.teams[team].setup;
+    return [...new Set([...s.lineup, s.libero, s.defensiveLibero ?? -1, ...s.bench])].filter((p) => p >= 0);
+  }
+
+  /** The liberos a team named for the match. */
+  registeredLiberosOf(team: 0 | 1): number[] {
+    return [...this.teams[team].registeredLiberos];
   }
 
   /**
@@ -1359,8 +1408,9 @@ export class MatchSimulator {
       rawPower * profile.power * defProfile.servePressure * sr.fatigue * sr.confidence;
     const serveAccuracy = sr.serveAccuracy * profile.accuracy;
 
+    const aimed = srvRotTactics(srv) === ServeTarget.WeakestPasser || srvRotTactics(srv) === ServeTarget.Setter;
     const errorProb = clamp(
-      0.20 - 0.0018 * serveAccuracy + 0.0012 * (serveStrength - 50) + (jump ? 0.022 : -0.012),
+      0.20 - 0.0018 * serveAccuracy + 0.0012 * (serveStrength - 50) + (jump ? 0.022 : -0.012) + (aimed ? AIMING_ERROR : 0),
       0.015,
       0.34,
     );
@@ -1726,13 +1776,14 @@ export class MatchSimulator {
           worst = this.recvUnit[i];
         }
       }
-      // Even a targeted serve misses its man sometimes.
-      return this.rng.chance(0.72) ? worst : this.recvUnit[this.rng.int(0, n - 1)];
+      // Even a targeted serve misses its man sometimes — and the passers
+      // beside him close up to take what they can of it.
+      return this.rng.chance(AIMED_AT_PASSER) ? worst : this.recvUnit[this.rng.int(0, n - 1)];
     }
 
     if (target === ServeTarget.Setter) {
       // Serving the setter disrupts the offense but they are usually hidden.
-      return this.rng.chance(0.3) ? rcv.settingIdx() : this.recvUnit[this.rng.int(0, n - 1)];
+      return this.rng.chance(AIMED_AT_SETTER) ? rcv.settingIdx() : this.recvUnit[this.rng.int(0, n - 1)];
     }
 
     if (target === ServeTarget.BestAttacker) {
@@ -2151,8 +2202,9 @@ function srvRotTactics(srv: TeamRuntime): ServeTarget {
   return srv.tactics.rotations[srv.rotation()].serveTarget;
 }
 
-function autoTarget(t: TeamTactics): ServeTarget {
-  return t.serve === 0 ? ServeTarget.WeakestPasser : ServeTarget.Auto;
+/** Where a serve goes with no instruction for the rotation: anywhere. How hard is the serve strategy's business, not where. */
+function autoTarget(_t: TeamTactics): ServeTarget {
+  return ServeTarget.Auto;
 }
 
 /** Probability of winning a race to `a` more sets vs `b`, assuming fair sets. */

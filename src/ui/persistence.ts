@@ -24,8 +24,9 @@ import type { WorldScale } from '../engine/world/worldGen.ts';
 import { cancelOffCycleClubWorld, ensureCupCompetitions } from '../engine/season/cups.ts';
 import { backfillCareer } from '../engine/world/career.ts';
 import { rollHandedness, rollOffHand } from '../engine/world/playerGen.ts';
+import { coachesSetUp } from '../engine/world/aiTactics.ts';
 import {
-  newSeasonContext, recordSeasonStartAbility, type SeasonContext, type SeasonStats,
+  newSeasonContext, pickLineup, recordSeasonStartAbility, type SeasonContext, type SeasonStats,
 } from '../engine/season/seasonEngine.ts';
 
 export interface SaveMeta {
@@ -257,6 +258,11 @@ export function reviveWorld(raw: World): World {
   for (const club of raw.clubs) {
     club.preferredDefensiveLibero ??= -1;
     migrateLineupOrder(club.preferredLineup, raw.players.position);
+  }
+  // Saves from before the other coaches picked their own tactics: they pick them now, not next season.
+  if (raw.coachedSides !== true) {
+    coachesSetUp(raw, (club) => pickLineup(raw.players, club).lineup);
+    raw.coachedSides = true;
   }
   return raw;
 }

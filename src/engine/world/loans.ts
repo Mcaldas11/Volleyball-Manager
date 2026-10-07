@@ -20,7 +20,7 @@ import type { Club } from '../model/club.ts';
 import { matchRating, playedInMatch } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import { PlayerFlag } from '../model/players.ts';
-import { Position, POSITION_NAMES } from '../model/positions.ts';
+import { MAX_SQUAD, Position, POSITION_NAMES } from '../model/positions.ts';
 import { StaffRole, type Staff } from '../model/staff.ts';
 import { arrivalsFor, moveDay, pendingMoveOf, pendingWages, seasonOfDay } from './moves.ts';
 import type { IncomingOffer } from './negotiation.ts';
@@ -167,8 +167,7 @@ export interface LoanReport {
   month?: { label: string; stats: LoanStats; abilityChange: number };
 }
 
-/** Most players a club can have on its books — its own out on loan included. */
-export const MAX_SQUAD = 16;
+export { MAX_SQUAD };
 
 /** The wage shares a loan can be agreed at. */
 export const LOAN_WAGE_SHARES: readonly number[] = [0, 0.25, 0.5, 0.75, 1];

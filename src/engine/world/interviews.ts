@@ -239,7 +239,10 @@ function contextFor(world: World, f: Fixture, kind: InterviewKind): { ctx: Ctx; 
   if (comp !== undefined && comp.kind === 'league' && f.round >= PLAYOFF_ROUND_BASE) {
     const group = comp.playoffGroups.find((g) => g.rounds.some((r) => r.some((t) => t.fixtureId === f.id)));
     const round = group?.rounds.find((r) => r.some((t) => t.fixtureId === f.id));
-    if (group?.id === 'championship') {
+    if (comp.playoffGroups.some((g) => g.thirdPlace?.fixtureId === f.id)) {
+      tags.add('knockout');
+      occasions.push('Third-place match');
+    } else if (group?.id === 'championship') {
       if (round?.length === 1) {
         tags.add('final').add('titleDecider');
         occasions.push('Championship final');

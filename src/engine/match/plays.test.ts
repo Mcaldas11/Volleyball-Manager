@@ -10,7 +10,7 @@ import {
   type TeamTactics,
 } from './tactics.ts';
 
-const world = generateWorld({ seed: 71, startYear: 2026, scale: 'small', manager: stubManager() });
+const world = generateWorld({ seed: 74, startYear: 2026, scale: 'small', manager: stubManager() });
 const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
 
 /** Each of the home side's attacks, with the rotation it was played in (0 for P1 — the setter's zone). */

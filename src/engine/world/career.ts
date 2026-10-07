@@ -321,6 +321,9 @@ function fillVacancy(world: World, v: Vacancy): void {
   let bestGap = Infinity;
   for (const s of world.staff) {
     if (s.role !== StaffRole.HeadCoach || s.clubId >= 0) continue;
+    // Never the coach the club has just shown the door.
+    const last = s.spells?.[s.spells.length - 1];
+    if (last !== undefined && last.clubId === club.id && world.day - last.to < DAYS_PER_SEASON) continue;
     const gap = Math.abs(s.reputation - club.reputation);
     if (gap < bestGap) {
       best = s;

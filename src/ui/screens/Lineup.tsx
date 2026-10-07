@@ -23,12 +23,12 @@ export function LineupScreen(): JSX.Element {
   if (club.players.length === 0) return <Empty>No players under contract.</Empty>;
   if (picked === null) return <Empty>No players under contract.</Empty>;
 
-  const { lineup, libero, defensiveLibero, bench } = picked;
+  const { lineup, libero, defensiveLibero, bench, out } = picked;
   const teamAvg = lineup.length > 0
     ? Math.round(lineup.reduce((s, p) => s + store.currentAbility[p], 0) / lineup.length)
     : 0;
   const hasPreference = club.preferredLineup.some((p) => p >= 0) || club.preferredLibero >= 0
-    || club.preferredDefensiveLibero >= 0;
+    || club.preferredDefensiveLibero >= 0 || club.preferredBench !== undefined;
   const formation = formationOf(club.tactics);
 
   return (
@@ -37,8 +37,8 @@ export function LineupScreen(): JSX.Element {
         <div className="lineup-bar-text">
           <strong>Default team sheet</strong>
           <span className="dim">
-            Used automatically for every match, and the starting point whenever you rearrange it on
-            match day. Anyone injured or sold is swapped for the next best fit until you pick a replacement.
+            Used automatically for every match — the six, the liberos and the rest of the fourteen — and the starting
+            point whenever you rearrange it on match day. Anyone injured or sold is swapped for the next best fit.
           </span>
         </div>
         <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
@@ -71,6 +71,9 @@ export function LineupScreen(): JSX.Element {
         onSetLibero={(p) => g.setPreferredLibero(p)}
         onSetDefensiveLibero={(p) => g.setPreferredDefensiveLibero(p)}
         slotPositions={lineupSlotPositions(formation)}
+        outOfSquad={out}
+        onAddToSquad={(p) => g.addToPreferredSquad(p)}
+        onDropFromSquad={(p) => g.dropFromPreferredSquad(p)}
       />
     </div>
   );

@@ -10,13 +10,13 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  MatchFormat, MatchSimulator, simulateMatch, type MatchResult, type RallyLogEntry, type ShoutKind, type SubstitutionPlan,
-  type SubstitutionReason, type TeamSetup,
+  MatchFormat, MatchSimulator, registeredLiberos, simulateMatch, type MatchResult, type RallyLogEntry, type ShoutKind,
+  type SubstitutionPlan, type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
 import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
-import { type Position } from '../engine/model/positions.ts';
+import { MATCHDAY_SQUAD, type Position } from '../engine/model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
 import {
   advanceDay, applyMatchResult, matchPrep, newSeasonContext, oppositionRead, pickLineup, playFixture, toTeamSetup,
@@ -326,7 +326,10 @@ export interface MatchdayState {
   homeLibero: number;
   /** Second libero who plays whenever the team serves, or -1. */
   homeDefensiveLibero: number;
+  /** The reserves named for the match: with the six and the liberos, the fourteen. */
   homeBench: number[];
+  /** The liberos named for the match, fixed at kickoff — at most two. */
+  homeLiberos?: number[];
   speed: 1 | 1.5 | 2;
   paused: boolean;
   /** Wall-clock ms; once reached the rally loop auto-resumes — a substitution stoppage, not a real pause. */
@@ -1731,8 +1734,76 @@ class Game {
   setMatchdayPlayer(zoneIdx: number, playerIdx: number): void {
     const md = this.matchday;
     if (md === null || md.stage === 'live') return;
+    if (md.homeLiberos?.includes(playerIdx)) {
+      this.notice = 'A libero named for the match cannot play in the six.';
+      this.emit();
+      return;
+    }
+    const was = md.homeLineup[zoneIdx];
     md.homeLineup[zoneIdx] = playerIdx;
+    this.trade(md, playerIdx, was);
     this.emit();
+  }
+
+  /**
+   * One of the fourteen has taken a place on the sheet from `was`: off the
+   * bench, `was` sits down in his place; from outside the squad, the two
+   * simply swap, and the squad stays as it was in size.
+   */
+  private trade(md: MatchdayState, incoming: number, was: number): void {
+    const at = md.homeBench.indexOf(incoming);
+    if (at >= 0) {
+      if (was >= 0) md.homeBench[at] = was;
+      else md.homeBench.splice(at, 1);
+    }
+  }
+
+  /** Name a player in the matchday squad — while there is room in the fourteen. */
+  addToMatchdaySquad(playerIdx: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup' || md.homeBench.includes(playerIdx)) return;
+    if (this.matchdaySquad().length >= MATCHDAY_SQUAD) {
+      this.notice = `Only ${MATCHDAY_SQUAD} can be named — leave someone out first.`;
+    } else md.homeBench.push(playerIdx);
+    this.emit();
+  }
+
+  /** Leave a reserve out of the matchday squad. */
+  dropFromMatchdaySquad(playerIdx: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup') return;
+    md.homeBench = md.homeBench.filter((p) => p !== playerIdx);
+    this.emit();
+  }
+
+  /** The user's fourteen for today: the six, the liberos and the bench. */
+  matchdaySquad(): number[] {
+    const md = this.matchday;
+    if (md === null) return [];
+    if (md.stage !== 'lineup' && this.liveSim !== null) return this.liveSim.squadFor(md.userIsHome ? 0 : 1);
+    return [...md.homeLineup, md.homeLibero, md.homeDefensiveLibero, ...md.homeBench].filter((p) => p >= 0);
+  }
+
+  /** The user's fit players left out of today's squad — before kickoff. */
+  matchdayLeftOut(): number[] {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup') return [];
+    const named = new Set(this.matchdaySquad());
+    return md.sides[md.userIsHome ? 0 : 1].players
+      .filter((p) => this.matchAvailable(p) && !named.has(p))
+      .sort((a, b) => this.world!.players.currentAbility[b] - this.world!.players.currentAbility[a]);
+  }
+
+  /** Either side's fourteen in the match under way. */
+  matchSquadOf(team: 0 | 1): number[] {
+    const md = this.matchday;
+    if (md !== null && md.stage === 'lineup' && team === (md.userIsHome ? 0 : 1)) return this.matchdaySquad();
+    return this.liveSim?.squadFor(team) ?? [];
+  }
+
+  /** The liberos either side named for the match under way. */
+  matchLiberosOf(team: 0 | 1): number[] {
+    return this.liveSim?.registeredLiberosOf(team) ?? [];
   }
 
   /** Swap two starting zones' players — dragging one starter onto another on the team sheet. */
@@ -1749,8 +1820,9 @@ class Game {
    *  defensive libero swaps the two roles over. */
   setMatchdayLibero(playerIdx: number): void {
     const md = this.matchday;
-    if (md === null || md.stage === 'live') return;
+    if (md === null || md.stage === 'live' || !this.mayPlayLibero(md, playerIdx)) return;
     if (playerIdx === md.homeDefensiveLibero) md.homeDefensiveLibero = md.homeLibero;
+    else this.trade(md, playerIdx, md.homeLibero);
     md.homeLibero = playerIdx;
     this.emit();
   }
@@ -1758,13 +1830,30 @@ class Game {
   /** Name (or with -1, drop) the second libero who plays whenever the team serves. */
   setMatchdayDefensiveLibero(playerIdx: number): void {
     const md = this.matchday;
-    if (md === null || md.stage === 'live') return;
+    if (md === null || md.stage === 'live' || (playerIdx >= 0 && !this.mayPlayLibero(md, playerIdx))) return;
+    const was = md.homeDefensiveLibero;
     if (playerIdx >= 0 && playerIdx === md.homeLibero) {
-      if (md.homeDefensiveLibero < 0) return;
-      md.homeLibero = md.homeDefensiveLibero;
+      if (was < 0) return;
+      md.homeLibero = was;
+    } else if (playerIdx >= 0) {
+      this.trade(md, playerIdx, was);
+    } else if (was >= 0 && md.stage === 'lineup') {
+      // One libero from now on: the other stays in the squad, on the bench.
+      md.homeBench.push(was);
     }
     md.homeDefensiveLibero = playerIdx;
     this.emit();
+  }
+
+  /** Whether a player may take a libero role: before kickoff anyone, after it only a libero named for the match. */
+  private mayPlayLibero(md: MatchdayState, playerIdx: number): boolean {
+    const problem = md.homeLineup.includes(playerIdx) ? 'He is in the six — bring someone else on for him first.'
+      : md.homeLiberos !== undefined && !md.homeLiberos.includes(playerIdx) ? 'Only the two liberos named for the match can play libero.'
+        : null;
+    if (problem === null) return true;
+    this.notice = problem;
+    this.emit();
+    return false;
   }
 
   /**
@@ -1777,12 +1866,44 @@ class Game {
   setPreferredLineupSlot(slot: number, playerIdx: number): void {
     const club = this.club;
     if (club === null) return;
+    const before = this.lineup()?.lineup[slot] ?? -1;
     while (club.preferredLineup.length <= slot) club.preferredLineup.push(-1);
     // Whoever he was, he moves to this slot.
     const was = club.preferredLineup.indexOf(playerIdx);
     if (was >= 0 && was !== slot) club.preferredLineup[was] = -1;
     club.preferredLineup[slot] = playerIdx;
     club.preferredFormation = formationOf(club.tactics);
+    this.tradePreferred(playerIdx, before);
+    this.emit();
+  }
+
+  /** The default bench once `incoming` has taken `was`'s place on the sheet: off the bench, `was` sits down in his place. */
+  private tradePreferred(incoming: number, was: number): void {
+    const bench = this.club?.preferredBench;
+    if (bench === undefined) return;
+    const at = bench.indexOf(incoming);
+    if (at < 0) return;
+    if (was >= 0) bench[at] = was;
+    else bench.splice(at, 1);
+  }
+
+  /** Name a player in the default matchday squad — while there is room in the fourteen. */
+  addToPreferredSquad(playerIdx: number): void {
+    const club = this.club;
+    const picked = this.lineup();
+    if (club === null || picked === null) return;
+    const named = picked.lineup.length + (picked.libero >= 0 ? 1 : 0) + (picked.defensiveLibero >= 0 ? 1 : 0) + picked.bench.length;
+    if (named >= MATCHDAY_SQUAD) this.notice = `Only ${MATCHDAY_SQUAD} can be named — leave someone out first.`;
+    else club.preferredBench = [...picked.bench, playerIdx];
+    this.emit();
+  }
+
+  /** Leave a reserve out of the default matchday squad. */
+  dropFromPreferredSquad(playerIdx: number): void {
+    const club = this.club;
+    const picked = this.lineup();
+    if (club === null || picked === null) return;
+    club.preferredBench = picked.bench.filter((p) => p !== playerIdx);
     this.emit();
   }
 
@@ -1803,6 +1924,7 @@ class Game {
     const picked = this.lineup();
     if (club === null || picked === null) return;
     if (playerIdx === picked.defensiveLibero) club.preferredDefensiveLibero = picked.libero;
+    else this.tradePreferred(playerIdx, picked.libero);
     club.preferredLibero = playerIdx;
     this.emit();
   }
@@ -1815,18 +1937,24 @@ class Game {
     if (playerIdx >= 0 && playerIdx === picked.libero) {
       if (picked.defensiveLibero < 0) return;
       club.preferredLibero = picked.defensiveLibero;
+    } else if (playerIdx >= 0) {
+      this.tradePreferred(playerIdx, picked.defensiveLibero);
+    } else if (picked.defensiveLibero >= 0 && club.preferredBench !== undefined) {
+      // One libero from now on: the other stays in the squad, on the bench.
+      club.preferredBench.push(picked.defensiveLibero);
     }
     club.preferredDefensiveLibero = playerIdx;
     this.emit();
   }
 
-  /** Clear the saved lineup so every slot goes back to auto-picking the best available player. */
+  /** Clear the saved lineup so every slot — and the bench — goes back to auto-picking the best available player. */
   resetPreferredLineup(): void {
     const club = this.club;
     if (club === null) return;
     club.preferredLineup = [];
     club.preferredLibero = -1;
     club.preferredDefensiveLibero = -1;
+    club.preferredBench = undefined;
     this.emit();
   }
 
@@ -1844,12 +1972,7 @@ class Game {
     const awayClub = world.clubs[md.fixture.away];
     if (homeClub === undefined || awayClub === undefined) return;
 
-    // The bench is rebuilt from the final team sheet: anyone swapped out of
-    // the six (or out of a libero role) on the lineup screen must still be
-    // available to come on, and anyone swapped in must not be listed twice.
-    const liberos = new Set([md.homeLibero, md.homeDefensiveLibero].filter((p) => p >= 0));
-    md.homeBench = club.players.filter((p) =>
-      world.players.isAvailable(p) && !md.homeLineup.includes(p) && !liberos.has(p));
+    this.handInSquad(md, (p) => world.players.isAvailable(p));
     const userSetup: TeamSetup = {
       clubId: club.id,
       name: club.name,
@@ -1857,14 +1980,19 @@ class Game {
       libero: md.homeLibero,
       defensiveLibero: md.homeDefensiveLibero,
       bench: md.homeBench,
+      liberos: md.homeLiberos,
       tactics: club.tactics,
       // A friendly teaches the opposition nothing.
       read: isFriendly(world, md.fixture) ? 0 : oppositionRead(world, club),
       prep: matchPrep(world, club, md.fixture.day),
     };
-    // The other side keeps any promise of games it has made a loanee.
-    const homeSetup = md.userIsHome ? userSetup : toTeamSetup(world.players, homeClub, loanStarters(world, homeClub));
-    const awaySetup = md.userIsHome ? toTeamSetup(world.players, awayClub, loanStarters(world, awayClub)) : userSetup;
+    // The other side keeps any promise of games it has made a loanee — and
+    // comes having prepared for the match, as it would anywhere else.
+    const theirs = (c: Club): TeamSetup => ({
+      ...toTeamSetup(world.players, c, loanStarters(world, c)), prep: matchPrep(world, c, md.fixture.day),
+    });
+    const homeSetup = md.userIsHome ? userSetup : theirs(homeClub);
+    const awaySetup = md.userIsHome ? theirs(awayClub) : userSetup;
 
     this.liveSim = new MatchSimulator(world.players, {
       home: homeSetup,
@@ -1879,6 +2007,19 @@ class Game {
       friendly: isFriendly(world, md.fixture),
     });
     this.startLive();
+  }
+
+  /**
+   * The team sheet handed in at kickoff: the bench as named — nobody twice,
+   * nobody who can't play, never more than the fourteen — and the liberos
+   * named for the match, fixed from here on.
+   */
+  private handInSquad(md: MatchdayState, canPlay: (p: number) => boolean): void {
+    const store = this.world!.players;
+    const sheet = new Set([...md.homeLineup, md.homeLibero, md.homeDefensiveLibero]);
+    const room = MATCHDAY_SQUAD - [...sheet].filter((p) => p >= 0).length;
+    md.homeBench = [...new Set(md.homeBench)].filter((p) => canPlay(p) && !sheet.has(p)).slice(0, Math.max(0, room));
+    md.homeLiberos = registeredLiberos(store, { libero: md.homeLibero, defensiveLibero: md.homeDefensiveLibero, bench: md.homeBench });
   }
 
   /** The match under way, from the first serve. */
@@ -2541,9 +2682,7 @@ class Game {
     if (world === null || md === null || md.national === null || found === null || tactics === null) return;
     const { t, m } = found;
     const nation = md.national.nation;
-    const liberos = new Set([md.homeLibero, md.homeDefensiveLibero].filter((p) => p >= 0));
-    md.homeBench = squadOf(t, nation).filter((p) =>
-      canPlayForCountry(world, p) && !md.homeLineup.includes(p) && !liberos.has(p));
+    this.handInSquad(md, (p) => canPlayForCountry(world, p));
     const userSetup: TeamSetup = {
       clubId: -1,
       name: nationName(nation),
@@ -2551,6 +2690,7 @@ class Game {
       libero: md.homeLibero,
       defensiveLibero: md.homeDefensiveLibero,
       bench: md.homeBench,
+      liberos: md.homeLiberos,
       tactics,
     };
     const opponent = nationSetup(world, t, md.userIsHome ? m.away : m.home);
@@ -2810,7 +2950,7 @@ class Game {
 
   // ---- Squad ------------------------------------------------------------
 
-  lineup(): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[] } | null {
+  lineup(): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[]; out: number[] } | null {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return null;

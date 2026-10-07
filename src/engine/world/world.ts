@@ -140,6 +140,9 @@ export interface PlayoffGroup {
   /** rounds[0] is the first round; each later round pairs the previous
    *  round's winners once every tie in it has resolved. */
   rounds: PlayoffTie[][];
+  /** The two beaten semi-finalists' match for third place, played alongside
+   *  the final — the title playoff's only. Absent on older saves. */
+  thirdPlace?: PlayoffTie;
   /** Round currently being played or awaited. */
   currentRound: number;
   resolved: boolean;
@@ -612,6 +615,8 @@ export interface World {
   vacancies: Vacancy[];
   /** Every player has had his hitting hand settled — false on saves from before. */
   handedness?: boolean;
+  /** The other clubs' coaches have picked their own tactics — false on saves from before they did. */
+  coachedSides?: boolean;
   /** The month's best points and plays in the manager's league so far, best
    *  first, for the Point and Play of the Month. */
   highlights?: { season: number; point: Highlight[]; play: Highlight[] };
