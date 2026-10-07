@@ -11,6 +11,7 @@
 import type { MatchResult } from '../match/engine.ts';
 import { keepBest, sameRally, type Highlight } from '../match/highlights.ts';
 import { postMessage } from './inbox.ts';
+import { keepCompetitionHighlight } from './competitionReview.ts';
 import type { Fixture, World } from './world.ts';
 
 /** How many of a month's candidates are kept, and how many make a shortlist. */
@@ -52,7 +53,14 @@ export function inManagersLeague(world: World, fixture: Fixture): boolean {
 
 /** A match in the manager's league just played: its best point and play go in the month's running. */
 export function collectHighlights(world: World, fixture: Fixture, result: MatchResult): void {
-  if (result.highlights === undefined || result.highlights.length === 0 || !inManagersLeague(world, fixture)) return;
+  if (result.highlights === undefined || result.highlights.length === 0) return;
+  // Every competition keeps its best for its review; the month's running is the league's.
+  for (const h of result.highlights) {
+    keepCompetitionHighlight(world, {
+      ...h, fixtureId: fixture.id, competitionId: fixture.competitionId, day: fixture.day, home: fixture.home, away: fixture.away,
+    });
+  }
+  if (!inManagersLeague(world, fixture)) return;
   if (world.highlights === undefined || world.highlights.season !== world.season) {
     world.highlights = { season: world.season, point: [], play: [] };
   }

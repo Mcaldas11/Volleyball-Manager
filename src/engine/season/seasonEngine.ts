@@ -42,6 +42,7 @@ import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices, t
 import { readLevel, studyTactic } from '../model/tacticRead.ts';
 import { recordFixture } from '../world/records.ts';
 import { collectHighlights, inManagersLeague } from '../world/monthAwards.ts';
+import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 
 /** Season-long statistics, keyed by player index. */
@@ -234,7 +235,8 @@ export function playFixture(
       importance: fixture.importance,
       neutralVenue: fixture.neutralVenue,
       collectLog: detailed || friendly,
-      highlights: ownLeague,
+      // The manager's own matches anywhere, and his league's: their best moments are kept.
+      highlights: ownLeague || (detailed && !friendly),
       seed: world.rng.next(),
       // Nobody is on the bench to make the changes: the engine makes them for both sides.
       autoCoach: [true, true],
@@ -454,6 +456,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   dailyRecovery(world, store);
   progressPlayoffs(world);
   progressCups(world);
+  // A competition just finished gets its review; one about to start, a look at its field.
+  competitionReviewsDay(world);
 
   // Training and injury rolls happen on a weekly cadence rather than daily, so
   // their cost does not scale with how many matches were played.

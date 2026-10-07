@@ -23,6 +23,7 @@ import type { Internationals, IntlReport } from './internationals.ts';
 import type { TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
 import type { MonthAward } from './monthAwards.ts';
+import type { CompetitionReview } from './competitionReview.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -388,6 +389,8 @@ export interface GameMessage {
   /** A monthly honour in the manager's league — its shortlist, and the
    *  points and plays on it to watch again. */
   award?: MonthAward;
+  /** The review of a competition just finished — see competitionReview.ts. */
+  competitionReview?: CompetitionReview;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
    *  tabs existed still load — {@link messageCategory} derives it from the
    *  older fields when absent. */
@@ -612,6 +615,13 @@ export interface World {
   /** The month's best points and plays in the manager's league so far, best
    *  first, for the Point and Play of the Month. */
   highlights?: { season: number; point: Highlight[]; play: Highlight[] };
+  /** Each followed competition's field as it started — its clubs, strongest
+   *  squad first — by "season:competition", for the review's surprises. */
+  competitionFields?: Record<string, number[]>;
+  /** The competitions reviewed already, by "season:competition". */
+  reviewedCompetitions?: string[];
+  /** The best point and play seen in each competition this season, by "season:competition". */
+  competitionHighlights?: Record<string, { point?: Highlight; play?: Highlight }>;
 }
 
 export function dayOfSeason(world: World): number {

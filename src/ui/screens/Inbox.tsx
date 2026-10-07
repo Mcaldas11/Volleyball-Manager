@@ -18,6 +18,7 @@ import { IntlReportSheet } from '../intlReport.tsx';
 import { nextTournamentFor, worldRanking } from '../../engine/world/internationals.ts';
 import { contractEndYear, currentJob } from '../../engine/world/career.ts';
 import { describeHighlight, type MonthAward } from '../../engine/world/monthAwards.ts';
+import { CompetitionReviewSheet } from '../competitionReviewSheet.tsx';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { useGame } from '../state.ts';
 
@@ -345,6 +346,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
   if (m.award !== undefined) return <AwardSheet award={m.award} />;
+
+  if (m.competitionReview !== undefined) return <CompetitionReviewSheet review={m.competitionReview} />;
 
   if (m.nationalOffer !== undefined) {
     const offer = world.internationals?.offers.find((o) => o.id === m.nationalOffer!.id);
@@ -904,6 +907,10 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
 
   if (m.roundup !== undefined) {
     out.push(<button key="table" className="paper-btn primary-dark" onClick={() => g.go('table')}>Full table</button>);
+  }
+  if (m.competitionReview !== undefined) {
+    const id = m.competitionReview.competitionId;
+    out.push(<button key="comp" className="paper-btn primary-dark" onClick={() => g.openCompetition(id)}>Open the competition</button>);
   }
   const winner = m.award?.highlights?.[0];
   if (m.award !== undefined && winner !== undefined) {

@@ -5475,3 +5475,57 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .dedit-presets button.active { border-color: var(--club-bright); background: var(--club-tint); color: #fff; }
 .dedit .zcourt-note b { color: var(--text); }
 .tboard.compact.phase-out .tboard-body { grid-template-columns: 250px minmax(0, 1fr); }
+
+/* ---- A competition's review, in the inbox ---- */
+.crv { display: flex; flex-direction: column; }
+.crv-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 14px 18px;
+  border: 1px solid #d2c8b6;
+  border-radius: 4px;
+  background: linear-gradient(135deg, rgba(215, 167, 63, 0.22), rgba(215, 167, 63, 0.05));
+}
+.crv-hero > div:nth-child(2) { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.crv-hero .paper-label { margin-bottom: 2px; }
+.crv-champ { font: 800 26px/1.05 var(--font-display); color: var(--paper-ink); }
+.crv-sub { font-size: 13px; color: #4d525c; }
+.crv-you { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; color: #4d525c; font-size: 12px; }
+.crv-you b { font: 800 18px/1.1 var(--font-display); color: var(--paper-ink); }
+.crv-you i { font-style: normal; font-size: 11.5px; }
+.crv-awards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; padding-bottom: 8px; }
+.crv-award, .crv-best { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.crv-award.mvp { grid-column: 1 / -1; padding: 8px 10px; border-radius: 6px; background: rgba(215, 167, 63, 0.16); }
+.crv-best { padding: 8px 0; border-top: 1px solid rgba(60, 45, 20, 0.09); }
+.crv-report .paper-label + .crv-best { border-top: none; }
+.crv-award-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.crv-award-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-gold); }
+.crv-award-main strong { overflow: hidden; color: var(--paper-ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.crv-award-value { font-size: 12.5px; color: #4d525c; }
+.crv-dream { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding-bottom: 10px; }
+.crv-dream-man { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; cursor: pointer; }
+.crv-dream-man b { overflow: hidden; max-width: 100%; color: var(--paper-ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.crv-dream-man i { font-style: normal; font-size: 11.5px; font-weight: 700; color: #237a3b; }
+.crv-dream-pos { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; color: var(--paper-gold); }
+.crv-teams { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding-bottom: 10px; }
+.crv-team-head { display: block; margin: 6px 0 4px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-gold); }
+.crv-team { display: flex; flex-direction: column; gap: 1px; margin-bottom: 6px; }
+.crv-team-how { font-size: 12px; color: #4d525c; }
+.crv-club { display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; font-weight: 700; color: var(--paper-ink); cursor: pointer; }
+.crv-club:hover { text-decoration: underline; }
+.crv-none { display: block; margin-bottom: 6px; font-size: 12px; color: #6b7079; }
+.crv-numbers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-bottom: 10px; }
+.crv-numbers div { display: flex; flex-direction: column; align-items: center; }
+.crv-numbers b { font: 800 24px/1.1 var(--font-display); color: var(--paper-ink); }
+.crv-numbers span { font-size: 11.5px; color: #4d525c; }
+.crv-standings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows, 8), auto); grid-auto-flow: column; gap: 2px 18px; padding-bottom: 10px; }
+.crv-standing { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid rgba(60, 45, 20, 0.09); }
+.crv-standing.ours { margin: 0 -6px; padding: 4px 6px; border-radius: 4px; background: rgba(215, 167, 63, 0.18); }
+.crv-pos { width: 18px; font-weight: 800; color: #4d525c; text-align: right; }
+@media (max-width: 900px) {
+  .crv-awards, .crv-teams, .crv-standings { grid-template-columns: minmax(0, 1fr); }
+  .crv-standings { grid-template-rows: none; grid-auto-flow: row; }
+  .crv-dream { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

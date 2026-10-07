@@ -12,6 +12,7 @@
  */
 
 import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
+import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, SQUAD_TARGET } from '../model/positions.ts';
@@ -47,6 +48,8 @@ export interface RolloverReport {
 }
 
 export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
+  // Any competition of the manager's not reviewed yet gets its review before the season is wiped.
+  competitionReviewsDay(world, true);
   const report: RolloverReport = {
     season: world.season,
     year: world.year,

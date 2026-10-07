@@ -32,6 +32,17 @@ export interface CompetitionRecord {
   blocks: number;
   /** Player-of-the-match awards. */
   mvps: number;
+  /** The rest of the box score, for the competition's awards — absent on
+   *  lines written before they were kept. */
+  kills?: number;
+  attacks?: number;
+  attackErrors?: number;
+  serves?: number;
+  digs?: number;
+  receptions?: number;
+  /** Perfect and positive passes. */
+  goodPasses?: number;
+  assists?: number;
 }
 
 /** How many past ratings the form guide remembers. */
@@ -74,6 +85,14 @@ function recordSide(
     line.aces += s.serveAces;
     line.blocks += s.blockPoints;
     if (fixture.mvp === p) line.mvps++;
+    line.kills = (line.kills ?? 0) + s.attackKills;
+    line.attacks = (line.attacks ?? 0) + s.attacksTotal;
+    line.attackErrors = (line.attackErrors ?? 0) + s.attackErrors + s.attackBlocked;
+    line.serves = (line.serves ?? 0) + s.servesTotal;
+    line.digs = (line.digs ?? 0) + s.digsTotal;
+    line.receptions = (line.receptions ?? 0) + s.receptionsTotal;
+    line.goodPasses = (line.goodPasses ?? 0) + s.receptionPerfect + s.receptionPositive;
+    line.assists = (line.assists ?? 0) + s.setAssists;
 
     let form = world.ratingForm.get(p);
     if (form === undefined) {
