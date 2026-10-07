@@ -24,6 +24,7 @@
 import { useEffect, useRef, type JSX } from 'react';
 import { PlayerFlag, type PlayerStore } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
+import { RATING_BANDS } from '../engine/match/playerRating.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
 import {
@@ -45,11 +46,11 @@ const FLOOR = {
 };
 
 function ratingColour(r: number): string {
-  if (r >= 8.0) return '#4f9dff';
-  if (r >= 7.2) return '#2fbf63';
-  if (r >= 6.7) return '#8fd65a';
-  if (r >= 6.2) return '#e8c547';
-  if (r >= 5.6) return '#f0913d';
+  if (r >= RATING_BANDS.star) return '#4f9dff';
+  if (r >= RATING_BANDS.great) return '#2fbf63';
+  if (r >= RATING_BANDS.good) return '#8fd65a';
+  if (r >= RATING_BANDS.ok) return '#e8c547';
+  if (r >= RATING_BANDS.poor) return '#f0913d';
   return '#ec5a52';
 }
 
@@ -1077,7 +1078,7 @@ function drawLabel(
     ctx.fillStyle = ratingColour(rating);
     roundRect(ctx, chipX, y0, chipW, boxH, 3);
     ctx.fill();
-    ctx.fillStyle = rating >= 8 || rating < 5.6 ? '#ffffff' : '#0b0e13';
+    ctx.fillStyle = rating >= RATING_BANDS.star || rating < RATING_BANDS.poor ? '#ffffff' : '#0b0e13';
     ctx.font = `800 ${size - 1}px "Segoe UI", system-ui, sans-serif`;
     ctx.textBaseline = 'top';
     const label = rating.toFixed(1);

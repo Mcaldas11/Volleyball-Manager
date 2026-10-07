@@ -13,6 +13,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import { secondNation, tiedNation } from '../../engine/world/internationals.ts';
 import { canRecall, coachTalkBlock, PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
+import { accoladeTitle, playerAccolades } from '../../engine/world/accolades.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import {
   abilityClass, attrClass, Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
@@ -681,6 +682,7 @@ export function PlayerDetail(): JSX.Element | null {
             <KV k="Titles">{store.careerTitles[p]}</KV>
             <KV k="International caps">{store.nationalCaps[p]}</KV>
             <InternationalHonours p={p} />
+            <PlayerAwards p={p} />
           </Card>
           <Card title="Contract" icon="finances">
             <KV k="Club">{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</KV>
@@ -1043,6 +1045,25 @@ function YouthLeagueView({ league }: { league: YouthLeague }): JSX.Element {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** A player's individual awards — the players of the year, the teams of the season — newest first. */
+function PlayerAwards({ p }: { p: number }): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  const awards = playerAccolades(world, p);
+  if (awards.length === 0) return null;
+  return (
+    <KV k="Awards">
+      <span className="intl-honours-list">
+        {awards.map((a, i) => (
+          <span key={i} className={`intl-medal-tag ${a.kind === 'team' ? 'silver' : 'gold'}`}>
+            {accoladeTitle(world, a)} {world.startYear + a.season + 1}
+          </span>
+        ))}
+      </span>
+    </KV>
   );
 }
 

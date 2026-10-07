@@ -155,8 +155,10 @@ export function quickSimulate(
   const homePoints = setScores.reduce((s, [h]) => s + h, 0);
   const awayPoints = setScores.reduce((s, [, a]) => s + a, 0);
 
-  const homeStats = allocateStats(store, home.lineup, home.libero, homePoints, totalRallies, sh, rng);
-  const awayStats = allocateStats(store, away.lineup, away.libero, awayPoints, totalRallies, sa, rng);
+  // How each side's box score reads is against the side it played: an even
+  // match reads the same in the top flight as in the third division.
+  const homeStats = allocateStats(store, home.lineup, home.libero, homePoints, totalRallies, sh, edgeOver(sh, sa), rng);
+  const awayStats = allocateStats(store, away.lineup, away.libero, awayPoints, totalRallies, sa, edgeOver(sa, sh), rng);
 
   return {
     homeSets,
@@ -200,6 +202,11 @@ const DIG_SHARE: Readonly<Record<Position, number>> = {
   [Position.MiddleBlocker]: 0.047,
 };
 
+/** How far a side was above the one it played, 0-1: 0.5 for an even match, 1 for a mismatch its way. */
+function edgeOver(mine: number, theirs: number): number {
+  return clamp(0.5 + (mine - theirs) / 500, 0, 1);
+}
+
 /** A count drawn around `mean`, spread roughly the way small match samples are. */
 function jitter(mean: number, rng: Rng, spread = 0.5): number {
   return Math.max(0, Math.round(mean * rng.range(1 - spread, 1 + spread)));
@@ -211,9 +218,10 @@ function jitter(mean: number, rng: Rng, spread = 0.5): number {
  * Without this, background matches would leave season statistics empty, the
  * scoring charts would only ever show the user's own league, and players
  * outside it could never earn a match rating. Rates and volumes follow what
- * the full rally engine produces for a side of the same strength: stronger
- * squads kill more of their swings and pass better, liberos and middles share
- * the back row, and only the six rotating players serve.
+ * the full rally engine produces against an opponent of the same strength
+ * difference: the stronger side kills more of its swings and passes better,
+ * liberos and middles share the back row, and only the six rotating players
+ * serve.
  */
 function allocateStats(
   store: PlayerStore,
@@ -222,6 +230,8 @@ function allocateStats(
   teamPoints: number,
   rallies: number,
   strength: number,
+  /** How far the side was above its opponent, 0-1 — see edgeOver. */
+  level: number,
   rng: Rng,
 ): Map<number, PlayerMatchStats> {
   const out = new Map<number, PlayerMatchStats>();
@@ -233,8 +243,6 @@ function allocateStats(
 
   for (const p of players) out.set(p, newPlayerStats(p));
 
-  // 0 for a weak lower-division side, 1 for an elite one.
-  const level = clamp((strength - 750) / 750, 0, 1);
   const killRate = 0.30 + 0.20 * level;
   const attackErrorRate = 0.14 - 0.05 * level;
   const blockedRate = 0.078 - 0.02 * level;

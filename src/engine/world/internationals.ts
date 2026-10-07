@@ -860,16 +860,16 @@ export function eligibleFor(world: World, nation: number): number[] {
   return out;
 }
 
-/** His average rating over his last few matches, or a neutral 6.5 without any. */
+/** His average rating over his last few matches, or the neutral 6.0 without any. */
 export function recentForm(world: World, p: number): number {
   const form = world.ratingForm.get(p);
-  return form !== undefined && form.length > 0 ? form.reduce((s, r) => s + r, 0) / form.length : 6.5;
+  return form !== undefined && form.length > 0 ? form.reduce((s, r) => s + r, 0) / form.length : 6.0;
 }
 
 /** How a national coach rates a player: ability first, form next, caps a little. */
 export function selectionScore(world: World, p: number): number {
   const store = world.players;
-  return store.currentAbility[p] + (recentForm(world, p) - 6.5) * 80 + Math.min(store.nationalCaps[p], 60) * 0.8
+  return store.currentAbility[p] + (recentForm(world, p) - 6.0) * 100 + Math.min(store.nationalCaps[p], 60) * 0.8
     - (store.condition[p] < 60 ? 40 : 0);
 }
 

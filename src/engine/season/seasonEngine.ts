@@ -45,6 +45,7 @@ import { collectHighlights, inManagersLeague } from '../world/monthAwards.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 import { coachesSetUp } from '../world/aiTactics.ts';
+import { noteExpectations } from '../world/accolades.ts';
 
 /** Season-long statistics, keyed by player index. */
 export type SeasonStats = Map<number, SeasonStatLine>;
@@ -302,7 +303,7 @@ export function playFixture(
 
   accumulate(ctx.stats, result.homeStats, result.setScores.length);
   accumulate(ctx.stats, result.awayStats, result.setScores.length);
-  recordFixture(world, fixture, result.homeStats, result.awayStats);
+  recordFixture(world, fixture, result.homeStats, result.awayStats, 'quick');
   applyMatchLoad(store, result.homeStats, world.rng);
   applyMatchLoad(store, result.awayStats, world.rng);
 
@@ -578,6 +579,8 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
   setBoardExpectations(world);
   // And every other coach sets his side up for the players the summer left him.
   coachesSetUp(world, (club) => pickLineup(world.players, club).lineup);
+  // Where each squad should finish, for the Coach of the Year to be judged against.
+  noteExpectations(world);
 
   if (ctx !== undefined) recordSeasonStartAbility(world, ctx);
 }

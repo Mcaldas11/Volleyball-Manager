@@ -9,6 +9,7 @@ import {
   useEffect, useId, useRef, useState, type CSSProperties, type JSX, type ReactNode, type RefObject,
 } from 'react';
 import { hashString } from '../engine/core/rng.ts';
+import { RATING_BANDS } from '../engine/match/playerRating.ts';
 import type { Club } from '../engine/model/club.ts';
 import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import { INJURY_NAMES, PlayerFlag, type PlayerStore } from '../engine/model/players.ts';
@@ -80,13 +81,13 @@ export function StarMeter({ value, max = 2000, size = 14 }: { value: number; max
   );
 }
 
-/** Colour band for a 0-10 match rating, from a poor night to a standout one. */
+/** Colour band for a 0-10 match rating — every player starts on 6.0 — from a poor night to a standout one. */
 export function ratingClass(r: number): string {
-  if (r >= 8.0) return 'rt-star';
-  if (r >= 7.2) return 'rt-great';
-  if (r >= 6.7) return 'rt-good';
-  if (r >= 6.2) return 'rt-ok';
-  if (r >= 5.6) return 'rt-poor';
+  if (r >= RATING_BANDS.star) return 'rt-star';
+  if (r >= RATING_BANDS.great) return 'rt-great';
+  if (r >= RATING_BANDS.good) return 'rt-good';
+  if (r >= RATING_BANDS.ok) return 'rt-ok';
+  if (r >= RATING_BANDS.poor) return 'rt-poor';
   return 'rt-bad';
 }
 

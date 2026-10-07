@@ -13,6 +13,7 @@
 
 import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
+import { seasonAwards } from '../world/accolades.ts';
 import { compareTableRows, sponsorshipFor, tvRightsFor, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { MAX_SQUAD, Position, SQUAD_TARGET } from '../model/positions.ts';
@@ -76,6 +77,10 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   };
 
   awardTitles(world, report, record);
+  // The season's individual awards — the leagues' and the world's — while
+  // everyone is still where he played it.
+  recordSeasonAwards(world, ctx, record);
+  seasonAwards(world, record, seasonAwardLines(world, record));
   // The user's season review reads the tables and books before they are settled.
   const review = beginSeasonReview(world, ctx);
   // Next season's continental places and super cups go on this season's results.
@@ -108,8 +113,6 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   revalueSquads(world);
   selectAllNationalSquads(world);
 
-  recordSeasonAwards(world, ctx, record);
-  pushSeasonAwardsMessage(world, record);
   if (review !== null) postSeasonReview(world, review);
   world.history.push(record);
 
@@ -561,8 +564,8 @@ function recordSeasonAwards(world: World, ctx: SeasonContext, record: SeasonReco
   }
 }
 
-/** Build the club's end-of-season awards message from the record just computed. */
-function pushSeasonAwardsMessage(world: World, record: SeasonRecord): void {
+/** The world's other honours of the season, for its awards night: the top scorer, the most improved, the youngest regular. */
+function seasonAwardLines(world: World, record: SeasonRecord): SeasonAwardLine[] {
   const store = world.players;
   const describe = (p: number): string => {
     const club = store.clubId[p] >= 0 ? world.clubs[store.clubId[p]] : undefined;
@@ -570,18 +573,6 @@ function pushSeasonAwardsMessage(world: World, record: SeasonRecord): void {
   };
 
   const lines: SeasonAwardLine[] = [];
-  if (record.playerOfTheYear >= 0) {
-    lines.push({
-      label: 'Player of the Season', playerIdx: record.playerOfTheYear,
-      detail: describe(record.playerOfTheYear),
-    });
-  }
-  if (record.youngPlayerOfTheYear >= 0) {
-    lines.push({
-      label: 'Breakthrough Player', playerIdx: record.youngPlayerOfTheYear,
-      detail: describe(record.youngPlayerOfTheYear),
-    });
-  }
   if (record.topScorer.player >= 0) {
     lines.push({
       label: 'Top Scorer', playerIdx: record.topScorer.player,
@@ -601,17 +592,7 @@ function pushSeasonAwardsMessage(world: World, record: SeasonRecord): void {
       detail: `${describe(record.youngestPlayer)} — age ${age}`,
     });
   }
-  if (lines.length === 0) return;
-
-  world.messages.push({
-    id: world.messages.length,
-    day: world.day,
-    year: world.year,
-    subject: `${world.year} season awards`,
-    body: 'The season\'s standout performers.',
-    seasonAwards: lines,
-    category: 'news',
-  });
+  return lines;
 }
 
 /**

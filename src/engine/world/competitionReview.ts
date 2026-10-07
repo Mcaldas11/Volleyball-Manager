@@ -55,7 +55,7 @@ export interface CompetitionReview {
   you: { finish: string; expected: number | null } | null;
   awards: ReviewAward[];
   /** The team of the competition: a setter, two outsides, two middles, an opposite, a libero. */
-  dreamTeam: Array<{ pos: Position; p: number; clubId: number; rating: number }>;
+  dreamTeam: DreamPick[];
   /** The three strongest squads going in, and where they finished. */
   favourites: ReviewTeamNote[];
   surprise: ReviewTeamNote | null;
@@ -161,8 +161,41 @@ function standingsOf(world: World, comp: Competition): number[] {
   return order;
 }
 
+/** A pick for a team of the season: who, where, for whom, and on what. */
+export interface DreamPick {
+  pos: Position;
+  p: number;
+  clubId: number;
+  rating: number;
+}
+
+/** A setter, two outsides, two middles, an opposite and a libero. */
+const TEAM_SHAPE: ReadonlyArray<readonly [Position, number]> = [
+  [Position.Setter, 1], [Position.OutsideHitter, 2], [Position.MiddleBlocker, 2], [Position.Opposite, 1], [Position.Libero, 1],
+];
+
+/** The best of a field of regulars at each position, by average rating — a team of the season. */
+export function teamOf(world: World, regulars: ReadonlyArray<readonly [number, CompetitionRecord]>): DreamPick[] {
+  const store = world.players;
+  const team: DreamPick[] = [];
+  for (const [pos, n] of TEAM_SHAPE) {
+    regulars.filter(([p]) => store.position[p] === pos)
+      .sort((a, b) => averageRating(b[1]) - averageRating(a[1]))
+      .slice(0, n)
+      .forEach(([p, l]) => team.push({ pos, p, clubId: store.clubId[p], rating: averageRating(l) }));
+  }
+  return team;
+}
+
+/** Those who played enough of a competition to be judged on it — in a one-off, a super cup final, the one match. */
+export function regularsOf(lines: Array<[number, CompetitionRecord]>): Array<[number, CompetitionRecord]> {
+  const maxApps = Math.max(1, ...lines.map(([, l]) => l.apps));
+  const minApps = Math.min(maxApps, Math.max(2, Math.ceil(maxApps * 0.4)));
+  return lines.filter(([, l]) => l.apps >= minApps);
+}
+
 /** Every player's line in this competition this season. */
-function linesOf(world: World, comp: Competition): Array<[number, CompetitionRecord]> {
+export function linesOf(world: World, comp: Competition): Array<[number, CompetitionRecord]> {
   const out: Array<[number, CompetitionRecord]> = [];
   for (const [p, recs] of world.competitionRecords) {
     const line = recs.find((r) => r.season === world.season && r.competitionId === comp.id);
@@ -179,10 +212,7 @@ export function reviewCompetition(world: World, comp: Competition): CompetitionR
 
   // ---- The players ----
   const lines = linesOf(world, comp);
-  const maxApps = Math.max(1, ...lines.map(([, l]) => l.apps));
-  // A one-off — a super cup final — has its MVP from the one match.
-  const minApps = Math.min(maxApps, Math.max(2, Math.ceil(maxApps * 0.4)));
-  const regulars = lines.filter(([, l]) => l.apps >= minApps);
+  const regulars = regularsOf(lines);
   const awards: ReviewAward[] = [];
   const give = (k: ReviewAwardKey, pool: Array<[number, CompetitionRecord]>, score: (l: CompetitionRecord) => number,
     value: (l: CompetitionRecord) => string): void => {
@@ -208,16 +238,7 @@ export function reviewCompetition(world: World, comp: Competition): CompetitionR
     (l) => `${averageRating(l).toFixed(2)} average in ${l.apps} matches`);
 
   // The team of the competition: the best by average rating in each position.
-  const dreamTeam: CompetitionReview['dreamTeam'] = [];
-  const shape: Array<[Position, number]> = [
-    [Position.Setter, 1], [Position.OutsideHitter, 2], [Position.MiddleBlocker, 2], [Position.Opposite, 1], [Position.Libero, 1],
-  ];
-  for (const [pos, n] of shape) {
-    regulars.filter(([p]) => store.position[p] === pos)
-      .sort((a, b) => averageRating(b[1]) - averageRating(a[1]))
-      .slice(0, n)
-      .forEach(([p, l]) => dreamTeam.push({ pos, p, clubId: store.clubId[p], rating: averageRating(l) }));
-  }
+  const dreamTeam = teamOf(world, regulars);
 
   // ---- The teams, against the strength they started with ----
   const field = world.competitionFields?.[key(world, comp)] ??
@@ -327,5 +348,19 @@ function postReview(world: World, comp: Competition, r: CompetitionReview): void
     subject: `${comp.name} review: ${ours ? 'champions!' : `${champ?.name ?? '—'} win it`}`,
     body: parts.filter((x) => x !== '').join(' '),
     competitionReview: r,
+  });
+
+  // The team of the competition, on the court, in a message of its own — not a one-off final's.
+  if (r.dreamTeam.length < 6 || comp.kind === 'supercup') return;
+  const title = comp.kind === 'league' ? 'Team of the Season' : 'Team of the Tournament';
+  const mine = r.dreamTeam.filter((d) => d.clubId === world.userClubId).map((d) => store.fullName(d.p));
+  postMessage(world, {
+    category: 'awards',
+    from: comp.organizer ?? comp.name,
+    clubId: r.champion >= 0 ? r.champion : undefined,
+    subject: `${comp.name}: the ${title}`,
+    body: `The best of the ${comp.name} at every position, on their ratings over the ${comp.kind === 'league' ? 'season' : 'competition'}.` +
+      (mine.length > 0 ? ` From your squad: ${mine.join(', ')}.` : ''),
+    teamOfSeason: { title: `${comp.name} · ${title}`, competitionId: comp.id, season: r.season, picks: r.dreamTeam },
   });
 }

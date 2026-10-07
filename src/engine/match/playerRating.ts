@@ -3,25 +3,40 @@
  *
  * A rating is read straight off a player's box-score line, so the same
  * function rates a match in progress (the live viewer calls it after every
- * rally) and a finished one, and it works identically for matches played
- * through the full rally engine and for background quick-sims — both fill in
- * the same statistics.
+ * rally) and a finished one, whether it was played through the full rally
+ * engine or a background quick-sim.
  *
  * Every contact is worth something: a kill or an ace adds, an error or a
  * shanked pass takes away. That value is expressed per set's worth of rallies
  * actually spent on court, measured against what an average player *in the
  * same position* produces — a libero is never going to out-score an opposite,
- * so comparing them on raw volume would make every libero a 5.5. Early in a
- * match, or for a substitute who played a handful of rallies, the rating is
- * pulled toward the neutral mark until there is enough evidence to move it.
- * Finally, the scoreline nudges everyone: winning sides rate a little higher.
+ * so comparing them on raw volume would make every libero a 5.5.
+ *
+ * Everyone starts a match on 6.0 and moves from there. An ordinary night ends
+ * close to it; a good one around 7; an 8 is a match to remember, and the
+ * scale tightens the further it climbs, so a 9 is one in thousands — or the
+ * other way, for a night to forget. Early in a match, or for a substitute who
+ * played a handful of rallies, the rating stays near 6.0 until there is
+ * enough evidence to move it. The scoreline nudges everyone: winning sides
+ * rate a little higher.
+ *
+ * Matches played through the full rally engine and background quick-sims fill
+ * in the same statistics, but not with the same shape — so each has its own
+ * yardstick, and the same spread: a 7.0 means the same in a league the
+ * manager watches as in one he never sees.
  */
 
 import { Position } from '../model/positions.ts';
 import type { PlayerMatchStats } from './stats.ts';
 
-/** Where a player with an unremarkable match lands. */
-export const NEUTRAL_RATING = 6.4;
+/** Where every player starts a match, and where an unremarkable one ends it. */
+export const NEUTRAL_RATING = 6.0;
+
+/** Where each colour band of the scale starts: a standout night is one in fifty, a great one one in ten. */
+export const RATING_BANDS = { star: 7.8, great: 7.0, good: 6.4, ok: 5.8, poor: 5.2 } as const;
+
+/** Which engine a match was played through: the full rally engine, or the background quick-sim. */
+export type RatingPath = 'full' | 'quick';
 
 /** Rallies that count as "one set's worth" of court time. */
 const RALLIES_PER_SET = 45;
@@ -30,17 +45,26 @@ const RALLIES_PER_SET = 45;
 const EVIDENCE_HALF = 22;
 
 /**
- * Average value per set for each position, measured across thousands of
- * simulated matches so an ordinary performance in any role sits at
- * {@link NEUTRAL_RATING}. Re-measure with `npm run vm ratings` if the
- * weights below or the match engine change.
+ * Average value per set for each position on each path, measured across
+ * thousands of simulated matches — with the coaches' own tactics — so an
+ * ordinary performance in any role sits at {@link NEUTRAL_RATING}. Re-measure
+ * with `npm run vm ratings` if the weights below or either engine change.
  */
-const POSITION_BASELINE: Readonly<Record<Position, number>> = {
-  [Position.Setter]: 1.84,
-  [Position.Opposite]: 2.25,
-  [Position.OutsideHitter]: 2.19,
-  [Position.MiddleBlocker]: 2.05,
-  [Position.Libero]: 3.25,
+const POSITION_BASELINE: Readonly<Record<RatingPath, Readonly<Record<Position, number>>>> = {
+  full: {
+    [Position.Setter]: 1.89,
+    [Position.Opposite]: 2.68,
+    [Position.OutsideHitter]: 1.76,
+    [Position.MiddleBlocker]: 1.93,
+    [Position.Libero]: 2.51,
+  },
+  quick: {
+    [Position.Setter]: 1.78,
+    [Position.Opposite]: 2.62,
+    [Position.OutsideHitter]: 2.62,
+    [Position.MiddleBlocker]: 2.18,
+    [Position.Libero]: 3.14,
+  },
 };
 
 /**
@@ -56,6 +80,17 @@ const POSITION_SCALE: Readonly<Record<Position, number>> = {
   [Position.MiddleBlocker]: 0.5,
   [Position.Libero]: 0.58,
 };
+
+/**
+ * How far a performance moves a rating on each path: a quick-sim box score
+ * varies less from night to night than a match played rally by rally, so its
+ * swings are widened to the same spread — a rating's standard deviation about
+ * 0.75 either way.
+ */
+const PATH_SPREAD: Readonly<Record<RatingPath, number>> = { full: 0.66, quick: 1.6 };
+
+/** The furthest a performance can carry a rating from 6.0, approached ever more slowly. */
+const RATING_REACH = 3.0;
 
 /** Total value of one stat line, before any normalisation. */
 export function ratingValue(s: PlayerMatchStats): number {
@@ -86,18 +121,21 @@ export function playedInMatch(s: PlayerMatchStats): boolean {
 /**
  * A player's rating for a match, 1.0-10.0 to one decimal. `setsFor` and
  * `setsAgainst` are from the player's own team's point of view — mid-match,
- * pass the sets won so far.
+ * pass the sets won so far. `path` is the engine the match was played through.
  */
 export function matchRating(
   s: PlayerMatchStats,
   position: Position,
   setsFor: number,
   setsAgainst: number,
+  path: RatingPath = 'full',
 ): number {
   const rallies = Math.max(s.ralliesPlayed, 1);
   const perSet = (ratingValue(s) / rallies) * RALLIES_PER_SET;
   const evidence = s.ralliesPlayed / (s.ralliesPlayed + EVIDENCE_HALF);
-  const performance = (perSet - POSITION_BASELINE[position]) * POSITION_SCALE[position] * evidence;
+  const raw = (perSet - POSITION_BASELINE[path][position]) * POSITION_SCALE[position] * PATH_SPREAD[path] * evidence;
+  // The further from 6.0, the harder each step: a great night is an 8, not a 10.
+  const performance = RATING_REACH * Math.tanh(raw / RATING_REACH);
   const result = Math.max(-0.45, Math.min(0.45, (setsFor - setsAgainst) * 0.15)) * evidence;
   const rating = NEUTRAL_RATING + performance + result;
   return Math.round(Math.max(1, Math.min(10, rating)) * 10) / 10;

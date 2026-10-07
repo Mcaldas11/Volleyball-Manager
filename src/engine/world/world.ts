@@ -23,7 +23,8 @@ import type { Internationals, IntlReport } from './internationals.ts';
 import type { TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
 import type { MonthAward } from './monthAwards.ts';
-import type { CompetitionReview } from './competitionReview.ts';
+import type { CompetitionReview, DreamPick } from './competitionReview.ts';
+import type { Accolade, AwardsNight } from './accolades.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -394,6 +395,10 @@ export interface GameMessage {
   award?: MonthAward;
   /** The review of a competition just finished — see competitionReview.ts. */
   competitionReview?: CompetitionReview;
+  /** A team of the season, drawn on the court. */
+  teamOfSeason?: { title: string; competitionId?: number; season: number; picks: DreamPick[] };
+  /** The season's awards, a league's or the world's — see accolades.ts. */
+  awardsNight?: AwardsNight;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
    *  tabs existed still load — {@link messageCategory} derives it from the
    *  older fields when absent. */
@@ -617,6 +622,10 @@ export interface World {
   handedness?: boolean;
   /** The other clubs' coaches have picked their own tactics — false on saves from before they did. */
   coachedSides?: boolean;
+  /** Every individual award ever given — the players and coaches of the year, the teams of the season. */
+  accolades?: Accolade[];
+  /** Where each club was expected to finish its league, from the squads it started the season with. */
+  expectedFinish?: { season: number; ranks: Record<number, number> };
   /** The month's best points and plays in the manager's league so far, best
    *  first, for the Point and Play of the Month. */
   highlights?: { season: number; point: Highlight[]; play: Highlight[] };

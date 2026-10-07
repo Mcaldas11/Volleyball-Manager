@@ -14,7 +14,8 @@ import {
   Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter, StatTile,
 } from '../components.tsx';
 import { coachingRating } from '../../engine/model/staff.ts';
-import { HonourList, honourOf, type Honour } from '../honours.tsx';
+import { AccoladeList, HonourList, honourOf, type Honour } from '../honours.tsx';
+import { coachAccolades } from '../../engine/world/accolades.ts';
 import { CoachAttributes, coachStrengths } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -323,6 +324,11 @@ export function CareerScreen(): JSX.Element {
               ]}
             />
           </Card>
+          {coachAccolades(world, -1).length > 0 && (
+            <Card title="Awards" icon="star">
+              <AccoladeList accolades={coachAccolades(world, -1)} world={world} />
+            </Card>
+          )}
         </div>
       </div>
     </div>

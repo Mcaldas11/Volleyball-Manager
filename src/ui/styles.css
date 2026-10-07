@@ -5546,3 +5546,58 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .crv-standings { grid-template-rows: none; grid-auto-flow: row; }
   .crv-dream { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* ---- A team of the season on the court, and a night of awards ---- */
+.dc { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 6px 0 12px; }
+.dc-court {
+  position: relative; display: flex; flex-direction: column; gap: 10px; padding: 26px 14px 14px;
+  background: #c76f36; border: 3px solid #f4efe6; border-radius: 6px; box-shadow: 0 0 0 6px #2f5d8a;
+}
+.dc-net {
+  position: absolute; top: -9px; left: -12px; right: -12px; height: 10px; display: grid; place-items: center;
+  background: repeating-linear-gradient(90deg, #f4efe6 0 3px, #1b2230 3px 6px); border-radius: 2px;
+}
+.dc-net span { padding: 0 6px; background: #f4efe6; color: #1b2230; font: 800 8px/10px var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; }
+.dc-line { height: 2px; margin: 0 -14px; background: rgba(244, 239, 230, 0.85); }
+.dc-row { display: grid; grid-template-columns: repeat(3, 96px); gap: 10px; }
+.dc-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 6px;
+  background: rgba(255, 252, 245, 0.95); border-radius: 6px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); cursor: pointer;
+  text-align: center; transition: transform 0.12s ease;
+}
+.dc-card:hover { transform: translateY(-2px); }
+.dc-card.ours { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0, 0, 0, 0.25); }
+.dc-card.empty { justify-content: center; min-height: 104px; color: #7a6a55; cursor: default; }
+.dc-card b { overflow: hidden; max-width: 100%; color: var(--paper-ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.dc-pos {
+  position: absolute; top: 4px; left: 4px; padding: 1px 5px; border-radius: 4px;
+  background: #1b2230; color: #f4efe6; font: 800 9px/13px var(--font-display); letter-spacing: 0.04em;
+}
+.dc-meta { display: flex; align-items: center; gap: 5px; }
+.dc-meta i { font-style: normal; font-size: 11.5px; font-weight: 800; color: #237a3b; }
+.dc-libero { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 104px; }
+.dc-libero-label { font: 800 10px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--paper-gold); }
+.dc-libero .dc-card { width: 96px; box-shadow: 0 0 0 2px #2f8f5b, 0 2px 6px rgba(0, 0, 0, 0.25); }
+
+.aw { display: flex; flex-direction: column; }
+.aw-nominee { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 4px; border-radius: 6px; cursor: pointer; }
+.aw-nominee:hover { background: rgba(60, 45, 20, 0.06); }
+.aw-nominee.winner { padding: 10px; background: rgba(215, 167, 63, 0.16); }
+.aw-nominee.ours .aw-nominee-main strong { color: #8a5a00; }
+.aw-nominee-main { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; }
+.aw-nominee-main strong { display: flex; align-items: center; gap: 6px; overflow: hidden; color: var(--paper-ink); font-size: 14px; white-space: nowrap; }
+.aw-nominee.winner .aw-nominee-main strong { font-size: 17px; }
+.aw-nominee-club { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #4d525c; }
+.aw-nominee-value { font-size: 12px; color: #4d525c; }
+.aw-you { padding: 1px 6px; border-radius: 4px; background: var(--gold); color: #211800; font-size: 9.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+.aw-coach {
+  display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%;
+  background: #1b2230; color: #f4efe6; font: 800 12px/1 var(--font-display);
+}
+.aw-coach.lg { width: 50px; height: 50px; font-size: 16px; }
+.aw-shortlist { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 8px; }
+.aw-shortlist-label { margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #7a7f88; }
+@media (max-width: 900px) {
+  .dc { flex-direction: column; }
+  .dc-row { grid-template-columns: repeat(3, minmax(0, 84px)); gap: 6px; }
+}

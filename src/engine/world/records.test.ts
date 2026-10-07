@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { matchRating } from '../match/playerRating.ts';
+import { runRatingReport } from '../../cli/ratings.ts';
 import { newPlayerStats } from '../match/stats.ts';
 import { Position } from '../model/positions.ts';
 import { newSeasonContext, simulateRestOfSeason, startSeason, pickLineup } from '../season/seasonEngine.ts';
@@ -8,9 +9,10 @@ import { averageRating, pruneCompetitionRecords, seasonRecords, seasonTotals } f
 import { generateWorld } from './worldGen.ts';
 import { stubManager } from './world.ts';
 
-test('matchRating sits at the neutral mark with no evidence and stays within 1-10', () => {
+test('everyone starts a match on 6.0, and stays within 1-10', () => {
   const idle = newPlayerStats(0);
-  assert.equal(matchRating(idle, Position.OutsideHitter, 0, 0), 6.4);
+  assert.equal(matchRating(idle, Position.OutsideHitter, 0, 0), 6.0);
+  assert.equal(matchRating(idle, Position.Libero, 0, 0, 'quick'), 6.0);
 
   const monster = { ...newPlayerStats(0), ralliesPlayed: 180, attacksTotal: 60, attackKills: 40, serveAces: 8, blockPoints: 6 };
   const disaster = { ...newPlayerStats(0), ralliesPlayed: 180, attacksTotal: 40, attackErrors: 15, attackBlocked: 10, serveErrors: 8, receptionsTotal: 30, receptionErrors: 12 };
@@ -18,6 +20,25 @@ test('matchRating sits at the neutral mark with no evidence and stays within 1-1
   const bad = matchRating(disaster, Position.OutsideHitter, 0, 3);
   assert.ok(good > 8 && good <= 10, `a dominant match rates highly (${good})`);
   assert.ok(bad < 5 && bad >= 1, `a disastrous match rates poorly (${bad})`);
+});
+
+test('an ordinary night ends near 6, a great one is rare, a 9 rarer still — the same on both engines', () => {
+  const report = runRatingReport(80, 77);
+  for (const samples of [report.detailed, report.quick]) {
+    const all = [...samples.values()].flatMap((s) => s.ratings).sort((a, b) => a - b);
+    const mean = all.reduce((s, x) => s + x, 0) / all.length;
+    const sd = Math.sqrt(all.reduce((s, x) => s + (x - mean) ** 2, 0) / all.length);
+    assert.ok(mean > 5.85 && mean < 6.2, `centred on 6 (${mean.toFixed(2)})`);
+    assert.ok(sd > 0.5 && sd < 0.95, `spread ${sd.toFixed(2)}`);
+    assert.ok(all[Math.floor(all.length * 0.95)] <= 7.6, 'nineteen in twenty under 7.6');
+    assert.ok(all.filter((r) => r >= 8).length / all.length < 0.03, 'an 8 is a night to remember');
+    assert.ok(all.filter((r) => r >= 9).length / all.length < 0.005);
+    // Every position on the same footing.
+    for (const s of samples.values()) {
+      const m = s.ratings.reduce((a, b) => a + b, 0) / s.ratings.length;
+      assert.ok(Math.abs(m - 6) < 0.3, `a position averages ${m.toFixed(2)}`);
+    }
+  }
 });
 
 test('winning nudges every rating up and losing nudges it down', () => {

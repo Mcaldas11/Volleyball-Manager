@@ -12,7 +12,7 @@
  * across all competitions.
  */
 
-import { matchRating, playedInMatch } from '../match/playerRating.ts';
+import { matchRating, playedInMatch, type RatingPath } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import type { Position } from '../model/positions.ts';
 import { courtShare, recordLoanMatch } from './loans.ts';
@@ -58,11 +58,12 @@ function recordSide(
   stats: Map<number, PlayerMatchStats>,
   setsFor: number,
   setsAgainst: number,
+  path: RatingPath,
 ): void {
   const store = world.players;
   for (const [p, s] of stats) {
     if (!playedInMatch(s)) continue;
-    const rating = matchRating(s, store.position[p] as Position, setsFor, setsAgainst);
+    const rating = matchRating(s, store.position[p] as Position, setsFor, setsAgainst, path);
 
     let lines = world.competitionRecords.get(p);
     if (lines === undefined) {
@@ -112,14 +113,16 @@ export function recordFixture(
   fixture: Fixture,
   homeStats: Map<number, PlayerMatchStats>,
   awayStats: Map<number, PlayerMatchStats>,
+  /** The engine it was played through — each rates on its own yardstick. */
+  path: RatingPath = 'full',
 ): void {
-  recordSide(world, fixture, homeStats, fixture.homeSets, fixture.awaySets);
-  recordSide(world, fixture, awayStats, fixture.awaySets, fixture.homeSets);
+  recordSide(world, fixture, homeStats, fixture.homeSets, fixture.awaySets, path);
+  recordSide(world, fixture, awayStats, fixture.awaySets, fixture.homeSets, path);
   // National teams' squads are not clubs.
   if (world.competitions[fixture.competitionId]?.kind === 'international') return;
   recordPlayingTime(world, fixture, fixture.home, homeStats);
   recordPlayingTime(world, fixture, fixture.away, awayStats);
-  recordLoanMatch(world, fixture, homeStats, awayStats);
+  recordLoanMatch(world, fixture, homeStats, awayStats, path);
 }
 
 /** Weight of the latest match in a player's rolling playing time. */

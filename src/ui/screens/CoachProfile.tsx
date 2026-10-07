@@ -6,7 +6,8 @@ import { contractEndSeason } from '../../engine/world/world.ts';
 import {
   attrClass, Bar, Card, ClubCrest, clubThemeStyle, Empty, Flag, initials, KV, money, StarMeter, StatTile,
 } from '../components.tsx';
-import { HonourList, honourOf, type Honour } from '../honours.tsx';
+import { AccoladeList, HonourList, honourOf, type Honour } from '../honours.tsx';
+import { coachAccolades } from '../../engine/world/accolades.ts';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { reputationWord } from './ClubDetail.tsx';
@@ -174,6 +175,11 @@ export function CoachProfile(): JSX.Element | null {
           <Card title={`Trophies (${honours.length})`} icon="trophy">
             <HonourList honours={honours} empty="No trophies yet." />
           </Card>
+          {coachAccolades(world, coach.id).length > 0 && (
+            <Card title="Awards" icon="star">
+              <AccoladeList accolades={coachAccolades(world, coach.id)} world={world} />
+            </Card>
+          )}
         </div>
       </div>
     </div>

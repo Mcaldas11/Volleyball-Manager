@@ -10,11 +10,11 @@
  */
 
 import { simulateMatch } from '../engine/match/engine.ts';
-import { matchRating, playedInMatch, ratingValue } from '../engine/match/playerRating.ts';
+import { matchRating, playedInMatch, ratingValue, type RatingPath } from '../engine/match/playerRating.ts';
 import type { PlayerMatchStats } from '../engine/match/stats.ts';
 import { POSITIONS, POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import { quickSimulate } from '../engine/season/quickSim.ts';
-import { pickLineup, toTeamSetup } from '../engine/season/seasonEngine.ts';
+import { newSeasonContext, pickLineup, startSeason, toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { stubManager, type World } from '../engine/world/world.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 
@@ -39,18 +39,21 @@ function record(
   stats: Map<number, PlayerMatchStats>,
   setsFor: number,
   setsAgainst: number,
+  path: RatingPath,
 ): void {
   for (const [p, s] of stats) {
     if (!playedInMatch(s) || s.ralliesPlayed < 30) continue;
     const pos = world.players.position[p] as Position;
     const sample = into.get(pos)!;
-    sample.ratings.push(matchRating(s, pos, setsFor, setsAgainst));
+    sample.ratings.push(matchRating(s, pos, setsFor, setsAgainst, path));
     sample.perSet.push((ratingValue(s) / Math.max(1, s.ralliesPlayed)) * 45);
   }
 }
 
 export function runRatingReport(matches = 300, seed = 20260728): RatingReport {
   const world = generateWorld({ seed, startYear: 2026, scale: 'small', manager: stubManager() });
+  // The coaches set their sides up as they do in a game.
+  startSeason(world, newSeasonContext());
   const leagues = world.competitions.filter((c) => c.kind === 'league' && c.participants.length >= 2);
   const report: RatingReport = { detailed: emptySamples(), quick: emptySamples() };
 
@@ -70,12 +73,12 @@ export function runRatingReport(matches = 300, seed = 20260728): RatingReport {
       collectLog: false,
       seed: world.rng.next(),
     });
-    record(world, report.detailed, full.stats.home.players, full.homeSets, full.awaySets);
-    record(world, report.detailed, full.stats.away.players, full.awaySets, full.homeSets);
+    record(world, report.detailed, full.stats.home.players, full.homeSets, full.awaySets, 'full');
+    record(world, report.detailed, full.stats.away.players, full.awaySets, full.homeSets, 'full');
 
     const quick = quickSimulate(world.players, pickLineup(world.players, h), pickLineup(world.players, a), 0, world.rng);
-    record(world, report.quick, quick.homeStats, quick.homeSets, quick.awaySets);
-    record(world, report.quick, quick.awayStats, quick.awaySets, quick.homeSets);
+    record(world, report.quick, quick.homeStats, quick.homeSets, quick.awaySets, 'quick');
+    record(world, report.quick, quick.awayStats, quick.awaySets, quick.homeSets, 'quick');
   }
   return report;
 }
