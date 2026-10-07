@@ -439,7 +439,7 @@ function loanedForRotation(seed: number, promise: 'starter' | 'rotation' | 'back
 
 /** He has been fit for eight matches and on court for a fifth of the play. */
 function benched(loan: Loan): void {
-  loan.stats = { ...loan.stats!, clubMatches: 8, clubRallies: 1400, fitMatches: 8, fitRallies: 1400, apps: 3, rallies: 280, ratingSum: 18 };
+  loan.stats = { ...loan.stats!, clubMatches: 8, clubRallies: 1400, fitMatches: 8, fitRallies: 1400, apps: 3, rallies: 280, ratingSum: 19 };
 }
 
 test('a loanee\'s coach can be spoken to once he is playing too little — and not every week', () => {

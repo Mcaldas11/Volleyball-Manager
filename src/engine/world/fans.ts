@@ -440,7 +440,10 @@ export function fanComments(world: World, story: { id: number; fans?: FanBrief }
   const rival = rivalOf(world, rng, b.club ?? b.other, [b.club, b.other]);
   const out: FanComment[] = [];
   for (let k = 0; k < count * 3 && out.length < count; k++) {
-    const side = sides[rng.weightedIndex(sides.map(weight))];
+    // Both clubs in a story have their say before anyone else gets a word in.
+    const side = k === 0 && sides.includes('club') ? 'club'
+      : k === 1 && sides.includes('other') ? 'other'
+        : sides[rng.weightedIndex(sides.map(weight))];
     const lines = voices[side]!;
     const seen = used.get(side) ?? new Set<number>();
     if (seen.size >= lines.length) continue;

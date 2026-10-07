@@ -17,7 +17,7 @@
  */
 
 import type { Club } from '../model/club.ts';
-import { matchRating, playedInMatch, type RatingPath } from '../match/playerRating.ts';
+import { matchRating, playedInMatch, TYPICAL_RATING, type RatingPath } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { MAX_SQUAD, Position, POSITION_NAMES } from '../model/positions.ts';
@@ -598,7 +598,7 @@ function standout(
   world: World, loan: Loan, fixture: Fixture, s: PlayerMatchStats, rating: number, home: boolean,
 ): void {
   const mvp = fixture.mvp === loan.playerIdx;
-  if (rating < 7.6 && !(mvp && rating >= 7.0)) return;
+  if (rating < 8.0 && !(mvp && rating >= 7.3)) return;
   if (loan.lastHighlight !== undefined && world.day - loan.lastHighlight < HIGHLIGHT_GAP_DAYS) return;
   loan.lastHighlight = world.day;
   const name = world.players.fullName(loan.playerIdx);
@@ -661,9 +661,9 @@ function loanVerdict(world: World, r: LoanReport): string {
   }
   if (st.apps >= 3) {
     const avg = st.ratingSum / st.apps;
-    parts.push(avg >= 6.8 ? 'His performances have been excellent.'
-      : avg >= 6.3 ? 'He has played well.'
-        : avg >= 5.8 ? 'His performances have been steady.'
+    parts.push(avg >= 7.1 ? 'His performances have been excellent.'
+      : avg >= 6.6 ? 'He has played well.'
+        : avg >= 6.0 ? 'His performances have been steady.'
           : 'He has struggled on court.');
   }
   const gain = r.abilityNow - r.abilityStart;
@@ -904,13 +904,13 @@ export function talkToLoanCoach(
   const keepingToDeal = request === loan.playingTime;
   const merit = playingTimeOnOffer(world, club, playerIdx);
   const beyondMerit = playingTimeRank(request) > playingTimeRank(merit);
-  const avg = st.apps > 0 ? st.ratingSum / st.apps : 6.0;
+  const avg = st.apps > 0 ? st.ratingSum / st.apps : TYPICAL_RATING;
   const handling = loanCoach(world, loan)?.attributes.manManagement ?? 10;
 
   let chance = keepingToDeal ? 0.6 + (firm ? 0.15 : 0)
     : beyondMerit ? 0.06
       : 0.5 + (firm ? -0.15 : 0);
-  chance += Math.max(-0.15, Math.min(0.15, (avg - 6.0) * 0.3));
+  chance += Math.max(-0.15, Math.min(0.15, (avg - TYPICAL_RATING) * 0.25));
   chance += (handling - 10) * 0.01;
   const agreed = world.rng.chance(Math.max(0.03, Math.min(0.95, chance)));
 
@@ -934,7 +934,7 @@ export function talkToLoanCoach(
       .map((q) => store.surname(q));
     reply = `Be realistic — ${ahead.join(' and ')} ${ahead.length === 1 ? 'is' : 'are'} ahead of him in his position. ` +
       'I can\'t give him more than that.';
-  } else if (st.apps >= 2 && avg < 5.9) {
+  } else if (st.apps >= 2 && avg < 6.1) {
     reply = 'His performances haven\'t earned it yet. Let him show me more and we\'ll talk again.';
   } else if (keepingToDeal) {
     reply = 'I pick the team on what I see in training, and right now others are ahead of him. That won\'t change for now.';

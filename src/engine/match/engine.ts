@@ -296,7 +296,7 @@ const TIRED_FATIGUE = 0.94;
 /** Rallies on court before a match rating says anything about form. */
 const FORM_MIN_RALLIES = 30;
 /** Match rating below which a player counts as having a bad night... */
-const FORM_FLOOR = 5.2;
+const FORM_FLOOR = 5.4;
 /** ...and how much of their value each rating point under it costs them. */
 const FORM_PENALTY = 0.1;
 

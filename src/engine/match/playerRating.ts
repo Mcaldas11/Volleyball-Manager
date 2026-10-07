@@ -13,12 +13,12 @@
  * so comparing them on raw volume would make every libero a 5.5.
  *
  * Everyone starts a match on 6.0 and moves from there. An ordinary night ends
- * close to it; a good one around 7; an 8 is a match to remember, and the
- * scale tightens the further it climbs, so a 9 is one in thousands — or the
- * other way, for a night to forget. Early in a match, or for a substitute who
- * played a handful of rallies, the rating stays near 6.0 until there is
- * enough evidence to move it. The scoreline nudges everyone: winning sides
- * rate a little higher.
+ * a little above it; a good one past 7; an 8 is a match to remember, and the
+ * scale tightens the further it climbs, so a 9 is a few times a season — or
+ * the other way, for a night to forget. A rating can only go as far from 6.0
+ * as the time on court has earned: a few points in, or for a substitute who
+ * played a handful of rallies, it stays close. The scoreline nudges everyone:
+ * winning sides rate a little higher.
  *
  * Matches played through the full rally engine and background quick-sims fill
  * in the same statistics, but not with the same shape — so each has its own
@@ -32,8 +32,11 @@ import type { PlayerMatchStats } from './stats.ts';
 /** Where every player starts a match, and where an unremarkable one ends it. */
 export const NEUTRAL_RATING = 6.0;
 
-/** Where each colour band of the scale starts: a standout night is one in fifty, a great one one in ten. */
-export const RATING_BANDS = { star: 7.8, great: 7.0, good: 6.4, ok: 5.8, poor: 5.2 } as const;
+/** Where each colour band of the scale starts: a standout night is one in twenty-five, a great one one in seven. */
+export const RATING_BANDS = { star: 8.0, great: 7.2, good: 6.6, ok: 6.0, poor: 5.3 } as const;
+
+/** Where an ordinary full match ends — a little above the 6.0 everyone starts on. */
+export const TYPICAL_RATING = 6.3;
 
 /** Which engine a match was played through: the full rally engine, or the background quick-sim. */
 export type RatingPath = 'full' | 'quick';
@@ -84,13 +87,23 @@ const POSITION_SCALE: Readonly<Record<Position, number>> = {
 /**
  * How far a performance moves a rating on each path: a quick-sim box score
  * varies less from night to night than a match played rally by rally, so its
- * swings are widened to the same spread — a rating's standard deviation about
- * 0.75 either way.
+ * swings are widened to the same spread.
  */
-const PATH_SPREAD: Readonly<Record<RatingPath, number>> = { full: 0.66, quick: 1.6 };
+const PATH_SPREAD: Readonly<Record<RatingPath, number>> = { full: 0.85, quick: 2.05 };
 
 /** The furthest a performance can carry a rating from 6.0, approached ever more slowly. */
-const RATING_REACH = 3.0;
+const RATING_REACH = 3.6;
+
+/**
+ * Rallies on court before a rating can go as far as it will. A rating can
+ * only wander from 6.0 as far as the time played has earned it: a few points
+ * in, nobody is on 9 for two kills, nor on 3 for a shanked pass — two sets
+ * in, a monster night shows for what it is.
+ */
+const RAMP_RALLIES = 90;
+
+/** What playing a full match the ordinary way is worth in itself: it ends a little above 6.0. */
+const COURT_LIFT = 0.25;
 
 /** Total value of one stat line, before any normalisation. */
 export function ratingValue(s: PlayerMatchStats): number {
@@ -134,8 +147,11 @@ export function matchRating(
   const perSet = (ratingValue(s) / rallies) * RALLIES_PER_SET;
   const evidence = s.ralliesPlayed / (s.ralliesPlayed + EVIDENCE_HALF);
   const raw = (perSet - POSITION_BASELINE[path][position]) * POSITION_SCALE[position] * PATH_SPREAD[path] * evidence;
-  // The further from 6.0, the harder each step: a great night is an 8, not a 10.
-  const performance = RATING_REACH * Math.tanh(raw / RATING_REACH);
+  // The further from 6.0, the harder each step — and never further than the
+  // time on court has earned: a great night is an 8, a few good points are not.
+  const ramp = Math.min(1, s.ralliesPlayed / RAMP_RALLIES);
+  const reach = Math.max(0.05, RATING_REACH * ramp);
+  const performance = reach * Math.tanh(raw / reach) + COURT_LIFT * ramp;
   const result = Math.max(-0.45, Math.min(0.45, (setsFor - setsAgainst) * 0.15)) * evidence;
   const rating = NEUTRAL_RATING + performance + result;
   return Math.round(Math.max(1, Math.min(10, rating)) * 10) / 10;
