@@ -22,6 +22,8 @@ import {
   answerStaffApproach, backroomOf, compensationFor, longestContract, offerToStaff, releaseStaff, severanceFor, staffBudgetRoom,
   staffInterest, staffMarket, staffOfferBlock, staffWageAsk, type StaffInterest, type StaffListing, type StaffReply,
 } from '../engine/world/staffMarket.ts';
+import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
+import { interestedClubs, type ClubInterest } from '../engine/world/interest.ts';
 import {
   advanceDay, applyMatchResult, matchPrep, newSeasonContext, oppositionRead, pickLineup, playFixture, toTeamSetup,
   type SeasonContext,
@@ -3226,6 +3228,12 @@ class Game {
       this.emit();
       return;
     }
+    // A player stopping at the end of the season has no use for a contract — talking him round comes first.
+    if (willRetire(world, playerIdx)) {
+      this.notice = `${world.players.fullName(playerIdx)} is retiring at the end of the season — there is nothing to renew.`;
+      this.emit();
+      return;
+    }
     const existing = this.talksWith(playerIdx, 'renewal');
     if (existing !== null) {
       this.openTalksView(existing.id);
@@ -3844,6 +3852,34 @@ class Game {
     const id = this.staffTalksFor;
     this.staffTalksFor = null;
     return id;
+  }
+
+  // ---- Retirement ---------------------------------------------------------
+
+  /** A player's plan to stop at the end of this season, if he has one. */
+  retirementPlan(p: number): RetirementPlan | undefined {
+    return this.world === null ? undefined : retirementPlan(this.world, p);
+  }
+
+  /** Try to talk one of the club's retiring players into another season. */
+  persuadeToPlayOn(p: number): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = persuadeToPlayOn(world, p);
+    this.emit();
+  }
+
+  /** Ask one of the club's retiring players to join the staff as he stops. */
+  offerStaffRole(p: number, role: StaffRole): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = offerStaffRole(world, p, role);
+    this.emit();
+  }
+
+  /** The clubs interested in a player, as his profile lists them. */
+  interestedClubs(p: number): ClubInterest[] {
+    return this.world === null ? [] : interestedClubs(this.world, p);
   }
 
   /** Answer another club's approach for one of the staff. */

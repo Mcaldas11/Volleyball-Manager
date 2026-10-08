@@ -26,6 +26,7 @@ import type { MonthAward } from './monthAwards.ts';
 import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
+import type { RetirementPlan } from './retirement.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -374,6 +375,8 @@ export interface GameMessage {
   staffApproachId?: number;
   /** The member of staff a message is about. */
   staffId?: number;
+  /** A player of the manager's who means to retire — the message offers the talks. */
+  retirementOf?: number;
   /** Fixture a press conference concerns. */
   fixtureId?: number;
   /** The press conference itself — looked up against `World.pendingInterviews`. */
@@ -634,6 +637,8 @@ export interface World {
   /** Other clubs' approaches for the manager's staff — see staffMarket.ts. */
   staffApproaches?: StaffApproach[];
   nextStaffApproachId?: number;
+  /** Who stops at the end of the season, made known in January — see retirement.ts. */
+  retirementPlans?: { season: number; plans: Record<number, RetirementPlan> };
   /** Where each club was expected to finish its league, from the squads it started the season with. */
   expectedFinish?: { season: number; ranks: Record<number, number> };
   /** The month's best points and plays in the manager's league so far, best

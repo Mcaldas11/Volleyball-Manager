@@ -20,6 +20,7 @@ import { contractEndYear, currentJob } from '../../engine/world/career.ts';
 import { describeHighlight, type MonthAward } from '../../engine/world/monthAwards.ts';
 import { CompetitionReviewSheet } from '../competitionReviewSheet.tsx';
 import { AwardsNightSheet, TeamOfSeasonSheet } from '../awardsSheet.tsx';
+import { RetirementSheet } from '../retirementSheet.tsx';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { useGame } from '../state.ts';
 
@@ -271,7 +272,8 @@ function MessageSheet({ message: m }: { message: GameMessage }): JSX.Element {
           <span className="paper-date">{g.longDateLabel(m.day)}</span>
         </div>
 
-        {m.intl === undefined && <PlayerContext message={m} />}
+        {/* A player who means to retire has his own sheet, face and all, below. */}
+        {m.intl === undefined && m.retirementOf === undefined && <PlayerContext message={m} />}
         {/* A drawn report says the player-by-player part better than the text. */}
         <p className="paper-text">{m.intl !== undefined ? intlIntro(m.body) : m.body}</p>
         <MessageDetail message={m} />
@@ -352,6 +354,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   if (m.competitionReview !== undefined) return <CompetitionReviewSheet review={m.competitionReview} />;
 
   if (m.awardsNight !== undefined) return <AwardsNightSheet night={m.awardsNight} />;
+
+  if (m.retirementOf !== undefined) return <RetirementSheet p={m.retirementOf} />;
 
   if (m.teamOfSeason !== undefined) return <TeamOfSeasonSheet team={m.teamOfSeason} />;
 
@@ -885,7 +889,7 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
   }
 
   // Only while his contract is still running out — not after he has re-signed.
-  const contractTalk = cat === 'contract' && p !== undefined && store.clubId[p] === world.userClubId &&
+  const contractTalk = cat === 'contract' && p !== undefined && store.clubId[p] === world.userClubId && m.retirementOf === undefined &&
     contractEndSeason(store.contractUntil[p]) <= world.season && talks === undefined;
   if (contractTalk && p !== undefined) {
     out.push(

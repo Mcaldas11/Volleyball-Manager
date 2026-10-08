@@ -46,6 +46,7 @@ import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 import { coachesSetUp } from '../world/aiTactics.ts';
 import { analysisEdge, medicalQuality, staffDay, topUpStaffPool } from '../world/staffMarket.ts';
+import { retirementDay } from '../world/retirement.ts';
 import { noteExpectations } from '../world/accolades.ts';
 
 /** Season-long statistics, keyed by player index. */
@@ -476,6 +477,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   processDeals(world);
   careerDay(world);
   staffDay(world);
+  retirementDay(world);
   friendliesDay(world);
   trainingDay(world);
   youthDay(world);

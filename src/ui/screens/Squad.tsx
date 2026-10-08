@@ -14,6 +14,7 @@ import { secondNation, tiedNation } from '../../engine/world/internationals.ts';
 import { canRecall, coachTalkBlock, PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
 import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
 import { accoladeTitle, playerAccolades } from '../../engine/world/accolades.ts';
+import { STAFF_ROLE_NAMES } from '../../engine/model/staff.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import {
   abilityClass, attrClass, Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
@@ -462,6 +463,10 @@ export function PlayerDetail(): JSX.Element | null {
   const seasonsLeft = contractEnds - world.season + 1;
   const expiring = club !== null && contractEnds <= world.season;
   const renewalTalks = g.talksWith(p, 'renewal');
+  const plan = g.retirementPlan(p);
+  const retiring = plan !== undefined && plan.persuaded !== true;
+  // The message he came to see the manager about, where the talks are.
+  const retirementMessage = isOwn && plan !== undefined ? world.messages.find((m) => m.retirementOf === p) : undefined;
 
   const group = (attrs: readonly AttributeName[], title: string): JSX.Element => (
     <div className="attr-col">
@@ -489,6 +494,13 @@ export function PlayerDetail(): JSX.Element | null {
             {secondary !== -1 && <span className="faint">· also {POSITION_NAMES[secondary]}</span>}
             {store.hasFlag(p, PlayerFlag.Transferable) && <span className="list-tag">Transfer listed</span>}
             {store.hasFlag(p, PlayerFlag.LoanListed) && <span className="list-tag loan">Available for loan</span>}
+            {plan !== undefined && (
+              <span className={`list-tag ${plan.persuaded === true ? 'loan' : 'retire'}`}
+                title={plan.persuaded === true ? 'He meant to stop, but has been talked into another season' : 'He has announced this season is his last'}>
+                {plan.persuaded === true ? 'Playing on another season' : 'Retiring at the end of the season'}
+                {plan.staffRole !== undefined && ` · then joins the staff as ${STAFF_ROLE_NAMES[plan.staffRole].toLowerCase()}`}
+              </span>
+            )}
           </div>
           <h2 className="profile-name">{store.fullName(p)}</h2>
           <div className="profile-sub">
@@ -533,13 +545,18 @@ export function PlayerDetail(): JSX.Element | null {
               Promote to first team
             </button>
           )}
-          {((isOwn && !isYouth) || lentOut) && move === null && (
+          {((isOwn && !isYouth) || lentOut) && move === null && !retiring && (
             <button className={expiring ? 'primary' : ''} onClick={() => g.startRenewal(p)}>
               <Icon name="finances" size={14} />
               {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
             </button>
           )}
           {isOwn && !isYouth && move === null && <TransferMenu p={p} />}
+          {retirementMessage !== undefined && plan?.persuaded !== true && plan?.staffRole === undefined && (
+            <button className="primary" onClick={() => g.openMessage(retirementMessage.id)}>
+              <Icon name="press" size={14} /> His retirement
+            </button>
+          )}
           {lentOut && (
             <button onClick={() => g.compileLoanMatches(p)}>
               <Icon name="stats" size={14} /> Compile matches
@@ -698,6 +715,7 @@ export function PlayerDetail(): JSX.Element | null {
             )}
             <KV k="Market value">{money(store.value[p])}</KV>
             <KV k="Wage">{money(store.wage[p])}</KV>
+            <InterestedClubs p={p} />
             <KV k="Nationality"><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</KV>
             {secondNation(world, p) >= 0 && (
               <KV k="Second nationality">
@@ -1045,6 +1063,31 @@ function YouthLeagueView({ league }: { league: YouthLeague }): JSX.Element {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** The clubs interested in him: who has bid, who the papers say is after him, who is keeping tabs. */
+function InterestedClubs({ p }: { p: number }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const list = g.interestedClubs(p);
+  const plan = g.retirementPlan(p);
+  const retiring = plan !== undefined && plan.persuaded !== true;
+  const why = { bid: 'bid', loan: 'loan offer', rumour: 'in the papers', watching: 'keeping tabs' } as const;
+  return (
+    <KV k="Interested clubs">
+      {list.length === 0 ? <span className="faint">{retiring ? 'None — he is retiring' : 'None that we know of'}</span> : (
+        <span className="interest-list">
+          {list.map((i) => (
+            <span key={i.clubId} className={`interest-tag ${i.why}`}>
+              <ClubCrest club={world.clubs[i.clubId]} size={14} />
+              <span className="player-link" onClick={() => g.selectClub(i.clubId)}>{world.clubs[i.clubId].shortName}</span>
+              <span className="faint">{i.fee !== undefined ? money(i.fee) : why[i.why]}</span>
+            </span>
+          ))}
+        </span>
+      )}
+    </KV>
   );
 }
 

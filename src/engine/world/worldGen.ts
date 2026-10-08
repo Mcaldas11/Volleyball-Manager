@@ -18,6 +18,7 @@ import { Rng } from '../core/rng.ts';
 import {
   newClub, newFinances, newTableRow, type Club,
 } from '../model/club.ts';
+import { AGEING_RESISTANCE } from '../model/ability.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position, SQUAD_TARGET } from '../model/positions.ts';
 import { StaffRole, type Staff, type StaffAttributes } from '../model/staff.ts';
@@ -100,8 +101,10 @@ export function generateWorld(opts: WorldGenOptions): World {
 
   // Squads are built after every club exists, so that foreign signings can be
   // drawn from the whole world rather than from whatever was created first.
+  // The veterans' long careers come from dice of their own.
+  const veterans = new Rng(opts.seed ^ 0x01d_ca9e);
   for (const club of world.clubs) {
-    buildSquad(world, rng, club);
+    buildSquad(world, rng, club, veterans);
     hireStaff(world, rng, club);
   }
 
@@ -230,7 +233,7 @@ function squadLevelFor(reputation: number): number {
   return 600 + Math.pow(reputation / 10000, 0.72) * 1010;
 }
 
-function buildSquad(world: World, rng: Rng, club: Club): void {
+function buildSquad(world: World, rng: Rng, club: Club, veterans: Rng): void {
   const store = world.players;
   const nationDef = NATIONS[club.nation];
   const level = squadLevelFor(club.reputation);
@@ -248,7 +251,7 @@ function buildSquad(world: World, rng: Rng, club: Club): void {
     for (let i = 0; i < count; i++) {
       // The first-choice player at each position is better than the backup.
       const depthPenalty = i === 0 ? 1.0 : i === 1 ? 0.88 : 0.76;
-      const age = rollSquadAge(rng, i === 0);
+      const age = lateCareer(rollSquadAge(rng, i === 0), posKey, veterans);
       const nation = rng.chance(foreignChance)
         ? pickForeignNation(rng, club.nation)
         : club.nation;
@@ -264,6 +267,8 @@ function buildSquad(world: World, rng: Rng, club: Club): void {
         position: posKey,
         currentYear: world.year,
       });
+      // Whoever is still playing this late always meant to go on — and past 43, nothing will stop him.
+      if (age >= 38) store.setAttr(idx, 'retirementPreference', age > OLDEST_AT_START ? 20 : Math.max(store.getAttr(idx, 'retirementPreference'), veterans.int(12, 18)));
       store.clubId[idx] = club.id;
       store.contractUntil[idx] = seasonEndDay(world.season + rng.int(0, 3));
       created.push(idx);
@@ -305,6 +310,28 @@ function buildSquad(world: World, rng: Rng, club: Club): void {
 function rollSquadAge(rng: Rng, firstChoice: boolean): number {
   const mean = firstChoice ? 27.5 : 24.5;
   return Math.round(rng.gaussianClamped(mean, 4.2, 18, 38));
+}
+
+/** The oldest anyone usually is at the start; in the game itself a few go on a year or two longer. */
+const OLDEST_AT_START = 43;
+/** How often one who gets that far is the exception of exceptions, still playing towards 50. */
+const LEGEND_CHANCE = 0.08;
+
+/**
+ * The few still going in their late thirties and forties. Everyone the dice
+ * put at 36 or more gets there a year at a time, the way the ones built to
+ * last do — setters and liberos far more often than opposites, and fewer and
+ * fewer past 40. Now and then one simply keeps going.
+ */
+function lateCareer(age: number, pos: Position, veterans: Rng): number {
+  if (age < 36) return age;
+  const carryOn = 0.78 - AGEING_RESISTANCE[pos] * 0.22;
+  let at = 36;
+  while (at < OLDEST_AT_START && veterans.chance(carryOn - Math.max(0, at - 39) * 0.06)) at++;
+  if (at === OLDEST_AT_START && veterans.chance(LEGEND_CHANCE)) {
+    while (at < 50 && veterans.chance(0.6)) at++;
+  }
+  return at;
 }
 
 /** Foreign signings come disproportionately from strong volleyball nations. */

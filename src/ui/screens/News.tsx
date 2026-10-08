@@ -25,9 +25,10 @@ export const NEWS_KIND: Readonly<Record<NewsKind, { label: string; icon: IconNam
   result: { label: 'Result', icon: 'ball', color: '#3dbb5c' },
   title: { label: 'Champions', icon: 'trophy', color: '#f0c35a' },
   injury: { label: 'Injury', icon: 'medical', color: '#e5484d' },
+  retirement: { label: 'Retirement', icon: 'career', color: '#a684f0' },
 };
 
-type Filter = 'all' | 'market' | 'coach' | 'award' | 'result' | 'injury';
+type Filter = 'all' | 'market' | 'coach' | 'award' | 'result' | 'injury' | 'retirement';
 
 const FILTERS: ReadonlyArray<readonly [Filter, string, readonly NewsKind[]]> = [
   ['all', 'All', []],
@@ -36,6 +37,7 @@ const FILTERS: ReadonlyArray<readonly [Filter, string, readonly NewsKind[]]> = [
   ['award', 'Awards', ['award']],
   ['result', 'Results', ['result', 'title']],
   ['injury', 'Injuries', ['injury']],
+  ['retirement', 'Retirements', ['retirement']],
 ];
 
 const ALL_COUNTRIES = -2;

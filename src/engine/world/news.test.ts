@@ -9,7 +9,7 @@ import { generateWorld } from './worldGen.ts';
 import { seasonEndDay, stubManager, type World } from './world.ts';
 
 /** A season in the world, the manager in charge of a top-flight club, played up to `day`. */
-function season(seed: number, day: number): { world: World; clubId: number; news: NewsItem[] } {
+function season(seed: number, day: number): { world: World; clubId: number; news: NewsItem[]; standing: Map<number, [number, number]> } {
   const world = generateWorld({ seed, startYear: 2026, scale: 'small', manager: stubManager() });
   const ctx = newSeasonContext();
   startSeason(world, ctx);
@@ -17,13 +17,19 @@ function season(seed: number, day: number): { world: World; clubId: number; news
   appointManager(world, clubId);
   // Stories are filed as they happen: catch each one as the day it was filed.
   const news: NewsItem[] = [];
+  // Where the two clubs in a story stood the day it was filed — reputations move over a season.
+  const standing = new Map<number, [number, number]>();
   let seen = world.nextNewsId;
   while (world.day < day) {
     advanceDay(world, ctx, { detailedClubs: new Set([world.userClubId]) });
-    for (const n of world.news) if (n.id >= seen) news.push(n);
+    for (const n of world.news) {
+      if (n.id < seen) continue;
+      news.push(n);
+      if (n.clubId !== undefined && n.otherClubId !== undefined) standing.set(n.id, [world.clubs[n.clubId].reputation, world.clubs[n.otherClubId].reputation]);
+    }
     seen = world.nextNewsId;
   }
-  return { world, clubId, news };
+  return { world, clubId, news, standing };
 }
 
 test('a season makes the news: coaches, rumours, injuries, results and the monthly awards', () => {
@@ -52,14 +58,14 @@ test('the paper covers the leagues that matter, and every story names its countr
 });
 
 test('a rumour is a bigger club after a player whose contract is running out', () => {
-  const { world, clubId, news } = season(23, 300);
+  const { world, clubId, news, standing } = season(23, 300);
   const rumours = news.filter((n) => n.kind === 'rumour');
   assert.ok(rumours.length > 5);
   const store = world.players;
   for (const r of rumours) {
-    const suitor = world.clubs[r.clubId!];
     const club = world.clubs[r.otherClubId!];
-    assert.ok(suitor.reputation > club.reputation, 'the suitor is the bigger club');
+    const [suitorRep, clubRep] = standing.get(r.id)!;
+    assert.ok(suitorRep > clubRep, 'the suitor is the bigger club');
     assert.notEqual(club.id, clubId, 'not about the manager\'s own players');
     const p = r.playerIdx!;
     // Still in his last season, unless he has moved since.

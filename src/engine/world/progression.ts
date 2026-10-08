@@ -16,9 +16,10 @@
 
 import { newsInjury } from './news.ts';
 import { medicalQuality } from './staffMarket.ts';
+import { ageAtSeasonEnd, farewell, plansThisSeason, retirementHazard, willRetire } from './retirement.ts';
 import type { Rng } from '../core/rng.ts';
 import {
-  AGE_DECAY_WEIGHT, ATTRIBUTES, LATE_GROWTH_WEIGHT, type AttributeName,
+  AGE_DECAY_WEIGHT, ATTRIBUTES, HIDDEN_ATTR_SET, LATE_GROWTH_WEIGHT, type AttributeName,
 } from '../model/attributes.ts';
 import { AGEING_RESISTANCE, abilityFractionAtAge, refreshAbility, weightsFor } from '../model/ability.ts';
 import { ATTR_INDEX } from '../model/attributes.ts';
@@ -277,6 +278,10 @@ function applyAbilityDelta(
 
     if (candidates.length === 0) break;
     const pick = candidates[rng.weightedIndex(weights)];
+    // Age and a bad week wear the body and the touch, not the man: who he is —
+    // his loyalty, his nerve, how long he means to go on — does not fade. (The
+    // step that lands there is simply not taken, so the rest declines as ever.)
+    if (!improving && HIDDEN_ATTR_SET.has(ATTRIBUTES[pick])) continue;
     const base = i * ATTRIBUTES.length + pick;
     store.attrs[base] = Math.max(1, Math.min(20, store.attrs[base] + (improving ? 1 : -1)));
   }
@@ -314,17 +319,28 @@ export function applyAgeing(world: World): void {
  * Retirement.
  *
  * Driven by age, how far a player has fallen from their peak, and the hidden
- * Retirement Preference attribute. Players who are still good rarely retire;
- * players whose ability has collapsed do so quickly, whatever their age.
+ * Retirement Preference attribute — see retirement.ts, where players make it
+ * known in January. Players who are still good rarely retire; players whose
+ * ability has collapsed do so quickly, whatever their age.
  */
 export function processRetirements(world: World): number[] {
   const store = world.players;
   const rng = world.rng;
   const retiredNow: number[] = [];
 
+  const plans = plansThisSeason(world);
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i)) continue;
     const age = store.ageOn(i, world.year, 181);
+
+    // Whoever said in January this season was his last goes now — unless he
+    // was talked round — whether or not he still has a club.
+    if (plans !== null && willRetire(world, i)) {
+      farewell(world, i);
+      retirePlayer(world, i);
+      retiredNow.push(i);
+      continue;
+    }
 
     // Players who spent a full season without finding a club mostly leave the
     // sport, whatever their age. Without this the world silently accumulates
@@ -342,23 +358,11 @@ export function processRetirements(world: World): number[] {
       continue;
     }
 
-    if (age < 29) continue;
-
-    const preference = store.getAttr(i, 'retirementPreference') / 20;
-    const ca = store.currentAbility[i];
-    const peak = store.potentialAbility[i];
-    const decline = peak > 0 ? 1 - ca / peak : 0;
-
-    // Base hazard by age, shifted by how long this player intends to go on.
-    let p = Math.max(0, (age - 30) * 0.055) + Math.max(0, decline - 0.15) * 0.75;
-    p *= 1.45 - preference * 0.9;
-    // Nobody plays past the very end.
-    if (age >= 40) p = Math.max(p, 0.55);
-    if (age >= 43) p = 1;
-    // A player without a club for a season is far more likely to stop.
-    if (store.clubId[i] < 0) p += 0.3;
-
-    if (rng.chance(Math.min(1, p))) {
+    // Nobody else stops — except on a save from before the plans were made
+    // public, which rolls the same dice there and then.
+    if (plans !== null || ageAtSeasonEnd(world, i) < 29) continue;
+    if (rng.chance(retirementHazard(world, i))) {
+      farewell(world, i);
       retirePlayer(world, i);
       retiredNow.push(i);
     }

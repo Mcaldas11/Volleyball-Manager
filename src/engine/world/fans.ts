@@ -22,7 +22,7 @@ import type { World } from './world.ts';
 
 /** What a story is, as the fans see it. */
 export type FanStory =
-  | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top'
+  | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top' | 'retiring' | 'retired'
   | 'playerAward' | 'coachAward' | 'title' | 'match'
   | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified';
 
@@ -148,6 +148,39 @@ const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>>
     rival: [
       ['neutral', 'Interesting choice by {c}.'],
       ['happy', '{coach} at {c}? That should keep them mid-table.'],
+    ],
+  },
+  retiring: {
+    club: [
+      ['worried', "Say it isn't so, {p}! One more season, please."],
+      ['happy', 'What a servant to this club. Make the last season count, {p}.'],
+      ['neutral', 'Right time to go, to be fair. Better a year early than a year late.'],
+      ['delighted', "Let's send {p} off with a trophy. He deserves it."],
+      ['worried', 'Who replaces {p}? The board need to start looking now.'],
+    ],
+    rival: [
+      ['happy', "Won't miss facing {p}, I'll say that."],
+      ['neutral', 'Respect to {p}. A proper {pos}.'],
+    ],
+    neutral: [
+      ['neutral', 'End of an era. {p} was class.'],
+      ['happy', 'One of the great {pos}s of his time. Enjoy the last season, {p}.'],
+    ],
+  },
+  retired: {
+    club: [
+      ['happy', 'Thank you for everything, {p}. A legend of {c}.'],
+      ['delighted', 'Shirt to the rafters for {p}! What a career.'],
+      ['neutral', 'The end of an era at {c}. The game is poorer for it.'],
+      ['worried', 'Hope he stays involved at the club. We need people like {p}.'],
+    ],
+    rival: [
+      ['neutral', 'Gave us plenty of trouble over the years. Enjoy retirement, {p}.'],
+      ['happy', 'One fewer {c} player to worry about!'],
+    ],
+    neutral: [
+      ['happy', 'Respect. {p} did it the right way.'],
+      ['neutral', "They don't make many like {p} any more."],
     ],
   },
   injury: {
@@ -334,7 +367,7 @@ const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>>
 
 /** How many comments a story draws. */
 const COMMENTS: Readonly<Record<FanStory, number>> = {
-  rumour: 4, signing: 5, extension: 3, sacked: 4, appointed: 4, injury: 3, shock: 5, top: 4,
+  rumour: 4, signing: 5, extension: 3, sacked: 4, appointed: 4, injury: 3, shock: 5, top: 4, retiring: 4, retired: 4,
   playerAward: 3, coachAward: 3, title: 6, match: 5,
   nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4, qualified: 4,
 };

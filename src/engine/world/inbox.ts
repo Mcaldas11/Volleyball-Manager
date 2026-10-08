@@ -70,6 +70,12 @@ export function messageNeedsAction(world: World, m: GameMessage): boolean {
     const offer = world.incomingOffers.find((o) => o.id === m.offerId);
     if (offer !== undefined && (offer.status ?? 'open') === 'open') return true;
   }
+  // A player who means to retire, until the manager has had his say — or it is settled.
+  if (m.retirementOf !== undefined) {
+    const plan = world.retirementPlans?.season === world.season ? world.retirementPlans.plans[m.retirementOf] : undefined;
+    if (plan !== undefined && plan.talked === undefined && plan.staffRole === undefined && plan.declinedRole !== true &&
+      world.players.clubId[m.retirementOf] === world.userClubId) return true;
+  }
   // Another club's approach for one of the staff, until it is answered or lapses.
   if (m.staffApproachId !== undefined && (world.staffApproaches ?? []).some((a) => a.id === m.staffApproachId && a.status === 'open')) return true;
   if (m.interviewId !== undefined && messageCategory(m) === 'interview') {
