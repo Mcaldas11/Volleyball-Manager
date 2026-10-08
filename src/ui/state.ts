@@ -17,16 +17,20 @@ import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
 import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { MATCHDAY_SQUAD, type Position } from '../engine/model/positions.ts';
-import { StaffRole, STAFF_ROLE_NAMES, type Staff } from '../engine/model/staff.ts';
+import { StaffRole, staffName, type Staff } from '../engine/model/staff.ts';
+import {
+  answerStaffApproach, backroomOf, compensationFor, longestContract, offerToStaff, releaseStaff, severanceFor, staffBudgetRoom,
+  staffInterest, staffMarket, staffOfferBlock, staffWageAsk, type StaffInterest, type StaffListing, type StaffReply,
+} from '../engine/world/staffMarket.ts';
 import {
   advanceDay, applyMatchResult, matchPrep, newSeasonContext, oppositionRead, pickLineup, playFixture, toTeamSetup,
   type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
 import { startSeason } from '../engine/season/seasonEngine.ts';
-import { generateStaff, generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
+import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
-  currentPhase, dayOfSeason, DAYS_PER_SEASON, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
+  currentPhase, dayOfSeason, DAYS_PER_SEASON, euros, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
   transferWindowOn,
   type Fixture, type GameMessage, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
@@ -3762,39 +3766,91 @@ class Game {
     this.emit();
   }
 
-  /** Generate a fresh batch of unattached candidates for a role, to browse and hire. */
-  recruitStaffCandidates(role: StaffRole, count = 3): Staff[] {
+  // ---- Staff -------------------------------------------------------------
+
+  /** The club's backroom — everyone but the head coach, who is the manager. */
+  backroom(): Staff[] {
     const world = this.world;
     const club = this.club;
-    if (world === null || club === null) return [];
-    const out: Staff[] = [];
-    for (let i = 0; i < count; i++) {
-      out.push(generateStaff(world, world.rng, club.nation, role, club.reputation));
-    }
-    return out;
+    return world === null || club === null ? [] : backroomOf(world, club);
   }
 
-  hireStaffMember(staffId: number): void {
+  /** Who the club could hire for a role: out of work, or in work at other clubs. */
+  staffMarket(role: StaffRole, employed: boolean): StaffListing[] {
     const world = this.world;
     const club = this.club;
-    if (world === null || club === null) return;
-    const s = world.staff[staffId];
-    if (s === undefined || s.clubId >= 0) return;
-    s.clubId = club.id;
-    club.staff.push(s.id);
-    this.notice = `${s.firstName} ${s.lastName} has joined as ${STAFF_ROLE_NAMES[s.role]}.`;
+    return world === null || club === null ? [] : staffMarket(world, club, role, employed);
+  }
+
+  /** What one of the staff, or someone on the market, asks of the club — and how he feels about it. */
+  staffTerms(staffId: number): { ask: number; interest: StaffInterest; fee: number; longest: number; block: string | null; room: number } | null {
+    const world = this.world;
+    const club = this.club;
+    const s = world?.staff[staffId];
+    if (world === null || club === null || s === undefined) return null;
+    const own = s.clubId === club.id;
+    return {
+      ask: staffWageAsk(world, s, club),
+      interest: staffInterest(world, s, club),
+      fee: own ? 0 : compensationFor(world, s),
+      longest: longestContract(world, s, club),
+      block: staffOfferBlock(world, club, s),
+      room: staffBudgetRoom(world, club, own ? s : undefined),
+    };
+  }
+
+  /** Offer one of the staff a new contract, or someone else a job. */
+  offerStaffContract(staffId: number, wage: number, years: number): StaffReply | null {
+    const world = this.world;
+    const club = this.club;
+    const s = world?.staff[staffId];
+    if (world === null || club === null || s === undefined) return null;
+    const reply = offerToStaff(world, club, s, { wage, years });
+    if (reply.outcome === 'accepted') this.notice = reply.text;
+    this.emit();
+    return reply;
+  }
+
+  /** Let one of the staff go, paying up the rest of his contract. */
+  releaseStaffMember(staffId: number): void {
+    const world = this.world;
+    const club = this.club;
+    const s = world?.staff[staffId];
+    if (world === null || club === null || s === undefined) return;
+    const cost = releaseStaff(world, club, s);
+    this.notice = `${staffName(s)} has left the club${cost > 0 ? ` — ${euros(cost)} paid up on his contract` : ''}.`;
     this.emit();
   }
 
-  fireStaffMember(staffId: number): void {
+  /** What releasing one of the staff would cost now. */
+  staffSeverance(staffId: number): number {
     const world = this.world;
-    const club = this.club;
-    if (world === null || club === null) return;
-    const s = world.staff[staffId];
-    if (s === undefined) return;
-    club.staff = club.staff.filter((id) => id !== staffId);
-    s.clubId = -1;
-    this.notice = `${s.firstName} ${s.lastName} has left the club.`;
+    const s = world?.staff[staffId];
+    return world === null || s === undefined ? 0 : severanceFor(world, s);
+  }
+
+  /** Someone to open talks with as the Staff screen opens — from a profile or a message. */
+  private staffTalksFor: number | null = null;
+
+  /** Go to the Staff screen, in talks with one man: one of the club's own to renew, or someone to hire. */
+  openStaffTalks(staffId: number): void {
+    this.staffTalksFor = staffId;
+    this.selectedCoach = null;
+    this.go('staff');
+  }
+
+  /** The talks the Staff screen should open with, once. */
+  takeStaffTalks(): number | null {
+    const id = this.staffTalksFor;
+    this.staffTalksFor = null;
+    return id;
+  }
+
+  /** Answer another club's approach for one of the staff. */
+  answerStaffApproach(approachId: number, accept: boolean): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = answerStaffApproach(world, approachId, accept);
     this.emit();
   }
 

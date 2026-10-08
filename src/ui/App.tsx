@@ -38,8 +38,9 @@ import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
 import {
   TacticsScreen, RotationsScreen, FinancesScreen,
-  StaffScreen, ScoutingScreen, TransfersScreen,
+  ScoutingScreen, TransfersScreen,
 } from './screens/Manage.tsx';
+import { StaffScreen } from './screens/Staff.tsx';
 import { StatsScreen, RankingsScreen, HallOfFameScreen } from './screens/World.tsx';
 import { SeasonReviewScreen } from './seasonReview.tsx';
 

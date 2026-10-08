@@ -15,6 +15,7 @@
  */
 
 import { newsInjury } from './news.ts';
+import { medicalQuality } from './staffMarket.ts';
 import type { Rng } from '../core/rng.ts';
 import {
   AGE_DECAY_WEIGHT, ATTRIBUTES, LATE_GROWTH_WEIGHT, type AttributeName,
@@ -67,7 +68,8 @@ export function rollInjuries(world: World): void {
   const store = world.players;
   const rng = world.rng;
   const medical = new Float64Array(world.clubs.length);
-  for (const c of world.clubs) medical[c.id] = 1.25 - (c.medicalFacilities / 20) * 0.5;
+  // The facilities and the doctor and physios who work in them.
+  for (const c of world.clubs) medical[c.id] = 1.25 - medicalQuality(world, c) * 0.5;
 
   const weights = INJURIES.map((i) => i.weight);
   const weeks = new Map<number, ClubWeek>();

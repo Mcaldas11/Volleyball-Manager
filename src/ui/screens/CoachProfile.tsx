@@ -97,7 +97,19 @@ export function CoachProfile(): JSX.Element | null {
           <StarMeter value={coach.reputation} max={10000} size={20} />
           <span className="dim">{reputationWord(coach.reputation)}</span>
         </div>
-        <button onClick={() => g.selectCoach(null)}><Icon name="close" size={14} /> Close</button>
+        <div className="coach-hero-actions">
+          {/* The backroom is the manager's to hire and keep: talks open on the Staff screen. */}
+          {coach.role !== StaffRole.HeadCoach && coach.retired !== true && g.club !== null && (
+            coach.clubId === g.club.id
+              ? <button className="primary" onClick={() => g.openStaffTalks(coach.id)}><Icon name="contract" size={14} /> New contract</button>
+              : g.staffTerms(coach.id)?.interest !== 'refuses' && (
+                <button className="primary" onClick={() => g.openStaffTalks(coach.id)}>
+                  <Icon name="contract" size={14} /> {coach.clubId >= 0 ? 'Approach' : 'Offer contract'}
+                </button>
+              )
+          )}
+          <button onClick={() => g.selectCoach(null)}><Icon name="close" size={14} /> Close</button>
+        </div>
       </div>
 
       <div className="tiles">

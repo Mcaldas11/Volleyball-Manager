@@ -276,7 +276,8 @@ test("coaching a nation: the squad is the manager's to name, the day waits for i
   advanceDay(world, ctx, { detailedClubs: new Set([world.userClubId]) });
   const squad = squadOf(euro, nation);
   assert.ok(squad.includes(setters[0]) || store.injuryDaysLeft[setters[0]] > 0, 'his pick went');
-  assert.ok(!squad.includes(best), 'and the one he left out stayed home');
+  // ...and the one he left out stayed home — unless his pick was hurt and he is the one called in instead.
+  assert.ok(!squad.includes(best) || store.injuryDaysLeft[setters[0]] > 0, 'and the one he left out stayed home');
 
   // Match day: his to play — here, through the engine, as the match screen does.
   const first = euro.matches.filter((m) => m.home === nation || m.away === nation).sort((a, b) => a.day - b.day)[0];

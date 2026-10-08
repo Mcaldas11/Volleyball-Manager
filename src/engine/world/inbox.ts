@@ -33,6 +33,7 @@ export const CATEGORY_SENDER: Readonly<Record<MessageCategory, string>> = {
   career: 'Your Agent',
   international: 'International Desk',
   awards: 'League Office',
+  staff: 'Director of Football',
 };
 
 /** Who a message is from. */
@@ -69,6 +70,8 @@ export function messageNeedsAction(world: World, m: GameMessage): boolean {
     const offer = world.incomingOffers.find((o) => o.id === m.offerId);
     if (offer !== undefined && (offer.status ?? 'open') === 'open') return true;
   }
+  // Another club's approach for one of the staff, until it is answered or lapses.
+  if (m.staffApproachId !== undefined && (world.staffApproaches ?? []).some((a) => a.id === m.staffApproachId && a.status === 'open')) return true;
   if (m.interviewId !== undefined && messageCategory(m) === 'interview') {
     const session = world.pendingInterviews.find((s) => s.id === m.interviewId);
     if (session !== undefined && !session.finished) return true;

@@ -45,6 +45,7 @@ import { collectHighlights, inManagersLeague } from '../world/monthAwards.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { boardResults, careerDay, setBoardExpectations } from '../world/career.ts';
 import { coachesSetUp } from '../world/aiTactics.ts';
+import { analysisEdge, medicalQuality, staffDay, topUpStaffPool } from '../world/staffMarket.ts';
 import { noteExpectations } from '../world/accolades.ts';
 
 /** Season-long statistics, keyed by player index. */
@@ -214,7 +215,14 @@ function pickBench(
 
 /** What a club worked on for a match in the days before it. */
 export function matchPrep(world: World, club: Club, day: number): TeamSetup['prep'] {
-  return prepCoverage(world, club, day);
+  // The analyst's study of the opposition adds to whatever the week's training covered.
+  const prep = prepCoverage(world, club, day);
+  const edge = analysisEdge(world, club);
+  if (edge === 0) return prep;
+  return {
+    reception: Math.min(1, prep.reception + edge), transition: Math.min(1, prep.transition + edge),
+    block: Math.min(1, prep.block + edge), combinations: Math.min(1, (prep.combinations ?? 0) + edge),
+  };
 }
 
 /** How well the opposition reads a club's tactic: the user's, which every side studies — nobody else's. */
@@ -467,6 +475,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   contractNotices(world);
   processDeals(world);
   careerDay(world);
+  staffDay(world);
   friendliesDay(world);
   trainingDay(world);
   youthDay(world);
@@ -533,7 +542,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
  */
 function dailyRecovery(world: World, store: PlayerStore): void {
   const medical = new Float64Array(world.clubs.length);
-  for (const c of world.clubs) medical[c.id] = 0.8 + (c.medicalFacilities / 20) * 0.5;
+  // The facilities and the physios and doctor who work in them.
+  for (const c of world.clubs) medical[c.id] = 0.8 + medicalQuality(world, c) * 0.5;
 
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i)) continue;
@@ -579,6 +589,8 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
   setBoardExpectations(world);
   // And every other coach sets his side up for the players the summer left him.
   coachesSetUp(world, (club) => pickLineup(world.players, club).lineup);
+  // People out of work in every backroom role, for anyone hiring.
+  topUpStaffPool(world);
   // Where each squad should finish, for the Coach of the Year to be judged against.
   noteExpectations(world);
 

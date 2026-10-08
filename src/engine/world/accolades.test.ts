@@ -29,8 +29,10 @@ test("a season ends with its awards: the league's and the world's players, coach
   const league = nights.find((n) => n.scope === club.leagueId);
   const globe = nights.find((n) => n.scope === 'world');
   assert.ok(league !== undefined && globe !== undefined);
+  // The world always has its young player of the year; a league only if a young player held a place in it.
+  assert.deepEqual(globe.awards.map((a) => a.kind), ['player', 'coach', 'young']);
   for (const night of [league, globe]) {
-    assert.deepEqual(night.awards.map((a) => a.kind), ['player', 'coach', 'young']);
+    assert.deepEqual(night.awards.map((a) => a.kind).slice(0, 2), ['player', 'coach']);
     for (const a of night.awards) {
       assert.ok(a.shortlist.length >= 1 && a.shortlist.length <= 3);
       assert.equal(new Set(a.shortlist.map((n) => n.p ?? `c${n.coach}`)).size, a.shortlist.length, 'nobody twice');

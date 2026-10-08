@@ -102,6 +102,14 @@ export interface Staff {
   reputation: number;
   /** A head coach's clubs, oldest first. Absent until his first is on record. */
   spells?: CoachSpell[];
+  /** Turned a move down he wanted — or was kept from one: he asks more to stay, and may not. */
+  unsettled?: boolean;
+  /** Retired from the game: on the record, in no one's employ, on no market. */
+  retired?: boolean;
+  /** The season the manager was last told his contract is running out. */
+  warnedSeason?: number;
+  /** The day he went out of work, for how long he has been looking. */
+  freeSince?: number;
 }
 
 export function staffName(s: Staff): string {

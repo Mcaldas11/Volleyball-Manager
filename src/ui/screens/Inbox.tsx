@@ -38,10 +38,11 @@ export const CATEGORY_META: Readonly<Record<MessageCategory, { label: string; ic
   career: { label: 'Career', icon: 'career', color: '#2fbf9b' },
   international: { label: 'International', icon: 'world', color: '#5fb8ff' },
   awards: { label: 'Awards', icon: 'star', color: '#f2c94c' },
+  staff: { label: 'Staff', icon: 'staff', color: '#7fb3a8' },
 };
 
 const FOLDER_ORDER: readonly MessageCategory[] = [
-  'career', 'offer', 'contract', 'task', 'medical', 'matchday', 'awards', 'international', 'interview', 'news', 'board', 'finance',
+  'career', 'offer', 'contract', 'staff', 'task', 'medical', 'matchday', 'awards', 'international', 'interview', 'news', 'board', 'finance',
 ];
 
 type Folder = 'inbox' | 'starred' | 'archive' | MessageCategory;
@@ -783,6 +784,25 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
   const cat = messageCategory(m);
   const out: JSX.Element[] = [];
   const p = m.playerIdx;
+
+  // Another club wants one of the staff: let him go, or keep him — and maybe give him a new deal.
+  const approach = m.staffApproachId !== undefined ? world.staffApproaches?.find((a) => a.id === m.staffApproachId) : undefined;
+  if (approach !== undefined && approach.status === 'open') {
+    out.push(
+      <button key="let-go" className="paper-btn primary-dark" onClick={() => g.answerStaffApproach(approach.id, true)}>
+        Let him go — {money(approach.fee)}
+      </button>,
+      <button key="keep" className="paper-btn" onClick={() => g.answerStaffApproach(approach.id, false)}>Not for sale</button>,
+    );
+  } else if (approach !== undefined) {
+    out.push(<span key="answered" className="paper-note">{approach.status === 'accepted' ? 'He has gone.' : approach.status === 'rejected' ? 'You kept him.' : 'The approach lapsed.'}</span>);
+  }
+  if (m.staffId !== undefined) {
+    const s = world.staff[m.staffId];
+    out.push(s !== undefined && s.clubId === world.userClubId
+      ? <button key="staff" className="paper-btn" onClick={() => g.openStaffTalks(s.id)}><Icon name="contract" size={15} /> Offer a new contract</button>
+      : <button key="staff" className="paper-btn" onClick={() => g.go('staff')}><Icon name="staff" size={15} /> Staff</button>);
+  }
 
   const session = m.interviewId !== undefined ? world.pendingInterviews.find((s) => s.id === m.interviewId) : undefined;
   if (session !== undefined) {

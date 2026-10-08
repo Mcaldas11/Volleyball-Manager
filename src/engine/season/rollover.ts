@@ -14,6 +14,7 @@
 import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { seasonAwards } from '../world/accolades.ts';
+import { staffSeasonEnd } from '../world/staffMarket.ts';
 import { compareTableRows, sponsorshipFor, tvRightsFor, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { MAX_SQUAD, Position, SQUAD_TARGET } from '../model/positions.ts';
@@ -110,6 +111,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   // chance to be picked up by someone else rather than simply vanishing.
   trimSquads(world);
   report.transfers = runTransferWindow(world);
+  // The backrooms too: contracts up, the old retiring, places filled.
+  staffSeasonEnd(world);
   revalueSquads(world);
   selectAllNationalSquads(world);
 

@@ -625,14 +625,15 @@ select:disabled { opacity: 0.4; cursor: default; }
 /* Screens built around one wrapper element pass the window's height down. */
 .content-fill > .view-fade > :is(.profile, .club-profile, .lineup-page, .srs) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 /* A two-column body (list | detail) takes what is left; each column scrolls on its own. */
-.content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout) {
+.content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout, .staff-layout) {
   flex: 1 1 0;
   min-height: 200px;
   grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
   margin-bottom: 0;
 }
-.content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout) > .card { min-height: 0; }
+.content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout, .staff-layout) > .card { min-height: 0; }
+.content-fill .staff-talks > .card-body { min-height: 0; overflow-y: auto; }
 .content-fill :is(.scout-report, .profile-attrs, .match-report) > .card-body { min-height: 0; overflow-y: auto; }
 .content-fill :is(.club-side, .profile-side) { min-height: 0; overflow-y: auto; padding-right: 2px; }
 .content-fill :is(.club-side, .profile-side) > .card { flex: none; }
@@ -5601,3 +5602,56 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .dc { flex-direction: column; }
   .dc-row { grid-template-columns: repeat(3, minmax(0, 84px)); gap: 6px; }
 }
+
+/* ---- The backroom: the club's staff and the market ---- */
+.staff-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(380px, 1fr); gap: 16px; align-items: start; }
+.staff-layout > .card { display: flex; flex-direction: column; }
+.staff-layout > .card > .card-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.staff-layout .table-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.staff-table td.staff-role {
+  vertical-align: top; width: 122px; max-width: 122px; padding-right: 8px; white-space: normal;
+  font: 700 10.5px/1.25 var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim);
+  border-right: 1px solid var(--line-soft);
+}
+.staff-table tr.selected td:not(.staff-role) { background: var(--gold-soft); }
+.staff-vacant td { color: var(--text-faint); font-style: italic; }
+.staff-vacant.active td:not(.staff-role) { background: rgba(255, 255, 255, 0.03); }
+.staff-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.staff-tag { margin-left: 6px; padding: 1px 6px; border-radius: 5px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.staff-tag.warn { background: rgba(240, 145, 61, 0.18); color: #f0913d; }
+.staff-club { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 11.5px; color: var(--text-faint); }
+.staff-interest { font-size: 12px; font-weight: 700; }
+.staff-interest.keen { color: var(--good); }
+.staff-interest.open { color: #8fd65a; }
+.staff-interest.reluctant { color: var(--warn); }
+.staff-interest.refuses { color: var(--bad); }
+.staff-duty { margin: 0; padding: 9px 14px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; color: var(--text-dim); }
+.staff-talks .staff-duty { padding: 8px 0; border-bottom: none; }
+.staff-talks-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.staff-talks-head > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.staff-talks-head b { font-size: 16px; }
+.staff-talks-head .dim { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12.5px; }
+.staff-terms { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.staff-terms > div { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.staff-terms span { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); }
+.staff-terms b { font: 700 15px/1.1 var(--font-display); }
+.staff-terms b.bad { color: var(--bad); }
+.staff-offer { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 14px; }
+.staff-offer label { font-size: 12px; font-weight: 700; color: var(--text-dim); }
+.staff-offer > .faint { grid-column: 2; font-size: 12px; }
+.staff-wage { display: flex; align-items: center; gap: 8px; }
+.staff-wage b { min-width: 86px; text-align: center; font: 700 17px/1 var(--font-display); }
+.staff-submit { display: flex; justify-content: flex-end; margin-top: 14px; }
+.staff-reply { margin: 12px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--line-strong); background: var(--surface-2); font-size: 13px; }
+.staff-reply.accepted { border-left-color: var(--good); }
+.staff-reply.counter { border-left-color: var(--warn); }
+.staff-reply.rejected, .staff-reply.refused { border-left-color: var(--bad); }
+.paper-note { align-self: center; font-size: 12.5px; color: #5d6470; }
+@media (max-width: 1100px) {
+  .staff-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.coach-hero-actions { display: flex; align-items: center; gap: 8px; }
+.staff-layout .rating-cell .bar { width: 34px; }
+.staff-layout .data-table td, .staff-layout .data-table th { padding-left: 8px; padding-right: 8px; }
+.staff-layout .icon-btn { display: inline-grid; place-items: center; width: 26px; height: 24px; padding: 0; }
+.staff-layout .staff-go { display: inline-grid; place-items: center; width: 28px; height: 24px; padding: 0; }

@@ -19,12 +19,14 @@
 import { Rng } from '../engine/core/rng.ts';
 import { PLAYING_TIME_UNKNOWN, PlayerStore, POSITION_SLOTS, StringTable } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
-import { DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
+import { contractEndSeason, DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
 import { cancelOffCycleClubWorld, ensureCupCompetitions } from '../engine/season/cups.ts';
 import { backfillCareer } from '../engine/world/career.ts';
 import { rollHandedness, rollOffHand } from '../engine/world/playerGen.ts';
 import { coachesSetUp } from '../engine/world/aiTactics.ts';
+import { topUpStaffPool } from '../engine/world/staffMarket.ts';
+import { StaffRole } from '../engine/model/staff.ts';
 import {
   newSeasonContext, pickLineup, recordSeasonStartAbility, type SeasonContext, type SeasonStats,
 } from '../engine/season/seasonEngine.ts';
@@ -259,6 +261,17 @@ export function reviveWorld(raw: World): World {
     club.preferredDefensiveLibero ??= -1;
     migrateLineupOrder(club.preferredLineup, raw.players.position);
   }
+  // Saves from before staff contracts were kept to: each runs to a 30 June,
+  // and anyone whose date had already gone by is given one to come — a
+  // backroom doesn't walk out the first summer the rule applies.
+  for (const s of raw.staff) {
+    if (s.clubId < 0 || s.role === StaffRole.HeadCoach) continue;
+    let ends = contractEndSeason(s.contractUntil);
+    if (ends < raw.season) ends = raw.season + (s.id % 3);
+    s.contractUntil = seasonEndDay(ends);
+  }
+  // ...and from before there was a market for them.
+  topUpStaffPool(raw);
   // Saves from before the other coaches picked their own tactics: they pick them now, not next season.
   if (raw.coachedSides !== true) {
     coachesSetUp(raw, (club) => pickLineup(raw.players, club).lineup);

@@ -29,7 +29,7 @@ import { estimateValue, generatePlayer } from './playerGen.ts';
 import { generateYouthIntake } from './progression.ts';
 import { ensureCupCompetitions } from '../season/cups.ts';
 import {
-  DAYS_PER_SEASON, newWorld, seasonEndDay, type Competition, type ManagerProfile, type NationalTeam, type World,
+  contractEndSeason, newWorld, seasonEndDay, type Competition, type ManagerProfile, type NationalTeam, type World,
 } from './world.ts';
 
 export type WorldScale = 'small' | 'standard' | 'large';
@@ -421,7 +421,8 @@ export function generateStaff(
       2_000,
       Math.round((4_000 + Math.pow(clubReputation / 10000, 1.5) * 240_000) / 1000) * 1000,
     ),
-    contractUntil: world.day + rng.int(1, 3) * DAYS_PER_SEASON,
+    // To 30 June, like a player's: this season's, or one of the next two.
+    contractUntil: seasonEndDay(contractEndSeason(world.day) + rng.int(0, 2)),
     reputation: Math.round(clubReputation * rng.range(0.7, 1.1)),
   };
   world.staff.push(staff);

@@ -25,6 +25,7 @@ import type { YouthState } from './youth.ts';
 import type { MonthAward } from './monthAwards.ts';
 import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { Accolade, AwardsNight } from './accolades.ts';
+import type { StaffApproach } from './staffMarket.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -314,7 +315,7 @@ export interface SeasonReview {
  *  approaches from other clubs, job applications, leaving a club. */
 export type MessageCategory =
   | 'news' | 'task' | 'offer' | 'interview' | 'contract'
-  | 'medical' | 'matchday' | 'finance' | 'board' | 'career' | 'international' | 'awards';
+  | 'medical' | 'matchday' | 'finance' | 'board' | 'career' | 'international' | 'awards' | 'staff';
 
 /** The finance office's month-end snapshot of the club's books. */
 export interface FinanceStatement {
@@ -369,6 +370,10 @@ export interface GameMessage {
   seasonReview?: SeasonReview;
   /** Talks this message is an answer in — the inbox offers a way back into them. */
   talksId?: number;
+  /** A club's approach for one of the manager's staff — see staffMarket.ts. */
+  staffApproachId?: number;
+  /** The member of staff a message is about. */
+  staffId?: number;
   /** Fixture a press conference concerns. */
   fixtureId?: number;
   /** The press conference itself — looked up against `World.pendingInterviews`. */
@@ -624,6 +629,11 @@ export interface World {
   coachedSides?: boolean;
   /** Every individual award ever given — the players and coaches of the year, the teams of the season. */
   accolades?: Accolade[];
+  /** Staff who have stopped listening to the manager's offers for now, by staff id: offers turned down, and until when. */
+  staffTalks?: Record<number, { tries: number; until: number }>;
+  /** Other clubs' approaches for the manager's staff — see staffMarket.ts. */
+  staffApproaches?: StaffApproach[];
+  nextStaffApproachId?: number;
   /** Where each club was expected to finish its league, from the squads it started the season with. */
   expectedFinish?: { season: number; ranks: Record<number, number> };
   /** The month's best points and plays in the manager's league so far, best
