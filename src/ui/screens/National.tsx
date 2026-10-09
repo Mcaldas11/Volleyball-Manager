@@ -405,3 +405,86 @@ export function NationalHome(): JSX.Element {
     </div>
   );
 }
+
+// ---- The squad screen, for a manager looking at his national team -----------------------------
+
+/**
+ * The national team's squad, as the Squad screen shows it: when the federation
+ * wants the fourteen, the picker to name them; otherwise the squad as it
+ * stands — named, at the tournament, or the assistant's until then — and the
+ * players in contention behind it.
+ */
+export function NationalSquadScreen(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const nation = userNation(world);
+  const t = nextTournamentFor(world, nation);
+  const squadOpen = t !== undefined && t.status === 'planned' && world.day >= t.callUpDay - 7;
+  const players = g.nationalPlayers();
+  const named = t !== undefined && (t.status !== 'planned' || world.internationals?.chosen?.tournamentId === t.id);
+  const running = t !== undefined && t.status !== 'planned' ? t : undefined;
+  const pool = useMemo(
+    () => eligibleFor(world, nation).filter((p) => !players.includes(p))
+      .sort((a, b) => selectionScore(world, b) - selectionScore(world, a)).slice(0, 40),
+    [world, nation, world.day, players.join(',')],
+  );
+
+  const status = t === undefined
+    ? 'No tournament on the calendar — the fourteen below are your assistant’s pick for now.'
+    : t.status === 'planned'
+      ? `${t.name}${t.host >= 0 ? ` in ${nationName(t.host)}` : ''} · the squad is named by ${g.dateLabelForDay(t.callUpDay)} · first match ${g.dateLabelForDay(t.startDay)}`
+      : t.out.includes(nation) ? `${t.name} · out of the tournament` : `${t.name} · under way`;
+
+  return (
+    <div className="nat-squad-page">
+      <div className="nat-squad-bar">
+        <span className="side-flag nat-squad-flag"><Flag nation={nation} /></span>
+        <div className="nat-squad-title">
+          <strong>{nationName(nation)} national team</strong>
+          <span className="dim">{status}</span>
+        </div>
+        {t !== undefined && (
+          <button onClick={() => g.openTournament(t.id)}><Icon name="trophy" size={14} /> {t.name}</button>
+        )}
+      </div>
+      {squadOpen && t !== undefined ? (
+        <SquadPicker key={t.id} t={t} nation={nation} />
+      ) : (
+        <div className="nat-squad-grid">
+          <section className="nat-card">
+            <h3 className="nat-h">{named ? 'The squad' : 'Your assistant’s fourteen'} · {players.length}</h3>
+            <div className="nat-scroll"><PlayerTable players={players} t={running} /></div>
+          </section>
+          <section className="nat-card">
+            <h3 className="nat-h">In contention</h3>
+            <div className="nat-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Player</th><th>Pos</th><th>Club</th><th className="num">Ability</th>
+                    <th className="num" title="Average rating over his last matches">Form</th><th className="num">Caps</th>
+                    <th className="num" title="How the assistant rates him for a place">Rating</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pool.map((p) => (
+                    <tr key={p}>
+                      <td><PlayerLink idx={p} /></td>
+                      <td><Pos pos={store.position[p] as Position} /></td>
+                      <td>{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
+                      <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                      <td className="num"><RatingBadge value={recentForm(world, p)} size="sm" /></td>
+                      <td className="num">{store.nationalCaps[p]}</td>
+                      <td className="num dim">{Math.round(selectionScore(world, p))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}

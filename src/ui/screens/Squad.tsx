@@ -44,7 +44,7 @@ export function SquadScreen(): JSX.Element {
   const club = g.club!;
   const store = world.players;
   const squad = g.squad();
-  const selection = g.lineup();
+  const selection = g.clubLineup();
   const starters = new Set(selection?.lineup ?? []);
   const libero = selection?.libero ?? -1;
   const defensiveLibero = selection?.defensiveLibero ?? -1;

@@ -91,14 +91,16 @@ export const SHAPE_OPTIONS: Array<[DefensiveShape, string]> = [
 
 export function TacticsScreen(): JSX.Element {
   const g = useGame();
-  const club = g.club!;
+  const tactics = g.activeTactics();
+  if (tactics === null) return <Empty>No team to instruct.</Empty>;
   return (
     <div className="tactics-page">
       <p className="page-intro">
+        {g.nationalView() && <b className="nat-only">National team only — your club keeps its own. </b>}
         These instructions feed straight into the rally engine — what the setter can run off each pass, who he
         looks for, how the block forms — not a hidden team rating.
       </p>
-      <TacticsBoard tactics={club.tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} />
+      <TacticsBoard tactics={tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} />
     </div>
   );
 }
@@ -138,13 +140,13 @@ export function SliderField({
 export function RotationsScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
+  const tactics = g.activeTactics();
   const store = world.players;
   const selection = g.lineup();
   const [rot, setRot] = useState(0);
-  const r = club.tactics.rotations[rot];
 
-  if (selection === null) return <Empty>No lineup available.</Empty>;
+  if (selection === null || tactics === null) return <Empty>No lineup available.</Empty>;
+  const r = tactics.rotations[rot];
 
   // selection.lineup is the P1 reference (setter at zone index 0). A real
   // rotation moves each player from zone z+1 into zone z (court.ts's
@@ -159,6 +161,7 @@ export function RotationsScreen(): JSX.Element {
   return (
     <>
       <p className="page-intro">
+        {g.nationalView() && <b className="nat-only">National team only — your club keeps its own. </b>}
         Rotations are named for the zone the setter stands in. When the setter is front row only two
         attackers are available — those rotations score less and need different instructions.
       </p>

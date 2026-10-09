@@ -45,8 +45,8 @@ import {
 import {
   acceptNationalOffer, applyForNationalJob, applyIntlResult, askForSquad, canPlayForCountry, declineNationalOffer,
   leaveNationalJob, matchImportance, nameSquad,
-  nationalApplicationBlock, nationName, nationSetup, postMatchReport, squadDue, squadOf, startNationalCareer, suggestSquad,
-  userMatchToday, userNation, type IntlMatch, type Tournament,
+  nationalApplicationBlock, nationName, nationSetup, nextTournamentFor, postMatchReport, squadDue, squadOf,
+  startNationalCareer, suggestSquad, userMatchToday, userNation, type IntlMatch, type Tournament,
 } from '../engine/world/internationals.ts';
 import {
   answerOffers, applyForJobs, countHolidayDay, DEFAULT_HOLIDAY, returnDay, type HolidayPlan,
@@ -104,6 +104,22 @@ export type ScreenId =
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
   'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news', 'internationals',
 ]);
+
+/** The team screens a national team has as well as a club: its squad, its team sheet, its instructions, its rotations. */
+export const NATIONAL_TEAM_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>(['squad', 'lineup', 'tactics', 'rotations']);
+
+/** Which of the manager's teams the team screens show, when he has a club and a country. */
+export type TeamView = 'club' | 'national';
+
+/** Whatever keeps a default team sheet and plays to instructions: a club, or a national team. */
+interface SheetOwner {
+  preferredLineup: number[];
+  preferredLibero: number;
+  preferredDefensiveLibero: number;
+  preferredBench?: number[];
+  preferredFormation?: Formation;
+  tactics: TeamTactics;
+}
 
 export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
 
@@ -466,6 +482,8 @@ class Game {
   careerMode: CareerMode = 'club';
   /** Club and country: the club is taken, the nation still to pick. */
   private nationStepPending = false;
+  /** With a club and a country, which of the two the team screens are about. */
+  teamView: TeamView = 'club';
   pendingManager: ManagerProfile | null = null;
   currentScale: WorldScale | null = null;
   saves: SaveMeta[] = [];
@@ -496,6 +514,7 @@ class Game {
     this.ctx = newSeasonContext();
     startSeason(world, this.ctx);
     this.world = world;
+    this.teamView = 'club';
     this.watched = null;
     this.lastRollover = null;
     this.trophyCelebration = null;
@@ -552,6 +571,7 @@ class Game {
     try {
       const { world, season } = await readSaveWorld(id);
       this.world = world;
+      this.teamView = 'club';
       this.ctx = season;
       this.watched = null;
       this.lastRollover = null;
@@ -710,7 +730,11 @@ class Game {
     this.watched = null;
     this.postMatch = null;
     this.activeInterviewId = null;
-    if (this.club === null && !CLUBLESS_SCREENS.has(this.screen)) this.screen = 'home';
+    if (this.club === null && !CLUBLESS_SCREENS.has(this.screen) &&
+      !(this.nationalView() && NATIONAL_TEAM_SCREENS.has(this.screen))) this.screen = 'home';
+    // Club and country no longer: the team screens are about the one that is left.
+    if (this.club === null) this.teamView = 'national';
+    else if (this.world !== null && userNation(this.world) < 0) this.teamView = 'club';
     this.resetHistory();
   }
 
@@ -1695,6 +1719,8 @@ class Game {
       return;
     }
     if (this.openPendingDecision()) return;
+    // The club's match: its squad, team sheet and instructions are the ones to see.
+    this.teamView = 'club';
 
     const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, club);
     const side = (id: number): MatchSide => {
@@ -1870,7 +1896,7 @@ class Game {
    * default rather than a one-off arrangement that gets thrown away.
    */
   setPreferredLineupSlot(slot: number, playerIdx: number): void {
-    const club = this.club;
+    const club = this.sheet();
     if (club === null) return;
     const before = this.lineup()?.lineup[slot] ?? -1;
     while (club.preferredLineup.length <= slot) club.preferredLineup.push(-1);
@@ -1885,7 +1911,7 @@ class Game {
 
   /** The default bench once `incoming` has taken `was`'s place on the sheet: off the bench, `was` sits down in his place. */
   private tradePreferred(incoming: number, was: number): void {
-    const bench = this.club?.preferredBench;
+    const bench = this.sheet()?.preferredBench;
     if (bench === undefined) return;
     const at = bench.indexOf(incoming);
     if (at < 0) return;
@@ -1895,7 +1921,7 @@ class Game {
 
   /** Name a player in the default matchday squad — while there is room in the fourteen. */
   addToPreferredSquad(playerIdx: number): void {
-    const club = this.club;
+    const club = this.sheet();
     const picked = this.lineup();
     if (club === null || picked === null) return;
     const named = picked.lineup.length + (picked.libero >= 0 ? 1 : 0) + (picked.defensiveLibero >= 0 ? 1 : 0) + picked.bench.length;
@@ -1906,7 +1932,7 @@ class Game {
 
   /** Leave a reserve out of the default matchday squad. */
   dropFromPreferredSquad(playerIdx: number): void {
-    const club = this.club;
+    const club = this.sheet();
     const picked = this.lineup();
     if (club === null || picked === null) return;
     club.preferredBench = picked.bench.filter((p) => p !== playerIdx);
@@ -1914,7 +1940,7 @@ class Game {
   }
 
   swapPreferredLineupSlots(slotA: number, slotB: number): void {
-    const club = this.club;
+    const club = this.sheet();
     if (club === null) return;
     while (club.preferredLineup.length < 6) club.preferredLineup.push(-1);
     const a = club.preferredLineup[slotA];
@@ -1926,7 +1952,7 @@ class Game {
 
   /** Set the default (reception) libero; naming the defensive one swaps the roles. */
   setPreferredLibero(playerIdx: number): void {
-    const club = this.club;
+    const club = this.sheet();
     const picked = this.lineup();
     if (club === null || picked === null) return;
     if (playerIdx === picked.defensiveLibero) club.preferredDefensiveLibero = picked.libero;
@@ -1937,7 +1963,7 @@ class Game {
 
   /** Name the default defensive libero, or -1 to play one libero throughout. */
   setPreferredDefensiveLibero(playerIdx: number): void {
-    const club = this.club;
+    const club = this.sheet();
     const picked = this.lineup();
     if (club === null || picked === null) return;
     if (playerIdx >= 0 && playerIdx === picked.libero) {
@@ -1955,7 +1981,7 @@ class Game {
 
   /** Clear the saved lineup so every slot — and the bench — goes back to auto-picking the best available player. */
   resetPreferredLineup(): void {
-    const club = this.club;
+    const club = this.sheet();
     if (club === null) return;
     club.preferredLineup = [];
     club.preferredLibero = -1;
@@ -2591,12 +2617,77 @@ class Game {
 
   /** The national team's tactics, made from the defaults the first time. */
   nationalTactics(): TeamTactics | null {
+    return this.nationalSheet()?.tactics ?? null;
+  }
+
+  /** The national team's tactics and default team sheet, made the first time they are looked at. */
+  private nationalSheet(): SheetOwner | null {
     const world = this.world;
     const nation = world === null ? -1 : userNation(world);
     const team = world?.nationalTeams.find((t) => t.nation === nation);
     if (team === undefined) return null;
     team.tactics ??= defaultTactics();
-    return team.tactics;
+    team.preferredLineup ??= [];
+    team.preferredLibero ??= -1;
+    team.preferredDefensiveLibero ??= -1;
+    return team as SheetOwner;
+  }
+
+  /** Whether the team screens are about the national team: chosen, with a club as well — or the only team there is. */
+  nationalView(): boolean {
+    const world = this.world;
+    if (world === null || userNation(world) < 0) return false;
+    return this.club === null || this.teamView === 'national';
+  }
+
+  /** Look at the club, or at the national team. A screen the other has no use for gives way to the squad. */
+  setTeamView(view: TeamView): void {
+    const world = this.world;
+    if (world === null || (view === 'national' && userNation(world) < 0) || (view === 'club' && this.club === null)) return;
+    this.teamView = view;
+    if (view === 'national' && (this.screen === 'training' || this.screen === 'youth')) this.screen = 'squad';
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedCoach = null;
+    this.selectedNation = null;
+    this.selectedReview = null;
+    this.selectedCompetition = null;
+    this.emit();
+  }
+
+  /** The team sheet the team screens edit: the club's, or the national team's. */
+  private sheet(): SheetOwner | null {
+    return this.nationalView() ? this.nationalSheet() : this.club;
+  }
+
+  /** The instructions of the team being looked at. */
+  activeTactics(): TeamTactics | null {
+    return this.sheet()?.tactics ?? null;
+  }
+
+  /** Whether the team being looked at has a team sheet of the manager's own, rather than the auto-pick. */
+  hasPreferredSheet(): boolean {
+    const s = this.sheet();
+    return s !== null && (s.preferredLineup.some((p) => p >= 0) || s.preferredLibero >= 0 ||
+      s.preferredDefensiveLibero >= 0 || s.preferredBench !== undefined);
+  }
+
+  /**
+   * The national team's players as things stand: the squad at the tournament
+   * under way, the fourteen named for the next — or the assistant's, before then.
+   */
+  nationalPlayers(): number[] {
+    const world = this.world;
+    const nation = world === null ? -1 : userNation(world);
+    if (world === null || nation < 0) return [];
+    const t = nextTournamentFor(world, nation);
+    if (t !== undefined && t.status !== 'planned') {
+      const squad = squadOf(t, nation);
+      if (squad.length > 0) return squad;
+    }
+    const chosen = world.internationals?.chosen;
+    if (t !== undefined && chosen?.tournamentId === t.id) return [...chosen.players];
+    return suggestSquad(world, nation);
   }
 
   /** The result screen's match: the national team's, if that was the last one played. */
@@ -2627,12 +2718,15 @@ class Game {
     const { t, m } = found;
     const nation = userNation(world);
     const squad = squadOf(t, nation);
+    // The national team's match: from now its squad, team sheet and instructions are the ones to see.
+    this.teamView = 'national';
+    // Its own team sheet, as the manager left it.
+    const sheet = this.nationalSheet();
     const { lineup, libero, defensiveLibero, bench } = pickLineup(
       world.players,
-      {
-        players: squad, preferredLineup: [], preferredLibero: -1, preferredDefensiveLibero: -1,
-        tactics: this.nationalTactics() ?? undefined,
-      },
+      sheet !== null
+        ? { ...sheet, players: squad }
+        : { players: squad, preferredLineup: [], preferredLibero: -1, preferredDefensiveLibero: -1 },
       undefined,
       (p) => canPlayForCountry(world, p),
     );
@@ -2809,11 +2903,11 @@ class Game {
     this.emit();
   }
 
-  /** The system the user's club plays; its team sheet follows it (see pickLineup). */
+  /** The system the team being looked at plays; its team sheet follows it (see pickLineup). */
   setFormation(formation: Formation): void {
-    const club = this.club;
-    if (club === null) return;
-    club.tactics.formation = formation;
+    const sheet = this.sheet();
+    if (sheet === null) return;
+    sheet.tactics.formation = formation;
     this.emit();
   }
 
@@ -2956,7 +3050,21 @@ class Game {
 
   // ---- Squad ------------------------------------------------------------
 
+  /** The default team sheet of the team being looked at — the club's, or the national team's. */
   lineup(): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[]; out: number[] } | null {
+    const world = this.world;
+    if (world === null) return null;
+    if (this.nationalView()) {
+      const sheet = this.nationalSheet();
+      const players = this.nationalPlayers();
+      if (sheet === null || players.length === 0) return null;
+      return pickLineup(world.players, { ...sheet, players }, undefined, (p) => canPlayForCountry(world, p));
+    }
+    return this.clubLineup();
+  }
+
+  /** The club's default team sheet, whichever team is being looked at. */
+  clubLineup(): { lineup: number[]; libero: number; defensiveLibero: number; bench: number[]; out: number[] } | null {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return null;

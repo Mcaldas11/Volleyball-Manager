@@ -6,14 +6,15 @@ import {
   ClubCrest, clubThemeStyle, Flag, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
 import { NATIONS } from '../engine/world/nations.ts';
-import { worldRanking } from '../engine/world/internationals.ts';
+import { userNation, worldRanking } from '../engine/world/internationals.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { HolidayDialog } from './holiday.tsx';
 import { FriendlyDialog } from './friendlyDialog.tsx';
 import { ReplayViewer } from './replay.tsx';
 import { TacticPicker } from './tacticPicker.tsx';
 import { ProcessingWindow } from './processing.tsx';
-import { CLUBLESS_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
+import { CLUBLESS_SCREENS, NATIONAL_TEAM_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
+import { NationalSquadScreen } from './screens/National.tsx';
 import {
   CreateManager, ClubSelect, LoadGameList, MainMenu, NationSelect, WorldSetup,
 } from './screens/Menu.tsx';
@@ -134,13 +135,17 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
 
 const ALL_SECTIONS = SECTION_GROUPS.flatMap((grp) => grp.sections);
 
+/** The team's sections — a national team has its squad and its team sheet, but no training ground or academy. */
+const TEAM_SECTIONS: ReadonlySet<string> = new Set(['squad', 'lineup', 'training', 'academy']);
+
 function sectionFor(screen: ScreenId): Section {
   return ALL_SECTIONS.find((s) => s.tabs.some(([id]) => id === screen)) ?? ALL_SECTIONS[0];
 }
 
 /** A section as it stands for the manager now: out of work, only the tabs
  *  that need no club are left — and a section with none left goes. */
-function availableTabs(section: Section, hasClub: boolean): Array<[ScreenId, string]> {
+function availableTabs(section: Section, hasClub: boolean, national = false): Array<[ScreenId, string]> {
+  if (national && TEAM_SECTIONS.has(section.id)) return section.tabs.filter(([id]) => NATIONAL_TEAM_SCREENS.has(id));
   return hasClub ? section.tabs : section.tabs.filter(([id]) => CLUBLESS_SCREENS.has(id));
 }
 
@@ -244,8 +249,9 @@ function MenuScreen(): JSX.Element {
 
 function Screen(): JSX.Element {
   const g = useGame();
-  // Out of work, anything about the club is gone with it.
-  if (g.club === null && !CLUBLESS_SCREENS.has(g.screen)) return <HomeScreen />;
+  // Out of work, anything about the club is gone with it — but a national team has a squad and a team sheet too.
+  const nationalTeamScreen = g.nationalView() && NATIONAL_TEAM_SCREENS.has(g.screen);
+  if (g.club === null && !CLUBLESS_SCREENS.has(g.screen) && !nationalTeamScreen) return <HomeScreen />;
   switch (g.screen) {
     case 'home': return <HomeScreen />;
     case 'inbox': return <InboxScreen />;
@@ -254,7 +260,7 @@ function Screen(): JSX.Element {
     case 'calendar': return <CalendarScreen />;
     case 'news': return <NewsScreen />;
     case 'competitions': return <CompetitionsScreen />;
-    case 'squad': return <SquadScreen />;
+    case 'squad': return g.nationalView() ? <NationalSquadScreen /> : <SquadScreen />;
     case 'lineup': return <LineupScreen />;
     case 'tactics': return <TacticsScreen />;
     case 'rotations': return <RotationsScreen />;
@@ -294,6 +300,7 @@ function Sidebar({
   const unread = g.unreadMessages().length;
   const takeover = inTakeover(g);
   const clubInfoActive = club !== null && g.selectedClub === club.id;
+  const national = g.nationalView();
   const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null || g.selectedCoach !== null ||
     g.selectedNation !== null ||
@@ -348,12 +355,13 @@ function Sidebar({
       <nav className="side-nav">
         {SECTION_GROUPS.map((grp) => {
           const sections = grp.sections
-            .map((s) => ({ s, tabs: availableTabs(s, club !== null) }))
+            .map((s) => ({ s, tabs: availableTabs(s, club !== null, national) }))
             .filter(({ tabs }) => tabs.length > 0);
           if (sections.length === 0) return null;
           return (
             <div className="side-group" key={grp.label}>
-              <div className="side-group-label">{grp.label}</div>
+              <div className="side-group-label">{grp.label === 'Team' && national ? 'National team' : grp.label}</div>
+              {grp.label === 'Team' && <TeamSwitch disabled={takeover} />}
               {sections.map(({ s, tabs }) => item(
                 s.id, s.label, s.icon, activeSection === s.id,
                 () => g.go(tabs[0][0]),
@@ -368,6 +376,26 @@ function Sidebar({
 
       <ManagerMenu name={`${world.manager.firstName} ${world.manager.lastName}`} photo={managerPhotoUrl(world.manager)} />
     </aside>
+  );
+}
+
+/** With a club and a country: which of the two the team screens are about. */
+function TeamSwitch({ disabled }: { disabled: boolean }): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club;
+  const nation = userNation(world);
+  if (club === null || nation < 0) return null;
+  const national = g.nationalView();
+  return (
+    <div className="side-team-switch">
+      <button className={national ? '' : 'on'} disabled={disabled} onClick={() => g.setTeamView('club')} title={`${club.name} — squad, team sheet and instructions`}>
+        <ClubCrest club={club} size={16} /><span>{club.shortName}</span>
+      </button>
+      <button className={national ? 'on' : ''} disabled={disabled} onClick={() => g.setTeamView('national')} title={`${NATIONS[nation]?.name} national team — its own squad, team sheet and instructions`}>
+        <Flag nation={nation} /><span>{NATIONS[nation]?.code}</span>
+      </button>
+    </div>
   );
 }
 
@@ -425,7 +453,7 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   if (g.selectedReview !== null) return { title: 'Season Review', tabs: null };
   if (g.selectedCompetition !== null) return { title: 'Competition', tabs: null };
   const section = sectionFor(g.screen);
-  const tabs = availableTabs(section, g.club !== null);
+  const tabs = availableTabs(section, g.club !== null, g.nationalView());
   return { title: section.label, tabs: tabs.length > 1 ? tabs : null };
 }
 
@@ -438,11 +466,25 @@ function Header(): JSX.Element {
   const league = club !== null ? world.competitions[club.leagueId] : undefined;
   const manager = `${world.manager.firstName} ${world.manager.lastName}`;
   const nationalTeam = world.career.nationalTeam ?? -1;
+  // Looking at the national team's squad, team sheet or instructions: the header says so.
+  const nationalTeamView = club !== null && g.nationalView() && TEAM_SECTIONS.has(sectionFor(g.screen).id) &&
+    g.selectedPlayer === null && g.selectedClub === null && g.selectedNation === null && g.matchday === null;
 
   return (
     <header className="hdr">
       <div className="hdr-top">
-        {club !== null ? (
+        {nationalTeamView ? (
+          <button className="hdr-club" onClick={() => g.selectNation(nationalTeam)} disabled={takeover} title="National team">
+            <span className="side-flag hdr-flag"><Flag nation={nationalTeam} /></span>
+            <span className="hdr-club-text">
+              <strong>{NATIONS[nationalTeam]?.name}</strong>
+              <span>
+                National team<span className="hdr-role">Head coach</span>
+                <span className="hdr-role hdr-nat"><ClubCrest club={club} size={12} /> {club.shortName}</span>
+              </span>
+            </span>
+          </button>
+        ) : club !== null ? (
           <button className="hdr-club" onClick={() => g.selectClub(club.id)} disabled={takeover} title="Club info">
             <ClubCrest club={club} size={36} />
             <span className="hdr-club-text">
@@ -493,8 +535,8 @@ function Header(): JSX.Element {
               </button>
             ))}
           </nav>
-          {/* The tactic loaded, and the others saved — over every Lineup screen, as in FM. */}
-          {sectionFor(g.screen).id === 'lineup' && club !== null && !takeover && <TacticPicker />}
+          {/* The club's tactic loaded, and the others saved — over every Lineup screen, as in FM; not the national team's. */}
+          {sectionFor(g.screen).id === 'lineup' && club !== null && !takeover && !g.nationalView() && <TacticPicker />}
         </div>
       )}
     </header>

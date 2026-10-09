@@ -20,7 +20,7 @@ import type { Loan, LoanReport } from './loans.ts';
 import type { PendingMove } from './moves.ts';
 import type { NewsItem } from './news.ts';
 import type { Internationals, IntlReport } from './internationals.ts';
-import type { TeamTactics } from '../match/tactics.ts';
+import type { Formation, TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
 import type { MonthAward } from './monthAwards.ts';
 import type { CompetitionReview, DreamPick } from './competitionReview.ts';
@@ -191,6 +191,12 @@ export interface NationalTeam {
   nationsLeagueTitles?: number;
   /** The tactics it plays — set by the manager when he coaches it; the defaults otherwise. */
   tactics?: TeamTactics;
+  /** The manager's default team sheet for it, as a club keeps one: the six, the liberos, the rest of the squad. */
+  preferredLineup?: number[];
+  preferredLibero?: number;
+  preferredDefensiveLibero?: number;
+  preferredBench?: number[];
+  preferredFormation?: Formation;
 }
 
 /** One line in the permanent record book. */

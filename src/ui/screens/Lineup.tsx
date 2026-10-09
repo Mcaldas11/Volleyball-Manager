@@ -16,29 +16,28 @@ import { useGame } from '../state.ts';
 export function LineupScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const club = g.club!;
   const store = world.players;
+  const national = g.nationalView();
   const picked = g.lineup();
 
-  if (club.players.length === 0) return <Empty>No players under contract.</Empty>;
-  if (picked === null) return <Empty>No players under contract.</Empty>;
+  if (picked === null) return <Empty>{national ? 'No national squad yet.' : 'No players under contract.'}</Empty>;
 
   const { lineup, libero, defensiveLibero, bench, out } = picked;
   const teamAvg = lineup.length > 0
     ? Math.round(lineup.reduce((s, p) => s + store.currentAbility[p], 0) / lineup.length)
     : 0;
-  const hasPreference = club.preferredLineup.some((p) => p >= 0) || club.preferredLibero >= 0
-    || club.preferredDefensiveLibero >= 0 || club.preferredBench !== undefined;
-  const formation = formationOf(club.tactics);
+  const hasPreference = g.hasPreferredSheet();
+  const formation = formationOf(g.activeTactics() ?? undefined);
 
   return (
     <div className="lineup-page">
       <div className="lineup-bar">
         <div className="lineup-bar-text">
-          <strong>Default team sheet</strong>
+          <strong>{national ? 'National team sheet' : 'Default team sheet'}</strong>
           <span className="dim">
-            Used automatically for every match — the six, the liberos and the rest of the fourteen — and the starting
-            point whenever you rearrange it on match day. Anyone injured or sold is swapped for the next best fit.
+            {national
+              ? 'Used for every national team match — the starting point on match day, from the squad named for the tournament. Your club keeps its own. Anyone hurt or not called up is swapped for the next best fit.'
+              : 'Used automatically for every match — the six, the liberos and the rest of the fourteen — and the starting point whenever you rearrange it on match day. Anyone injured or sold is swapped for the next best fit.'}
           </span>
         </div>
         <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">

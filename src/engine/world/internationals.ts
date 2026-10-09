@@ -1021,13 +1021,24 @@ function release(world: World, t: Tournament, nation: number): void {
  *  playing the manager's tactics if it is his nation. */
 export function nationSetup(world: World, t: Tournament, nation: number): TeamSetup {
   const store = world.players;
+  const team = teamOf(world, nation);
+  const tactics = team?.tactics ?? defaultTactics();
+  // The manager's own team sheet for it, where he has made one; the six for its system either way.
   const pick = pickLineup(
     store,
-    { players: squadOf(t, nation), preferredLineup: [], preferredLibero: -1, preferredDefensiveLibero: -1 },
+    {
+      players: squadOf(t, nation),
+      preferredLineup: team?.preferredLineup ?? [],
+      preferredLibero: team?.preferredLibero ?? -1,
+      preferredDefensiveLibero: team?.preferredDefensiveLibero ?? -1,
+      preferredBench: team?.preferredBench,
+      preferredFormation: team?.preferredFormation,
+      tactics,
+    },
     undefined,
     (p) => canPlayForCountry(world, p),
   );
-  return { clubId: -1, name: nationName(nation), ...pick, tactics: teamOf(world, nation)?.tactics ?? defaultTactics() };
+  return { clubId: -1, name: nationName(nation), ...pick, tactics };
 }
 
 /** How much a match matters: a pool match, a knockout tie, the final. */
