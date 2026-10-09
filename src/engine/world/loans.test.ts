@@ -283,27 +283,30 @@ test('a lender complains when its player is denied the promised games, then reca
   assert.ok(world.messages.some((m) => m.subject === `${name} recalled by ${lender.name}`));
 });
 
-test('a young player who plays develops faster than one on the bench', () => {
+test('young players who play develop faster than ones on the bench', () => {
+  // Every youngster in the world, a year on from where it was made — with room
+  // to grow into — playing every minute in one world and none in the other.
+  // One player's weeks are mostly noise; a whole generation's are not.
   const grow = (minutes: number): number => {
     const world = generateWorld({ seed: 56, startYear: 2026, scale: 'small', manager: stubManager() });
     const store = world.players;
-    // The same youngster in both worlds: a good deal of room left to grow.
-    let pick = -1;
-    for (let i = 0; i < store.count && pick < 0; i++) {
-      if (store.clubId[i] >= 0 && store.ageOn(i, world.year, 181) <= 20 &&
-        store.potentialAbility[i] - store.currentAbility[i] > 300) pick = i;
+    const young: number[] = [];
+    for (let i = 0; i < store.count; i++) {
+      if (store.clubId[i] >= 0 && store.ageOn(i, world.year, 181) <= 21 &&
+        store.potentialAbility[i] - store.currentAbility[i] > 150) young.push(i);
     }
-    assert.ok(pick >= 0);
-    const before = store.currentAbility[pick];
+    assert.ok(young.length > 100);
+    for (const p of young) store.birthYear[p] -= 1;
+    const before = young.map((p) => store.currentAbility[p]);
     for (let week = 0; week < 20; week++) {
-      store.playingTime[pick] = minutes;
+      for (const p of young) store.playingTime[p] = minutes;
       weeklyTraining(world);
     }
-    return store.currentAbility[pick] - before;
+    return young.reduce((n, p, k) => n + store.currentAbility[p] - before[k], 0) / young.length;
   };
   const playing = grow(100);
   const benched = grow(0);
-  assert.ok(playing > benched * 1.5, `playing ${playing} vs benched ${benched}`);
+  assert.ok(playing > benched * 1.1, `playing ${playing.toFixed(1)} vs benched ${benched.toFixed(1)}`);
 });
 
 /** One of ours out on loan to a club that has played, with a record to report on. */

@@ -16,6 +16,7 @@ import { matchRating, playedInMatch, type RatingPath } from '../match/playerRati
 import type { PlayerMatchStats } from '../match/stats.ts';
 import type { Position } from '../model/positions.ts';
 import { courtShare, recordLoanMatch } from './loans.ts';
+import { noteTeamMatch } from './teamAwards.ts';
 import type { Fixture, World } from './world.ts';
 
 /** One player's line in one competition in one season. */
@@ -120,6 +121,7 @@ export function recordFixture(
   recordSide(world, fixture, awayStats, fixture.awaySets, fixture.homeSets, path);
   // National teams' squads are not clubs.
   if (world.competitions[fixture.competitionId]?.kind === 'international') return;
+  noteTeamMatch(world, fixture, homeStats, awayStats);
   recordPlayingTime(world, fixture, fixture.home, homeStats);
   recordPlayingTime(world, fixture, fixture.away, awayStats);
   recordLoanMatch(world, fixture, homeStats, awayStats, path);

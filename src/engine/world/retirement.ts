@@ -71,15 +71,16 @@ export function retirementHazard(world: World, i: number): number {
   const peak = store.potentialAbility[i];
   const decline = peak > 0 ? 1 - ca / peak : 0;
   // The one in a generation who will not stop: he never meant to, and he has
-  // looked after himself all his career.
-  const devotion = Math.max(0, (preference - 0.8) / 0.2) * (store.getAttr(i, 'professionalism') + store.getAttr(i, 'durability')) / 40;
-  // Most stop in their mid-thirties. The ones still going past that are the
-  // ones built to last — the hazard barely climbs to 42, and only then closes
-  // in: dozens play on past 40, and the oldest is usually 43 or so. For the
-  // devoted few it closes in slowly enough that one may play on near 50.
-  const byAge = age <= 36 ? Math.max(0, (age - 30) * 0.055)
-    : 0.33 + (age - 36) * 0.01 + Math.max(0, age - 42) * (0.15 - devotion * 0.12);
-  let p = byAge + Math.max(0, decline - 0.15) * 0.75;
+  // always looked after himself.
+  const devotion = Math.min(1, Math.max(0, (preference - 0.75) / 0.2)) *
+    Math.min(1, 0.5 + store.getAttr(i, 'professionalism') / 30);
+  // Most stop in their mid-thirties. Past that the hazard climbs, and past 42
+  // it closes in: dozens play on past 40, and the oldest is usually 43 or 44.
+  // For the devoted few it hardly climbs at all — one in a while plays on
+  // towards 50.
+  const rise = (age - 36) * 0.045 + Math.max(0, age - 42) * 0.3;
+  const byAge = age <= 36 ? Math.max(0, (age - 30) * 0.055) : 0.33 + rise * (1 - devotion * 0.95);
+  let p = byAge + Math.max(0, decline - 0.15) * 0.75 * (1 - devotion * 0.8);
   p *= 1.45 - preference * 0.9;
   if (store.clubId[i] < 0) p += 0.3;
   return Math.min(1, p);

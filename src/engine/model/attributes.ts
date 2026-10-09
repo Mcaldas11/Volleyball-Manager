@@ -97,6 +97,15 @@ export const ATTR_INDEX = Object.freeze(
 
 export const HIDDEN_ATTR_SET: ReadonlySet<string> = new Set(HIDDEN_ATTRS);
 
+/**
+ * Who a player is rather than what he can do: the hidden attributes, and the
+ * mental ones no position plays on. Training never raises them, so age and a
+ * bad week must not wear them down either.
+ */
+export const PERSONALITY_ATTR_SET: ReadonlySet<string> = new Set<string>([
+  ...HIDDEN_ATTRS, 'professionalism', 'workEthic', 'aggression', 'confidence', 'adaptability',
+]);
+
 export type AttributeGroup = 'physical' | 'technical' | 'mental' | 'hidden';
 
 export function attributeGroup(name: AttributeName): AttributeGroup {

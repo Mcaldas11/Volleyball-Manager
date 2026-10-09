@@ -8,9 +8,11 @@
  * attacker, server, blocker, passer, digger and setter, and the best young
  * player; the team of the competition; the favourites going in and how they
  * did, the surprise and the disappointment, measured against how strong each
- * squad was before a ball was played; the best attack, the best defence, the
- * longest winning run; the competition in numbers; and the best point and the
- * best play of it, to watch again, where they were seen.
+ * squad was before a ball was played; the team awards — the best attack,
+ * defence, block, serve and passing, the most clinical side and the comeback
+ * kings, each with the players who made it; the longest winning run; the
+ * competition in numbers; and the best point and the best play of it, to
+ * watch again, where they were seen.
  */
 
 import { compareTableRows } from '../model/club.ts';
@@ -20,6 +22,7 @@ import { cupGroupTable, cupProgress, isCupCompetition } from '../season/cups.ts'
 import { finalStandingsOrder } from '../season/playoffs.ts';
 import { ordinal, postMessage } from './inbox.ts';
 import { averageRating, type CompetitionRecord } from './records.ts';
+import { entrants, pruneTeamLines, TEAM_AWARD_NAMES, teamAwardsOf, type TeamAward } from './teamAwards.ts';
 import type { Competition, World } from './world.ts';
 
 export type ReviewAwardKey = 'mvp' | 'scorer' | 'attacker' | 'server' | 'blocker' | 'receiver' | 'digger' | 'setter' | 'rising';
@@ -62,6 +65,8 @@ export interface CompetitionReview {
   disappointment: ReviewTeamNote | null;
   bestAttack: { clubId: number; perSet: number } | null;
   bestDefence: { clubId: number; perSet: number } | null;
+  /** The team awards, each with the players who made it — absent on reviews from before they were kept. */
+  teamAwards?: TeamAward[];
   longestRun: { clubId: number; wins: number } | null;
   numbers: { matches: number; sets: number; tieBreaks: number; sweeps: number };
   bestPoint?: Highlight;
@@ -73,12 +78,6 @@ export interface CompetitionReview {
 /** A competition's key for the season: one review, and one look at the field, each. */
 function key(world: World, comp: Competition): string {
   return `${world.season}:${comp.id}`;
-}
-
-/** The clubs in a competition this season. */
-function entrants(comp: Competition): number[] {
-  if (isCupCompetition(comp)) return comp.cup?.entrants ?? [];
-  return comp.table.length > 0 ? comp.table.map((r) => r.clubId) : comp.participants;
 }
 
 /** A competition the manager's club is in, worth a review. */
@@ -131,6 +130,7 @@ export function competitionReviewsDay(world: World, seasonOver = false): void {
   for (const k of Object.keys(world.competitionFields)) {
     if (Number(k.split(':')[0]) < world.season - 1) delete world.competitionFields[k];
   }
+  pruneTeamLines(world);
 }
 
 /** The best point and play seen in a competition this season — kept as matches are played. */
@@ -316,11 +316,17 @@ export function reviewCompetition(world: World, comp: Competition): CompetitionR
     disappointment: flop !== undefined && flop.actual - flop.expected >= swing ? flop : null,
     bestAttack,
     bestDefence,
+    teamAwards: teamAwardsOf(world, comp),
     longestRun,
     numbers: { matches: fixtures.length, sets, tieBreaks, sweeps },
     bestPoint: seen?.point,
     bestPlay: seen?.play,
   };
+}
+
+/** "a, b and c". */
+function listOf(items: string[]): string {
+  return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
 /** The review, to the manager's inbox. */
@@ -334,12 +340,14 @@ function postReview(world: World, comp: Competition, r: CompetitionReview): void
   };
   const how = isCupCompetition(comp) ? `beating ${second?.name ?? 'their opponents'} in the final` : `ahead of ${second?.name ?? 'the rest'}`;
   const ours = r.champion === world.userClubId;
+  const teamHonours = (r.teamAwards ?? []).filter((a) => a.clubId === world.userClubId).map((a) => TEAM_AWARD_NAMES[a.key].toLowerCase());
   const parts = [
     `${champ?.name ?? 'The champions'} are the ${comp.name} champions, ${how}.`,
     r.you !== null && !ours ? `You finished: ${r.you.finish}.` : '',
     award('mvp') !== null ? `Most valuable player: ${award('mvp')}.` : '',
     award('scorer') !== null ? `Top scorer: ${award('scorer')}.` : '',
-    'The full review — the awards, the team of the competition, the surprises and the disappointments — is below.',
+    teamHonours.length > 0 ? `Your side take ${teamHonours.length === 1 ? 'a team award' : `${teamHonours.length} team awards`}: ${listOf(teamHonours)}.` : '',
+    'The full review — the awards, the team awards, the team of the competition, the surprises and the disappointments — is below.',
   ];
   postMessage(world, {
     category: 'awards',

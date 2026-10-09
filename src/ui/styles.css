@@ -5524,6 +5524,34 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .crv-award-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-gold); }
 .crv-award-main strong { overflow: hidden; color: var(--paper-ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .crv-award-value { font-size: 12.5px; color: #4d525c; }
+.crv-taw { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-bottom: 10px; }
+.crv-taward { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 12px; border: 1px solid rgba(60, 45, 20, 0.12); border-radius: 6px; background: rgba(255, 255, 255, 0.35); }
+.crv-taward.ours { border-color: rgba(215, 167, 63, 0.7); background: rgba(215, 167, 63, 0.14); }
+.crv-taward-head { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--paper-gold); white-space: nowrap; cursor: help; }
+.crv-taward-club { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.crv-taward-club > div { display: flex; flex-direction: column; min-width: 0; }
+.crv-taward-club b { overflow: hidden; font-size: 14.5px; color: var(--paper-ink); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.crv-taward-club b:hover { text-decoration: underline; }
+.crv-taward-club span { font-size: 12.5px; font-weight: 600; color: #237a3b; }
+.crv-taward-chasers { display: flex; flex-direction: column; gap: 1px; font-size: 11.5px; color: #6b7079; }
+.crv-taward-chasers span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.crv-taward-chasers b { font-weight: 700; color: #4d525c; }
+.crv-taward-matches { display: flex; flex-wrap: wrap; gap: 4px; }
+.crv-taward-matches span { padding: 1px 6px; border-radius: 4px; font-size: 11px; color: #4d525c; background: rgba(60, 45, 20, 0.07); }
+.crv-taward-players { display: flex; flex-direction: column; border-top: 1px solid rgba(60, 45, 20, 0.09); }
+.crv-taward-man { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 0; border-bottom: 1px solid rgba(60, 45, 20, 0.06); cursor: pointer; }
+.crv-taward-man:hover b { text-decoration: underline; }
+.crv-taward-who { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.crv-taward-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crv-taward-row b { overflow: hidden; flex: 1; min-width: 0; font-size: 12.5px; color: var(--paper-ink); text-overflow: ellipsis; white-space: nowrap; }
+.crv-taward-row strong { flex: none; font-size: 12px; color: var(--paper-ink); }
+.crv-taward-who em { font-size: 10px; font-style: normal; font-weight: 800; letter-spacing: 0.05em; color: var(--paper-gold); }
+.crv-taward-who span { overflow: hidden; font-size: 11.5px; color: #4d525c; text-overflow: ellipsis; white-space: nowrap; }
+.crv-taward-share { position: relative; flex: none; width: 44px; height: 14px; overflow: hidden; border-radius: 3px; background: rgba(60, 45, 20, 0.08); }
+.crv-taward-share i { position: absolute; inset: 0 auto 0 0; background: rgba(215, 167, 63, 0.55); }
+.crv-taward-share small { position: relative; display: block; font-size: 10.5px; font-weight: 700; line-height: 14px; color: var(--paper-ink); text-align: center; }
+.crv-taward-more { align-self: flex-start; padding: 2px 8px; border: 1px solid rgba(60, 45, 20, 0.15); border-radius: 4px; font-size: 11.5px; color: #4d525c; background: transparent; cursor: pointer; }
+.crv-taward-more:hover:not(:disabled) { color: var(--paper-ink); background: rgba(60, 45, 20, 0.08); }
 .crv-dream { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding-bottom: 10px; }
 .crv-dream-man { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; cursor: pointer; }
 .crv-dream-man b { overflow: hidden; max-width: 100%; color: var(--paper-ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

@@ -27,6 +27,7 @@ test('in January the players who will stop say so — in the paper, on their pro
   // A veteran of the manager's, at the very end.
   const veteran = club.players[0];
   store.birthYear[veteran] = world.year - 44;
+  store.setAttr(veteran, 'retirementPreference', 5);
   world.day = world.season * DAYS_PER_SEASON + ANNOUNCE_DAY;
   retirementDay(world);
 

@@ -27,6 +27,7 @@ import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
 import type { RetirementPlan } from './retirement.ts';
+import type { TeamLine } from './teamAwards.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
@@ -651,6 +652,8 @@ export interface World {
   reviewedCompetitions?: string[];
   /** The best point and play seen in each competition this season, by "season:competition". */
   competitionHighlights?: Record<string, { point?: Highlight; play?: Highlight }>;
+  /** Each followed competition's sides, match by match, for its team awards — keyed "season:competitionId", then by club. */
+  teamLines?: Record<string, Record<number, TeamLine>>;
 }
 
 export function dayOfSeason(world: World): number {

@@ -19,7 +19,7 @@ import { medicalQuality } from './staffMarket.ts';
 import { ageAtSeasonEnd, farewell, plansThisSeason, retirementHazard, willRetire } from './retirement.ts';
 import type { Rng } from '../core/rng.ts';
 import {
-  AGE_DECAY_WEIGHT, ATTRIBUTES, HIDDEN_ATTR_SET, LATE_GROWTH_WEIGHT, type AttributeName,
+  AGE_DECAY_WEIGHT, ATTRIBUTES, LATE_GROWTH_WEIGHT, PERSONALITY_ATTR_SET, type AttributeName,
 } from '../model/attributes.ts';
 import { AGEING_RESISTANCE, abilityFractionAtAge, refreshAbility, weightsFor } from '../model/ability.ts';
 import { ATTR_INDEX } from '../model/attributes.ts';
@@ -279,9 +279,10 @@ function applyAbilityDelta(
     if (candidates.length === 0) break;
     const pick = candidates[rng.weightedIndex(weights)];
     // Age and a bad week wear the body and the touch, not the man: who he is —
-    // his loyalty, his nerve, how long he means to go on — does not fade. (The
-    // step that lands there is simply not taken, so the rest declines as ever.)
-    if (!improving && HIDDEN_ATTR_SET.has(ATTRIBUTES[pick])) continue;
+    // his professionalism, his loyalty, how long he means to go on — does not
+    // fade. (The step that lands there is simply not taken, so the rest
+    // declines as ever.)
+    if (!improving && PERSONALITY_ATTR_SET.has(ATTRIBUTES[pick])) continue;
     const base = i * ATTRIBUTES.length + pick;
     store.attrs[base] = Math.max(1, Math.min(20, store.attrs[base] + (improving ? 1 : -1)));
   }
