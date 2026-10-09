@@ -357,17 +357,18 @@ const AWAY_EDGE = 0.999;
 /**
  * The liberos a side names for a match — never more than two: whoever plays
  * the libero roles, then the best natural libero among the reserves, as the
- * spare. Anyone else in the squad, a third libero too, is down to play in the
- * six. A setup that names them itself is taken at its word.
+ * spare — unless the coach has him down to play in the six (`outfield`).
+ * Anyone else in the squad, a third libero too, is down to play in the six.
+ * A setup that names them itself is taken at its word.
  */
 export function registeredLiberos(
   store: PlayerStore,
-  setup: Pick<TeamSetup, 'libero' | 'defensiveLibero' | 'bench' | 'liberos'>,
+  setup: Pick<TeamSetup, 'libero' | 'defensiveLibero' | 'bench' | 'liberos'> & { outfield?: readonly number[] },
 ): number[] {
   if (setup.liberos !== undefined) return setup.liberos.filter((p) => p >= 0).slice(0, MAX_LIBEROS);
   const named = [setup.libero, setup.defensiveLibero ?? -1].filter((p) => p >= 0);
   const spares = setup.bench
-    .filter((p) => store.position[p] === Position.Libero && !named.includes(p))
+    .filter((p) => store.position[p] === Position.Libero && !named.includes(p) && !(setup.outfield ?? []).includes(p))
     .sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
   return [...named, ...spares].slice(0, MAX_LIBEROS);
 }
@@ -423,9 +424,17 @@ class TeamRuntime {
     this.receptionLibero = setup.libero;
     this.defensiveLibero = setup.defensiveLibero ?? -1;
     this.registeredLiberos = new Set(registeredLiberos(store, setup));
+    // What the bench plays tonight, shirt and all, from the first whistle: a
+    // libero named as one is a libero; a libero down to play in the six is an
+    // outfield player — a receiver — and never wears the libero's shirt.
+    for (const p of setup.bench) {
+      if (p < 0) continue;
+      if (this.registeredLiberos.has(p)) roles[p] = Position.Libero;
+      else if (roles[p] === Position.Libero) roles[p] = Position.OutsideHitter;
+    }
 
     // Ratings for everyone who might take the floor: the six and the liberos
-    // in the positions they were picked for, the bench in their own.
+    // in the positions they were picked for, the bench in what it plays tonight.
     const all = [...setup.lineup, ...setup.bench];
     if (setup.libero >= 0) all.push(setup.libero);
     if (this.defensiveLibero >= 0) all.push(this.defensiveLibero);

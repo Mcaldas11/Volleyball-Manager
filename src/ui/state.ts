@@ -352,6 +352,8 @@ export interface MatchdayState {
   homeBench: number[];
   /** The liberos named for the match, fixed at kickoff — at most two. */
   homeLiberos?: number[];
+  /** Reserve liberos the coach has down to play in the six rather than as the spare libero — until kickoff. */
+  homeOutfieldLiberos?: number[];
   speed: 1 | 1.5 | 2;
   paused: boolean;
   /** Wall-clock ms; once reached the rally loop auto-resumes — a substitution stoppage, not a real pause. */
@@ -2051,7 +2053,23 @@ class Game {
     const sheet = new Set([...md.homeLineup, md.homeLibero, md.homeDefensiveLibero]);
     const room = MATCHDAY_SQUAD - [...sheet].filter((p) => p >= 0).length;
     md.homeBench = [...new Set(md.homeBench)].filter((p) => canPlay(p) && !sheet.has(p)).slice(0, Math.max(0, room));
-    md.homeLiberos = registeredLiberos(store, { libero: md.homeLibero, defensiveLibero: md.homeDefensiveLibero, bench: md.homeBench });
+    md.homeLiberos = registeredLiberos(store, {
+      libero: md.homeLibero, defensiveLibero: md.homeDefensiveLibero, bench: md.homeBench, outfield: md.homeOutfieldLiberos,
+    });
+  }
+
+  /**
+   * Before kickoff: a libero among the reserves is either the spare libero —
+   * who plays libero and nothing else — or down to play in the six, an
+   * outfield player who may never take a libero's place. This turns him from
+   * the one into the other.
+   */
+  toggleReserveLibero(playerIdx: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup' || !md.homeBench.includes(playerIdx)) return;
+    const outfield = md.homeOutfieldLiberos ?? [];
+    md.homeOutfieldLiberos = outfield.includes(playerIdx) ? outfield.filter((p) => p !== playerIdx) : [...outfield, playerIdx];
+    this.emit();
   }
 
   /** The match under way, from the first serve. */

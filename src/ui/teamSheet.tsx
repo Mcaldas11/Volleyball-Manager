@@ -128,12 +128,14 @@ export function LineupCard({
 
 /** A bench row, draggable onto any starting slot unless told otherwise. */
 export function BenchCard({
-  playerIdx, store, tag, tagTitle, draggable = true, action, out = false,
+  playerIdx, store, tag, tagTitle, onTag, draggable = true, action, out = false,
 }: {
   playerIdx: number;
   store: PlayerStore;
   tag?: string;
   tagTitle?: string;
+  /** The tag is a switch: a reserve libero between the spare libero and the six. */
+  onTag?: () => void;
   draggable?: boolean;
   /** A button at the end of the row — into the squad, or out of it. */
   action?: ReactNode;
@@ -150,9 +152,11 @@ export function BenchCard({
     >
       {draggable && <span className="bench-token-grip" aria-hidden="true">⋮⋮</span>}
       <PlayerFace playerId={store.id[playerIdx]} name={store.fullName(playerIdx)} size={30} />
-      <span className="bench-token-name">
-        {store.shortName(playerIdx)}
-        {tag !== undefined && <span className="bench-token-tag" title={tagTitle}>{tag}</span>}
+      <span className={`bench-token-name${tag !== undefined ? ' has-tag' : ''}`}>
+        <span className="bench-token-text">{store.shortName(playerIdx)}</span>
+        {tag !== undefined && (onTag !== undefined
+          ? <button className="bench-token-tag switch" title={tagTitle} onClick={onTag}>{tag} <span aria-hidden="true">⇄</span></button>
+          : <span className="bench-token-tag" title={tagTitle}>{tag}</span>)}
       </span>
       <Pos pos={pos} />
       <span className="bench-token-ability">{store.currentAbility[playerIdx]}</span>
@@ -194,6 +198,10 @@ export interface TeamSheetProps {
   /** The liberos named for the match, once it is under way: only they may take
    *  the libero slots, and none of them a zone. Absent: worked out as picked. */
   registered?: number[];
+  /** Before kickoff, reserve liberos down to play in the six rather than as the spare libero. */
+  outfieldLiberos?: number[];
+  /** Before kickoff: switch a reserve libero between the spare libero and the six. */
+  onToggleReserveLibero?: (playerIdx: number) => void;
 }
 
 /**
@@ -211,13 +219,13 @@ export interface TeamSheetProps {
 export function TeamSheet({
   lineup, libero, defensiveLibero, bench, store, onSetPlayer, onSwapPlayers, onSetLibero,
   onSetDefensiveLibero, restrictSwapsByPosition = false, slotPositions = LINEUP_SLOT_POSITIONS,
-  outOfSquad, onAddToSquad, onDropFromSquad, registered,
+  outOfSquad, onAddToSquad, onDropFromSquad, registered, outfieldLiberos, onToggleReserveLibero,
 }: TeamSheetProps): JSX.Element {
   const [dragOverZone, setDragOverZone] = useState<number | null>(null);
   const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
   // Once the match is on, the liberos named for it are fixed: they play libero and nothing else.
   const fixed = new Set(registered ?? []);
-  const namedLiberos = registered ?? registeredLiberos(store, { libero, defensiveLibero, bench });
+  const namedLiberos = registered ?? registeredLiberos(store, { libero, defensiveLibero, bench, outfield: outfieldLiberos });
 
   const dropOnZone = (targetZone: number, draggedPlayerIdx: number): void => {
     if (draggedPlayerIdx === lineup[targetZone] || fixed.has(draggedPlayerIdx)) return;
@@ -275,11 +283,26 @@ export function TeamSheet({
   const starters = lineup.filter((p) => p >= 0).length;
   const inSquad = starters + (libero >= 0 ? 1 : 0) + (defensiveLibero >= 0 ? 1 : 0) + bench.length;
   const full = inSquad >= MATCHDAY_SQUAD;
-  /** What a reserve is down as, when it isn't obvious: the spare libero, or a libero playing in the six. */
-  const benchTag = (p: number): { tag?: string; title?: string } => {
-    if (namedLiberos.includes(p)) return { tag: 'Spare', title: 'Named as the second libero for the match: plays libero, and nothing else' };
+  /** What a reserve is down as, when it isn't obvious: the spare libero, or a libero playing in the six — and, before kickoff, the switch between the two. */
+  const benchTag = (p: number): { tag?: string; tagTitle?: string; onTag?: () => void } => {
+    const canSwitch = registered === undefined && onToggleReserveLibero !== undefined;
+    const toggle = canSwitch ? () => onToggleReserveLibero(p) : undefined;
+    if (namedLiberos.includes(p)) {
+      return {
+        tag: 'Spare',
+        tagTitle: `Named as the second libero for the match: plays libero, and nothing else${canSwitch ? ' — click to play him in the six instead' : ''}`,
+        onTag: toggle,
+      };
+    }
     if (store.position[p] === Position.Libero) {
-      return { tag: 'Outfield', title: `Only ${namedLiberos.length} liberos can be named — he is down to play in the six` };
+      const chosen = (outfieldLiberos ?? []).includes(p);
+      return {
+        tag: 'Outfield',
+        tagTitle: chosen
+          ? `Down to play in the six: an outfield player, who can never take a libero's place${canSwitch ? ' — click to name him the spare libero' : ''}`
+          : `Only ${namedLiberos.length} liberos can be named — he is down to play in the six`,
+        onTag: chosen ? toggle : undefined,
+      };
     }
     return {};
   };

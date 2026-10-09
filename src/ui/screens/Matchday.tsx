@@ -219,6 +219,8 @@ function LineupSetup(): JSX.Element {
         outOfSquad={g.matchdayLeftOut()}
         onAddToSquad={(p) => g.addToMatchdaySquad(p)}
         onDropFromSquad={(p) => g.dropFromMatchdaySquad(p)}
+        outfieldLiberos={md.homeOutfieldLiberos}
+        onToggleReserveLibero={(p) => g.toggleReserveLibero(p)}
       />
     </div>
   );
@@ -1216,10 +1218,12 @@ function LiveMatchView(): JSX.Element {
  *  onto another (in either direction — bench-to-court or court-to-bench) subs
  *  them in one motion; clicking both, then confirming, does the same thing. */
 function SubCard({
-  playerIdx, store, rating, selected, isDragOver, onClick, onDropPlayer, onDragOverCard, onDragLeaveCard, warm,
+  playerIdx, store, role, rating, selected, isDragOver, onClick, onDropPlayer, onDragOverCard, onDragLeaveCard, warm,
 }: {
   playerIdx: number;
   store: PlayerStore;
+  /** What he plays in this match — a libero down to play in the six is no libero here. */
+  role?: Position;
   /** Live match rating, if the player has played yet. */
   rating?: number;
   /** A substitute's warm-up: how warm he is, whether he is warming up, and the button to send him. */
@@ -1231,7 +1235,7 @@ function SubCard({
   onDragOverCard: () => void;
   onDragLeaveCard: () => void;
 }): JSX.Element {
-  const pos = store.position[playerIdx] as Position;
+  const pos = role ?? (store.position[playerIdx] as Position);
   return (
     <div
       className={`bench-token sub-token draggable${selected ? ' selected' : ''}${isDragOver ? ' drag-over' : ''}`}
@@ -1344,6 +1348,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   // this bench. A libero beyond the two is in the squad to play in the six.
   const bench = squad.filter((p) => !onCourt.includes(p) && g.matchAvailable(p) && !named.has(p));
   const ratings = g.liveRatings();
+  const roles = g.liveRoles();
   const liberos = g.liveLiberos();
   const spareLiberos = squad.filter((p) =>
     named.has(p) && g.matchAvailable(p) && !onCourt.includes(p) && p !== liberos.reception && p !== liberos.defence);
@@ -1404,6 +1409,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
                   key={p}
                   playerIdx={p}
                   store={store}
+                  role={roles[p] as Position}
                   rating={ratings.get(p)}
                   selected={outPlayer === p}
                   onClick={() => setOutPlayer(outPlayer === p ? null : p)}
@@ -1421,6 +1427,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
                   key={p}
                   playerIdx={p}
                   store={store}
+                  role={roles[p] as Position}
                   rating={ratings.get(p)}
                   selected={inPlayer === p}
                   onClick={() => setInPlayer(inPlayer === p ? null : p)}

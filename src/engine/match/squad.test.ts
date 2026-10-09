@@ -89,3 +89,48 @@ test('only two liberos are named: a third in the squad plays in the six, and tho
   assert.equal(sim.setLibero(0, 'reception', benchSpare).ok, true);
   assert.deepEqual(new Set(sim.squadFor(0)), new Set([...home.lineup, home.libero, ...bench]));
 });
+
+test('a libero down to play in the six is an outfield player from the first whistle — shirt and all — and a libero named as one never plays in the six', () => {
+  const w = world(94);
+  const store = w.players;
+  const [a, b] = w.clubs.filter((c) => c.tier === 1 && c.players.length >= 18);
+  const home = toTeamSetup(store, a);
+  const away = toTeamSetup(store, b);
+  const spare = home.bench.find((p) => store.position[p] === Position.Libero)!;
+  assert.ok(spare !== undefined, 'a second libero among the reserves');
+
+  // The coach's say: the reserve libero is either the spare libero, or down to play in the six.
+  assert.ok(registeredLiberos(store, home).includes(spare));
+  assert.ok(!registeredLiberos(store, { ...home, outfield: [spare] }).includes(spare));
+
+  // Down to play in the six: an outfield player before he has even come on.
+  const asOutfield = new MatchSimulator(store, {
+    home: { ...home, liberos: registeredLiberos(store, { ...home, outfield: [spare] }) }, away,
+    format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: false, seed: 4,
+  });
+  assert.equal(asOutfield.roleOf(spare), Position.OutsideHitter, 'not in the libero’s shirt on the bench');
+  assert.equal(asOutfield.setLibero(0, 'reception', spare).ok, false, 'and never a libero');
+
+  // Named as the spare: a libero before he has come on, and nothing else.
+  const asLibero = new MatchSimulator(store, {
+    home, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: false, seed: 4,
+  });
+  assert.equal(asLibero.roleOf(spare), Position.Libero);
+  const mb = home.lineup.find((p) => store.position[p] === Position.MiddleBlocker)!;
+  assert.equal(asLibero.substitute(0, mb, spare).ok, false);
+  // Nor at a set break's new sheet.
+  const sheet = home.lineup.map((p) => (p === mb ? spare : p));
+  assert.equal(asLibero.setStartingLineup(0, sheet, home.libero).ok, false);
+
+  // A libero picked in the six plays there, as the slot's position — and never libero, even once he has come off.
+  const ohSlot = home.lineup.findIndex((p) => store.position[p] === Position.OutsideHitter);
+  const oh = home.lineup[ohSlot];
+  const inSix = { ...home, lineup: home.lineup.map((p, i) => (i === ohSlot ? spare : p)), bench: [...home.bench.filter((p) => p !== spare), oh] };
+  const sim = new MatchSimulator(store, {
+    home: inSix, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: false, seed: 5,
+  });
+  assert.equal(sim.roleOf(spare), Position.OutsideHitter);
+  assert.equal(sim.setLibero(0, 'reception', spare).ok, false);
+  assert.equal(sim.substitute(0, spare, oh).ok, true);
+  assert.equal(sim.setLibero(0, 'defence', spare).ok, false, 'off the court, still not a libero');
+});
