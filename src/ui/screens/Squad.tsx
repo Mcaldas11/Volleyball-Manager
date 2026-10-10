@@ -21,6 +21,7 @@ import {
   RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useDismiss, useSort,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
+import { ClubHistoryCard } from '../clubHistory.tsx';
 import { useGame } from '../state.ts';
 
 type SquadSort =
@@ -679,18 +680,21 @@ export function PlayerDetail(): JSX.Element | null {
 
       {tab === 'details' && (
         <div className="grid3 profile-details">
-          <Card title="Physical Profile" icon="user">
-            <KV k="Height">{store.heightCm[p]} cm</KV>
-            <KV k="Weight">{store.weightKg[p]} kg</KV>
-            <KV k="Preferred hand">
-              {store.hasFlag(p, PlayerFlag.LeftHanded) ? 'Left' : 'Right'}
-              {store.hasFlag(p, PlayerFlag.LeftHanded) && store.position[p] === Position.Opposite && (
-                <span className="faint"> · a left-hander on the right side</span>
-              )}
-            </KV>
-            <KV k="Spike reach">{store.spikeReachCm[p]} cm</KV>
-            <KV k="Block reach">{store.blockReachCm[p]} cm</KV>
-          </Card>
+          <div className="stack">
+            <Card title="Physical Profile" icon="user">
+              <KV k="Height">{store.heightCm[p]} cm</KV>
+              <KV k="Weight">{store.weightKg[p]} kg</KV>
+              <KV k="Preferred hand">
+                {store.hasFlag(p, PlayerFlag.LeftHanded) ? 'Left' : 'Right'}
+                {store.hasFlag(p, PlayerFlag.LeftHanded) && store.position[p] === Position.Opposite && (
+                  <span className="faint"> · a left-hander on the right side</span>
+                )}
+              </KV>
+              <KV k="Spike reach">{store.spikeReachCm[p]} cm</KV>
+              <KV k="Block reach">{store.blockReachCm[p]} cm</KV>
+            </Card>
+            <ClubHistoryCard world={world} p={p} />
+          </div>
           <Card title="Career" icon="trophy">
             <KV k="Matches">{store.careerMatches[p].toLocaleString()}</KV>
             <KV k="Points">{store.careerPoints[p].toLocaleString()}</KV>

@@ -22,6 +22,8 @@ import { Position } from '../engine/model/positions.ts';
 import { contractEndSeason, DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
 import { cancelOffCycleClubWorld, ensureCupCompetitions } from '../engine/season/cups.ts';
+import { balanceRelegationSlots } from '../engine/season/pyramid.ts';
+import { seedClubHistories } from '../engine/world/clubHistory.ts';
 import { backfillCareer } from '../engine/world/career.ts';
 import { rollHandedness, rollOffHand } from '../engine/world/playerGen.ts';
 import { coachesSetUp } from '../engine/world/aiTactics.ts';
@@ -194,6 +196,8 @@ export function reviveWorld(raw: World): World {
   for (const comp of raw.competitions) {
     comp.playoffGroups ??= [];
   }
+  // Saves from before the divisions traded clubs evenly: as many places down as up.
+  balanceRelegationSlots(raw);
   // Saves from before pre-match interviews existed have neither field.
   raw.pendingInterviews ??= [];
   raw.interviewedFixtures ??= new Set();
@@ -272,6 +276,8 @@ export function reviveWorld(raw: World): World {
   }
   // ...and from before there was a market for them.
   topUpStaffPool(raw);
+  // Saves from before club histories: the careers so far are drawn up now.
+  if (raw.clubSpells === undefined) seedClubHistories(raw, raw.season);
   // Saves from before the other coaches picked their own tactics: they pick them now, not next season.
   if (raw.coachedSides !== true) {
     coachesSetUp(raw, (club) => pickLineup(raw.players, club).lineup);

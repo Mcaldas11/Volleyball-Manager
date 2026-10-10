@@ -660,6 +660,8 @@ export interface World {
   competitionHighlights?: Record<string, { point?: Highlight; play?: Highlight }>;
   /** Each followed competition's sides, match by match, for its team awards — keyed "season:competitionId", then by club. */
   teamLines?: Record<string, Record<number, TeamLine>>;
+  /** Every player's spells at clubs, oldest first, packed as numbers — see clubHistory.ts. Keyed by player index. */
+  clubSpells?: Map<number, number[]>;
 }
 
 export function dayOfSeason(world: World): number {

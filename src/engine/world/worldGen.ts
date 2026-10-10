@@ -29,6 +29,8 @@ import { NATIONS, type Confederation } from './nations.ts';
 import { estimateValue, generatePlayer } from './playerGen.ts';
 import { generateYouthIntake } from './progression.ts';
 import { ensureCupCompetitions } from '../season/cups.ts';
+import { balanceRelegationSlots, divisionSize } from '../season/pyramid.ts';
+import { seedClubHistories } from './clubHistory.ts';
 import {
   contractEndSeason, newWorld, seasonEndDay, type Competition, type ManagerProfile, type NationalTeam, type World,
 } from './world.ts';
@@ -69,9 +71,8 @@ function pyramidShape(
 
 /** Clubs per division, by tier. Top flights are smaller than lower ones. */
 function clubsPerDivision(tier: number, rng: Rng): number {
-  if (tier === 1) return rng.int(12, 14);
-  if (tier === 2) return rng.int(12, 16);
-  return rng.int(10, 14);
+  const [lo, hi] = divisionSize(tier);
+  return rng.int(lo, hi);
 }
 
 export function generateWorld(opts: WorldGenOptions): World {
@@ -99,6 +100,9 @@ export function generateWorld(opts: WorldGenOptions): World {
     }
   }
 
+  // As many places down from each division as there are up from the one below.
+  balanceRelegationSlots(world);
+
   // Squads are built after every club exists, so that foreign signings can be
   // drawn from the whole world rather than from whatever was created first.
   // The veterans' long careers come from dice of their own.
@@ -113,6 +117,9 @@ export function generateWorld(opts: WorldGenOptions): World {
   const academies = new Rng(opts.seed ^ 0x5eed_ac4d);
   generateYouthIntake(world, academies);
   generateYouthIntake(world, academies);
+
+  // Where every senior player has been before.
+  seedClubHistories(world, 0);
 
   createNationalTeams(world);
   ensureCupCompetitions(world);

@@ -8,6 +8,7 @@ import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { BracketView, LeagueTableView } from './Match.tsx';
 import { Dropdown } from '../dropdown.tsx';
+import { CompetitionStatsView } from '../competitionStats.tsx';
 
 const REGION: Readonly<Record<string, string>> = {
   CEV: 'Europe',
@@ -238,9 +239,9 @@ function ordinal(n: number): string {
 
 // ---- One competition ---------------------------------------------------------------
 
-type DetailTab = 'table' | 'groups' | 'knockout' | 'results';
+type DetailTab = 'table' | 'groups' | 'knockout' | 'results' | 'stats';
 
-/** A competition's own page: its groups, its bracket and every result. */
+/** A competition's own page: its groups, its bracket, every result and its statistics. */
 export function CompetitionDetail(): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
@@ -258,6 +259,7 @@ export function CompetitionDetail(): JSX.Element | null {
   if (cup !== undefined && cup.groups.length > 0) tabs.push(['groups', 'Groups']);
   if (cup !== undefined) tabs.push(['knockout', 'Knockout']);
   tabs.push(['results', 'Fixtures & results']);
+  if (league || cup !== undefined) tabs.push(['stats', 'Stats']);
   const active = tabs.some(([t]) => t === tab) ? tab : tabs[0][0];
 
   return (
@@ -309,6 +311,8 @@ export function CompetitionDetail(): JSX.Element | null {
       )}
 
       {active === 'results' && <ResultsList comp={comp} />}
+
+      {active === 'stats' && <CompetitionStatsView comp={comp} />}
     </div>
   );
 }

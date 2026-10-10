@@ -19,6 +19,8 @@ import { compareTableRows, sponsorshipFor, tvRightsFor, type Club } from '../mod
 import { PlayerFlag } from '../model/players.ts';
 import { MAX_SQUAD, Position, SQUAD_TARGET } from '../model/positions.ts';
 import { finalStandingsOrder } from './playoffs.ts';
+import { applyPromotionRelegation } from './pyramid.ts';
+import { openSeasonSpells } from '../world/clubHistory.ts';
 import { isCupCompetition, qualifyForCups } from './cups.ts';
 import {
   applyAgeing, generateYouthIntake, processRetirements, revalueSquads, revisePotential,
@@ -126,6 +128,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   ctx.stats.clear();
   ctx.detailedResults.clear();
   startSeason(world, ctx);
+  // Everyone's spell at his club runs on into the new season — or starts with it.
+  openSeasonSpells(world);
   seasonObjectives(world);
 
   return report;
@@ -245,68 +249,6 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
     club.finances.balance = 50_000;
     club.finances.seasonsInDebt = 0;
   }
-}
-
-// ---- Promotion and relegation --------------------------------------------
-
-function applyPromotionRelegation(world: World, report: RolloverReport): void {
-  // Group divisions by nation and tier so clubs move between the right ones.
-  const byNationTier = new Map<string, number[]>();
-  for (const comp of world.competitions) {
-    if (comp.kind !== 'league') continue;
-    const key = `${comp.nation}:${comp.tier}`;
-    const list = byNationTier.get(key) ?? [];
-    list.push(comp.id);
-    byNationTier.set(key, list);
-  }
-
-  for (const comp of world.competitions) {
-    if (comp.kind !== 'league' || comp.table.length === 0) continue;
-    const above = byNationTier.get(`${comp.nation}:${comp.tier - 1}`);
-    const below = byNationTier.get(`${comp.nation}:${comp.tier + 1}`);
-    const sorted = [...comp.table].sort(compareTableRows);
-    if (sorted[0].played === 0) continue;
-
-    // A relegation playoff, where one was contested, decides who actually
-    // goes down — not simply whoever sat at the bottom of the table.
-    const finalOrder = finalStandingsOrder(comp);
-
-    // Relegate the bottom clubs if there is a division beneath.
-    if (below !== undefined && below.length > 0) {
-      for (let i = 0; i < comp.relegationSlots && i < finalOrder.length; i++) {
-        const clubId = finalOrder[finalOrder.length - 1 - i];
-        const target = world.competitions[below[i % below.length]];
-        moveClub(world, clubId, comp.id, target.id);
-        report.relegated++;
-      }
-    }
-    // Promote the top clubs if there is a division above.
-    if (above !== undefined && above.length > 0 && comp.promotionSlots > 0) {
-      for (let i = 0; i < comp.promotionSlots && i < finalOrder.length; i++) {
-        const clubId = finalOrder[i];
-        const target = world.competitions[above[i % above.length]];
-        moveClub(world, clubId, comp.id, target.id);
-        report.promoted++;
-      }
-    }
-  }
-}
-
-function moveClub(world: World, clubId: number, fromComp: number, toComp: number): void {
-  const club = world.clubs[clubId];
-  const from = world.competitions[fromComp];
-  const to = world.competitions[toComp];
-  if (club === undefined || from === undefined || to === undefined) return;
-
-  from.participants = from.participants.filter((c) => c !== clubId);
-  to.participants.push(clubId);
-  club.leagueId = to.id;
-  club.tier = to.tier;
-
-  // Moving division changes what a club is worth to sponsors, and therefore
-  // what it can pay. Promotion is a windfall; relegation hurts for years.
-  const factor = to.tier < from.tier ? 1.18 : 0.86;
-  club.reputation = Math.round(Math.min(10000, club.reputation * factor));
 }
 
 // ---- Youth and squads -----------------------------------------------------

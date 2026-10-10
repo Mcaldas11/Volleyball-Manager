@@ -13,6 +13,7 @@ import {
   Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerLink, RatingBadge, Segmented, StatTile,
 } from '../components.tsx';
 import { useGame, type WatchedMatch } from '../state.ts';
+import { CompetitionStatsView } from '../competitionStats.tsx';
 
 type NameLookup = { shortName: (i: number) => string };
 
@@ -596,16 +597,23 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
             <span className="faint">Tier {comp.tier} · {comp.participants.length} clubs</span>
           </div>
         )}
-        {comp.playoffGroups.length > 0 && (
+        {(titled || comp.playoffGroups.length > 0) && (
           <Segmented
-            options={[['table', 'Table'], ...comp.playoffGroups.map((grp) => [grp.id, grp.label] as const)]}
+            options={[
+              ['table', 'Table'],
+              ...comp.playoffGroups.map((grp) => [grp.id, grp.label] as const),
+              // The competition's own page has its statistics a tab of their own.
+              ...(titled ? [['stats', 'Stats'] as const] : []),
+            ]}
             value={tab}
             onChange={setTab}
           />
         )}
       </div>}
 
-      {activeGroup !== undefined ? (
+      {tab === 'stats' ? (
+        <CompetitionStatsView comp={comp} />
+      ) : activeGroup !== undefined ? (
         <Card title={activeGroup.label} icon="trophy">
           <BracketView group={activeGroup} world={world} />
         </Card>
@@ -653,7 +661,7 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
           </div>
         </Card>
       )}
-      {activeGroup === undefined && champSize > 0 && (
+      {tab !== 'stats' && activeGroup === undefined && champSize > 0 && (
         <p className="legend">
           <span className="zone-key champ" /> Top {champSize} — championship playoff
           {relegationSize > 0 && (
