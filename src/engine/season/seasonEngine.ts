@@ -31,7 +31,9 @@ import { progressCups, scheduleCupSeason } from './cups.ts';
 import { friendliesDay, isFriendly } from './friendlies.ts';
 import { POSITION_MATCH, prepCoverage, trainingDay, trainPositions } from '../world/training.ts';
 import { youthDay } from '../world/youth.ts';
-import { rollInjuries, weeklyTraining } from '../world/progression.ts';
+import {
+  applyMatchInjuries, matchInjuryRng, quickMatchInjuries, rollInjuries, weeklyTraining,
+} from '../world/progression.ts';
 import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
 import { generateLoanOffers, loanOf, loanStarters, reviewLoanPromises } from '../world/loans.ts';
@@ -313,6 +315,9 @@ export function playFixture(
   accumulate(ctx.stats, result.homeStats, result.setScores.length);
   accumulate(ctx.stats, result.awayStats, result.setScores.length);
   recordFixture(world, fixture, result.homeStats, result.awayStats, 'quick');
+  // What it did to its players: the same risks as a match watched, rolled on its own dice.
+  const hurt = matchInjuryRng(world, fixture.id, fixture.day);
+  applyMatchInjuries(world, quickMatchInjuries(world, [result.homeStats, result.awayStats], hurt), hurt);
   applyMatchLoad(store, result.homeStats, world.rng);
   applyMatchLoad(store, result.awayStats, world.rng);
 
@@ -362,6 +367,8 @@ export function applyMatchResult(
   accumulate(ctx.stats, homeStats, result.setScores.length);
   accumulate(ctx.stats, awayStats, result.setScores.length);
   recordFixture(world, fixture, homeStats, awayStats);
+  // Who got hurt, and how it ended — off, played on with it, worse.
+  applyMatchInjuries(world, result.injuries ?? [], matchInjuryRng(world, fixture.id, fixture.day));
   applyMatchLoad(world.players, homeStats, world.rng);
   applyMatchLoad(world.players, awayStats, world.rng);
 

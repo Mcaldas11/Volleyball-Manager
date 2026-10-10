@@ -242,6 +242,9 @@ select:disabled { opacity: 0.4; cursor: default; }
   display: grid;
   grid-template-columns: var(--side-w) minmax(0, 1fr);
   height: 100vh;
+  height: 100dvh;
+  /* What can actually be seen of the window — see fitWindow.ts. */
+  height: var(--app-h, 100dvh);
   overflow: hidden;
   background: var(--bg);
 }
@@ -305,9 +308,12 @@ select:disabled { opacity: 0.4; cursor: default; }
 .side-collapse:hover:not(:disabled), .side-arrow:hover:not(:disabled) { background: var(--surface-2); color: var(--text); border: none; }
 .side-history { display: flex; gap: 4px; padding: 0 12px 6px; flex: none; }
 
-.side-nav { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 10px 10px; }
-.side-group { padding: 4px 0; }
+/* The sidebar always fits the window, and never scrolls: its items give up
+   height as the window gets shorter, and below a point the group titles go. */
+.side-nav { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; padding: 0 10px 6px; }
+.side-group { display: flex; flex: 0 1 auto; flex-direction: column; min-height: 0; padding: 4px 0; }
 .side-group-label {
+  flex: none;
   padding: 10px 10px 6px;
   font-size: 10.5px;
   font-weight: 600;
@@ -318,7 +324,16 @@ select:disabled { opacity: 0.4; cursor: default; }
 }
 
 /* Club and country: which of the two the team screens are about. */
-.side-team-switch { display: flex; gap: 3px; margin: 0 2px 6px; padding: 3px; border-radius: 9px; background: var(--surface-2); }
+.side-team-switch { display: flex; flex: none; gap: 3px; margin: 0 2px 6px; padding: 3px; border-radius: 9px; background: var(--surface-2); }
+@media (max-height: 820px) {
+  .side-group-label { display: none; }
+  .side-group + .side-group { border-top: 1px solid var(--line); }
+  .side-team-switch { margin-top: 4px; }
+}
+/* The same when less of the window can be seen than the browser says — see fitWindow.ts. */
+.short-window .side-group-label { display: none; }
+.short-window .side-group + .side-group { border-top: 1px solid var(--line); }
+.short-window .side-team-switch { margin-top: 4px; }
 .side-team-switch button {
   display: flex; flex: 1; align-items: center; justify-content: center; gap: 6px; min-width: 0;
   padding: 5px 6px; border: none; border-radius: 6px; background: none;
@@ -332,12 +347,14 @@ select:disabled { opacity: 0.4; cursor: default; }
 .side-item {
   position: relative;
   display: flex;
+  flex: 0 1 36px;
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
   width: 100%;
+  min-height: 22px;
   margin: 1px 0;
-  padding: 8px 12px;
+  padding: 0 12px;
   background: none;
   border: none;
   border-radius: 8px;
@@ -398,9 +415,10 @@ select:disabled { opacity: 0.4; cursor: default; }
 .sidebar-collapsed .side-manager-caret,
 .sidebar-collapsed .side-group-label { display: none; }
 .sidebar-collapsed .side-group + .side-group { border-top: 1px solid var(--line); }
-.sidebar-collapsed .side-team-switch { flex-direction: column; margin: 4px 6px; }
+.sidebar-collapsed .side-team-switch { flex: none; flex-direction: column; gap: 2px; margin: 3px 4px; padding: 2px; }
+.sidebar-collapsed .side-team-switch button { padding: 3px 0; }
 .sidebar-collapsed .side-team-switch span { display: none; }
-.sidebar-collapsed .side-item { justify-content: center; padding: 9px 0; }
+.sidebar-collapsed .side-item { justify-content: center; min-height: 22px; padding: 0; }
 .sidebar-collapsed .side-manager-btn { justify-content: center; padding: 6px 0; }
 .sidebar-collapsed .side-badge { position: absolute; top: 2px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; font-size: 9.5px; }
 .sidebar-collapsed .menu-pop-up { right: auto; min-width: 220px; }
@@ -825,7 +843,7 @@ th.sorted { color: var(--text); }
 th.col-sorted { color: var(--gold); }
 td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 700; }
 
-.table-wrap { overflow: auto; max-height: calc(100vh - 290px); min-height: 0; }
+.table-wrap { overflow: auto; max-height: calc(var(--app-h, 100vh) - 290px); min-height: 0; }
 .data-table .face-cell { width: 40px; padding-right: 0; }
 .strong { font-weight: 600; }
 .mini-table td { height: 32px; }
@@ -1588,7 +1606,7 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
 .cal-fr.pending { color: var(--text-dim); }
 
 /* Arranging a friendly — the holiday dialog's frame, a club list inside it. */
-.fr-card { width: min(720px, 100%); height: min(640px, calc(100vh - 32px)); }
+.fr-card { width: min(720px, 100%); height: min(640px, calc(var(--app-h, 100vh) - 32px)); }
 .fr-body { display: flex; flex-direction: column; flex: 1; min-height: 0; border-top: 1px solid var(--line); }
 .fr-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
 .fr-field { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
@@ -2176,7 +2194,7 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
 
 .ts-bench { position: sticky; top: 0; }
 .ts-bench-hint { margin: 0; padding: 9px 12px; font-size: 11.5px; color: var(--text-faint); border-bottom: 1px solid var(--line-soft); }
-.ts-bench-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; max-height: calc(100vh - 330px); overflow-y: auto; }
+.ts-bench-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; max-height: calc(var(--app-h, 100vh) - 330px); overflow-y: auto; }
 .ts-bench-list .empty { padding: 8px 4px; }
 
 .lineup-card {
@@ -2487,7 +2505,7 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
 .filter-field > label.filter-check { font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-dim); }
 
 .scout-layout { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, 1fr); gap: 16px; align-items: start; }
-.scout-table { max-height: calc(100vh - 250px); }
+.scout-table { max-height: calc(var(--app-h, 100vh) - 250px); }
 .scout-report { position: sticky; top: 0; }
 .report-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .report-head-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -2649,10 +2667,10 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   flex: 1;
   min-height: 0;
   gap: 12px;
-  --card-h: clamp(116px, calc((100vh - 380px) / 2), 174px);
+  --card-h: clamp(116px, calc((var(--app-h, 100vh) - 380px) / 2), 174px);
   --card-w: calc(var(--card-h) * 0.713);
 }
-.lineup-page { --card-h: clamp(110px, calc((100vh - 440px) / 2), 174px); --card-w: calc(var(--card-h) * 0.713); }
+.lineup-page { --card-h: clamp(110px, calc((var(--app-h, 100vh) - 440px) / 2), 174px); --card-w: calc(var(--card-h) * 0.713); }
 .lineup-page > .lineup-bar { flex: none; }
 :is(.md-setup, .lineup-page) .ts { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
 :is(.md-setup, .lineup-page) .ts-main { align-content: safe center; }
@@ -3477,7 +3495,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
    Start screen & new-career wizard
    ============================================================ */
 
-.start { display: flex; min-height: 100vh; }
+.start { display: flex; min-height: var(--app-h, 100vh); }
 .start-panel {
   position: relative;
   z-index: 1;
@@ -3586,7 +3604,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .start-hero-caption strong { font-size: 26px; letter-spacing: 0.08em; color: #fff; }
 
 .wizard-page {
-  min-height: 100vh;
+  min-height: var(--app-h, 100vh);
   padding: 40px 24px;
   background:
     radial-gradient(ellipse 900px 520px at 10% -10%, rgba(76, 125, 255, 0.12), transparent 60%),
@@ -3710,7 +3728,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: 8px;
   padding: 14px 16px;
-  max-height: calc(100vh - 380px);
+  max-height: calc(var(--app-h, 100vh) - 380px);
   min-height: 240px;
   overflow-y: auto;
   align-content: start;
@@ -3805,7 +3823,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   display: flex;
   flex-direction: column;
   width: min(660px, 100%);
-  max-height: calc(100vh - 32px);
+  max-height: calc(var(--app-h, 100vh) - 32px);
   background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--line-strong);
   border-radius: 12px;
@@ -4344,8 +4362,8 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 
 @media (max-width: 1100px) {
   /* Team selection: court, liberos and a slimmer bench still side by side. */
-  .md-setup { --card-h: clamp(110px, calc((100vh - 380px) / 2), 150px); }
-  .lineup-page { --card-h: clamp(110px, calc((100vh - 440px) / 2), 150px); }
+  .md-setup { --card-h: clamp(110px, calc((var(--app-h, 100vh) - 380px) / 2), 150px); }
+  .lineup-page { --card-h: clamp(110px, calc((var(--app-h, 100vh) - 440px) / 2), 150px); }
   :is(.md-setup, .lineup-page) .ts { grid-template-columns: minmax(0, 1fr) 240px; }
   :is(.md-setup, .lineup-page) .ts-main { flex-wrap: nowrap; }
   /* The slim bench drops the condition bar so the names stay readable. */
@@ -4638,7 +4656,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
    New career: choosing a national team
    ============================================================ */
 
-.nation-table { max-height: calc(100vh - 380px); min-height: 240px; overflow-y: auto; padding: 4px 10px 10px; }
+.nation-table { max-height: calc(var(--app-h, 100vh) - 380px); min-height: 240px; overflow-y: auto; padding: 4px 10px 10px; }
 .nation-table td { white-space: nowrap; }
 .nation-table tr.nation-on td { background: var(--gold-soft); }
 .nation-table tr.nation-on td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
@@ -5263,7 +5281,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 }
 
 /* ---- A point shown again ---- */
-.rp-card { width: min(1180px, 100%); height: min(820px, calc(100vh - 32px)); }
+.rp-card { width: min(1180px, 100%); height: min(820px, calc(var(--app-h, 100vh) - 32px)); }
 .rp-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 18px 12px; flex-wrap: wrap; }
 .rp-star { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .rp-what { font: 800 12px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
@@ -5744,3 +5762,41 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 }
 .bench-token-tag.switch:hover:not(:disabled) { filter: brightness(1.15); background: var(--gold); color: #211800; border: none; }
 .bench-token-tag.switch span { opacity: 0.7; }
+
+/* Someone down hurt in the live match: who, what, and — for the user's own — his call. */
+.injury-panel {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6;
+  max-height: calc(100% - 20px); overflow-y: auto; padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(58, 16, 18, 0.95), rgba(20, 23, 29, 0.96) 60%);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(229, 72, 77, 0.6); border-radius: var(--radius);
+  box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.15), 0 12px 30px -8px rgba(0, 0, 0, 0.8);
+  animation: view-fade-in 0.2s ease;
+}
+.injury-head { display: flex; align-items: center; gap: 12px; }
+.injury-icon { display: inline-flex; padding: 8px; border-radius: 8px; background: rgba(229, 72, 77, 0.16); color: #ff8a86; }
+.injury-title { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 2px; }
+.injury-title strong { display: inline-flex; align-items: center; gap: 8px; font: 700 16px/1.2 var(--font-display); letter-spacing: 0.02em; }
+.injury-title .faint { font-size: 12px; }
+.injury-tag { flex: none; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.injury-tag.knock { background: var(--gold-soft); color: var(--gold-bright); }
+.injury-tag.serious { background: rgba(229, 72, 77, 0.2); color: #ff8a86; }
+.injury-line { margin: 10px 0 0; font-size: 13px; color: var(--text-dim); }
+.injury-choices { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.injury-choices > .faint { font-size: 12px; }
+.injury-options { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.injury-option { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 6px; font-size: 13px; }
+.injury-option.pick { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold-soft); }
+.injury-option b { font: 700 13px/1 var(--font-display); }
+.injury-option-name { font-weight: 600; }
+.injury-flag { padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; background: rgba(229, 72, 77, 0.2); color: #ff8a86; }
+.injury-flag.pick { background: var(--gold-soft); color: var(--gold-bright); }
+.lv-knock { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin-left: 5px; border-radius: 50%; background: #fff; color: #e5484d; font-size: 12px; font-weight: 900; line-height: 1; }
+
+/* A button inside a report row: the way in, where the eye already is. */
+.paper-inline-btn {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; padding: 3px 10px;
+  border: none; border-radius: 6px; background: var(--paper-ink); color: #f6efe1;
+  font-size: 12px; font-weight: 700; cursor: pointer; vertical-align: middle;
+}
+.paper-inline-btn:hover:not(:disabled) { background: #2a3140; color: #fff; border: none; }

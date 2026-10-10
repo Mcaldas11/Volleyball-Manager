@@ -55,6 +55,12 @@ export const enum InjuryType {
   ACLTear = 8,
   /** Pulled coming on without warming up. */
   MuscleStrain = 9,
+  /** Knocks picked up in a match — a player can carry on with one, at a risk. */
+  TurnedAnkle = 10,
+  JammedFinger = 11,
+  Cramp = 12,
+  KneeKnock = 13,
+  SoreShoulder = 14,
 }
 
 export const INJURY_NAMES: Readonly<Record<number, string>> = {
@@ -68,6 +74,11 @@ export const INJURY_NAMES: Readonly<Record<number, string>> = {
   [InjuryType.AchillesTear]: 'Achilles Tear',
   [InjuryType.ACLTear]: 'ACL Tear',
   [InjuryType.MuscleStrain]: 'Muscle Strain',
+  [InjuryType.TurnedAnkle]: 'Turned Ankle',
+  [InjuryType.JammedFinger]: 'Jammed Finger',
+  [InjuryType.Cramp]: 'Cramp',
+  [InjuryType.KneeKnock]: 'Knee Knock',
+  [InjuryType.SoreShoulder]: 'Sore Shoulder',
 };
 
 /**

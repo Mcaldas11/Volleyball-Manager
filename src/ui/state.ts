@@ -75,7 +75,8 @@ import {
 import { positionTarget, setPositionTarget } from '../engine/world/training.ts';
 import { effectivePlayerAt } from '../engine/match/court.ts';
 import { injuryNotice } from '../engine/world/inbox.ts';
-import type { CourtSideline } from './courtMotion.ts';
+import type { CourtSideline, InjuryPhase } from './courtMotion.ts';
+import type { MatchInjury } from '../engine/match/injury.ts';
 import type { Highlight } from '../engine/match/highlights.ts';
 import {
   academyOffers, sellAcademyPlayer, userYouthLeague, type AcademyOffer, type YouthLeague,
@@ -312,6 +313,16 @@ export interface MatchdaySnapshot {
 /** A revealed rally, plus the court arrangement that was in effect while it
  *  was played (rotation only changes between rallies), so the live view can
  *  place each contact in its true zone for the ball animation. */
+/** Someone down hurt in the live match, as the viewer plays the stoppage out. */
+export interface LiveInjury {
+  seq: number;
+  /** The engine's own record of it — it learns whether he came off, and for whom. */
+  inj: MatchInjury;
+  /** The user's own player: the call is his. */
+  ours: boolean;
+  phase: InjuryPhase;
+}
+
 export interface MatchdayLogEntry {
   entry: RallyLogEntry;
   homeCourt: number[];
@@ -385,6 +396,10 @@ export interface MatchdayState {
   warmth?: Map<number, number>;
   /** The user's substitutes sent to warm up. */
   warming?: Set<number>;
+  /** Injuries still to be shown, each once the rally it came in has been played out. */
+  injuryQueue?: LiveInjury[];
+  /** The stoppage for someone hurt under way — null when there is none. */
+  injury?: LiveInjury | null;
 }
 
 /** Rallies' worth of warm-up from cold to ready, and how fast a substitute cools on the bench. */
@@ -1290,6 +1305,9 @@ class Game {
       // The squad is named in the federation's message.
       const m = this.world === null ? undefined : askForSquad(this.world);
       if (m !== undefined) this.openMessage(m.id);
+    } else if (d.kind === 'interview' && d.interviewId !== null) {
+      // "Press conference": straight into the room — it can still be declined from its message.
+      this.openInterview(d.interviewId);
     } else if (d.messageId !== null) this.openMessage(d.messageId);
     else if (d.interviewId !== null) this.openInterview(d.interviewId);
     else if (d.offerId !== null) this.openOffer(d.offerId);
@@ -2076,6 +2094,10 @@ class Game {
   private startLive(): void {
     const md = this.matchday;
     if (md === null || this.liveSim === null) return;
+    // His own hurt players are his to answer for: the engine waits on him.
+    this.liveSim.answerInjuriesFor(md.userIsHome ? 0 : 1, true);
+    md.injuryQueue = [];
+    md.injury = null;
     md.stage = 'live';
     md.log = [];
     md.timeoutsUsed = [0, 0];
@@ -2154,6 +2176,10 @@ class Game {
     const preSnap = sim.snapshot();
     const entry = sim.step();
     if (entry === null) return null;
+    const userTeam: 0 | 1 = md.userIsHome ? 0 : 1;
+    for (const inj of sim.takeInjuries()) {
+      (md.injuryQueue ??= []).push({ seq: ++this.subSeq, inj, ours: inj.team === userTeam, phase: 'down' });
+    }
 
     const logEntry: MatchdayLogEntry = {
       entry, homeCourt: preSnap.homeCourt, awayCourt: preSnap.awayCourt,
@@ -2179,6 +2205,107 @@ class Game {
     }
     this.emit();
     return logEntry;
+  }
+
+  // ---- Someone hurt ------------------------------------------------------------------
+
+  /** The next stoppage for someone hurt — the rally it came in has been shown — and play halts for it. */
+  beginInjuryStoppage(): LiveInjury | null {
+    const md = this.matchday;
+    if (md === null || (md.injuryQueue?.length ?? 0) === 0) return null;
+    const live = md.injuryQueue!.shift()!;
+    live.phase = 'down';
+    md.injury = live;
+    md.paused = true;
+    md.pauseUntil = null;
+    this.emit();
+    return live;
+  }
+
+  /** Where the stoppage has got to. */
+  setInjuryPhase(phase: InjuryPhase): void {
+    const md = this.matchday;
+    if (md?.injury == null) return;
+    md.injury.phase = phase;
+    this.emit();
+  }
+
+  /** Whether the call is the user's to make: his own player, not yet off — one who must come off, or a knock not yet answered. */
+  injuryNeedsCall(live: LiveInjury): boolean {
+    const sim = this.liveSim;
+    if (sim === null || !live.ours || live.inj.off === true) return false;
+    if (live.inj.severity === 'serious') return sim.injuryWaiting(live.inj.team)?.p === live.inj.p;
+    return sim.knocks(live.inj.team).some((k) => k.p === live.inj.p) && !this.knocksAnswered.has(live.inj);
+  }
+
+  /** Knocks the user has let a player carry on with. */
+  private knocksAnswered = new Set<MatchInjury>();
+
+  /** Who may come on for the user's hurt player, the assistant's choice first, and whether each would be the exceptional substitution. */
+  injuryOptions(): Array<{ p: number; exceptional: boolean; pick: boolean }> {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md?.injury == null || sim === null) return [];
+    const team = md.injury.inj.team;
+    const best = sim.injuryReplacement(team, md.injury.inj.p);
+    return sim.injuryOptions(team, md.injury.inj.p)
+      .map((o) => ({ ...o, pick: o.p === best }))
+      .sort((a, b) => Number(b.pick) - Number(a.pick));
+  }
+
+  /** Take the user's hurt player off for `inc` — -1 for a libero the side goes on without. */
+  injuryTakeOff(inc: number): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md?.injury == null || sim === null) return;
+    const live = md.injury;
+    const result = sim.injurySubstitute(live.inj.team, live.inj.p, inc);
+    if (!result.ok) {
+      this.notice = result.reason ?? 'That change is not allowed.';
+      this.emit();
+      return;
+    }
+    md.snapshot = sim.snapshot();
+    live.phase = 'off';
+    this.emit();
+  }
+
+  /** The user lets his player carry on with a knock — below himself, and at a risk. */
+  injuryPlayOn(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md?.injury == null || sim === null || md.injury.inj.severity !== 'knock') return;
+    sim.playOnWithKnock(md.injury.inj.team, md.injury.inj.p);
+    this.knocksAnswered.add(md.injury.inj);
+    md.injury.phase = 'up';
+    this.emit();
+  }
+
+  /** Nobody left to bring on for a man who should come off: he carries on as best he can. */
+  injuryCarryOn(): void {
+    const md = this.matchday;
+    if (md?.injury == null) return;
+    md.injury.phase = 'up';
+    this.emit();
+  }
+
+  /** The stoppage is over: play on. */
+  endInjuryStoppage(): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.injury = null;
+    md.paused = false;
+    md.pauseUntil = null;
+    if (this.liveSim !== null) md.snapshot = this.liveSim.snapshot();
+    this.emit();
+  }
+
+  /** The user's players carrying on with a knock in the live match. */
+  liveKnocks(): Set<number> {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return new Set();
+    return new Set([...sim.knocks(0), ...sim.knocks(1)].map((k) => k.p));
   }
 
   /**
@@ -2298,7 +2425,9 @@ class Game {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null) return { ok: false };
-    const result = sim.substitute(team, outPlayerIdx, inPlayerIdx, role);
+    // Playing on with a knock: off now, he is off hurt — out of the match.
+    const knocked = sim.knocks(team).some((k) => k.p === outPlayerIdx);
+    const result = knocked ? sim.injurySubstitute(team, outPlayerIdx, inPlayerIdx) : sim.substitute(team, outPlayerIdx, inPlayerIdx, role);
     if (result.ok) {
       md.snapshot = sim.snapshot();
       md.paused = true;
@@ -2391,17 +2520,20 @@ class Game {
     const sim = this.liveSim;
     const snap = md?.snapshot;
     if (md === null || sim === null || snap === null || snap === undefined) return null;
-    const out: CourtSideline = { bench: [[], []], waiting: [[], []], warming: new Set(md.warming ?? []) };
+    const out: CourtSideline = { bench: [[], []], waiting: [[], []], warming: new Set(md.warming ?? []), hurt: [[], []] };
     const store = this.world!.players;
     for (const team of [0, 1] as const) {
       const court = team === 0 ? snap.homeCourt : snap.awayCourt;
       const libero = team === 0 ? snap.homeLibero : snap.awayLibero;
       const floor = new Set(court.map((_, z) => effectivePlayerAt(court, z, sim.roles, libero)));
       const liberos = sim.liberos(team);
+      // Off hurt: by the bench, out of it.
+      out.hurt![team] = sim.squadFor(team).filter((p) => sim.isOutHurt(team, p));
+      const hurt = new Set(out.hurt![team]);
       for (const p of [...court, liberos.reception, liberos.defence]) {
-        if (p >= 0 && !floor.has(p) && !out.waiting[team].includes(p)) out.waiting[team].push(p);
+        if (p >= 0 && !floor.has(p) && !hurt.has(p) && !out.waiting[team].includes(p)) out.waiting[team].push(p);
       }
-      out.bench[team] = sim.benchFor(team).filter((p) => !floor.has(p) && !out.waiting[team].includes(p));
+      out.bench[team] = sim.benchFor(team).filter((p) => !floor.has(p) && !hurt.has(p) && !out.waiting[team].includes(p));
     }
     const other: 0 | 1 = md.userIsHome ? 1 : 0;
     const warmers = [...out.bench[other]].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 2);

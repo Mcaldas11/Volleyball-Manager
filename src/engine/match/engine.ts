@@ -32,6 +32,9 @@ import {
 } from './court.ts';
 import { coverage, coverEdge, defenceLayoutsOf, type AttackSource } from './defence.ts';
 import { pressureOf, rateRally, type Highlight } from './highlights.ts';
+import {
+  aggravate, drawInjury, injuryRiskPerRally, KNOCK_HAMPER, MATCH_INJURIES, AGGRAVATE_PER_RALLY, type MatchInjury,
+} from './injury.ts';
 import { matchRating } from './playerRating.ts';
 import { computeRatings, contest, type PlayerMatchRatings } from './ratings.ts';
 import {
@@ -219,6 +222,8 @@ export interface MatchResult {
   roles?: Map<number, Position>;
   /** The match's best point and best play, when asked for. */
   highlights?: Highlight[];
+  /** Who got hurt, and how it ended: came off for it, played on, got worse — see injury.ts. */
+  injuries?: MatchInjury[];
 }
 
 /**
@@ -408,6 +413,14 @@ class TeamRuntime {
   readonly prep: { reception: number; transition: number; block: number; combinations?: number };
   /** The liberos named for the match: only they play libero, and they play nothing else. */
   readonly registeredLiberos: ReadonlySet<number>;
+  /** Playing on with a knock: who, and what it is. */
+  readonly knocked = new Map<number, MatchInjury>();
+  /** Hurt too badly to go on: they come off before the next serve. */
+  readonly mustLeave: MatchInjury[] = [];
+  /** Off hurt: they take no further part in the match. */
+  readonly outForMatch = new Set<number>();
+  /** Knocks the engine's coach has already weighed up — and let him play on with. */
+  readonly knockWeighed = new Set<MatchInjury>();
   private readonly startRotation: number;
 
   constructor(
@@ -557,6 +570,14 @@ export class MatchSimulator {
   private readonly subPairing: [Map<number, number>, Map<number, number>] = [new Map(), new Map()];
   /** Sides whose bench the engine runs — see `MatchSetup.autoCoach`. */
   private readonly autoCoached: [boolean, boolean];
+  /** Everything that happened to anyone in the match, as it stands. */
+  readonly injuries: MatchInjury[] = [];
+  /** Injuries a live viewer has not been told of yet. */
+  private freshInjuries: MatchInjury[] = [];
+  /** Sides whose coach answers for his own hurt players — the engine waits for him. */
+  private readonly ownInjuries: [boolean, boolean] = [false, false];
+  /** Dice of their own: who gets hurt changes no rally's outcome. */
+  private readonly hurtRng: Rng;
   /** The rally each engine-coached side last made a change on. */
   private readonly lastAutoSub: [number, number] = [-Infinity, -Infinity];
 
@@ -575,6 +596,7 @@ export class MatchSimulator {
   ) {
     this.rng = new Rng(setup.seed);
     this.flair = new Rng((setup.seed ^ 0x5bd1e995) >>> 0);
+    this.hurtRng = new Rng((setup.seed ^ 0x27d4eb2f) >>> 0);
     this.roles = store.position.slice(0, store.count);
     this.teams = [new TeamRuntime(setup.home, store, this.roles), new TeamRuntime(setup.away, store, this.roles)];
     this.log = setup.collectLog ? [] : null;
@@ -597,8 +619,10 @@ export class MatchSimulator {
     return this.buildResult();
   }
 
-  /** Play every remaining rally to completion. */
+  /** Play every remaining rally to completion — the engine answers for anyone hurt from here. */
   finish(): void {
+    this.ownInjuries[0] = false;
+    this.ownInjuries[1] = false;
     while (!this.matchOver) this.step();
   }
 
@@ -645,12 +669,16 @@ export class MatchSimulator {
   step(): RallyLogEntry | null {
     this.startIfNeeded();
     if (this.matchOver) return null;
+    // Nobody serves with a man down who has to come off: if his coach has not
+    // answered for him, the engine does.
+    for (const t of [0, 1] as const) if (this.teams[t].mustLeave.length > 0) this.coachInjuries(t);
 
     const serving = this.serving;
     const before = this.best !== null
       ? { court: this.snapshot(), sets: [this.teams[0].setsWon, this.teams[1].setsWon] as [number, number] }
       : null;
     const entry = this.playRally(serving);
+    this.hurtInRally();
     const winner = entry.winner;
     if (before !== null) this.weighHighlight(entry, before.court, before.sets);
 
@@ -708,8 +736,213 @@ export class MatchSimulator {
     } else {
       for (const t of [0, 1] as const) if (this.autoCoached[t]) this.coachRally(t);
     }
+    // Anyone hurt: the engine's coach answers straight away; the live user's waits for him.
+    if (!this.matchOver) for (const t of [0, 1] as const) if (!this.ownInjuries[t]) this.coachInjuries(t);
 
     return entry;
+  }
+
+  // ---- Getting hurt -------------------------------------------------------------------
+
+  /** Leave a side's hurt players to its coach — or hand them back to the engine. */
+  answerInjuriesFor(team: 0 | 1, own: boolean): void {
+    this.ownInjuries[team] = own;
+  }
+
+  /** Injuries since the last call, for a live viewer — new ones, and knocks that got worse. */
+  takeInjuries(): MatchInjury[] {
+    const out = this.freshInjuries;
+    this.freshInjuries = [];
+    return out;
+  }
+
+  /** The first of a side's players who has to come off hurt before the next serve, if any. */
+  injuryWaiting(team: 0 | 1): MatchInjury | null {
+    return this.teams[team].mustLeave[0] ?? null;
+  }
+
+  /** A side's players carrying on with a knock. */
+  knocks(team: 0 | 1): MatchInjury[] {
+    return [...this.teams[team].knocked.values()];
+  }
+
+  /** Whether a player is off hurt and out of the match. */
+  isOutHurt(team: 0 | 1, p: number): boolean {
+    return this.teams[team].outForMatch.has(p);
+  }
+
+  /** The rally just played, for everyone on court: a knock that gets worse, or a new hurt — never in a friendly, which goes on no record. */
+  private hurtInRally(): void {
+    if (this.setup.friendly === true) return;
+    for (const team of [0, 1] as const) {
+      const t = this.teams[team];
+      const on = [...t.court, t.liberoIdx].filter((p) => p >= 0);
+      for (const p of on) {
+        if (t.outForMatch.has(p) || t.mustLeave.some((i) => i.p === p)) continue;
+        const r = t.ratings.get(p);
+        const knock = t.knocked.get(p);
+        if (knock !== undefined) {
+          // Playing on with it: below himself, and it may go.
+          if (r !== undefined) r.fatigue = Math.min(r.fatigue, KNOCK_HAMPER);
+          if (this.hurtRng.chance(AGGRAVATE_PER_RALLY)) {
+            aggravate(knock);
+            t.knocked.delete(p);
+            t.mustLeave.push(knock);
+            this.freshInjuries.push(knock);
+          }
+          continue;
+        }
+        const tired = r === undefined ? 0 : 1 - r.fatigue;
+        if (this.hurtRng.chance(injuryRiskPerRally(this.store, p, tired))) this.injure(team, p, drawInjury(this.hurtRng));
+      }
+    }
+  }
+
+  /** A player gets hurt — which of `MATCH_INJURIES` it is. The match's own dice call it; a test may too. */
+  injure(team: 0 | 1, p: number, kind: number): MatchInjury {
+    const t = this.teams[team];
+    const k = MATCH_INJURIES[kind];
+    const inj: MatchInjury = { p, team, set: this.currentSet, rally: this.totalRallies, kind, type: k.type, severity: k.severity };
+    this.injuries.push(inj);
+    this.freshInjuries.push(inj);
+    if (k.severity === 'knock') {
+      t.knocked.set(p, inj);
+      const r = t.ratings.get(p);
+      if (r !== undefined) r.fatigue = Math.min(r.fatigue, KNOCK_HAMPER);
+    } else {
+      t.mustLeave.push(inj);
+    }
+    return inj;
+  }
+
+  /**
+   * The engine's coach and his hurt players: anyone who has to come off,
+   * does — for the best of the bench in his position; a knock, he takes off
+   * if there is a like-for-like change to make, and otherwise lets him play on.
+   */
+  private coachInjuries(team: 0 | 1): void {
+    const t = this.teams[team];
+    while (t.mustLeave.length > 0) {
+      const inj = t.mustLeave[0];
+      if (!this.injurySubstitute(team, inj.p, this.injuryReplacement(team, inj.p)).ok) {
+        // Nobody left to bring on: he carries on as best he can.
+        t.mustLeave.shift();
+        t.knocked.set(inj.p, inj);
+        t.knockWeighed.add(inj);
+      }
+    }
+    for (const inj of [...t.knocked.values()]) {
+      if (t.knockWeighed.has(inj)) continue;
+      t.knockWeighed.add(inj);
+      const inc = this.injuryReplacement(team, inj.p);
+      const like = inc >= 0 && this.roles[inc] === this.roles[inj.p];
+      if (like && this.substitutionError(team, inj.p, inc) === null) this.injurySubstitute(team, inj.p, inc);
+    }
+  }
+
+  /**
+   * Who a coach would bring on for a hurt player: for a libero, a spare named
+   * for the match (-1 for none — the other libero carries on); for anyone
+   * else, the best of the bench in his position, or failing that the best of
+   * the bench.
+   */
+  injuryReplacement(team: 0 | 1, out: number): number {
+    const t = this.teams[team];
+    const free = (p: number): boolean => !t.court.includes(p) && !t.outForMatch.has(p) &&
+      p !== t.receptionLibero && p !== t.defensiveLibero;
+    if (out === t.receptionLibero || out === t.defensiveLibero) {
+      return [...t.registeredLiberos].find((p) => free(p) && p !== out) ?? -1;
+    }
+    let best = -1;
+    let bestScore = -Infinity;
+    for (const p of t.ratings.keys()) {
+      if (!free(p) || t.registeredLiberos.has(p)) continue;
+      const score = this.currentValue(team, p) + (this.roles[p] === this.roles[out] ? 10_000 : 0);
+      if (score > bestScore) { best = p; bestScore = score; }
+    }
+    return best;
+  }
+
+  /**
+   * Take a hurt player off — he takes no further part in the match. A libero
+   * makes way for a spare named for the match, or with none (`inc` -1) for
+   * the other libero alone, or none at all. Anyone else makes way by an
+   * ordinary substitution if the rules allow one; if not, by the exceptional
+   * substitution the rules keep for an injury — anyone on the bench but a
+   * libero, and it uses none of the side's five. Whoever comes on also starts
+   * the sets to come in his place.
+   */
+  injurySubstitute(team: 0 | 1, out: number, inc: number): { ok: boolean; reason?: string } {
+    const t = this.teams[team];
+    const inj = t.mustLeave.find((i) => i.p === out) ?? t.knocked.get(out);
+    if (inj === undefined) return { ok: false, reason: 'He is not hurt.' };
+    if (out === t.receptionLibero || out === t.defensiveLibero) {
+      if (inc >= 0 && (!t.registeredLiberos.has(inc) || t.outForMatch.has(inc) || t.court.includes(inc) ||
+        inc === t.receptionLibero || inc === t.defensiveLibero)) {
+        return { ok: false, reason: 'Only a libero named for the match can take his place.' };
+      }
+      if (inc >= 0) t.assign(inc, Position.Libero);
+      if (out === t.receptionLibero) {
+        t.receptionLibero = inc >= 0 ? inc : t.defensiveLibero;
+        if (inc < 0) t.defensiveLibero = -1;
+      } else {
+        t.defensiveLibero = inc;
+      }
+      if (t.liberoIdx === out) t.liberoIdx = t.receptionLibero;
+    } else {
+      const zone = t.court.indexOf(out);
+      if (zone < 0) return { ok: false, reason: 'He is not on court.' };
+      if (inc < 0 || !t.ratings.has(inc) || t.court.includes(inc) || t.outForMatch.has(inc)) {
+        return { ok: false, reason: 'Pick someone from the bench to come on.' };
+      }
+      if (t.registeredLiberos.has(inc)) return { ok: false, reason: 'A libero named for the match cannot play in the six.' };
+      if (this.substitutionError(team, out, inc) === null) {
+        this.substitute(team, out, inc);
+      } else {
+        // The exceptional substitution: it costs none of the five.
+        t.assign(inc, this.roleFor(team, out, inc));
+        t.court[zone] = inc;
+        if (t.setterIdx === out) {
+          const pos = this.roles;
+          t.setterIdx = pos[inc] === Position.Setter ? inc : Array.from(t.court).find((p) => pos[p] === Position.Setter) ?? inc;
+        }
+      }
+      // He cannot come back, so nobody is tied to him.
+      this.subPairing[team].delete(out);
+      this.subPairing[team].delete(inc);
+      const start = t.startLineup.indexOf(out);
+      if (start >= 0) t.startLineup[start] = inc;
+    }
+    t.outForMatch.add(out);
+    t.knocked.delete(out);
+    const at = t.mustLeave.indexOf(inj);
+    if (at >= 0) t.mustLeave.splice(at, 1);
+    inj.off = true;
+    inj.replacedBy = inc;
+    return { ok: true };
+  }
+
+  /**
+   * Who may come on for a hurt player — for a libero, a spare named for the
+   * match; for anyone else, anyone on the bench but a libero — and whether it
+   * would be the exceptional substitution, that costs none of the five.
+   */
+  injuryOptions(team: 0 | 1, out: number): Array<{ p: number; exceptional: boolean }> {
+    const t = this.teams[team];
+    const libero = out === t.receptionLibero || out === t.defensiveLibero;
+    const options: Array<{ p: number; exceptional: boolean }> = [];
+    for (const p of t.ratings.keys()) {
+      if (t.court.includes(p) || t.outForMatch.has(p) || p === t.receptionLibero || p === t.defensiveLibero) continue;
+      if (libero !== t.registeredLiberos.has(p)) continue;
+      options.push({ p, exceptional: !libero && this.substitutionError(team, out, p) !== null });
+    }
+    return options;
+  }
+
+  /** The coach lets a player carry on with his knock — the engine stops waiting on him. */
+  playOnWithKnock(team: 0 | 1, p: number): void {
+    const inj = this.teams[team].knocked.get(p);
+    if (inj !== undefined) this.teams[team].knockWeighed.add(inj);
   }
 
   /** A rally just played, against the match's best point and best play so far. */
@@ -945,6 +1178,7 @@ export class MatchSimulator {
       mvp: this.findMvp(),
       roles: new Map([...this.teams[0].ratings.keys(), ...this.teams[1].ratings.keys()]
         .map((p) => [p, this.roles[p] as Position])),
+      injuries: this.injuries,
       highlights: this.best !== null
         ? [this.best.point, this.best.play].filter((h): h is Highlight => h !== null)
         : undefined,
@@ -1021,6 +1255,7 @@ export class MatchSimulator {
     if (!t.ratings.has(inPlayerIdx)) return 'That player is not part of the squad.';
     if (t.court.includes(inPlayerIdx)) return 'That player is already on court.';
     if (t.registeredLiberos.has(inPlayerIdx)) return 'A libero named for the match cannot play in the six.';
+    if (t.outForMatch.has(inPlayerIdx)) return 'He went off hurt — he takes no further part.';
     if (this.subsUsedThisSet[team] >= 5) return 'No substitutions left this set.';
 
     const pairing = this.subPairing[team];
@@ -1110,7 +1345,7 @@ export class MatchSimulator {
       let pick = -1;
       let pickExcess = 0;
       for (const p of t.ratings.keys()) {
-        if (lineup.includes(p) || t.registeredLiberos.has(p)) continue;
+        if (lineup.includes(p) || t.registeredLiberos.has(p) || t.outForMatch.has(p)) continue;
         const shift = this.crossShift(team, starter, p, lineup);
         if (shift === null) continue;
         const excess = this.currentValue(team, p) / starterValue - 1 - margin - shift;
@@ -1218,6 +1453,7 @@ export class MatchSimulator {
     }
     if (!t.ratings.has(playerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
     if (t.court.includes(playerIdx)) return { ok: false, reason: 'That player is already on court.' };
+    if (t.outForMatch.has(playerIdx)) return { ok: false, reason: 'He went off hurt — he takes no further part.' };
     if (!t.registeredLiberos.has(playerIdx)) return { ok: false, reason: 'Only the two liberos named for the match can play libero.' };
     // Whoever is named libero plays libero, whatever he is by trade.
     t.assign(playerIdx, Position.Libero);
@@ -1264,6 +1500,9 @@ export class MatchSimulator {
     }
     if (lineup.some((p) => !t.ratings.has(p))) return { ok: false, reason: 'That player is not part of the squad.' };
     if (lineup.some((p) => t.registeredLiberos.has(p))) return { ok: false, reason: 'A libero named for the match cannot play in the six.' };
+    if ([...lineup, libero, defensiveLibero].some((p) => t.outForMatch.has(p))) {
+      return { ok: false, reason: 'He went off hurt — he takes no further part.' };
+    }
     for (const l of [libero, defensiveLibero]) {
       if (l < 0) continue;
       if (!t.ratings.has(l)) return { ok: false, reason: 'That player is not part of the squad.' };

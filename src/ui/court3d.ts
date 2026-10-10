@@ -56,6 +56,12 @@ const REFEREE_LOOK: Look = {
   libero: false, trim: '#1b2130', number: 0, skin: '#d9a97c', hair: '#2b1d14', hairStyle: 0, trousers: true,
 };
 
+/** The physio: a white polo trimmed in red, dark trousers. */
+const MEDIC_LOOK: Look = {
+  kit: { shirt: '#f4f6f8', shorts: '#2a3140', libero: '#f4f6f8' },
+  libero: false, trim: '#d63a3a', number: 0, skin: '#c99a73', hair: '#3a2a1e', hairStyle: 1, trousers: true,
+};
+
 /** A perspective camera that sees exactly what the painted hall's projector
  *  does for a `width` × `height` box. */
 export function courtCamera(width: number, height: number, camera = new PerspectiveCamera()): PerspectiveCamera {
@@ -517,6 +523,8 @@ export class Court3D {
   private readonly referee = new Figure(REFEREE_LOOK);
   /** Each side's coach, made the first time the court is drawn. */
   private coaches: [Figure, Figure] | null = null;
+  /** The physio, made the first time one is on. */
+  private medic: Figure | null = null;
   /** The benches, rebuilt when the kits or the halves change. */
   private benches: Group | null = null;
   private benchKey = '';
@@ -646,6 +654,16 @@ export class Court3D {
         f.restyle(coachLook(t as 0 | 1));
         f.pose(motion.coaches[t]);
       });
+    }
+    if (motion.medic !== null) {
+      if (this.medic === null) {
+        this.medic = new Figure(MEDIC_LOOK);
+        this.scene.add(this.medic.root);
+      }
+      this.medic.root.visible = true;
+      this.medic.pose(motion.medic);
+    } else if (this.medic !== null) {
+      this.medic.root.visible = false;
     }
     for (const [p, b] of motion.bodies) {
       let f = this.figures.get(p);

@@ -132,6 +132,16 @@ const CLAP = shape(CLAP_OPEN, { ...arms(1.42, -0.12, 1.0) });
 const HIPS = shape(STAND, { lean: 0.06, nod: 0.45, ...arms(-0.25, 0.55, 1.9, 0.6) });
 
 /** Running flat out: tall, leaning into it, elbows bent and the arms pumping. */
+/** Down hurt: on one knee, bent over, a hand on the ankle. */
+const HURT = shape(STAND, {
+  crouch: 0.55, hipShift: -0.06, tilt: 0.5, lean: 0.8, nod: 0.5, stance: 0.2, stride: 0.42,
+  hFlex: 0.55, hAbd: 0.15, hElbow: 0.55, oFlex: 0.45, oAbd: 0.2, oElbow: 0.75,
+});
+/** The physio, down on his haunches beside him, hands on the leg. */
+const TEND = shape(STAND, {
+  crouch: 0.48, tilt: 0.35, lean: 0.55, nod: 0.4, stance: 0.26, stride: 0.3,
+  hFlex: 1.05, hAbd: 0.1, hElbow: 0.65, oFlex: 0.95, oAbd: 0.1, oElbow: 0.85,
+});
 const RUN = shape(STAND, { crouch: 0.05, tilt: 0.1, lean: 0.14, nod: -0.05, stance: 0.1, stride: 0, ...arms(0.1, 0.12, 1.5) });
 
 // ---- The referee's signals, as the FIVB rules give them ----------------------------------
@@ -306,8 +316,15 @@ export interface Body {
   seed: number;
   /** Every joint's angle, this frame. */
   rig: Rig;
-  /** Off the court: in the warm-up area as a substitute, or by the bench to go back on — null on it. */
-  side: 'bench' | 'wait' | null;
+  /** Off the court: in the warm-up area as a substitute, by the bench to go back on, or on it hurt — null on it. */
+  side: 'bench' | 'wait' | 'hurt' | null;
+  /** How far down hurt, 0 to 1, and how far he is headed. */
+  hurt?: number;
+  hurtGoal?: number;
+  /** Hobbling: off the court on a bad leg. */
+  limp?: boolean;
+  /** The physio, crouched over someone: how far, 0 to 1. */
+  tend?: number;
   /** A point to pass through on the way to the mark: the substitution zone, on a change. */
   via: { x: number; y: number } | null;
   /** Their place by the bench, that a substitute warming up runs from and back to. */
@@ -322,6 +339,18 @@ export interface CourtSideline {
   waiting: [number[], number[]];
   /** Those sent to warm up. */
   warming: ReadonlySet<number>;
+  /** Off hurt, out of the match: they sit by the bench. */
+  hurt?: [number[], number[]];
+}
+
+/** Where a stoppage for someone hurt has got to: down, the physio with him, the coach deciding, up again or helped off. */
+export type InjuryPhase = 'down' | 'treat' | 'decide' | 'up' | 'off';
+
+/** Someone down hurt, and where the stoppage for him has got to. */
+export interface CourtInjury {
+  p: number;
+  team: 0 | 1;
+  phase: InjuryPhase;
 }
 
 /**
@@ -486,6 +515,10 @@ export class CourtMotion {
   readonly referee: Body;
   /** Each side's coach, at the front of its bench. */
   readonly coaches: [Body, Body];
+  /** The physio, on for someone hurt — null when nobody is. */
+  medic: Body | null = null;
+  /** Someone down hurt, and where the stoppage for him has got to. */
+  private injury: CourtInjury | null = null;
   /** Who is off the court, and the half each team plays on: -1 the near (negative y) one. */
   private sideline: CourtSideline | null = null;
   private sides: [number, number] = [-1, 1];
@@ -568,8 +601,8 @@ export class CourtMotion {
   }
 
   /** Where everyone off the court belongs: substitutes in the warm-up area, the rest by the coach. */
-  private sideSpots(): Map<number, { x: number; y: number; kind: 'bench' | 'wait' }> {
-    const out = new Map<number, { x: number; y: number; kind: 'bench' | 'wait' }>();
+  private sideSpots(): Map<number, { x: number; y: number; kind: 'bench' | 'wait' | 'hurt' }> {
+    const out = new Map<number, { x: number; y: number; kind: 'bench' | 'wait' | 'hurt' }>();
     const sl = this.sideline;
     if (sl === null) return out;
     for (const t of [0, 1] as const) {
@@ -578,8 +611,86 @@ export class CourtMotion {
       sl.waiting[t].forEach((p, i) => out.set(p, {
         x: SIDELINE.wait.x, y: side * (SIDELINE.wait.y + i * SIDELINE.wait.step), kind: 'wait',
       }));
+      // Off hurt: along the bench, the far end from the coach.
+      (sl.hurt?.[t] ?? []).forEach((p, i) => out.set(p, {
+        x: SIDELINE.bench.x + 0.35, y: side * (SIDELINE.bench.y1 - 0.4 - i * 0.7), kind: 'hurt',
+      }));
     }
     return out;
+  }
+
+  /**
+   * Someone hurt: he goes down where he is, and the physio comes on from his
+   * bench and down beside him. Then he is up again and back to his place —
+   * or helped off on a bad leg, the physio with him, to sit by the bench.
+   * Null: the stoppage is over, and the physio goes back.
+   */
+  setInjury(next: CourtInjury | null, now: number): void {
+    const prev = this.injury;
+    this.injury = next;
+    if (next === null) {
+      if (this.medic !== null && prev !== null) {
+        const home = coachSpot(this.sides[prev.team]);
+        this.medic.tx = home.x - 0.5;
+        this.medic.ty = home.y + this.sides[prev.team] * 0.7;
+        this.medic.tend = 0;
+      }
+      return;
+    }
+    const b = this.bodies.get(next.p);
+    if (b !== undefined) {
+      b.hurtGoal = next.phase === 'up' ? 0 : next.phase === 'off' ? 0.25 : 1;
+      b.action = null;
+      b.reaction = null;
+      if (next.phase === 'off') {
+        // Helped off: by the substitution zone to the bench.
+        const side = this.sides[next.team];
+        b.limp = true;
+        b.via = { x: SIDELINE.sub.x, y: side * SIDELINE.sub.out };
+        b.tx = SIDELINE.bench.x + 0.35;
+        b.ty = side * (SIDELINE.bench.y1 - 0.4);
+        b.ox = 0;
+        b.oy = 0;
+        b.pose = 'stand';
+      }
+    }
+    if (this.medic === null || this.medic.leaving) this.medic = this.medicBody(next.team);
+    void now;
+  }
+
+  /** The physio, at the front of a team's bench. */
+  private medicBody(team: 0 | 1): Body {
+    const side = this.sides[team];
+    const at = coachSpot(side);
+    const x = at.x - 0.5;
+    const y = at.y + side * 0.7;
+    return {
+      x, y, tx: x, ty: y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: yawTo(1, 0), lift: 0, vz: 0,
+      pose: 'stand', posture: STAND, shape: STAND, gait: 0, running: 0, action: null, reaction: null, fade: null,
+      alpha: 1, leaving: false, scale: 1.8 / REF_HEIGHT, hand: 1, seed: 23 + team,
+      rig: buildRig(STAND, STILL), side: null, via: null, home: null, tend: 0,
+    };
+  }
+
+  /** The physio's walk: out to the man down, beside him while he is treated, off with him or back alone. */
+  private stepMedic(dt: number, now: number): void {
+    const m = this.medic;
+    if (m === null) return;
+    const inj = this.injury;
+    const b = inj !== null ? this.bodies.get(inj.p) : undefined;
+    if (inj !== null && b !== undefined) {
+      // Beside him, on the bench side; helping him off, just ahead of him.
+      const side = this.sides[inj.team];
+      m.tx = b.x - 0.6;
+      m.ty = b.y - side * 0.2;
+      const close = Math.hypot(m.tx - m.x, m.ty - m.y) < 0.35;
+      const tending = (inj.phase === 'treat' || inj.phase === 'decide') && close;
+      m.tend = (m.tend ?? 0) + ((tending ? 1 : 0) - (m.tend ?? 0)) * (1 - Math.exp(-dt / 0.3));
+    } else if (inj === null && !m.leaving && Math.hypot(m.tx - m.x, m.ty - m.y) < 0.3) {
+      m.leaving = true;
+    }
+    this.stepBody(m, dt, now, null);
+    if (m.leaving && m.alpha < 0.02) this.medic = null;
   }
 
   /** Play stopped or not, and a time-out called: the referee signals the
@@ -678,7 +789,9 @@ export class CourtMotion {
         continue;
       }
       // Off the court: a substitute through the zone to the warm-up area, a libero's man to the bench.
-      if (b.side === null && spot.kind === 'bench') b.via = { x: SIDELINE.sub.x, y: sideOf(p) * SIDELINE.sub.out };
+      if (b.side === null && (spot.kind === 'bench' || spot.kind === 'hurt') && b.via === null) {
+        b.via = { x: SIDELINE.sub.x, y: sideOf(p) * SIDELINE.sub.out };
+      }
       b.side = spot.kind;
       b.home = { x: spot.x, y: spot.y };
       b.tx = spot.x;
@@ -947,6 +1060,7 @@ export class CourtMotion {
     const ball = this.ballAt(now);
     this.stepReferee(now, ball);
     for (const c of this.coaches) this.stepStill(c, now, ball);
+    this.stepMedic(dt, now);
     for (const [p, b] of this.bodies) {
       if (b.side === 'bench' && b.home !== null && b.via === null) this.warmUp(p, b, now);
       this.stepBody(b, dt, now, ball);
@@ -1060,8 +1174,10 @@ export class CourtMotion {
       const dx = (waiting ? path.from.x : goalX) - b.x;
       const dy = (waiting ? path.from.y : goalY) - b.y;
       const dist = Math.hypot(dx, dy);
+      // Down hurt, nobody moves him; on a bad leg, he hobbles.
+      const top = (b.hurtGoal ?? 0) >= 1 ? 0 : b.limp === true ? MAX_SPEED * 0.2 : MAX_SPEED;
       if (dist > 0.001 && b.lift < 0.05) {
-        const move = Math.min(dist, Math.min(MAX_SPEED, dist / SETTLE) * dt);
+        const move = Math.min(dist, Math.min(top, dist / SETTLE) * dt);
         b.x += (dx / dist) * move;
         b.y += (dy / dist) * move;
       }
@@ -1118,6 +1234,14 @@ export class CourtMotion {
       if (u >= 1) b.fade = null;
       else s = mixShape(b.fade.from, s, smooth(u));
     }
+    // Hurt: down on one knee, or bent over a bad leg; the physio crouched over him.
+    const hurtGoal = b.hurtGoal ?? 0;
+    if (hurtGoal > 0 || (b.hurt ?? 0) > 0.001) {
+      b.hurt = (b.hurt ?? 0) + (hurtGoal - (b.hurt ?? 0)) * (1 - Math.exp(-dt / 0.28));
+      s = mixShape(s, HURT, b.hurt);
+    }
+    if (b.limp === true && speed > 0.15) s = { ...s, crouch: s.crouch + 0.07 * Math.abs(Math.sin(b.gait)), bend: s.bend + 0.12 };
+    if ((b.tend ?? 0) > 0.001) s = mixShape(s, TEND, b.tend!);
     b.shape = s;
 
     // ---- Running, and looking at the ball ----

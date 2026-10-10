@@ -540,6 +540,11 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
         <ReportRow k="Questions">{session?.questions.length ?? '—'}</ReportRow>
         <ReportRow k="Status">
           {session === undefined ? 'Closed' : session.finished ? 'Done' : session.currentIndex > 0 ? 'In progress' : 'Waiting for you'}
+          {session !== undefined && !session.finished && (
+            <button className="paper-inline-btn" onClick={() => g.openInterview(session.id)}>
+              {session.currentIndex > 0 ? 'Go back in' : 'Go in'} <Icon name="arrowRight" size={13} />
+            </button>
+          )}
         </ReportRow>
       </div>
     );

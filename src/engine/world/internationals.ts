@@ -60,6 +60,7 @@ import { ensureManagerAttributes } from './career.ts';
 import { postMessage } from './inbox.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from './nations.ts';
 import { postNews } from './news.ts';
+import { applyMatchInjuries, matchInjuryRng } from './progression.ts';
 import { recordFixture } from './records.ts';
 import {
   dayOfSeason, DAYS_PER_SEASON, type Competition, type Fixture, type GameMessage, type World,
@@ -1083,6 +1084,8 @@ export function applyIntlResult(world: World, t: Tournament, m: IntlMatch, resul
   const homeStats = result.stats.home.players;
   const awayStats = result.stats.away.players;
   recordFixture(world, fixture, homeStats, awayStats);
+  // Hurt playing for his country: his club loses him too.
+  applyMatchInjuries(world, result.injuries ?? [], matchInjuryRng(world, fixture.id, m.day));
 
   const all = new Map<number, PlayerMatchStats>([...homeStats, ...awayStats]);
   const sides = [[homeStats, m.home, m.homeSets, m.awaySets], [awayStats, m.away, m.awaySets, m.homeSets]] as const;

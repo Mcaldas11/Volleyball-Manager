@@ -430,15 +430,17 @@ test('a side whose tactic the opposition has read wins less often', () => {
 /** Matches enough to see a coach's changes: in a well-matched pair they are a few a season, not every night. */
 const COACHED_MATCHES = Array.from({ length: 30 }, (_, i) => i + 1);
 
-test('an engine-coached side makes its own changes; one left alone makes none', () => {
+test('an engine-coached side makes its own changes; one left alone makes none — but those an injury forces', () => {
   const { store, setup: base } = buildMatch(4, 0);
   const benchUsed = (autoCoach: boolean): number => {
     let used = 0;
     for (const seed of COACHED_MATCHES) {
       const setup = { ...base, seed };
       const r = new MatchSimulator(store, { ...setup, autoCoach: [autoCoach, autoCoach] }).run();
+      // On for someone hurt: the rules made that change, not the coach.
+      const forced = new Set((r.injuries ?? []).map((i) => i.replacedBy ?? -1));
       for (const [side, team] of [[setup.home, r.stats.home], [setup.away, r.stats.away]] as const) {
-        for (const p of side.bench) if ((team.players.get(p)?.ralliesPlayed ?? 0) > 0) used++;
+        for (const p of side.bench) if (!forced.has(p) && (team.players.get(p)?.ralliesPlayed ?? 0) > 0) used++;
       }
     }
     return used;

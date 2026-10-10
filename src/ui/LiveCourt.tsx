@@ -28,7 +28,7 @@ import { RATING_BANDS } from '../engine/match/playerRating.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
 import {
-  type Body, CourtMotion, type CourtSideline, flightAt, SIDELINE,
+  type Body, CourtMotion, type CourtInjury, type CourtSideline, flightAt, SIDELINE,
 } from './courtMotion.ts';
 import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, NET_HEIGHT, type Ball3, type Scene } from './matchCourt.ts';
 
@@ -92,9 +92,11 @@ interface CourtProps {
 
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
-  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85,
+  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null,
 }: {
   scene: Scene;
+  /** Someone down hurt, and where the stoppage for him has got to. */
+  injury?: CourtInjury | null;
   store: PlayerStore;
   /** How full the stand is, 0-1 — a title decider packed, a dead rubber half empty. */
   crowdFill?: number;
@@ -127,7 +129,7 @@ export function LiveCourt({
     const sl = props.current.sideline;
     const m = motion.current;
     if (sl === null || sl === undefined || m === null) return;
-    const key = JSON.stringify([sl.bench, sl.waiting, [...sl.warming], props.current.nearTeam]);
+    const key = JSON.stringify([sl.bench, sl.waiting, [...sl.warming], sl.hurt ?? [], props.current.nearTeam]);
     if (key === sidelineKey.current) return;
     sidelineKey.current = key;
     m.setSideline(sl, props.current.nearTeam ?? 0, now);
@@ -154,6 +156,14 @@ export function LiveCourt({
   useEffect(() => {
     motion.current?.setStoppage(timeout, paused, performance.now());
   }, [timeout, paused]);
+
+  // Someone hurt: down, the physio on, up again or helped off.
+  const injuryKey = injury === null ? '' : `${injury.p}:${injury.phase}`;
+  useEffect(() => {
+    // Who is off hurt goes on the sideline before he is sent there.
+    applySideline(performance.now());
+    motion.current?.setInjury(injury, performance.now());
+  }, [injuryKey]);
   if (motion.current !== null) motion.current.pace = speed;
 
   // The animation loop — runs for the life of the court.
@@ -398,6 +408,18 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
     ctx.textBaseline = 'middle';
     ctx.fillText('C', P.X(c.x), P.Y(c.y) + 0.5);
   });
+  // The physio: white, with a red cross.
+  if (m.medic !== null) {
+    const md = m.medic;
+    ctx.save();
+    ctx.globalAlpha = md.alpha;
+    ctx.beginPath();
+    ctx.arc(P.X(md.x), P.Y(md.y), r * 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = '#f4f6f8';
+    ctx.fill();
+    drawCross(ctx, P.X(md.x), P.Y(md.y), r * 0.5);
+    ctx.restore();
+  }
   for (const [p, b] of m.bodies) {
     const X = P.X(b.x);
     const Y = P.Y(b.y);
@@ -424,6 +446,14 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
     ctx.lineWidth = m.actor === p ? 3 : 2;
     ctx.strokeStyle = m.actor === p ? '#ffc72c' : 'rgba(255, 255, 255, 0.9)';
     ctx.stroke();
+    // Down hurt, or hobbling off: a red cross over him.
+    if ((b.hurt ?? 0) > 0.2 || b.limp === true) {
+      ctx.beginPath();
+      ctx.arc(X + r * 0.75, Y - r * 0.75, r * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      drawCross(ctx, X + r * 0.75, Y - r * 0.75, r * 0.32);
+    }
     ctx.restore();
 
     if (props.labels === 'off' || b.side !== null) continue;
@@ -756,6 +786,14 @@ function drawHall(
   board([BOARD_X, -END_BOARD_Y, 0], [BOARD_X, END_BOARD_Y, 0], END_BOARD_Y * 2);
   board([BOARD_X, -END_BOARD_Y, 0], [9, -END_BOARD_Y, 0], 9 - BOARD_X);
   board([BOARD_X, END_BOARD_Y, 0], [9, END_BOARD_Y, 0], 9 - BOARD_X);
+}
+
+/** A red cross, centred at (x, y), `h` from the middle to each arm's end. */
+function drawCross(ctx: CanvasRenderingContext2D, x: number, y: number, h: number): void {
+  const w = h * 0.38;
+  ctx.fillStyle = '#e5484d';
+  ctx.fillRect(x - w, y - h, w * 2, h * 2);
+  ctx.fillRect(x - h, y - w, h * 2, w * 2);
 }
 
 /** The referee's call over their head while they make it — whose point,

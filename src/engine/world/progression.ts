@@ -17,7 +17,11 @@
 import { newsInjury } from './news.ts';
 import { medicalQuality } from './staffMarket.ts';
 import { ageAtSeasonEnd, farewell, plansThisSeason, retirementHazard, willRetire } from './retirement.ts';
-import type { Rng } from '../core/rng.ts';
+import { Rng } from '../core/rng.ts';
+import {
+  AGGRAVATE_PER_RALLY, aggravate, drawInjury, injuryOutcome, injuryRiskPerRally, MATCH_INJURIES, type MatchInjury,
+} from '../match/injury.ts';
+import type { PlayerMatchStats } from '../match/stats.ts';
 import {
   AGE_DECAY_WEIGHT, ATTRIBUTES, LATE_GROWTH_WEIGHT, PERSONALITY_ATTR_SET, type AttributeName,
 } from '../model/attributes.ts';
@@ -92,9 +96,10 @@ export function rollInjuries(world: World): void {
       weeks.set(club, week);
     }
     const planned = weekInjury(world, world.clubs[club], i, week);
-    // Base weekly risk, modulated by the things that actually drive it.
+    // Base weekly risk, modulated by the things that actually drive it — less
+    // what matches now do to players themselves (see applyMatchInjuries).
     const risk = planned *
-      0.0075 *
+      0.0069 *
       (0.55 + proneness * 1.1) *
       (1.35 - durability * 0.7) *
       (1 + fatigue * 1.3) *
@@ -122,6 +127,68 @@ export function rollInjuries(world: World): void {
       applyPermanentInjuryCost(store, i, def.permanentCost, rng);
     }
   }
+}
+
+/** A match's own dice for what it did to its players — the world's are left as they were. */
+export function matchInjuryRng(world: World, fixtureId: number, day: number): Rng {
+  return new Rng((world.seed ^ Math.imul(fixtureId + 0x9e37, 0x2c1b3c6d) ^ Math.imul(day + 1, 0x297a2d39)) >>> 0);
+}
+
+/**
+ * What a match did to its players, now it is over: each knock and injury
+ * comes to so many days out — none for a knock he came off with straight
+ * away, a few for one he played on with, the full injury for one that got
+ * worse — and the manager hears of his own.
+ */
+export function applyMatchInjuries(world: World, injuries: readonly MatchInjury[], rng: Rng): void {
+  const store = world.players;
+  for (const inj of injuries) {
+    const out = injuryOutcome(inj, rng);
+    if (out.days <= 0 || store.injuryDaysLeft[inj.p] >= out.days) continue;
+    store.injuryDaysLeft[inj.p] = out.days;
+    store.injuryType[inj.p] = out.type;
+    store.setFlag(inj.p, PlayerFlag.Injured, true);
+    store.morale[inj.p] = Math.max(10, store.morale[inj.p] - (inj.severity === 'serious' ? rng.int(5, 15) : rng.int(0, 4)));
+    newsInjury(world, inj.p, out.type, out.days);
+    const club = store.clubId[inj.p];
+    if (club >= 0 && club === world.userClubId) {
+      injuryNotice(world, inj.p, out.type, out.days);
+    } else if (club >= 0 && world.loans.length > 0 && world.userClubId >= 0 && loanOf(world, inj.p)?.parentClubId === world.userClubId) {
+      injuryNotice(world, inj.p, out.type, out.days, world.clubs[club]);
+    }
+    if (out.cost > 0) applyPermanentInjuryCost(store, inj.p, out.cost, rng);
+  }
+}
+
+/**
+ * The same risks for a match nobody watched, played by the quick engine:
+ * each player, for the rallies he was on court, may have been hurt; a knock
+ * his coach took him off for, or let him play on with — and that may have
+ * got worse.
+ */
+export function quickMatchInjuries(
+  world: World,
+  sides: ReadonlyArray<ReadonlyMap<number, PlayerMatchStats>>,
+  rng: Rng,
+): MatchInjury[] {
+  const store = world.players;
+  const out: MatchInjury[] = [];
+  sides.forEach((stats, team) => {
+    for (const [p, s] of stats) {
+      const rallies = s.ralliesPlayed;
+      if (rallies <= 0) continue;
+      const tired = 1 - store.condition[p] / 100;
+      if (!rng.chance(1 - Math.pow(1 - injuryRiskPerRally(store, p, tired * 0.5), rallies))) continue;
+      const kind = drawInjury(rng);
+      const k = MATCH_INJURIES[kind];
+      const inj: MatchInjury = { p, team: team as 0 | 1, set: 0, rally: 0, kind, type: k.type, severity: k.severity };
+      if (k.severity === 'serious') inj.off = true;
+      else if (rng.chance(0.6)) inj.off = true;
+      else if (rng.chance(1 - Math.pow(1 - AGGRAVATE_PER_RALLY, rallies * rng.float()))) aggravate(inj);
+      out.push(inj);
+    }
+  });
+  return out;
 }
 
 /**

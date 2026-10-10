@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
-import type { PlayerStore } from '../../engine/model/players.ts';
+import { INJURY_NAMES, type PlayerStore } from '../../engine/model/players.ts';
 import type { ShoutKind } from '../../engine/match/engine.ts';
 import {
   abilityClass, Bar, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
@@ -25,7 +25,7 @@ import {
 import { TacticsBoard } from '../tacticsBoard.tsx';
 import { defenceLayoutsOf, type DefenceLayouts } from '../../engine/match/defence.ts';
 import { describeRallyHighlight } from './Match.tsx';
-import { useGame, WARM_READY, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
+import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 
 /** National teams play in something like their flag's colour. */
@@ -376,6 +376,82 @@ const TIMEOUT_SECONDS = 30;
 
 /** The compact tactics editor shown while a timeout is active — the same club.tactics
  *  object the rally engine reads live, so a change here applies from the next rally on. */
+/**
+ * Someone down hurt: who, and what — and when it is the user's own player,
+ * his call: let him play on with a knock, or take him off — and for whom, the
+ * assistant's choice first; an exceptional substitution when the five are
+ * spent. One who has to come off, has to.
+ */
+function InjuryPanel(): JSX.Element | null {
+  const g = useGame();
+  const md = g.matchday!;
+  const live = md.injury;
+  if (live == null) return null;
+  const store = g.world!.players;
+  const roles = g.liveRoles();
+  const { inj } = live;
+  const knock = inj.severity === 'knock';
+  const deciding = live.phase === 'decide';
+  const liberos = g.liveLiberos();
+  const isLibero = live.ours && (inj.p === liberos.reception || inj.p === liberos.defence);
+  const options = deciding ? g.injuryOptions() : [];
+  const otherLibero = inj.p === liberos.reception ? liberos.defence : liberos.reception;
+  const line = live.phase === 'down' ? 'He is down. The physio is on his way.'
+    : live.phase === 'treat' ? 'The physio is with him.'
+      : live.phase === 'decide'
+        ? knock ? 'He can carry on — below his best, and every rally he plays on with it, it may get worse.'
+          : inj.aggravated === true ? 'Playing on has made it worse — he has to come off.' : 'He cannot carry on. Who comes on?'
+        : live.phase === 'up' ? 'Back on his feet — he plays on.' : 'Helped off.';
+  return (
+    <div className={`injury-panel${deciding ? ' deciding' : ''}`}>
+      <div className="injury-head">
+        <span className="injury-icon"><Icon name="medical" size={22} /></span>
+        <PlayerFace playerId={store.id[inj.p]} name={store.fullName(inj.p)} size={38} />
+        <div className="injury-title">
+          <strong>{store.fullName(inj.p)} <Pos pos={roles[inj.p] as Position} /></strong>
+          <span className="faint">{INJURY_NAMES[inj.type] ?? 'Injury'} · {md.sides[inj.team].shortName}</span>
+        </div>
+        <span className={`injury-tag ${knock ? 'knock' : 'serious'}`}>{knock ? 'Knock' : 'Has to come off'}</span>
+      </div>
+      <p className="injury-line">{line}</p>
+      {deciding && (
+        <div className="injury-choices">
+          {knock && (
+            <button className="primary" onClick={() => g.injuryPlayOn()}>
+              <Icon name="play" size={13} /> Play on
+            </button>
+          )}
+          <span className="faint">{knock ? 'or take him off for' : 'Bring on'}</span>
+          <div className="injury-options">
+            {isLibero && (
+              <button className="injury-option" onClick={() => g.injuryTakeOff(-1)}>
+                {otherLibero >= 0 ? `${store.shortName(otherLibero)} plays libero alone` : 'Go on without a libero'}
+              </button>
+            )}
+            {options.map((o) => (
+              <button key={o.p} className={`injury-option${o.pick ? ' pick' : ''}`} onClick={() => g.injuryTakeOff(o.p)}>
+                <PlayerFace playerId={store.id[o.p]} name={store.fullName(o.p)} size={24} />
+                <span className="injury-option-name">{store.shortName(o.p)}</span>
+                <Pos pos={roles[o.p] as Position} />
+                <b>{store.currentAbility[o.p]}</b>
+                {o.pick && <span className="injury-flag pick">Assistant's pick</span>}
+                {o.exceptional && (
+                  <span className="injury-flag" title="Your five are spent: the rules allow an exceptional substitution for an injury, and it uses none of them">
+                    Exceptional
+                  </span>
+                )}
+              </button>
+            ))}
+            {options.length === 0 && !isLibero && !knock && (
+              <button className="injury-option" onClick={() => g.injuryCarryOn()}>Nobody left — he carries on as best he can</button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TimeoutPanel({
   secondsLeft, calledBy,
 }: {
@@ -514,6 +590,7 @@ function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolea
   const rows = [...court, ...(libero >= 0 ? [libero] : [])]
     .filter((p, i, all) => all.indexOf(p) === i)
     .sort((a, b) => ROLE_ORDER[roles[a] as Position] - ROLE_ORDER[roles[b] as Position]);
+  const knocks = g.liveKnocks();
   return (
     <section className="card lv-team">
       <header className="lv-team-head">
@@ -527,7 +604,10 @@ function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolea
           return (
             <div key={p} className="lv-team-row" onClick={() => g.select(p)} title={store.fullName(p)}>
               <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={22} />
-              <span className="lv-team-name">{store.shortName(p).split(' ').pop()}</span>
+              <span className="lv-team-name">
+                {store.shortName(p).split(' ').pop()}
+                {knocks.has(p) && <span className="lv-knock" title="Playing on with a knock — below his best, and it may get worse">+</span>}
+              </span>
               <Pos pos={roles[p] as Position} />
               {r !== undefined ? <RatingBadge value={r} size="sm" /> : <span className="lv-rating-none">—</span>}
             </div>
@@ -862,6 +942,43 @@ function LiveMatchView(): JSX.Element {
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
   }, [lastShoutSeq]);
 
+  /** A line on the banner, for either side. */
+  const announce = (text: string, team: 0 | 1): void => {
+    setSubAnnouncement({ text, team, key: Date.now() });
+    if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
+    subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3200);
+  };
+
+  /**
+   * Someone hurt: he goes down, the physio comes on and down beside him; the
+   * coach makes his call — the user, for his own; the engine has made it for
+   * the other side — and he is up and playing on, or helped off and someone
+   * else on.
+   */
+  const playInjury = async (live: LiveInjury, speed: number, cancelled: { current: boolean }): Promise<void> => {
+    const who = store.shortName(live.inj.p);
+    const side = live.inj.team;
+    const sideName = g.matchday?.sides[side].shortName ?? '';
+    announce(`${sideName}: ${who} is down — ${(INJURY_NAMES[live.inj.type] ?? 'hurt').toLowerCase()}`, side);
+    await sleep(1500 / speed);
+    if (cancelled.current) return;
+    g.setInjuryPhase('treat');
+    await sleep(2200 / speed);
+    if (cancelled.current) return;
+    if (g.injuryNeedsCall(live)) {
+      g.setInjuryPhase('decide');
+      while (!cancelled.current && g.matchday?.injury?.phase === 'decide') await sleep(150);
+    } else {
+      g.setInjuryPhase(live.inj.off === true ? 'off' : 'up');
+    }
+    if (cancelled.current) return;
+    const off = g.matchday?.injury?.phase === 'off';
+    const by = live.inj.replacedBy ?? -1;
+    announce(off ? `${sideName}: ${who} helped off${by >= 0 ? ` — ${store.shortName(by)} on` : ''}` : `${sideName}: ${who} plays on`, side);
+    await sleep((off ? 3400 : 1700) / speed);
+    g.endInjuryStoppage();
+  };
+
   // Drives the match forward itself: play a rally, animate it, repeat.
   // No timer in state.ts — pacing is entirely a presentation concern here.
   useEffect(() => {
@@ -915,6 +1032,13 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
+        // Anyone hurt in that rally: the stoppage for him, played out on the court.
+        if (g.matchday?.snapshot?.matchOver !== true) {
+          for (let live = g.beginInjuryStoppage(); live !== null && !cancelled.current; live = g.beginInjuryStoppage()) {
+            await playInjury(live, current.speed, cancelled);
+          }
+          if (cancelled.current) break;
+        }
         if (g.matchday?.snapshot?.matchOver === true) {
           // Full time: let the last point sink in, then on to the report.
           await sleep(2200 / current.speed);
@@ -990,6 +1114,8 @@ function LiveMatchView(): JSX.Element {
   const homeProb = shownLog.length > 0 ? shownLog[shownLog.length - 1].entry.homeWinProb : 0.5;
   const status = view.matchOver
     ? 'Full time'
+    : md.injury != null
+      ? 'Injury'
     : md.timeoutActive !== null
       ? 'Timeout'
       : md.paused && md.pauseUntil !== null
@@ -1065,6 +1191,7 @@ function LiveMatchView(): JSX.Element {
           <div className="card court-panel lv-court">
             <LiveCourt
               scene={scene} store={store} roles={g.liveRoles()} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
+              injury={md.injury != null ? { p: md.injury.inj.p, team: md.injury.inj.team, phase: md.injury.phase } : null}
               sideline={g.liveSideline()}
               nearTeam={nearTeam}
               crowdFill={crowdFill}
@@ -1096,6 +1223,7 @@ function LiveMatchView(): JSX.Element {
                 {subAnnouncement.text}
               </div>
             )}
+            {md.injury != null && <InjuryPanel />}
             {md.timeoutActive !== null && overlay !== 'subs' && (
               <TimeoutPanel
                 secondsLeft={timeoutSecondsLeft}
@@ -1191,12 +1319,12 @@ function LiveMatchView(): JSX.Element {
         <span className="flex-spacer" />
         {md.paused
           ? (
-            <button disabled={md.timeoutActive !== null} onClick={() => g.resume()}>
+            <button disabled={md.timeoutActive !== null || md.injury != null} onClick={() => g.resume()}>
               <Icon name="play" size={14} /> Resume
             </button>
           )
           : (
-            <button disabled={md.timeoutActive !== null} onClick={() => g.pause()}>
+            <button disabled={md.timeoutActive !== null || md.injury != null} onClick={() => g.pause()}>
               <Icon name="pause" size={14} /> Pause
             </button>
           )}
