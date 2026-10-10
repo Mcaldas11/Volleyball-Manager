@@ -578,7 +578,13 @@ const SHOUT_EFFECT: Readonly<Record<'lifted' | 'flat' | 'tense', string>> = {
 };
 
 /** A side's six on court and its libero, each with the live rating — the panel down either side of the court. */
-function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolean; ratings: Map<number, number> }): JSX.Element {
+function LiveTeamCard({ team, serving, ratings, onPick }: {
+  team: 0 | 1;
+  serving: boolean;
+  ratings: Map<number, number>;
+  /** The user's own side: a player clicked, for his options. */
+  onPick?: (p: number, row: DOMRect) => void;
+}): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const md = g.matchday!;
@@ -602,7 +608,12 @@ function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolea
         {rows.map((p) => {
           const r = ratings.get(p);
           return (
-            <div key={p} className="lv-team-row" onClick={() => g.select(p)} title={store.fullName(p)}>
+            <div
+              key={p}
+              className={`lv-team-row${onPick !== undefined ? ' pickable' : ''}`}
+              onClick={(e) => (onPick !== undefined ? onPick(p, e.currentTarget.getBoundingClientRect()) : g.select(p))}
+              title={onPick !== undefined ? `${store.fullName(p)} — click to change him` : store.fullName(p)}
+            >
               <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={22} />
               <span className="lv-team-name">
                 {store.shortName(p).split(' ').pop()}
@@ -615,6 +626,70 @@ function LiveTeamCard({ team, serving, ratings }: { team: 0 | 1; serving: boolea
         })}
       </div>
     </section>
+  );
+}
+
+/**
+ * One of the user's players clicked beside the court: who could come on for
+ * him — like for like first, the assistant's eye on who is warm — and, for
+ * any who can't, why not. A libero's are the other liberos.
+ */
+function QuickSub({ at, onClose }: {
+  at: { p: number; x: number; y: number; side: 'left' | 'right' };
+  onClose: () => void;
+}): JSX.Element {
+  const g = useGame();
+  const store = g.world!.players;
+  const roles = g.liveRoles();
+  const liberos = g.liveLiberos();
+  const p = at.p;
+  const isLibero = p === liberos.reception || p === liberos.defence;
+  const options = g.subOptionsFor(p);
+  const ref = useDismiss(true, onClose);
+  const width = 300;
+  const left = at.side === 'left' ? at.x : at.x - width;
+  const top = Math.max(8, Math.min(at.y, window.innerHeight - 360));
+  return (
+    <div ref={ref} className="lv-quicksub" style={{ left, top, width }}>
+      <header className="lv-quicksub-head">
+        <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={30} />
+        <div>
+          <b>{store.fullName(p)}</b>
+          <span className="faint">
+            {isLibero ? 'Libero — changes are free and unlimited' : `Bring on for him · ${g.subsRemaining()} left this set`}
+          </span>
+        </div>
+        <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={14} /></button>
+      </header>
+      <div className="lv-quicksub-list">
+        {options.length === 0 && <p className="faint lv-quicksub-none">Nobody on the bench can come on for him.</p>}
+        {options.map((o) => {
+          const cold = g.warmthOf(o.p) < WARM_READY;
+          return (
+            <button
+              key={o.p}
+              className="lv-quicksub-opt"
+              disabled={o.why !== null}
+              title={o.why ?? (cold ? 'Not warmed up — he risks a strain' : undefined)}
+              onClick={() => {
+                if (isLibero) g.changeLibero(p === liberos.reception ? 'reception' : 'defence', o.p);
+                else g.substitute(p, o.p);
+                onClose();
+              }}
+            >
+              <PlayerFace playerId={store.id[o.p]} name={store.fullName(o.p)} size={24} />
+              <span className="lv-quicksub-name">{store.shortName(o.p)}</span>
+              <Pos pos={roles[o.p] as Position} />
+              <b>{store.currentAbility[o.p]}</b>
+              {o.why === null && <span className={`lv-quicksub-warm${cold ? ' cold' : ''}`}>{cold ? 'Cold' : 'Ready'}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <footer className="lv-quicksub-foot">
+        <button className="link" onClick={() => { onClose(); g.select(p); }}>His profile <Icon name="arrowRight" size={12} /></button>
+      </footer>
+    </div>
   );
 }
 
@@ -870,6 +945,27 @@ function LiveMatchView(): JSX.Element {
   const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, g.liveRoles(), nearTeam, store));
   const [labels, setLabels] = useState<CourtLabels>('ratings');
   const [overlay, setOverlay] = useState<'subs' | 'tactics' | null>(null);
+  /** One of the user's players clicked beside the court: his options, by the row. */
+  const [quick, setQuick] = useState<{ p: number; x: number; y: number; side: 'left' | 'right' } | null>(null);
+  /** Opening the substitutions holds play until they are closed. */
+  const openSubs = (): void => {
+    setQuick(null);
+    setOverlay('subs');
+    g.openCoachPanel();
+  };
+  const closeOverlay = (): void => {
+    if (overlay === 'subs') g.closeCoachPanel();
+    setOverlay(null);
+  };
+  const pickPlayer = (p: number, row: DOMRect, side: 'left' | 'right'): void => {
+    if (overlay === 'subs') return;
+    setQuick({ p, x: side === 'left' ? row.right + 8 : row.left - 8, y: row.top, side });
+    g.openCoachPanel();
+  };
+  const closeQuick = (): void => {
+    setQuick(null);
+    g.closeCoachPanel();
+  };
   const [shoutOpen, setShoutOpen] = useState(false);
   const shoutRef = useDismiss(shoutOpen, () => setShoutOpen(false));
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
@@ -1000,7 +1096,7 @@ function LiveMatchView(): JSX.Element {
           // A substitution stoppage ends by itself once its wall-clock time is
           // up — but never while a timeout is open, which only the clock or
           // the Resume button may close.
-          if (current.pauseUntil !== null && current.timeoutActive === null && Date.now() >= current.pauseUntil) {
+          if (current.pauseUntil !== null && current.timeoutActive === null && current.coachPanel !== true && Date.now() >= current.pauseUntil) {
             g.resume();
             continue;
           }
@@ -1070,11 +1166,6 @@ function LiveMatchView(): JSX.Element {
   useEffect(() => {
     logRef.current?.scrollTo(0, 0);
   }, [revealed]);
-
-  // A timeout is the moment for changes — open the substitutions.
-  useEffect(() => {
-    if (md.timeoutActive !== null) setOverlay('subs');
-  }, [md.timeoutActive]);
 
   // A substitution or libero change between rallies redraws the set-up.
   useEffect(() => {
@@ -1168,7 +1259,8 @@ function LiveMatchView(): JSX.Element {
 
       <div className="lv-main">
         <div className="lv-col">
-          <LiveTeamCard team={0} serving={view.serving === 0} ratings={ratings} />
+          <LiveTeamCard team={0} serving={view.serving === 0} ratings={ratings}
+            onPick={userTeamIdx === 0 ? (p, row) => pickPlayer(p, row, 'left') : undefined} />
           <section className="card lv-points-card">
             <header className="lv-card-head">Point by point</header>
             <div className="lv-pbp" ref={logRef}>
@@ -1238,7 +1330,7 @@ function LiveMatchView(): JSX.Element {
                   {md.timeoutActive !== null && (
                     <button className="primary sm" onClick={() => g.resumeFromTimeout()}><Icon name="play" size={13} /> Resume play</button>
                   )}
-                  <button className="icon-btn" onClick={() => setOverlay(null)} title="Close"><Icon name="close" size={16} /></button>
+                  <button className="icon-btn" onClick={closeOverlay} title="Close"><Icon name="close" size={16} /></button>
                 </header>
                 <div className="lv-overlay-body"><Substitutions teamIdx={userTeamIdx} /></div>
               </div>
@@ -1254,7 +1346,9 @@ function LiveMatchView(): JSX.Element {
         </div>
 
         <div className="lv-col">
-          <LiveTeamCard team={1} serving={view.serving === 1} ratings={ratings} />
+          <LiveTeamCard team={1} serving={view.serving === 1} ratings={ratings}
+            onPick={userTeamIdx === 1 ? (p, row) => pickPlayer(p, row, 'right') : undefined} />
+          {quick !== null && <QuickSub key={quick.p} at={quick} onClose={closeQuick} />}
           <section className="card lv-stats-card">
             <header className="lv-card-head">Match stats</header>
             <div className="lv-stats-names">
@@ -1288,7 +1382,7 @@ function LiveMatchView(): JSX.Element {
         >
           <Icon name="whistle" size={15} /> Timeout <span className="lv-badge">{2 - md.timeoutsUsed[userTeamIdx]}</span>
         </button>
-        <button className={overlay === 'subs' ? 'on' : ''} onClick={() => setOverlay((o) => (o === 'subs' ? null : 'subs'))}>
+        <button className={overlay === 'subs' ? 'on' : ''} onClick={() => (overlay === 'subs' ? closeOverlay() : openSubs())}>
           <Icon name="swap" size={15} /> Substitution <span className={`lv-badge${remaining <= 0 ? ' bad' : ''}`}>{remaining}</span>
         </button>
         <div className="lv-shout" ref={shoutRef}>
@@ -1313,7 +1407,7 @@ function LiveMatchView(): JSX.Element {
             </div>
           )}
         </div>
-        <button className={overlay === 'tactics' ? 'on' : ''} onClick={() => setOverlay((o) => (o === 'tactics' ? null : 'tactics'))}>
+        <button className={overlay === 'tactics' ? 'on' : ''} onClick={() => { if (overlay === 'subs') g.closeCoachPanel(); setOverlay((o) => (o === 'tactics' ? null : 'tactics')); }}>
           <Icon name="tactics" size={15} /> Tactics
         </button>
         <span className="flex-spacer" />

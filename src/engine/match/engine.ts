@@ -386,6 +386,8 @@ class TeamRuntime {
   setterIdx = -1;
   /** The libero on court for the rally being played — one of the two below. */
   liberoIdx = -1;
+  /** Whether the side serves the rally being played: a middle in zone 1 serves it, or makes way for the libero. */
+  onServe = false;
   receptionLibero = -1;
   defensiveLibero = -1;
   score = 0;
@@ -776,7 +778,8 @@ export class MatchSimulator {
     if (this.setup.friendly === true) return;
     for (const team of [0, 1] as const) {
       const t = this.teams[team];
-      const on = [...t.court, t.liberoIdx].filter((p) => p >= 0);
+      // Who was on the floor: a middle sitting out for the libero wasn't.
+      const on = Array.from(t.court, (_, z) => effectivePlayerAt(t.court, z, this.roles, t.liberoIdx, t.onServe)).filter((p) => p >= 0);
       for (const p of on) {
         if (t.outForMatch.has(p) || t.mustLeave.some((i) => i.p === p)) continue;
         const r = t.ratings.get(p);
@@ -1073,7 +1076,7 @@ export class MatchSimulator {
     const pos = this.roles;
     const setter = atk.settingIdx();
     for (const z of [5, 4, 0, 1, 2, 3]) {
-      const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx);
+      const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx, atk.onServe);
       if (p >= 0 && p !== attacker && p !== setter) return p;
     }
     return attacker;
@@ -1268,6 +1271,11 @@ export class MatchSimulator {
       return 'That player can only come back on for the player they swapped with.';
     }
     return null;
+  }
+
+  /** Why `inPlayerIdx` can't come on for `outPlayerIdx` right now — null if he can. */
+  substitutionCheck(team: 0 | 1, outPlayerIdx: number, inPlayerIdx: number): string | null {
+    return this.substitutionError(team, outPlayerIdx, inPlayerIdx);
   }
 
   subsRemaining(team: 0 | 1): number {
@@ -1602,6 +1610,8 @@ export class MatchSimulator {
     // defensive one on to dig; with a single libero both calls return it.
     srv.liberoIdx = this.activeLibero(serving);
     rcv.liberoIdx = this.activeLibero(receiving);
+    srv.onServe = true;
+    rcv.onServe = false;
     const scoreBefore: [number, number] = [this.teams[0].score, this.teams[1].score];
     const srvRot = srv.rotation();
     const rcvRot = rcv.rotation();
@@ -1988,7 +1998,7 @@ export class MatchSimulator {
     const setter = atk.settingIdx();
     const pos = this.roles;
     const onCourt: number[] = [];
-    for (let z = 0; z < 6; z++) onCourt.push(effectivePlayerAt(atk.court, z, pos, atk.liberoIdx));
+    for (let z = 0; z < 6; z++) onCourt.push(effectivePlayerAt(atk.court, z, pos, atk.liberoIdx, atk.onServe));
     const free = (p: number): boolean => p >= 0 && p !== firstTouch && onCourt.includes(p);
     const libero = free(atk.liberoIdx) ? atk.liberoIdx : -1;
 
@@ -2094,7 +2104,7 @@ export class MatchSimulator {
       pos[atk.court[0]] === Position.Setter && pos[atk.court[1]] === Position.OutsideHitter;
 
     for (let z = 0; z < 6; z++) {
-      const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx);
+      const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx, atk.onServe);
       if (p === setter) continue;
       const role = pos[p] as Position;
       const front = z >= 1 && z <= 3;
@@ -2247,7 +2257,7 @@ export class MatchSimulator {
     let total = 0;
     let n = 0;
     for (const z of [0, 4, 5]) {
-      const p = effectivePlayerAt(def.court, z, pos, def.liberoIdx);
+      const p = effectivePlayerAt(def.court, z, pos, def.liberoIdx, def.onServe);
       const r = def.rate(p);
       // The libero is the best defender on the floor and gets more balls.
       const weight = pos[p] === Position.Libero ? 1.6 : 1;
@@ -2262,11 +2272,11 @@ export class MatchSimulator {
     const zones = [0, 4, 5];
     const w = [1, 1, 1];
     for (let i = 0; i < 3; i++) {
-      const p = effectivePlayerAt(def.court, zones[i], pos, def.liberoIdx);
+      const p = effectivePlayerAt(def.court, zones[i], pos, def.liberoIdx, def.onServe);
       w[i] = pos[p] === Position.Libero ? 2.2 : 1;
     }
     const z = zones[this.rng.weightedIndex(w)];
-    return effectivePlayerAt(def.court, z, pos, def.liberoIdx);
+    return effectivePlayerAt(def.court, z, pos, def.liberoIdx, def.onServe);
   }
 
   // ---- Match-state modifiers ---------------------------------------------
@@ -2294,7 +2304,7 @@ export class MatchSimulator {
       const momentumBoost = 1 + team.momentum * 0.006;
       const edge = team.edge;
       for (let z = 0; z < 6; z++) {
-        const p = effectivePlayerAt(team.court, z, this.roles, team.liberoIdx);
+        const p = effectivePlayerAt(team.court, z, this.roles, team.liberoIdx, team.onServe);
         const r = team.rate(p);
         const clutch = (r.bigMatch - 0.5) * 0.5 + (r.composure - 0.5) * 0.5;
         r.confidence = clamp(edge * momentumBoost * (1 + clutch * pressure * 0.16), 0.72, 1.28);
@@ -2308,7 +2318,7 @@ export class MatchSimulator {
     for (let t = 0; t < 2; t++) {
       const team = this.teams[t];
       for (let z = 0; z < 6; z++) {
-        const p = effectivePlayerAt(team.court, z, this.roles, team.liberoIdx);
+        const p = effectivePlayerAt(team.court, z, this.roles, team.liberoIdx, team.onServe);
         const r = team.rate(p);
         // Stamina buys endurance; a 20-stamina player fades roughly a third as
         // fast as a 5-stamina one.

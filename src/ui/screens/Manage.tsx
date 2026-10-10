@@ -199,8 +199,8 @@ export function RotationsScreen(): JSX.Element {
             </div>
           </div>
           <p className="footnote">
-            Libero replaces the middle blocker in zones 5 and 6. The middle serves from zone 1, since a
-            libero may not serve.
+            Libero replaces the middle blocker in the back row. The middle serves from zone 1, since a
+            libero may not serve — and the moment the serve is lost the libero comes on for him.
           </p>
         </Card>
 

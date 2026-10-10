@@ -396,6 +396,10 @@ export interface MatchdayState {
   warmth?: Map<number, number>;
   /** The user's substitutes sent to warm up. */
   warming?: Set<number>;
+  /** The coach has a panel open — the substitutions, or one player's options: play holds until it is closed. */
+  coachPanel?: boolean;
+  /** Play was running when he opened it: closing it starts it again. */
+  pausedForPanel?: boolean;
   /** Injuries still to be shown, each once the rally it came in has been played out. */
   injuryQueue?: LiveInjury[];
   /** The stoppage for someone hurt under way — null when there is none. */
@@ -2151,6 +2155,7 @@ class Game {
     if (md === null) return;
     md.paused = true;
     md.pauseUntil = null; // a manual pause is indefinite, not a timed stoppage
+    md.pausedForPanel = false; // his own pause: closing a panel doesn't undo it
     this.emit();
   }
 
@@ -2159,6 +2164,7 @@ class Game {
     if (md === null) return;
     md.paused = false;
     md.pauseUntil = null;
+    md.pausedForPanel = false;
     this.emit();
   }
 
@@ -2205,6 +2211,64 @@ class Game {
     }
     this.emit();
     return logEntry;
+  }
+
+  // ---- The coach's panels ---------------------------------------------------------
+
+  /** The coach opens a panel — the substitutions, or a player's options: play stops after the rally under way, and stays stopped. */
+  openCoachPanel(): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'live') return;
+    md.coachPanel = true;
+    if (!md.paused && md.timeoutActive === null && md.injury == null) {
+      md.paused = true;
+      md.pauseUntil = null;
+      md.pausedForPanel = true;
+    }
+    this.emit();
+  }
+
+  /**
+   * The panel is closed: play starts again if it was the panel that stopped
+   * it — once the stoppage for any change made from it is over (the view's
+   * loop sees to that).
+   */
+  closeCoachPanel(): void {
+    const md = this.matchday;
+    if (md === null) return;
+    const restart = md.pausedForPanel === true;
+    md.coachPanel = false;
+    md.pausedForPanel = false;
+    if (restart && md.paused && md.pauseUntil === null && md.timeoutActive === null && md.injury == null) {
+      md.paused = false;
+    }
+    this.emit();
+  }
+
+  /**
+   * Who could come on for one of the user's players on court, those who can
+   * first, like for like first — and why any of the rest can't: for a
+   * libero, the other liberos named for the match.
+   */
+  subOptionsFor(out: number): Array<{ p: number; why: string | null }> {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return [];
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const snap = md.snapshot;
+    const onCourt = new Set([...(team === 0 ? snap?.homeCourt : snap?.awayCourt) ?? []]);
+    const liberos = sim.liberos(team);
+    const named = new Set(sim.registeredLiberosOf(team));
+    const isLibero = out === liberos.reception || out === liberos.defence;
+    const store = this.world!.players;
+    const role = sim.roles[out];
+    const options = sim.squadFor(team)
+      .filter((p) => p !== out && !onCourt.has(p) && p !== liberos.reception && p !== liberos.defence &&
+        this.matchAvailable(p) && !sim.isOutHurt(team, p) && named.has(p) === isLibero)
+      .map((p) => ({ p, why: isLibero ? null : sim.substitutionCheck(team, out, p) }));
+    return options.sort((a, b) => Number(a.why !== null) - Number(b.why !== null) ||
+      Number(sim.roles[b.p] === role) - Number(sim.roles[a.p] === role) ||
+      store.currentAbility[b.p] - store.currentAbility[a.p]);
   }
 
   // ---- Someone hurt ------------------------------------------------------------------
@@ -2525,7 +2589,7 @@ class Game {
     for (const team of [0, 1] as const) {
       const court = team === 0 ? snap.homeCourt : snap.awayCourt;
       const libero = team === 0 ? snap.homeLibero : snap.awayLibero;
-      const floor = new Set(court.map((_, z) => effectivePlayerAt(court, z, sim.roles, libero)));
+      const floor = new Set(court.map((_, z) => effectivePlayerAt(court, z, sim.roles, libero, snap.serving === team)));
       const liberos = sim.liberos(team);
       // Off hurt: by the bench, out of it.
       out.hurt![team] = sim.squadFor(team).filter((p) => sim.isOutHurt(team, p));
@@ -2641,7 +2705,7 @@ class Game {
 
   /**
    * Call one of the user's two 30-second timeouts this set. Pauses play and
-   * opens the tactics/substitutions window — resumeFromTimeout() ends it.
+   * opens the timeout window — resumeFromTimeout() ends it.
    */
   callTimeout(): void {
     const md = this.matchday;
@@ -2655,7 +2719,9 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.timeoutActive = null;
-    md.paused = false;
+    // With a coach's panel still open, play waits for it to be closed.
+    if (md.coachPanel === true) md.pausedForPanel = true;
+    else md.paused = false;
     this.emit();
   }
 

@@ -53,18 +53,25 @@ export function rotationOf(court: Int32Array, setterIdx: number): number {
 /**
  * Where the libero may legally play.
  *
- * Under FIVB rules the libero cannot serve, so when the middle blocker rotates
- * into zone 1 they must serve for themselves; the libero comes in one rotation
- * later. That means the libero covers zones 5 and 6 only — array indices 4 and
- * 5 — which is exactly what happens on a real court.
+ * Under FIVB rules the libero cannot serve, so a middle blocker who rotates
+ * into zone 1 with his side serving serves for himself — and goes on serving
+ * for as long as his side keeps the serve. The moment it is lost he is just a
+ * back-row player who isn't serving, and the libero comes on for him, to stay
+ * through zones 6 and 5 until the middle rotates to the front again. So the
+ * libero covers zones 5 and 6 — array indices 4 and 5 — always, and zone 1 —
+ * index 0 — whenever his side is not serving.
  */
-export function liberoCoversZone(zone: number): boolean {
-  return zone === 4 || zone === 5;
+export function liberoCoversZone(zone: number, serving: boolean): boolean {
+  return zone === 4 || zone === 5 || (zone === 0 && !serving);
 }
+
+/** The back-row zones in the order the libero takes a middle's place, should an odd lineup put two there. */
+const LIBERO_ZONES = [5, 4, 0] as const;
 
 /**
  * Resolve who is actually standing in a zone once the libero substitution is
- * applied.
+ * applied. `serving` is whether the side serves the rally: a middle in zone 1
+ * serves it, and otherwise makes way for the libero.
  *
  * `court` and `positions` take `ArrayLike<number>` rather than the engine's
  * own `Int32Array`/`Uint8Array` so the UI can call this with the plain
@@ -76,16 +83,21 @@ export function effectivePlayerAt(
   zone: number,
   positions: ArrayLike<number>,
   liberoIdx: number,
+  serving: boolean,
 ): number {
   const p = court[zone];
-  if (liberoIdx >= 0 && liberoCoversZone(zone) && positions[p] === Position.MiddleBlocker) {
-    return liberoIdx;
+  if (liberoIdx < 0 || !liberoCoversZone(zone, serving) || positions[p] !== Position.MiddleBlocker) return p;
+  // He replaces one player: with two middles in the back row, the first of them.
+  for (const z of LIBERO_ZONES) {
+    if (z === zone) break;
+    if (liberoCoversZone(z, serving) && positions[court[z]] === Position.MiddleBlocker) return p;
   }
-  return p;
+  return liberoIdx;
 }
 
 /**
- * Build the reception unit: the players who will pass serve.
+ * Build the reception unit: the players who will pass serve — a side not
+ * serving, so with the libero on for a middle in zone 1 too.
  *
  * Standard professional practice is a three-passer system — the libero plus
  * both outside hitters — with the setter, opposite and middles hidden. When an
@@ -99,7 +111,7 @@ export function receptionUnit(
 ): number {
   let n = 0;
   for (let z = 0; z < 6 && n < 3; z++) {
-    const p = effectivePlayerAt(court, z, positions, liberoIdx);
+    const p = effectivePlayerAt(court, z, positions, liberoIdx, false);
     const pos = positions[p] as Position;
     if (pos === Position.Libero || pos === Position.OutsideHitter) {
       out[n++] = p;
@@ -108,7 +120,7 @@ export function receptionUnit(
   // Degenerate lineups (an injury crisis, a youth side) may not field a full
   // passing unit; fall back to whoever is on the floor.
   for (let z = 0; z < 6 && n < 3; z++) {
-    const p = effectivePlayerAt(court, z, positions, liberoIdx);
+    const p = effectivePlayerAt(court, z, positions, liberoIdx, false);
     if (out.indexOf(p) === -1) out[n++] = p;
   }
   return n;

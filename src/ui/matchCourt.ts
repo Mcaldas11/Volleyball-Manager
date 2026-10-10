@@ -269,8 +269,10 @@ interface Team {
 /** How a player serves — a jump serve or a float — when it is known. */
 export type ServeKind = (p: number) => 'jump' | 'float' | undefined;
 
-function buildTeam(near: boolean, court: number[], libero: number, positions: Uint8Array, serveKind: ServeKind): Team {
-  const zones = [0, 1, 2, 3, 4, 5].map((z) => effectivePlayerAt(court, z, positions, libero));
+function buildTeam(
+  near: boolean, court: number[], libero: number, serving: boolean, positions: Uint8Array, serveKind: ServeKind,
+): Team {
+  const zones = [0, 1, 2, 3, 4, 5].map((z) => effectivePlayerAt(court, z, positions, libero, serving));
   const role = (p: number): Position => positions[p] as Position;
   const out = [0, 0, 0];
   const n = court.length === 6 ? receptionUnit(Int32Array.from(court), positions, libero, out) : 0;
@@ -529,12 +531,12 @@ function wobble(seed: number, i: number): number {
 }
 
 function teamsOf(
-  court: CourtState, positions: Uint8Array, nearTeam: 0 | 1, receiving: 0 | 1 | null = null,
+  court: CourtState, positions: Uint8Array, nearTeam: 0 | 1, serving: 0 | 1, receiving: 0 | 1 | null = null,
   serveKind: ServeKind = () => undefined,
 ): [Team, Team] {
   const teams: [Team, Team] = [
-    buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, positions, serveKind),
-    buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, positions, serveKind),
+    buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, serving === 0, positions, serveKind),
+    buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, serving === 1, positions, serveKind),
   ];
   // Receiving with the setter in zone 1 and an outside in zone 2 — a 5-1 in
   // P1, a 4-2 twice round — a side keeps its places.
@@ -567,7 +569,7 @@ function toPositions(teams: [Team, Team], forms: [Formation, Formation]): Map<nu
 export function setupScene(
   court: CourtState, serving: 0 | 1, positions: Uint8Array, nearTeam: 0 | 1, serveKind?: ServeKind,
 ): Scene {
-  const teams = teamsOf(court, positions, nearTeam, null, serveKind);
+  const teams = teamsOf(court, positions, nearTeam, serving, null, serveKind);
   const forms = openingFormations(teams, serving);
   const server = teams[serving].zones[0];
   const hand = forms[serving].get(server);
@@ -610,7 +612,7 @@ export function rallyBeats(
   const first = contacts[0];
   const kindOf: ServeKind = (p) =>
     first !== undefined && first.player === p && (first.detail === 'jump' || first.detail === 'float') ? first.detail : undefined;
-  const teams = teamsOf(court, positions, nearTeam, (1 - serveTeam) as 0 | 1, kindOf);
+  const teams = teamsOf(court, positions, nearTeam, serveTeam, (1 - serveTeam) as 0 | 1, kindOf);
   const forms = openingFormations(teams, serveTeam);
   const beats: Beat[] = [];
   const at = (t: 0 | 1, p: number): Local => forms[t].get(p) ?? { u: 0.5, v: 0.5 };

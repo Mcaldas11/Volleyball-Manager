@@ -100,7 +100,8 @@ test("the manager's own matches make the paper, and the fans of both sides have 
   const played = world.fixtures.filter((f) => f.played && (f.home === clubId || f.away === clubId) &&
     (left < 0 || f.day < left) &&
     !['friendly', 'international'].includes(world.competitions[f.competitionId]?.kind ?? ''));
-  const reports = news.filter((n) => n.kind === 'result' && (n.clubId === clubId || n.otherClubId === clubId));
+  // One report per match — a side going top of the table is a story of its own.
+  const reports = news.filter((n) => n.kind === 'result' && n.fans?.story !== 'top' && (n.clubId === clubId || n.otherClubId === clubId));
   assert.ok(played.length > 5);
   assert.equal(reports.length, played.length, 'every competitive match he plays is reported');
   assert.ok(world.news.some((n) => n.kind === 'coach' && n.clubId === clubId), 'his appointment made the news');

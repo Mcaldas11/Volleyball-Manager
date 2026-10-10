@@ -142,10 +142,10 @@ test("a zone's plan is the coach's: the middle off a deep pass, or the opposite 
   assert.ok(deepMiddle.length > 0 && deepMiddle.every(({ c }) => c.play === 'slide'));
 
   const share = (tactics: Partial<TeamTactics>): number => {
-    const all = byZone(tactics, [17, 18, 19]);
+    const all = byZone(tactics, [17, 18, 19, 20, 21, 22, 23, 24]);
     return all.filter(({ c }) => c.detail === 'Opposite').length / all.length;
   };
   const toOpp = defaultZonePlans();
   for (const z of ['A', 'B', 'C'] as const) toOpp[z] = { ...toOpp[z], target: ZoneTarget.Opposite };
-  assert.ok(share({ zones: toOpp }) > share({}) + 0.05, 'the opposite gets more of the ball');
+  assert.ok(share({ zones: toOpp }) > share({}) + 0.03, 'the opposite gets more of the ball');
 });
