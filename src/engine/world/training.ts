@@ -166,11 +166,23 @@ function readPlan(world: World, club: Club): TrainingPlan {
 
 // ---- The calendar ---------------------------------------------------------------------
 
+/** Weekdays already worked out, by start year and day: the calendar sums are dear and asked for constantly. */
+const weekdays = new Map<number, number>();
+
 /** The weekday an absolute day falls on, Monday 0 to Sunday 6 — the calendar the interface shows. */
 export function weekdayOf(world: Pick<World, 'startYear'>, day: number): number {
+  const key = world.startYear * 1_000_000 + day;
+  const known = weekdays.get(key);
+  if (known !== undefined) return known;
+  const weekday = calendarWeekday(world.startYear, day);
+  weekdays.set(key, weekday);
+  return weekday;
+}
+
+function calendarWeekday(startYear: number, day: number): number {
   const seasonDay = ((day % DAYS_PER_SEASON) + DAYS_PER_SEASON) % DAYS_PER_SEASON;
   const doy = (seasonDay + 181) % 365;
-  const year = world.startYear + Math.floor(day / DAYS_PER_SEASON) + (seasonDay >= 184 ? 1 : 0);
+  const year = startYear + Math.floor(day / DAYS_PER_SEASON) + (seasonDay >= 184 ? 1 : 0);
   const md = new Date(Date.UTC(2001, 0, 1 + doy));
   const sunday0 = new Date(Date.UTC(year, md.getUTCMonth(), md.getUTCDate())).getUTCDay();
   return (sunday0 + 6) % 7;
@@ -367,6 +379,32 @@ export function loadOf(world: World, club: Club, p: number): PlayerLoad {
 
 // ---- What it does ----------------------------------------------------------------------
 
+/** Each other club's week of sessions, worked out once — and again only when its fixtures change. */
+const weeks = new WeakMap<World, Map<number, { key: number; days: PlannedDay[] }>>();
+
+/**
+ * A club's week of sessions, as training runs it (no match preparation). The
+ * other clubs' weeks follow from their fixtures alone, so each is kept until
+ * a fixture is added around it; the manager's own can change any day.
+ */
+function trainingWeek(world: World, club: Club, monday: number): PlannedDay[] {
+  if (club.id === world.userClubId) return weekPlan(world, club, monday, false);
+  // The plan looks a day either side of the week.
+  let fixtures = 0;
+  for (let d = monday - 1; d <= monday + 7; d++) fixtures += world.fixturesByDay.get(d)?.length ?? 0;
+  const key = monday * 100_000 + fixtures;
+  let byClub = weeks.get(world);
+  if (byClub === undefined) {
+    byClub = new Map();
+    weeks.set(world, byClub);
+  }
+  const known = byClub.get(club.id);
+  if (known !== undefined && known.key === key) return known.days;
+  const days = weekPlan(world, club, monday, false);
+  byClub.set(club.id, { key, days });
+  return days;
+}
+
 /**
  * The day's training at every club: condition spent on a training day (as
  * hard as the session, the week and the player's own load make it), given
@@ -377,7 +415,7 @@ export function trainingDay(world: World): void {
   const store = world.players;
   for (const club of world.clubs) {
     if (club.players.length === 0) continue;
-    const today = weekPlan(world, club, monday, false)[world.day - monday];
+    const today = trainingWeek(world, club, monday)[world.day - monday];
     if (today === undefined || today.session === 'match') continue;
     const s = SESSIONS[today.session];
     for (const p of club.players) {
@@ -404,7 +442,7 @@ export interface ClubWeek {
 }
 
 export function clubWeek(world: World, club: Club): ClubWeek {
-  const days = weekPlan(world, club, weekStartOf(world, world.day - 1), false);
+  const days = trainingWeek(world, club, weekStartOf(world, world.day - 1));
   let dev = 0;
   let load = 0;
   const kinds = { physical: 0, technical: 0, tactical: 0 };

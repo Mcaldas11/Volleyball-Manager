@@ -16,6 +16,7 @@ import {
 import { abilityFractionAtAge, weightsFor } from '../model/ability.ts';
 import { computeCurrentAbility } from '../model/ability.ts';
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
+import { rollTraits } from '../model/traits.ts';
 import { PLAUSIBLE_SECONDARY, Position } from '../model/positions.ts';
 import { NATIONS } from './nations.ts';
 import { bankFor } from './names.ts';
@@ -130,6 +131,7 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
 
   rollHandedness(store, i);
   rollOffHand(store, i);
+  rollTraits(store, i);
 
   // ---- Career state ----
   store.condition[i] = rng.int(88, 100);

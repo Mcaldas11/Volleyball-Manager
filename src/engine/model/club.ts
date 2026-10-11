@@ -13,6 +13,8 @@ import { defaultTactics, type Formation, type TeamTactics } from '../match/tacti
 import type { SavedTactic } from './tacticSlots.ts';
 import type { TacticRead } from './tacticRead.ts';
 import type { TrainingPlan } from '../world/training.ts';
+import type { SponsorDeal } from '../world/commercial.ts';
+import type { FacilityKind, FacilityProject } from '../world/facilities.ts';
 
 export interface Finances {
   /** Cash in hand. Negative for long enough and the club is in trouble. */
@@ -111,6 +113,18 @@ export interface Club {
   boardConfidence: number;
   /** Absolute day the current head coach was appointed. */
   coachSince: number;
+  /** The captain the manager picked — absent: the dressing room's first leader. See dressingRoom.ts. */
+  captain?: number;
+  /** The manager's ticket price, a multiplier on the normal one — see commercial.ts. Absent: normal. */
+  ticketPrice?: number;
+  /** The sponsor signed for the season — see commercial.ts. */
+  sponsor?: SponsorDeal;
+  /** Affiliate clubs, by id — see affiliates.ts. */
+  affiliates?: number[];
+  /** An upgrade with the board, or being built — see facilities.ts. */
+  facilityProject?: FacilityProject;
+  /** Upgrades the board turned down, and the day each can be asked for again. */
+  facilityRefused?: Partial<Record<FacilityKind, number>>;
 }
 
 export interface LeagueTableRow {

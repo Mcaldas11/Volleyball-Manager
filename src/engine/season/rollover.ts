@@ -17,9 +17,12 @@ import { seasonAwards } from '../world/accolades.ts';
 import { staffSeasonEnd } from '../world/staffMarket.ts';
 import { compareTableRows, sponsorshipFor, tvRightsFor, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
+import { rollTraits } from '../model/traits.ts';
 import { MAX_SQUAD, Position, SQUAD_TARGET } from '../model/positions.ts';
 import { finalStandingsOrder } from './playoffs.ts';
 import { applyPromotionRelegation } from './pyramid.ts';
+import { nextSeasonSponsorship, sponsorBonus } from '../world/commercial.ts';
+import { affiliateFee, affiliatesOf } from '../world/affiliates.ts';
 import { openSeasonSpells } from '../world/clubHistory.ts';
 import { isCupCompetition, qualifyForCups } from './cups.ts';
 import {
@@ -97,6 +100,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
 
   revisePotential(world, ctx.stats);
   applyAgeing(world);
+  // A summer's growth can earn a player a trait.
+  for (let i = 0; i < world.players.count; i++) if (world.players.isActive(i)) rollTraits(world.players, i);
 
   const retired = processRetirements(world);
   report.retired = retired.length;
@@ -208,6 +213,15 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
   const store = world.players;
   const dissolved: Club[] = [];
 
+  const user = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
+  if (user !== undefined) {
+    // The sponsor pays for where the club finished; the affiliates are paid their fee.
+    const league = world.competitions[user.leagueId];
+    const finish = league !== undefined ? finalStandingsOrder(league).indexOf(user.id) + 1 : 0;
+    if (finish > 0) sponsorBonus(world, user, finish);
+    for (const a of affiliatesOf(world, user)) a.finances.balance += affiliateFee(user);
+  }
+
   for (const club of world.clubs) {
     const f = club.finances;
     const { totalIncome: income, totalCosts: costs } = clubBooks(world, club);
@@ -224,8 +238,9 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
     f.seasonExpenditure = 0;
     f.prizeMoney = 0;
 
-    // Sponsorship follows reputation, so success compounds and decline bites.
-    f.sponsorshipIncome = sponsorshipFor(club.reputation);
+    // Sponsorship follows reputation, so success compounds and decline bites —
+    // unless the club has a deal that runs on.
+    f.sponsorshipIncome = club === user ? nextSeasonSponsorship(world, club) : sponsorshipFor(club.reputation);
     f.tvRightsIncome = tvRightsFor(club.reputation);
 
     if (f.seasonsInDebt >= 3 && f.balance < -500_000) dissolved.push(club);

@@ -26,6 +26,14 @@ import {
   answerStaffApproach, counterStaffApproach, openStaffTalks, setStaffListed, staffTalksBlock, staffTalksOf, staffTalksWith,
   submitStaffOffer, withdrawStaffTalks, type StaffTalks,
 } from '../engine/world/staffDeals.ts';
+import { cohesionEdge, cohesionOf, dressingRoom, setCaptain, type DressingRoom } from '../engine/world/dressingRoom.ts';
+import { applyTalkMorale, favouriteness, giveTalk, type TalkMoment, type TalkResult, type TalkTone } from '../engine/world/teamTalk.ts';
+import { answerTransferRequest, chatBlock, talkToPlayer, type ChatTopic } from '../engine/world/playerTalks.ts';
+import { requestUpgrade, upgradeBlock, type FacilityKind } from '../engine/world/facilities.ts';
+import { chooseSponsor, setTicketPrice } from '../engine/world/commercial.ts';
+import { endAffiliation, proposeAffiliation } from '../engine/world/affiliates.ts';
+import { loanToAffiliate } from '../engine/world/deals.ts';
+import type { ChallengeResult, LastCall } from '../engine/match/engine.ts';
 import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
 import { interestedClubs, type ClubInterest } from '../engine/world/interest.ts';
 import {
@@ -102,7 +110,8 @@ import {
 export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
-  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals';
+  | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals'
+  | 'dressing' | 'commercial' | 'facilities' | 'affiliates';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
@@ -185,6 +194,15 @@ export interface Negotiation {
   loanPlayingTime: LoanPlayingTime;
   /** A problem with the offer itself (budget, window) before it is sent. */
   message: string | null;
+}
+
+/** Where the browser remembers that the welcome tour has been seen. */
+const WELCOME_KEY = 'vm.welcome';
+
+/** A team talk the coach gave, and how it went. */
+export interface GivenTalk {
+  tone: TalkTone;
+  result: TalkResult;
 }
 
 /** The staff talks screen: the offer being put together, before it is sent. */
@@ -412,6 +430,12 @@ export interface MatchdayState {
   warmth?: Map<number, number>;
   /** The user's substitutes sent to warm up. */
   warming?: Set<number>;
+  /** The talks the coach has given: before the match, and at each set break, by the set it was for. */
+  talks?: { prematch?: GivenTalk; sets: Record<number, GivenTalk> };
+  /** The last video check, either side's, for the banner. */
+  lastChallenge?: { seq: number; team: 0 | 1; overturned: boolean; verdict: string } | null;
+  /** The stoppage under way is for the video, not a substitution. */
+  videoCheck?: boolean;
   /** The coach has a panel open — the substitutions, or one player's options: play holds until it is closed. */
   coachPanel?: boolean;
   /** Play was running when he opened it: closing it starts it again. */
@@ -486,6 +510,10 @@ class Game {
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
   staffNegotiation: StaffNegotiation | null = null;
+  /** The help, open over whatever is on screen. */
+  helpOpen = false;
+  /** A new manager's first look round — see help.tsx. */
+  welcomeOpen = false;
   incomingOffer: IncomingOfferReview | null = null;
   /** A word with the coach of a club playing one of ours on loan. */
   coachTalk: CoachTalk | null = null;
@@ -548,6 +576,12 @@ class Game {
   newGame(scale: WorldScale, seed: number): void {
     const manager = this.pendingManager;
     if (manager === null) return;
+    // A first career in this browser starts with the tour.
+    try {
+      if (window.localStorage.getItem(WELCOME_KEY) === null) this.welcomeOpen = true;
+    } catch {
+      // No storage: no tour — the help has it.
+    }
     const world = generateWorld({ seed, startYear: 2026, scale, manager });
     this.ctx = newSeasonContext();
     startSeason(world, this.ctx);
@@ -2070,11 +2104,13 @@ class Game {
       // A friendly teaches the opposition nothing.
       read: isFriendly(world, md.fixture) ? 0 : oppositionRead(world, club),
       prep: matchPrep(world, club, md.fixture.day),
+      roomEdge: cohesionEdge(cohesionOf(world, club.id)),
     };
     // The other side keeps any promise of games it has made a loanee — and
     // comes having prepared for the match, as it would anywhere else.
     const theirs = (c: Club): TeamSetup => ({
       ...toTeamSetup(world.players, c, loanStarters(world, c)), prep: matchPrep(world, c, md.fixture.day),
+      roomEdge: cohesionEdge(cohesionOf(world, c.id)),
     });
     const homeSetup = md.userIsHome ? userSetup : theirs(homeClub);
     const awaySetup = md.userIsHome ? theirs(awayClub) : userSetup;
@@ -2091,6 +2127,8 @@ class Game {
       seed: world.rng.next(),
       friendly: isFriendly(world, md.fixture),
     });
+    const talk = md.talks?.prematch;
+    if (talk !== undefined) this.liveSim.teamTalk(md.userIsHome ? 0 : 1, talk.result.multiplier, 'match');
     this.startLive();
   }
 
@@ -2193,6 +2231,7 @@ class Game {
     if (md === null) return;
     md.paused = false;
     md.pauseUntil = null;
+    md.videoCheck = false;
     md.pausedForPanel = false;
     this.emit();
   }
@@ -2240,6 +2279,275 @@ class Game {
     }
     this.emit();
     return logEntry;
+  }
+
+  // ---- Help ------------------------------------------------------------------------------
+
+  openHelp(): void {
+    this.helpOpen = true;
+    this.emit();
+  }
+
+  closeHelp(): void {
+    this.helpOpen = false;
+    this.emit();
+  }
+
+  startWelcome(): void {
+    this.welcomeOpen = true;
+    this.emit();
+  }
+
+  closeWelcome(): void {
+    this.welcomeOpen = false;
+    try {
+      window.localStorage.setItem(WELCOME_KEY, 'seen');
+    } catch {
+      // Without storage it shows again next time.
+    }
+    this.emit();
+  }
+
+  // ---- Team talks --------------------------------------------------------------------
+
+  /** The moment for a team talk now — before the match or at a set break — or null if there isn't one. */
+  talkMoment(): TalkMoment | null {
+    const md = this.matchday;
+    if (md === null) return null;
+    if (md.stage === 'lineup') return md.talks?.prematch === undefined ? 'prematch' : null;
+    if (md.stage === 'setBreak') return md.talks?.sets[md.snapshot?.set ?? -1] === undefined ? 'setbreak' : null;
+    return null;
+  }
+
+  /** The talk already given at this moment, if any — to show how it went. */
+  givenTalk(): GivenTalk | null {
+    const md = this.matchday;
+    if (md === null) return null;
+    if (md.stage === 'lineup') return md.talks?.prematch ?? null;
+    if (md.stage === 'setBreak') return md.talks?.sets[md.snapshot?.set ?? -1] ?? null;
+    return null;
+  }
+
+  /** Give the team talk: how each player takes it, and what it is worth on court. */
+  giveTeamTalk(tone: TalkTone): void {
+    const world = this.world;
+    const md = this.matchday;
+    const moment = this.talkMoment();
+    if (world === null || md === null || moment === null) return;
+    const userTeam: 0 | 1 = md.userIsHome ? 0 : 1;
+    const side = md.sides[userTeam];
+    const club = side.clubId >= 0 ? world.clubs[side.clubId] : undefined;
+    const store = world.players;
+    const players = moment === 'prematch'
+      ? [...md.homeLineup, md.homeLibero, md.homeDefensiveLibero, ...md.homeBench].filter((p) => p >= 0)
+      : [...(this.liveSim?.squadFor(userTeam) ?? [])];
+    const avg = (ps: readonly number[]): number => ps.length === 0 ? 0 : ps.reduce((s, p) => s + store.currentAbility[p], 0) / ps.length;
+    const best6 = (ps: readonly number[]): number[] => [...ps].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 6);
+    const own = avg(md.homeLineup.filter((p) => p >= 0));
+    const theirs = avg(best6(md.sides[1 - userTeam].players));
+    const snap = md.snapshot;
+    const setsFor = snap === null ? 0 : userTeam === 0 ? snap.homeSets : snap.awaySets;
+    const setsAgainst = snap === null ? 0 : userTeam === 0 ? snap.awaySets : snap.homeSets;
+    const lastScores = md.stage === 'setBreak' ? this.liveSim?.setScoresSoFar().at(-1) : undefined;
+    const lastSet = lastScores === undefined ? undefined : {
+      won: lastScores[userTeam] > lastScores[1 - userTeam], margin: Math.abs(lastScores[0] - lastScores[1]),
+    };
+    const previous = md.stage === 'setBreak'
+      ? md.talks?.sets[(snap?.set ?? 0) - 1] ?? (snap?.set === 1 ? md.talks?.prematch : undefined)
+      : undefined;
+    const fallback = world.clubs[world.userClubId];
+    const result = giveTalk(world, club ?? fallback!, players, tone, {
+      moment, favourite: favouriteness(own, theirs), setsFor, setsAgainst, lastSet, importance: md.fixture.importance,
+    }, previous?.tone === tone, (snap?.set ?? 0) + (md.log.length << 3));
+    md.talks ??= { sets: {} };
+    if (moment === 'prematch') {
+      md.talks.prematch = { tone, result };
+      applyTalkMorale(world, result);
+    } else {
+      md.talks.sets[snap?.set ?? 0] = { tone, result };
+      this.liveSim?.teamTalk(userTeam, result.multiplier, 'set');
+    }
+    this.emit();
+  }
+
+  // ---- The video check ------------------------------------------------------------------
+
+  /** The point just played, if it could be challenged. */
+  lastCall(): LastCall | null {
+    return this.liveSim?.lastCall() ?? null;
+  }
+
+  /** Why the user can't challenge the last point, or null if he can. */
+  challengeError(): string | null {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return 'No match.';
+    return sim.challengeError(md.userIsHome ? 0 : 1);
+  }
+
+  /** Challenges the user's side has left this set. */
+  challengesLeft(): number {
+    const md = this.matchday;
+    return md === null || this.liveSim === null ? 0 : this.liveSim.challengesLeft(md.userIsHome ? 0 : 1);
+  }
+
+  /**
+   * The point just shown went against the other side on a close call: their
+   * bench may ask for the video. Called by the live view once the point has
+   * been played out on the court — never before anyone has seen it.
+   */
+  aiConsidersChallenge(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.timeoutActive !== null) return;
+    const aiTeam: 0 | 1 = md.userIsHome ? 1 : 0;
+    const call = sim.lastCall();
+    if (call !== null && call.close && call.winner !== aiTeam && sim.challengeError(aiTeam) === null && Math.random() < 0.45) {
+      this.resolveChallenge(aiTeam);
+    }
+  }
+
+  /** Ask for the video on the last point. */
+  challenge(): ChallengeResult | null {
+    const md = this.matchday;
+    if (md === null) return null;
+    return this.resolveChallenge(md.userIsHome ? 0 : 1);
+  }
+
+  /** A side's challenge: the call looked at, and the match put right if it was wrong. */
+  private resolveChallenge(team: 0 | 1): ChallengeResult | null {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return null;
+    const before = md.snapshot;
+    const result = sim.challenge(team);
+    if (!result.ok) {
+      this.notice = result.reason ?? 'No challenge.';
+      this.emit();
+      return result;
+    }
+    md.lastChallenge = { seq: ++this.subSeq, team, overturned: result.overturned === true, verdict: result.verdict ?? '' };
+    // The referee goes to the screen: a moment's stoppage.
+    if (!md.paused) {
+      md.paused = true;
+      md.pauseUntil = Date.now() + 2500;
+      md.videoCheck = true;
+    }
+    md.snapshot = sim.snapshot();
+    if (result.overturned === true && !md.snapshot.matchOver && before !== null && md.snapshot.set !== before.set) {
+      // The point given back ended the set.
+      md.timeoutsUsed = [0, 0];
+      md.setBreakPending = true;
+      this.aiPicksNextSet();
+    }
+    this.emit();
+    return result;
+  }
+
+  // ---- The dressing room ------------------------------------------------------------------
+
+  /** The club's dressing room as it stands. */
+  dressingRoom(): DressingRoom | null {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? null : dressingRoom(world, club);
+  }
+
+  /** Give one of the squad the armband. */
+  makeCaptain(p: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    setCaptain(club, p);
+    this.notice = `${world.players.fullName(p)} is the new captain.`;
+    this.emit();
+  }
+
+  // ---- One-to-one talks -------------------------------------------------------------------
+
+  /** Why the manager can't have this talk with a player now, or null if he can. */
+  chatBlock(p: number, topic: ChatTopic): string | null {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? 'No club.' : chatBlock(world, club, p, topic);
+  }
+
+  /** Talk to one of the squad. */
+  talkToPlayer(p: number, topic: ChatTopic): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = talkToPlayer(world, club, p, topic).text;
+    this.emit();
+  }
+
+  /** Answer a player's request to leave. */
+  answerTransferRequest(p: number, answer: 'list' | 'promise' | 'refuse'): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = answerTransferRequest(world, p, answer);
+    this.emit();
+  }
+
+  // ---- Facilities, tickets, sponsors, affiliates ---------------------------------------------
+
+  /** Why the manager can't ask for this upgrade now, or null if he can. */
+  upgradeBlock(kind: FacilityKind): string | null {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? 'No club.' : upgradeBlock(world, club, kind);
+  }
+
+  /** Ask the board for a better facility. */
+  requestUpgrade(kind: FacilityKind): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = requestUpgrade(world, club, kind);
+    this.emit();
+  }
+
+  setTicketPrice(price: number): void {
+    const club = this.club;
+    if (club === null) return;
+    setTicketPrice(club, price);
+    this.emit();
+  }
+
+  /** Sign one of this summer's sponsorship offers. */
+  chooseSponsor(index: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = chooseSponsor(world, club, index);
+    this.emit();
+  }
+
+  proposeAffiliation(clubId: number): void {
+    const world = this.world;
+    const club = this.club;
+    const target = world?.clubs[clubId];
+    if (world === null || club === null || target === undefined) return;
+    this.notice = proposeAffiliation(world, club, target);
+    this.emit();
+  }
+
+  endAffiliation(clubId: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    endAffiliation(club, clubId);
+    this.notice = `${world.clubs[clubId]?.name ?? 'They'} are no longer an affiliate.`;
+    this.emit();
+  }
+
+  /** Send one of the squad to an affiliate on loan. */
+  loanToAffiliate(p: number, affiliateId: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = loanToAffiliate(world, club, p, affiliateId);
+    this.emit();
   }
 
   // ---- The coach's panels ---------------------------------------------------------
@@ -2538,6 +2846,7 @@ class Game {
     if (md === null || md.stage !== 'live' || md.setBreakPending) return;
     const teamIdx = md.userIsHome ? 0 : 1;
     const warmth = this.warmthOf(inPlayerIdx);
+    if (this.matchday !== null) this.matchday.videoCheck = false;
     const result = this.performSubstitution(teamIdx, outPlayerIdx, inPlayerIdx);
     if (!result.ok) this.notice = result.reason ?? 'That substitution is not allowed.';
     else if (warmth < WARM_READY && Math.random() < ((WARM_READY - warmth) / WARM_READY) * COLD_STRAIN) {

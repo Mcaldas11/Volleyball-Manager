@@ -86,6 +86,7 @@ export function messageNeedsAction(world: World, m: GameMessage): boolean {
     const talks = world.talks.find((t) => t.id === m.talksId);
     if (talks !== undefined && talks.pending === null) return true;
   }
+  if (m.transferRequestOf !== undefined && world.transferRequests?.[m.transferRequestOf]?.status === 'open') return true;
   if (m.staffTalksId !== undefined) {
     const talks = world.staffNegotiations?.find((t) => t.id === m.staffTalksId);
     if (talks !== undefined && talks.pending === null) return true;

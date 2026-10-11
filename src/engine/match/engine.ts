@@ -23,11 +23,13 @@ import { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
 import type { PlayerStore } from '../model/players.ts';
 import { MAX_LIBEROS, Position } from '../model/positions.ts';
+import { hasTrait, Trait } from '../model/traits.ts';
 import {
   BACK_ROW_ZONES,
   effectivePlayerAt,
   receptionUnit,
   rotate,
+  unrotate,
   rotationOf,
 } from './court.ts';
 import { coverage, coverEdge, defenceLayoutsOf, type AttackSource } from './defence.ts';
@@ -130,6 +132,8 @@ export interface TeamSetup {
   /** Players the club has promised games — a loanee promised a starting
    *  place: an engine-run bench takes them off only when they are spent. */
   promised?: readonly number[];
+  /** What the dressing room is worth on court, a multiplier — see dressingRoom.ts. Absent: 1. */
+  roomEdge?: number;
 }
 
 export interface MatchSetup {
@@ -207,6 +211,8 @@ export interface RallyLogEntry {
   contacts: RallyContact[];
   /** Home team's win probability after this rally. */
   homeWinProb: number;
+  /** The call turned over on video: the point went the other way. */
+  overturned?: boolean;
 }
 
 export interface MatchResult {
@@ -269,6 +275,39 @@ const GRADE_SYMBOL = ['/', '-', '+', '#'];
  */
 const SERVE_EDGE = 5;
 const ATTACK_DEFENCE_BALANCE = -8;
+
+/** Challenges each side has a set: one that is upheld is kept, one that is not is lost. */
+export const CHALLENGES_PER_SET = 2;
+/** Of the points a challenge could be made on — a kill, an ace, an attack called out, a block —
+ *  how many were close, and of those how many the referee got wrong. */
+const CLOSE_CALL = 0.3;
+const WRONG_CALL = 0.32;
+
+/** The point just played, as a video check sees it. */
+export interface LastCall {
+  winner: 0 | 1;
+  /** What the referee gave: the ball in, the serve in, the attack out, the block. */
+  call: 'kill' | 'ace' | 'attackError' | 'blocked';
+  /** Close enough that the bench saw it differently. */
+  close: boolean;
+  /** Already looked at. */
+  challenged: boolean;
+}
+
+/** How a challenge went. */
+export interface ChallengeResult {
+  ok: boolean;
+  /** Why it couldn't be made. */
+  reason?: string;
+  /** The call turned over: the point goes the other way. */
+  overturned?: boolean;
+  /** What the video showed, for the commentary. */
+  verdict?: string;
+}
+
+/** How much more often the setter gives a hitter the ball he loves — see traits.ts. */
+const PIPE_HITTER_PULL = 1.35;
+const QUICK_HITTER_PULL = 1.2;
 
 /** Substitutions each side may make in a set, as the FIVB rules have it. */
 export const SUBS_PER_SET = 6;
@@ -405,10 +444,17 @@ class TeamRuntime {
   venue = 1;
   dayForm = 1;
   setForm = 1;
+  /** How well the squad holds together — see dressingRoom.ts. */
+  room = 1;
+  /** The coach's words before the match, and at the last set break — see teamTalk.ts. */
+  matchTalk = 1;
+  setTalk = 1;
+  /** Video challenges left this set. */
+  challenges = CHALLENGES_PER_SET;
 
-  /** All three together. */
+  /** All of them together. */
   get edge(): number {
-    return this.venue * this.dayForm * this.setForm;
+    return this.venue * this.dayForm * this.setForm * this.room * this.matchTalk * this.setTalk;
   }
   /** The six who start each set, in rotational order — the coach may hand in a new sheet between sets. */
   startLineup: number[];
@@ -438,6 +484,7 @@ class TeamRuntime {
     this.read = Math.min(1, Math.max(0, setup.read ?? 0));
     this.prep = setup.prep ?? { reception: 0, transition: 0, block: 0 };
     this.startRotation = setup.startingRotation ?? 0;
+    this.room = setup.roomEdge ?? 1;
     this.liberoIdx = setup.libero;
     this.receptionLibero = setup.libero;
     this.defensiveLibero = setup.defensiveLibero ?? -1;
@@ -583,6 +630,17 @@ export class MatchSimulator {
   private readonly ownInjuries: [boolean, boolean] = [false, false];
   /** Dice of their own: who gets hurt changes no rally's outcome. */
   private readonly hurtRng: Rng;
+  /** The referee's close calls, on dice of their own so the rallies come out the same. */
+  private readonly callRng: Rng;
+  /** The last point, as it stands before the next serve: what a challenge would undo. */
+  private last: {
+    call: LastCall;
+    wrong: boolean;
+    entry: RallyLogEntry;
+    serving: 0 | 1;
+    momentum: [number, number];
+    runs: [number, number];
+  } | null = null;
   /** The rally each engine-coached side last made a change on. */
   private readonly lastAutoSub: [number, number] = [-Infinity, -Infinity];
 
@@ -602,6 +660,7 @@ export class MatchSimulator {
     this.rng = new Rng(setup.seed);
     this.flair = new Rng((setup.seed ^ 0x5bd1e995) >>> 0);
     this.hurtRng = new Rng((setup.seed ^ 0x27d4eb2f) >>> 0);
+    this.callRng = new Rng((setup.seed ^ 0x6a09e667) >>> 0);
     this.roles = store.position.slice(0, store.count);
     this.teams = [new TeamRuntime(setup.home, store, this.roles), new TeamRuntime(setup.away, store, this.roles)];
     this.log = setup.collectLog ? [] : null;
@@ -629,6 +688,17 @@ export class MatchSimulator {
     this.ownInjuries[0] = false;
     this.ownInjuries[1] = false;
     while (!this.matchOver) this.step();
+  }
+
+  /**
+   * The coach's talk: before the match, it colours all of it; at a set break,
+   * the set to come. A multiplier on the side's play — see teamTalk.ts.
+   */
+  teamTalk(team: 0 | 1, multiplier: number, scope: 'match' | 'set'): void {
+    this.startIfNeeded();
+    const t = this.teams[team];
+    if (scope === 'match') t.matchTalk = multiplier;
+    else t.setTalk = multiplier;
   }
 
   /** A shout from the touchline, and what it did — for the commentary. */
@@ -687,6 +757,17 @@ export class MatchSimulator {
     const winner = entry.winner;
     if (before !== null) this.weighHighlight(entry, before.court, before.sets);
 
+    this.noteCall(entry, serving);
+    this.awardPoint(winner);
+    // Anyone hurt: the engine's coach answers straight away; the live user's waits for him.
+    if (!this.matchOver) for (const t of [0, 1] as const) if (!this.ownInjuries[t]) this.coachInjuries(t);
+
+    return entry;
+  }
+
+  /** A point to `winner`: the score, the run, the momentum, the rotation — and the set, if it ends it. */
+  private awardPoint(winner: 0 | 1): void {
+    const serving = this.serving;
     this.teams[winner].score++;
     this.teams[winner].currentRun++;
     this.teams[1 - winner].currentRun = 0;
@@ -741,10 +822,111 @@ export class MatchSimulator {
     } else {
       for (const t of [0, 1] as const) if (this.autoCoached[t]) this.coachRally(t);
     }
-    // Anyone hurt: the engine's coach answers straight away; the live user's waits for him.
-    if (!this.matchOver) for (const t of [0, 1] as const) if (!this.ownInjuries[t]) this.coachInjuries(t);
+  }
 
-    return entry;
+  // ---- The video check -------------------------------------------------------------
+
+  /** What the referee gave on the point just played, and whether it was close — kept for a challenge. */
+  private noteCall(entry: RallyLogEntry, serving: 0 | 1): void {
+    this.last = null;
+    const end = entry.contacts[entry.contacts.length - 1];
+    if (end === undefined || (end.kind !== 'kill' && end.kind !== 'ace' && end.kind !== 'attackError' && end.kind !== 'blocked')) return;
+    const close = this.callRng.chance(CLOSE_CALL);
+    const wrong = close && this.callRng.chance(WRONG_CALL);
+    this.last = {
+      call: { winner: entry.winner, call: end.kind, close, challenged: false },
+      wrong,
+      entry,
+      serving,
+      momentum: [this.teams[0].momentum, this.teams[1].momentum],
+      runs: [this.teams[0].currentRun, this.teams[1].currentRun],
+    };
+  }
+
+  /** The point just played, if a challenge could be made on it. */
+  lastCall(): LastCall | null {
+    return this.last?.call ?? null;
+  }
+
+  /** Every set finished so far, [home, away]. */
+  setScoresSoFar(): ReadonlyArray<readonly [number, number]> {
+    return this.setScores;
+  }
+
+  /** Challenges a side has left this set. */
+  challengesLeft(team: 0 | 1): number {
+    return this.teams[team].challenges;
+  }
+
+  /** Why a side can't challenge the last point, or null if it can. */
+  challengeError(team: 0 | 1): string | null {
+    const last = this.last;
+    if (this.matchOver) return 'The match is over.';
+    if (last === null) return 'There is nothing to challenge.';
+    if (last.call.challenged) return 'That call has been looked at already.';
+    if (last.call.winner === team) return 'You won that point.';
+    if (this.teams[team].challenges <= 0) return 'No challenges left this set.';
+    if (last.entry.set !== this.currentSet) return 'The set is over.';
+    return null;
+  }
+
+  /**
+   * Ask for the video: if the referee got the last point wrong, it goes the
+   * other way — the score, the serve and the rotation put back, the box score
+   * put right — and the challenge is kept; if he got it right, it is lost.
+   */
+  challenge(team: 0 | 1): ChallengeResult {
+    const reason = this.challengeError(team);
+    if (reason !== null) return { ok: false, reason };
+    const last = this.last!;
+    last.call.challenged = true;
+    const end = last.entry.contacts[last.entry.contacts.length - 1];
+    if (!last.wrong) {
+      this.teams[team].challenges--;
+      return {
+        ok: true, overturned: false,
+        verdict: end.kind === 'blocked' ? 'Clean block — the call stands.' : end.kind === 'attackError' ? 'Out — the call stands.' : 'In — the call stands.',
+      };
+    }
+    // Put the point back as it was before it was given...
+    const won = last.call.winner;
+    const t = this.teams[won];
+    t.score--;
+    if (this.serving !== last.serving) {
+      unrotate(t.court);
+      this.serving = last.serving;
+    }
+    this.teams[0].momentum = last.momentum[0];
+    this.teams[1].momentum = last.momentum[1];
+    this.teams[0].currentRun = last.runs[0];
+    this.teams[1].currentRun = last.runs[1];
+    // ...put the box score right...
+    const own = (side: 0 | 1, p: number) => statsFor(this.teams[side].stats, p);
+    let verdict = '';
+    if (end.kind === 'kill') {
+      own(end.team, end.player).attackKills--;
+      own(end.team, end.player).attackErrors++;
+      verdict = 'Out — the call is overturned.';
+    } else if (end.kind === 'ace') {
+      own(end.team, end.player).serveAces--;
+      own(end.team, end.player).serveErrors++;
+      verdict = 'The serve was out — the call is overturned.';
+    } else if (end.kind === 'attackError') {
+      own(end.team, end.player).attackErrors--;
+      own(end.team, end.player).attackKills++;
+      verdict = 'In — the call is overturned.';
+    } else {
+      own(end.team, end.player).attackBlocked--;
+      own(end.team, end.player).attackKills++;
+      if (end.by !== undefined) own(won, end.by).blockPoints--;
+      verdict = 'Off the block and out — the call is overturned.';
+    }
+    // ...and give it the other way.
+    last.entry.winner = team;
+    last.entry.overturned = true;
+    this.last = null;
+    this.awardPoint(team);
+    return { ok: true, overturned: true, verdict };
   }
 
   // ---- Getting hurt -------------------------------------------------------------------
@@ -1160,6 +1342,10 @@ export class MatchSimulator {
   private beginSet(): void {
     this.teams[0].resetForSet();
     this.teams[1].resetForSet();
+    for (const t of this.teams) {
+      t.setTalk = 1;
+      t.challenges = CHALLENGES_PER_SET;
+    }
     for (const t of this.teams) t.setForm = clamp(this.rng.gaussian(1, SET_FORM_SD), 0.85, 1.15);
     const format = this.setup.format;
     const isDecider =
@@ -2118,7 +2304,8 @@ export class MatchSimulator {
           // Quick attacks need a pass the setter can work with — and the zone's plan to allow one.
           if (middle !== MiddleOption.None && setQuality > 0.35) {
             weights[AttackLane.QuickMiddle] = base[AttackLane.QuickMiddle] * fastBias * qual(r.quickAttack) *
-              COMBINATION_PROFILE[combinationsOf(atk.tactics)].quickFeed;
+              COMBINATION_PROFILE[combinationsOf(atk.tactics)].quickFeed *
+              (hasTrait(r.traits, Trait.QuickHitter) ? QUICK_HITTER_PULL : 1);
             attackers[AttackLane.QuickMiddle] = p;
           }
         } else if (role === Position.OutsideHitter && noSwitch) {
@@ -2155,7 +2342,8 @@ export class MatchSimulator {
         const one = plan.backRow === BackRowOption.Both || plan.backRow === BackRowOption.ZoneOne;
         if (pipe || one) {
           if (pipe && role === Position.OutsideHitter && z === 5 && setQuality > 0.42) {
-            weights[AttackLane.Pipe] = base[AttackLane.Pipe] * backBias * qual(r.pipeAttack);
+            weights[AttackLane.Pipe] = base[AttackLane.Pipe] * backBias * qual(r.pipeAttack) *
+              (hasTrait(r.traits, Trait.PipeHitter) ? PIPE_HITTER_PULL : 1);
             attackers[AttackLane.Pipe] = p;
           } else if (one && role === Position.Opposite && z === 0 && setQuality > (grade >= Grade.Positive ? 0.42 : 0.3)) {
             weights[AttackLane.BackRowRight] =

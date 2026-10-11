@@ -39,6 +39,17 @@ export function rotate(court: Int32Array): void {
   court[5] = first;
 }
 
+/** Turn a rotation back, in place: the step a side-out took, undone. */
+export function unrotate(court: Int32Array): void {
+  const last = court[5];
+  court[5] = court[4];
+  court[4] = court[3];
+  court[3] = court[2];
+  court[2] = court[1];
+  court[1] = court[0];
+  court[0] = last;
+}
+
 /**
  * Rotation number as coaches speak of it: P1 through P6, named for the zone
  * the setter currently occupies. Returned 0-indexed, so P1 is 0.

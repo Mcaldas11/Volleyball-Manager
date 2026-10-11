@@ -16,6 +16,7 @@
 import { ATTR_COUNT, ATTR_INDEX } from '../model/attributes.ts';
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position, positionalEffectiveness } from '../model/positions.ts';
+import { hasTrait, Trait } from '../model/traits.ts';
 
 /** Reference anthropometrics for a top-flight men's league, used to normalise. */
 const REF_SPIKE_REACH = 345;
@@ -26,6 +27,8 @@ const A = ATTR_INDEX;
 export interface PlayerMatchRatings {
   /** Index into the PlayerStore. */
   idx: number;
+  /** His traits, one bit each — see traits.ts. */
+  traits: number;
   /** Role this player is filling in this match (may differ from natural). */
   role: Position;
   /** Multiplier for playing out of position. */
@@ -118,39 +121,44 @@ export function computeRatings(
 
   const mk = (x: number): number => r(x) * state * posEff;
 
+  // A trait is a few per cent on the skill it is about — see traits.ts.
+  const traits = store.traits[idx];
+  const t = (trait: Trait, lift: number): number => (hasTrait(traits, trait) ? lift : 1);
+
   return {
     idx,
     role,
     posEff,
+    traits,
 
-    serveFloat: mk(0.68 * g(A.floatServe) + 0.22 * g(A.servingAccuracy) + 0.1 * control),
-    serveJump: mk(0.55 * g(A.jumpServe) + 0.22 * g(A.servingPower) + 0.23 * athleticism),
+    serveFloat: mk(0.68 * g(A.floatServe) + 0.22 * g(A.servingAccuracy) + 0.1 * control) * t(Trait.FloatSpecialist, 1.06),
+    serveJump: mk(0.55 * g(A.jumpServe) + 0.22 * g(A.servingPower) + 0.23 * athleticism) * t(Trait.JumpServer, 1.05),
     servePower: mk(0.7 * g(A.servingPower) + 0.3 * g(A.powerServe)),
     serveAccuracy: mk(0.7 * g(A.servingAccuracy) + 0.18 * g(A.concentration) + 0.12 * control),
 
-    reception: mk(0.6 * g(A.reception) + 0.2 * control + 0.12 * g(A.concentration) + 0.08 * g(A.balance)),
-    dig: mk(0.52 * g(A.digging) + 0.18 * g(A.agility) + 0.15 * g(A.balance) + 0.15 * g(A.flexibility)),
-    setting: mk(0.62 * g(A.setting) + 0.2 * control + 0.18 * g(A.concentration)),
-    block: mk(0.6 * g(A.blocking) + 0.22 * g(A.verticalJump) + 0.18 * g(A.balance)) + blockReachBonus,
+    reception: mk(0.6 * g(A.reception) + 0.2 * control + 0.12 * g(A.concentration) + 0.08 * g(A.balance)) * t(Trait.RockInReception, 1.05),
+    dig: mk(0.52 * g(A.digging) + 0.18 * g(A.agility) + 0.15 * g(A.balance) + 0.15 * g(A.flexibility)) * t(Trait.DigMachine, 1.06),
+    setting: mk(0.62 * g(A.setting) + 0.2 * control + 0.18 * g(A.concentration)) * t(Trait.FloorGeneral, 1.05),
+    block: (mk(0.6 * g(A.blocking) + 0.22 * g(A.verticalJump) + 0.18 * g(A.balance)) + blockReachBonus) * t(Trait.ReadBlocker, 1.05),
 
     attackPower: mk(0.45 * technique + 0.3 * athleticism + 0.25 * g(A.servingPower)) + spikeReachBonus,
-    attackControl: mk(0.55 * technique + 0.3 * control + 0.15 * g(A.composure)),
-    quickAttack: mk(0.6 * g(A.quickAttack) + 0.22 * athleticism + 0.18 * technique) + spikeReachBonus * 0.8,
+    attackControl: mk(0.55 * technique + 0.3 * control + 0.15 * g(A.composure)) * t(Trait.Tooler, 1.05),
+    quickAttack: (mk(0.6 * g(A.quickAttack) + 0.22 * athleticism + 0.18 * technique) + spikeReachBonus * 0.8) * t(Trait.QuickHitter, 1.04),
     backRowAttack: mk(0.6 * g(A.backRowAttack) + 0.25 * athleticism + 0.15 * technique),
-    pipeAttack: mk(0.6 * g(A.pipeAttack) + 0.25 * athleticism + 0.15 * technique),
+    pipeAttack: mk(0.6 * g(A.pipeAttack) + 0.25 * athleticism + 0.15 * technique) * t(Trait.PipeHitter, 1.05),
 
     leftHanded: store.hasFlag(idx, PlayerFlag.LeftHanded),
     offHand: n(store.offHand[idx]),
     spikeReachEdge: spikeEdge,
     blockReachEdge: blockEdge,
 
-    stamina: n(at[b + A.stamina]),
+    stamina: Math.min(1, n(at[b + A.stamina]) + (hasTrait(traits, Trait.Tireless) ? 0.12 : 0)),
     recovery: n(at[b + A.recovery]),
-    composure: n(at[b + A.composure]),
+    composure: Math.min(1, n(at[b + A.composure]) + (hasTrait(traits, Trait.Clutch) ? 0.1 : 0)),
     concentration: n(at[b + A.concentration]),
     consistency: n(at[b + A.consistency]),
-    bigMatch: n(at[b + A.bigMatchPerformance]),
-    leadership: n(at[b + A.leadership]),
+    bigMatch: Math.min(1, n(at[b + A.bigMatchPerformance]) + (hasTrait(traits, Trait.Clutch) ? 0.2 : 0)),
+    leadership: Math.min(1, n(at[b + A.leadership]) + (hasTrait(traits, Trait.VocalLeader) ? 0.15 : 0)),
     teamwork: n(at[b + A.teamwork]),
 
     fatigue: 1,

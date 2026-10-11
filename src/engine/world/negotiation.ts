@@ -21,6 +21,7 @@ import { PlayerFlag } from '../model/players.ts';
 import { endLoan, loanOf, MAX_SQUAD, type LoanPlayingTime } from './loans.ts';
 import { pendingMoveOf } from './moves.ts';
 import { newsTransfer } from './news.ts';
+import { noteDeparture } from './dressingRoom.ts';
 import {
   contractEndSeason, dayOfYear, euros, logTransfer, seasonEndDay, windowCloseDay, type World,
 } from './world.ts';
@@ -58,6 +59,8 @@ export function evaluateFeeOffer(
   sellingClub: Club,
   playerIdx: number,
   offer: number,
+  /** What the club asks of this buyer, of what it would ask anyone — an affiliate asks its parent less. */
+  discount = 1,
 ): FeeResult {
   const store = world.players;
   const playerLevel = store.currentAbility[playerIdx] / 2000;
@@ -65,7 +68,7 @@ export function evaluateFeeOffer(
   // A club demands a premium to sell someone who outclasses its own level —
   // losing an overperformer is harder to replace than a like-for-like sale.
   const premium = 1 + Math.max(0, playerLevel - clubLevel) * 1.6;
-  const valuation = Math.round(store.value[playerIdx] * premium);
+  const valuation = Math.round(store.value[playerIdx] * premium * discount);
   const ratio = offer / valuation;
 
   if (ratio < 0.7) {
@@ -147,6 +150,7 @@ export function completeTransfer(
   store.setFlag(playerIdx, PlayerFlag.Transferable, false);
   store.setFlag(playerIdx, PlayerFlag.LoanListed, false);
   const oldClubId = store.clubId[playerIdx];
+  if (oldClubId >= 0 && world.clubs[oldClubId] !== undefined) noteDeparture(world, world.clubs[oldClubId], playerIdx);
   logTransfer(world, playerIdx, oldClubId, buyingClub.id, oldClubId >= 0 || paid ? fee : 0, logSeason);
   if (oldClubId >= 0) {
     const oldClub = world.clubs[oldClubId];

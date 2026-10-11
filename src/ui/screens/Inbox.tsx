@@ -861,6 +861,23 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
       </span>,
     );
   }
+  // A player asking to leave: let him go, promise him games, or keep him.
+  const request = m.transferRequestOf !== undefined ? world.transferRequests?.[m.transferRequestOf] : undefined;
+  if (m.transferRequestOf !== undefined && request !== undefined) {
+    const rp = m.transferRequestOf;
+    if (request.status === 'open') {
+      out.push(
+        <button key="req-list" className="paper-btn primary-dark" onClick={() => g.answerTransferRequest(rp, 'list')}>Put him on the list</button>,
+        <button key="req-promise" className="paper-btn" onClick={() => g.answerTransferRequest(rp, 'promise')}>Promise him games</button>,
+        <button key="req-refuse" className="paper-btn" onClick={() => g.answerTransferRequest(rp, 'refuse')}>He is staying</button>,
+      );
+    } else {
+      out.push(<span key="req-done" className="paper-note">{request.status === 'listed' ? 'He is on the list.' : request.status === 'promised' ? 'You promised him games.' : 'You told him he is staying.'}</span>);
+    }
+  }
+  if (m.sponsorOffers === true) {
+    out.push(<button key="sponsor" className="paper-btn primary-dark" onClick={() => g.go('commercial')}><Icon name="contract" size={15} /> See the offers</button>);
+  }
   const staffTalks = m.staffTalksId !== undefined ? world.staffNegotiations?.find((t) => t.id === m.staffTalksId) : undefined;
   if (staffTalks !== undefined) {
     out.push(

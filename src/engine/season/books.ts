@@ -7,6 +7,7 @@
 import type { Club } from '../model/club.ts';
 import { wageBill } from '../world/loans.ts';
 import type { World } from '../world/world.ts';
+import { affiliateFee } from '../world/affiliates.ts';
 
 export interface ClubBooks {
   /** One line per stream, in display order. */
@@ -49,6 +50,7 @@ export function clubBooks(world: World, club: Club): ClubBooks {
     ['Medical', f.medicalCosts],
     ['Youth academy', f.youthAcademyCosts],
     ['Travel', f.seasonExpenditure],
+    ['Affiliates', (club.affiliates?.length ?? 0) * affiliateFee(club)],
   ];
   const sum = (lines: Array<[string, number]>): number => lines.reduce((s, [, v]) => s + v, 0);
   return { income, costs, totalIncome: sum(income), totalCosts: sum(costs) };

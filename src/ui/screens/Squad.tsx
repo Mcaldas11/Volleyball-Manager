@@ -9,6 +9,7 @@ import {
   MAX_SQUAD, POSITION_NAMES, POSITIONS, familiarityLabel, Position,
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
+import { TRAIT_HINTS, TRAIT_NAMES, traitsOf } from '../../engine/model/traits.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { secondNation, tiedNation } from '../../engine/world/internationals.ts';
 import { canRecall, coachTalkBlock, PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
@@ -22,6 +23,8 @@ import {
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { ClubHistoryCard } from '../clubHistory.tsx';
+import { CHAT_HINTS, CHAT_NAMES, CHAT_TOPICS } from '../../engine/world/playerTalks.ts';
+import { affiliatesOf } from '../../engine/world/affiliates.ts';
 import { useGame } from '../state.ts';
 
 type SquadSort =
@@ -366,6 +369,7 @@ function TransferMenu({ p }: { p: number }): JSX.Element {
   const listed = store.hasFlag(p, PlayerFlag.Transferable);
   const loanListed = store.hasFlag(p, PlayerFlag.LoanListed);
   const act = (f: () => void) => (): void => { setOpen(false); f(); };
+  const affiliates = g.club !== null ? affiliatesOf(g.world!, g.club) : [];
   return (
     <div className="profile-menu" ref={ref}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open}>
@@ -387,10 +391,50 @@ function TransferMenu({ p }: { p: number }): JSX.Element {
               <span className="faint">{loanListed ? 'He stays at the club' : 'Clubs can borrow him until 30 June'}</span>
             </span>
           </button>
+          {affiliates.map((a) => (
+            <button key={a.id} onClick={act(() => g.loanToAffiliate(p, a.id))}>
+              <Icon name="club" size={15} />
+              <span className="menu-pop-stack">
+                <span>Loan to {a.name}</span>
+                <span className="faint">Your affiliate: regular games, half his wage paid</span>
+              </span>
+            </button>
+          ))}
           <div className="menu-sep" />
           <button className="menu-danger" onClick={act(() => { g.releasePlayer(p); g.select(null); })}>
             <Icon name="close" size={15} /> Release
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A word with one of the squad: praise, criticism, encouragement, a promise of games — or just how he is. */
+function TalkMenu({ p }: { p: number }): JSX.Element {
+  const g = useGame();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    <div className="profile-menu" ref={ref}>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Icon name="press" size={14} /> Talk <Icon name="chevronDown" size={13} />
+      </button>
+      {open && (
+        <div className="menu-pop menu-pop-right">
+          {CHAT_TOPICS.map((topic) => {
+            const block = g.chatBlock(p, topic);
+            return (
+              <button key={topic} disabled={block !== null} title={block ?? undefined}
+                onClick={() => { setOpen(false); g.talkToPlayer(p, topic); }}>
+                <Icon name="press" size={15} />
+                <span className="menu-pop-stack">
+                  <span>{CHAT_NAMES[topic]}</span>
+                  <span className="faint">{block ?? CHAT_HINTS[topic]}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -495,6 +539,7 @@ export function PlayerDetail(): JSX.Element | null {
             <Pos pos={natural} />
             <span className="profile-role">{POSITION_NAMES[natural]}</span>
             {secondary !== -1 && <span className="faint">· also {POSITION_NAMES[secondary]}</span>}
+            {traitsOf(store, p).map((t) => <span key={t} className="trait-tag" title={TRAIT_HINTS[t]}>{TRAIT_NAMES[t]}</span>)}
             {store.hasFlag(p, PlayerFlag.Transferable) && <span className="list-tag">Transfer listed</span>}
             {store.hasFlag(p, PlayerFlag.LoanListed) && <span className="list-tag loan">Available for loan</span>}
             {plan !== undefined && (
@@ -557,6 +602,7 @@ export function PlayerDetail(): JSX.Element | null {
                   {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
                 </button>
               )}
+              {isOwn && !isYouth && <TalkMenu p={p} />}
               {isOwn && !isYouth && move === null && <TransferMenu p={p} />}
               {retirementMessage !== undefined && plan?.persuaded !== true && plan?.staffRole === undefined && (
                 <button className="primary" onClick={() => g.openMessage(retirementMessage.id)}>

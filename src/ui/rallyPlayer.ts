@@ -111,12 +111,15 @@ export async function playBeats(
   setScene: (scene: Scene) => void,
   onBigPlay: (play: BigPlay) => void,
   onRadar?: (radar: Radar) => void,
+  /** Each beat as it is shown — for the sound of the ball. */
+  onBeat?: (beat: Beat) => void,
 ): Promise<void> {
   for (const beat of beats) {
     if (cancelled.current) return;
     const ms = (beat.ms * 1.15) / speed;
     const release = beat.release !== undefined ? (beat.release * 1.15) / speed : undefined;
     setScene({ ...beat, ms, release, seq: ++beatSeq });
+    onBeat?.(beat);
     const play = bigPlayFor(beat.callout);
     if (play !== null) onBigPlay(play);
     if (beat.radar !== undefined && onRadar !== undefined) onRadar(beat.radar);

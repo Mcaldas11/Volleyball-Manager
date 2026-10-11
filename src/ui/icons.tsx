@@ -14,7 +14,7 @@ export type IconName =
   | 'press' | 'whistle' | 'clock' | 'star' | 'ball' | 'alert' | 'collapse'
   | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check'
   | 'inbox' | 'archive' | 'medical' | 'coin' | 'contract' | 'board' | 'playOutline' | 'chevronLeft' | 'arrowRight'
-  | 'career';
+  | 'career' | 'sound' | 'mute' | 'help';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   home: <><path d="M3.5 10.5 12 4l8.5 6.5" /><path d="M5.5 9v10.5h13V9" /><path d="M10 19.5v-5h4v5" /></>,
@@ -50,6 +50,9 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   offer: <><path d="M3.5 12.5 11 5h7.5v7.5L11 20l-7.5-7.5Z" /><circle cx="15" cy="8.8" r="1.3" /></>,
   press: <><rect x="9" y="3.5" width="6" height="10" rx="3" /><path d="M6 11a6 6 0 0 0 12 0" /><path d="M12 17v3.5M9 20.5h6" /></>,
   whistle: <><circle cx="9" cy="14" r="5" /><path d="M13 11.5 20 8v4h-5" /><path d="M9 6V3.5" /></>,
+  sound: <><path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4v-5Z" /><path d="M15.5 9a4 4 0 0 1 0 6" /><path d="M18 6.5a7.5 7.5 0 0 1 0 11" /></>,
+  mute: <><path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4v-5Z" /><path d="m16 9.5 5 5M21 9.5l-5 5" /></>,
+  help: <><circle cx="12" cy="12" r="8.5" /><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6" /><path d="M12 16.6v.1" /></>,
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
   star: <path d="m12 3.8 2.5 5.2 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8L12 3.8Z" />,
   ball: <><circle cx="12" cy="12" r="8.5" /><path d="M12 3.5c-3 3-3 14 0 17" /><path d="M4.2 8.6c5 2.2 10.6 2.2 15.6 0" /><path d="M4.6 16.2c4.8-2.6 10-2.6 14.8 0" /></>,

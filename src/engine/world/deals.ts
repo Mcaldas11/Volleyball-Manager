@@ -29,6 +29,7 @@ import {
 } from './loans.ts';
 import { moveDay, pendingMoveOf, seasonOfDay, windowOpeningLabel } from './moves.ts';
 import { euros, seasonEndDay, seasonEndYear, type GameMessage, type World } from './world.ts';
+import { AFFILIATE_DISCOUNT, affiliateLoanBlock, isAffiliate } from './affiliates.ts';
 
 export interface TalksOffer {
   /** Transfer fee — only while talking to the selling club. */
@@ -159,6 +160,29 @@ function agreeLoan(
     fee: 0, wage: world.players.wage[playerIdx], contractEnd: 0, wageShare, playingTime,
   });
   return day;
+}
+
+/**
+ * Send one of the club's players to an affiliate on loan: they take him and
+ * play him — regular games promised, half his wage paid — if he will go.
+ * Returns what happened.
+ */
+export function loanToAffiliate(world: World, club: Club, playerIdx: number, affiliateId: number): string {
+  const store = world.players;
+  const name = store.fullName(playerIdx);
+  const affiliate = world.clubs[affiliateId];
+  if (affiliate === undefined || !isAffiliate(club, affiliateId)) return 'They are not your affiliate.';
+  if (!club.players.includes(playerIdx) || loanOf(world, playerIdx) !== undefined || pendingMoveOf(world, playerIdx) !== undefined) {
+    return `${name} can't go out on loan just now.`;
+  }
+  const block = affiliateLoanBlock(affiliate);
+  if (block !== null) return block;
+  if (store.contractUntil[playerIdx] < seasonEndDay(seasonOfDay(moveDay(world)))) return `${name}'s contract runs out before the loan would end.`;
+  if (!playerAgreesToLoan(world, affiliate, playerIdx, 'starter')) return `${name} doesn't want to go to ${affiliate.name}.`;
+  const day = agreeLoan(world, club, affiliate, playerIdx, 0.5, 'starter');
+  return day > world.day
+    ? `${name} joins ${affiliate.name} on loan when the window opens on ${windowOpeningLabel(world, day)}, promised regular games.`
+    : `${name} has gone to ${affiliate.name} on loan to the end of the season, promised regular games. They pay half his wage.`;
 }
 
 /** "as a regular starter" — the playing time in a loan's small print. */
@@ -360,7 +384,9 @@ function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
   const name = store.fullName(t.playerIdx);
   const seller = world.clubs[t.sellingClubId];
   if (seller === undefined) { closeTalks(world, t); return; }
-  const result = evaluateFeeOffer(world, seller, t.playerIdx, offer.fee);
+  const buyer = world.clubs[world.userClubId];
+  const result = evaluateFeeOffer(world, seller, t.playerIdx, offer.fee,
+    buyer !== undefined && isAffiliate(buyer, seller.id) ? AFFILIATE_DISCOUNT : 1);
   t.valuation = result.valuation;
   t.expiresOn = idleDeadline(world);
   const rivals = t.rivals.map((r) => world.clubs[r.clubId]?.name).filter((n): n is string => n !== undefined);

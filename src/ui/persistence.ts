@@ -26,6 +26,7 @@ import { balanceRelegationSlots } from '../engine/season/pyramid.ts';
 import { seedClubHistories } from '../engine/world/clubHistory.ts';
 import { backfillCareer } from '../engine/world/career.ts';
 import { rollHandedness, rollOffHand } from '../engine/world/playerGen.ts';
+import { rollTraits } from '../engine/model/traits.ts';
 import { coachesSetUp } from '../engine/world/aiTactics.ts';
 import { topUpStaffPool } from '../engine/world/staffMarket.ts';
 import { StaffRole } from '../engine/model/staff.ts';
@@ -246,6 +247,11 @@ export function reviveWorld(raw: World): World {
   if (raw.players.offHand === undefined) {
     raw.players.offHand = new Uint8Array(raw.players.id.length).fill(5);
     for (let i = 0; i < raw.players.count; i++) rollOffHand(raw.players, i);
+  }
+  // Saves from before traits: each player earns his, as a new world would.
+  if (raw.players.traits === undefined) {
+    raw.players.traits = new Uint16Array(raw.players.id.length);
+    for (let i = 0; i < raw.players.count; i++) if (raw.players.isActive(i)) rollTraits(raw.players, i);
   }
   // Saves from before players had a hitting hand: each is given one, as a new world would.
   if (raw.handedness !== true) {

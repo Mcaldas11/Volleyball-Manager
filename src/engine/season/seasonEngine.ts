@@ -49,6 +49,11 @@ import { boardResults, careerDay, setBoardExpectations } from '../world/career.t
 import { coachesSetUp } from '../world/aiTactics.ts';
 import { analysisEdge, medicalQuality, staffDay, topUpStaffPool } from '../world/staffMarket.ts';
 import { processStaffDeals } from '../world/staffDeals.ts';
+import { cohesionEdge, cohesionOf, dressingRoomWeek } from '../world/dressingRoom.ts';
+import { playerHappinessWeek } from '../world/playerTalks.ts';
+import { crowdAt, sponsorDay, ticketPriceOf } from '../world/commercial.ts';
+import { facilitiesDay } from '../world/facilities.ts';
+import { affiliatesDay } from '../world/affiliates.ts';
 import { retirementDay } from '../world/retirement.ts';
 import { noteExpectations } from '../world/accolades.ts';
 
@@ -285,8 +290,14 @@ export function playFixture(
   const ownLeague = inManagersLeague(world, fixture);
   if (detailed || friendly || ownLeague) {
     const result = simulateMatch(store, {
-      home: { ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home), prep: matchPrep(world, home, fixture.day) },
-      away: { ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away), prep: matchPrep(world, away, fixture.day) },
+      home: {
+        ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home), prep: matchPrep(world, home, fixture.day),
+        roomEdge: cohesionEdge(cohesionOf(world, home.id)),
+      },
+      away: {
+        ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away), prep: matchPrep(world, away, fixture.day),
+        roomEdge: cohesionEdge(cohesionOf(world, away.id)),
+      },
       format: fixture.format,
       importance: fixture.importance,
       neutralVenue: fixture.neutralVenue,
@@ -446,11 +457,11 @@ function updateTable(world: World, fixture: Fixture): void {
 function applyMatchFinances(world: World, home: Club, away: Club, fixture: Fixture): void {
   const comp = world.competitions[fixture.competitionId];
   const draw = comp !== undefined ? Math.min(1, comp.reputation / 8000) : 0.5;
-  const attendance = Math.round(
-    home.arenaCapacity * (0.42 + 0.5 * draw) * world.rng.range(0.78, 1.08),
-  );
+  // The price brings the crowd, or keeps it away — and each pays it.
+  const price = ticketPriceOf(home);
+  const attendance = crowdAt(home.arenaCapacity * (0.42 + 0.5 * draw) * world.rng.range(0.78, 1.08), price);
   const gate = Math.round(
-    Math.min(attendance, home.arenaCapacity) * (home.finances.ticketIncomePerMatch / Math.max(1, home.arenaCapacity)),
+    Math.min(attendance, home.arenaCapacity) * (home.finances.ticketIncomePerMatch / Math.max(1, home.arenaCapacity)) * price,
   );
   home.finances.balance += gate;
   home.finances.seasonIncome += gate;
@@ -480,6 +491,9 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   // running down, the answers to every offer that is due today — and the
   // job market: applications answered, coaches appointed, boards meeting.
   monthlyStatement(world);
+  facilitiesDay(world);
+  sponsorDay(world);
+  affiliatesDay(world);
   monthlyLoanReports(world);
   contractNotices(world);
   processDeals(world);
@@ -529,6 +543,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     const phase = currentPhase(world);
     if (phase !== SeasonPhase.OffSeason) {
       weeklyTraining(world);
+      dressingRoomWeek(world);
+      playerHappinessWeek(world);
       trainPositions(world);
       rollInjuries(world);
       generateIncomingOffers(world);

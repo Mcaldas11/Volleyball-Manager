@@ -27,6 +27,8 @@ import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
 import type { StaffTalks } from './staffDeals.ts';
+import type { PlayerPromise, TransferRequest } from './playerTalks.ts';
+import type { SponsorOffer } from './commercial.ts';
 import type { RetirementPlan } from './retirement.ts';
 import type { TeamLine } from './teamAwards.ts';
 import type { InterviewSession } from './interviews.ts';
@@ -383,6 +385,10 @@ export interface GameMessage {
   staffApproachId?: number;
   /** Staff talks this message is an answer in — the inbox offers a way back into them. */
   staffTalksId?: number;
+  /** A player of the manager's who has asked to leave — the message offers the answers. */
+  transferRequestOf?: number;
+  /** The summer's sponsorship offers — the message leads to them. */
+  sponsorOffers?: boolean;
   /** The member of staff a message is about. */
   staffId?: number;
   /** A player of the manager's who means to retire — the message offers the talks. */
@@ -647,6 +653,22 @@ export interface World {
   /** Other clubs' approaches for the manager's staff — see staffDeals.ts. */
   staffApproaches?: StaffApproach[];
   nextStaffApproachId?: number;
+  /** This summer's sponsorship offers to the manager's club, and the one he chose — see commercial.ts. */
+  sponsorOffers?: { season: number; clubId: number; offers: SponsorOffer[]; day: number; chosen?: number };
+  /** The manager's proposals of affiliation, out for an answer — see affiliates.ts. */
+  affiliateTalks?: Array<{ clubId: number; resolvesOn: number }>;
+  /** The day the manager last spoke to each of his players, one to one — see playerTalks.ts. */
+  playerChats?: Record<number, number>;
+  /** Promises of games the manager has made. */
+  promises?: PlayerPromise[];
+  /** Weeks each of the manager's players has been unhappy. */
+  unhappyWeeks?: Record<number, number>;
+  /** Players who have asked to leave, and where each request stands. */
+  transferRequests?: Record<number, TransferRequest>;
+  /** Each club's dressing-room cohesion, 0-100, as last worked out — see dressingRoom.ts. */
+  cohesion?: Record<number, number>;
+  /** A club's room unsettled by a leader leaving: when, and by how much. */
+  roomShock?: Record<number, { day: number; amount: number }>;
   /** The manager's talks to hire staff, or to keep his own — see staffDeals.ts. */
   staffNegotiations?: StaffTalks[];
   nextStaffTalksId?: number;

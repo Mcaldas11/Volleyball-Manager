@@ -35,6 +35,9 @@ import { MatchdayScreen } from './screens/Matchday.tsx';
 import { MatchResultScreen } from './screens/MatchResult.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { StaffNegotiationScreen } from './screens/StaffNegotiation.tsx';
+import { DressingRoomScreen } from './screens/DressingRoom.tsx';
+import { HelpDialog, WelcomeTour } from './help.tsx';
+import { AffiliatesScreen, CommercialScreen, FacilitiesScreen } from './screens/ClubBusiness.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
@@ -84,7 +87,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'Team',
     sections: [
-      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Squad']] },
+      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Squad'], ['dressing', 'Dressing Room']] },
       {
         id: 'lineup',
         label: 'Lineup',
@@ -106,7 +109,12 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
     label: 'Club',
     sections: [
       { id: 'staff', label: 'Staff', icon: 'staff', tabs: [['staff', 'Staff']] },
-      { id: 'finances', label: 'Finances', icon: 'finances', tabs: [['finances', 'Finances']] },
+      {
+        id: 'finances',
+        label: 'Finances',
+        icon: 'finances',
+        tabs: [['finances', 'Finances'], ['commercial', 'Tickets & Sponsors'], ['facilities', 'Facilities'], ['affiliates', 'Affiliates']],
+      },
     ],
   },
   {
@@ -236,6 +244,8 @@ function GameShell(): JSX.Element {
       <FriendlyDialog />
       <ReplayViewer />
       <ProcessingWindow />
+      <HelpDialog />
+      <WelcomeTour />
     </div>
   );
 }
@@ -278,6 +288,10 @@ function Screen(): JSX.Element {
     case 'scouting': return <ScoutingScreen />;
     case 'staff': return <StaffScreen />;
     case 'finances': return <FinancesScreen />;
+    case 'dressing': return <DressingRoomScreen />;
+    case 'commercial': return <CommercialScreen />;
+    case 'facilities': return <FacilitiesScreen />;
+    case 'affiliates': return <AffiliatesScreen />;
     case 'rankings': return <RankingsScreen />;
     case 'halloffame': return <HallOfFameScreen />;
     default: return <HomeScreen />;
@@ -516,6 +530,7 @@ function Header(): JSX.Element {
 
         <span className="hdr-spacer" />
         <GlobalSearch disabled={takeover} />
+        <button className="icon-btn hdr-help" title="Help" onClick={() => g.openHelp()}><Icon name="help" size={18} /></button>
         <span className="hdr-spacer" />
 
         <div className="hdr-date">

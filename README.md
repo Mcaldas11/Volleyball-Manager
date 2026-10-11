@@ -82,7 +82,15 @@ Before submitting a change:
       and makes way for the libero the moment it is lost — and a registered
       libero can't play outfield
 - [x] In-match substitutions up to the real six-per-set limit, two timeouts
-      a set, and a word from the touchline
+      a set, a word from the touchline, and the video challenge: two a set, a
+      wrong call turned over — point, serve and box score — and the challenge
+      kept
+- [x] Team talks before the match and at every set break: what lands depends
+      on the moment and on each player's personality, the dressing room's
+      leaders counting most
+- [x] Player traits — a big jump server, a floor general, a libero who digs
+      everything — earned as the attributes behind them grow, each a few per
+      cent on the skill it is about
 - [x] In-match injuries: a knock can be played on, at the risk of it getting
       worse; a serious one forces a change
 - [x] Full point-by-point rally log, box scores, 0-10 match ratings and
@@ -110,7 +118,9 @@ Before submitting a change:
       the Olympic Games, the continental championships and the Nations League,
       with caps and a world ranking
 - [x] Manage the team's finances: sponsorship, TV rights, gate receipts,
-      wage budgets — and real bankruptcy risk
+      wage budgets — and real bankruptcy risk. Set the ticket price, pick each
+      summer's shirt sponsor (steady, performance or long-term), ask the board
+      for better facilities, and take on up to two affiliate clubs
 - [x] Manage the squad's roster: sign, release and loan players, set the
       starting six and liberos, respect a 16-player squad cap. Loans carry
       promised playing time, monthly reports, a word with the loan club's
@@ -124,6 +134,12 @@ Before submitting a change:
 - [x] Player ageing, injuries with permanent career effects, and procedurally
       generated "regens" that keep the world populated across a fifty-season
       career
+- [x] One-to-one talks with players — praise, criticism, encouragement, a
+      promise of games that is called in later — and players kept unhappy
+      asking to leave
+- [x] A dressing room with its leaders, a captain and a cohesion that grows
+      with time together, suffers with new faces and a leader's departure,
+      and is worth a little on court
 - [x] Retirement case by case: most players stop in their mid-thirties, many
       play past 40, the oldest usually around 43 and a rare few towards 50.
       A player's plans are known mid-season, and he can be persuaded to stay
@@ -185,15 +201,18 @@ Before submitting a change:
 - [x] A club dashboard (next fixture, table, one to watch, form, top scorer,
       the board's mood, the money) and a month-by-month calendar of results,
       fixtures and transfer deadlines
+- [x] Match sounds — the whistle, the ball, the crowd, the timeout hooter —
+      made in the browser, with a mute button
+- [x] In-game help, a topic at a time, and a welcome tour for a first career
 - [x] Every screen fits the window, Football Manager style: the page never
       scrolls, long lists scroll inside their own panels, and the layout
       follows the height that can actually be seen
 
 ### PLANNED FEATURES
 
-- [ ] Performance work on the season rollover at world scale (around 30
-      seconds a season on the small world, dominated by weekly training
-      iterating every player alive)
+- [ ] More performance work on simulating a season (around 19 seconds a
+      season on the small world from the command line, down from 31)
+- [ ] A women's game
 
 ## LICENSE
 

@@ -21,7 +21,7 @@ test('receiving in P1 a 5-1 stays put: the outside passing in zone 2 hits on the
   const { world, home, away } = sides(71);
   const store = world.players;
   const where = { p1: { oh: new Set<string>(), opp: new Set<string>() }, served: { oh: new Set<string>() } };
-  for (const seed of [1, 2, 3, 4]) {
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
     const r = simulateMatch(store, {
       home, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: true, seed,
     });
@@ -39,7 +39,8 @@ test('receiving in P1 a 5-1 stays put: the outside passing in zone 2 hits on the
   }
   assert.deepEqual([...where.p1.oh], ['Opposite'], 'the receiving outside hits from the right');
   assert.deepEqual([...where.p1.opp], ['Outside'], 'and the opposite from the left');
-  assert.ok(where.served.oh.has('Outside'), 'serving in P1, they switch as usual');
+  // Serving, they switch as usual: the outside hits from the left — a high ball or a quicker one.
+  assert.ok([...where.served.oh].some((lane) => /outside/i.test(lane)), 'serving in P1, they switch as usual');
 });
 
 test('a 4-2 receiving with its setter in zone 1 stays put too — each outside, passing in zone 2, hits on the right, the setter at the net on the left', () => {

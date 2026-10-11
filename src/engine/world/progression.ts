@@ -301,6 +301,15 @@ function coachingQualityByClub(world: World): Float64Array {
  * which is why veteran setters and liberos stay useful long after the
  * opposites they came through with have retired.
  */
+/** Each attribute's late-career growth weight, decline weight and whether it is
+ *  part of who the man is — by attribute index, for the hot loop below. */
+const LATE_GROWTH_BY_IDX = Float64Array.from(ATTRIBUTES, (name) => LATE_GROWTH_WEIGHT[name] ?? 0);
+const DECAY_BY_IDX = Float64Array.from(ATTRIBUTES, (name) => AGE_DECAY_WEIGHT[name] ?? 0.12);
+const PERSONALITY_BY_IDX = Uint8Array.from(ATTRIBUTES, (name) => (PERSONALITY_ATTR_SET.has(name) ? 1 : 0));
+/** Scratch space for the weighted pick, reused rather than allocated for every player every week. */
+const PICK_FROM = new Int32Array(ATTRIBUTES.length);
+const PICK_WEIGHT = new Float64Array(ATTRIBUTES.length);
+
 function applyAbilityDelta(
   store: PlayerStore,
   i: number,
@@ -315,43 +324,54 @@ function applyAbilityDelta(
   const improving = deltaCA > 0;
   // Roughly how many attribute points correspond to this ability change.
   const steps = Math.min(6, Math.max(1, Math.round(Math.abs(deltaCA) / 8)));
+  const row = i * ATTRIBUTES.length;
+  const attrs = store.attrs;
 
   for (let s = 0; s < steps; s++) {
-    const candidates: number[] = [];
-    const weights: number[] = [];
-
+    let n = 0;
     for (let a = 0; a < ATTRIBUTES.length; a++) {
-      const name = ATTRIBUTES[a];
-      const value = store.attrs[i * ATTRIBUTES.length + a];
+      const value = attrs[row + a];
       if (improving) {
         if (value >= 20) continue;
         // Positional relevance, plus a late-career bias toward the technical
         // and mental attributes that keep improving past physical peak.
         let weight = w[a];
-        if (age >= 28) weight += (LATE_GROWTH_WEIGHT[name] ?? 0) * 1.4;
+        if (age >= 28) weight += LATE_GROWTH_BY_IDX[a] * 1.4;
         // Training can bring on an attribute the position has no use for.
         const pull = bias?.[a] ?? 1;
         if (weight <= 0 && pull <= 1) continue;
-        candidates.push(a);
-        weights.push((Math.max(weight, 0.05) * pull) * (20 - value) / 19);
+        PICK_FROM[n] = a;
+        PICK_WEIGHT[n++] = (Math.max(weight, 0.05) * pull) * (20 - value) / 19;
       } else {
         if (value <= 1) continue;
-        const decay = AGE_DECAY_WEIGHT[name] ?? 0.12;
+        const decay = DECAY_BY_IDX[a];
         if (decay <= 0) continue;
-        candidates.push(a);
-        weights.push(decay * (value / 20));
+        PICK_FROM[n] = a;
+        PICK_WEIGHT[n++] = decay * (value / 20);
       }
     }
 
-    if (candidates.length === 0) break;
-    const pick = candidates[rng.weightedIndex(weights)];
+    if (n === 0) break;
+    // A weighted pick among them — the same draw `Rng.weightedIndex` makes.
+    let sum = 0;
+    for (let k = 0; k < n; k++) sum += PICK_WEIGHT[k];
+    let chosen = 0;
+    if (sum > 0) {
+      let r = rng.float() * sum;
+      chosen = n - 1;
+      for (let k = 0; k < n; k++) {
+        r -= PICK_WEIGHT[k];
+        if (r <= 0) { chosen = k; break; }
+      }
+    }
+    const pick = PICK_FROM[chosen];
     // Age and a bad week wear the body and the touch, not the man: who he is —
     // his professionalism, his loyalty, how long he means to go on — does not
     // fade. (The step that lands there is simply not taken, so the rest
     // declines as ever.)
-    if (!improving && PERSONALITY_ATTR_SET.has(ATTRIBUTES[pick])) continue;
-    const base = i * ATTRIBUTES.length + pick;
-    store.attrs[base] = Math.max(1, Math.min(20, store.attrs[base] + (improving ? 1 : -1)));
+    if (!improving && PERSONALITY_BY_IDX[pick] === 1) continue;
+    const base = row + pick;
+    attrs[base] = Math.max(1, Math.min(20, attrs[base] + (improving ? 1 : -1)));
   }
 
   refreshAbility(store, i);

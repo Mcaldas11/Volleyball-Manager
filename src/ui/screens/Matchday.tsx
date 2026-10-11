@@ -28,6 +28,8 @@ import { describeRallyHighlight } from './Match.tsx';
 import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { PlayerDetail } from './Squad.tsx';
+import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
+import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn } from '../sound.ts';
 
 /** National teams play in something like their flag's colour. */
 const NATION_HUES: Readonly<Record<string, number>> = {
@@ -83,7 +85,11 @@ async function animateRally(
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
   const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf);
-  await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar);
+  await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar, (beat) => {
+    if (beat.actor !== null) playHit(beat.callout !== null || beat.radar !== undefined);
+  });
+  // The crowd for the point — the home crowd louder for the home side's.
+  playCrowd(entry.winner === 0 ? 0.9 : 0.35);
 }
 
 /** How full the stand is: a big competition draws a crowd, a big match fills the place. */
@@ -216,6 +222,7 @@ function LineupSetup(): JSX.Element {
           </div>
           {md.national === null && <MatchdayTacticSelect />}
           <MatchdayFormation />
+          <TeamTalkButton />
           <button className="primary lg" onClick={() => g.kickOff()}>
             <Icon name="whistle" size={18} /> Kick off
           </button>
@@ -366,6 +373,7 @@ function SetBreak(): JSX.Element {
           </div>
           {md.national === null && <MatchdayTacticSelect />}
           <MatchdayFormation />
+          <TeamTalkButton />
           <button className="primary lg" onClick={() => g.startNextSet()}>
             <Icon name="whistle" size={18} /> Start set {setsPlayed + 1}
           </button>
@@ -385,6 +393,72 @@ function SetBreak(): JSX.Element {
         slotPositions={lineupSlotPositions(formationOf(g.matchTactics() ?? undefined))}
         registered={md.homeLiberos ?? g.matchLiberosOf(md.userIsHome ? 0 : 1)}
       />
+    </div>
+  );
+}
+
+/** How a reaction to a talk reads, and its colour. */
+const REACTION_TONE: Readonly<Record<ReactionLabel, string>> = {
+  'Fired up': 'good', Focused: 'good', Unmoved: '', Nervous: 'bad', Annoyed: 'bad',
+};
+
+/** The team talk, before the match or at a set break: give it, or see how it went. */
+function TeamTalkButton(): JSX.Element {
+  const g = useGame();
+  const [open, setOpen] = useState(false);
+  const given = g.givenTalk();
+  const moment = g.talkMoment();
+  return (
+    <>
+      <button className={`md-talk-btn${given !== null ? ' done' : ''}`} onClick={() => setOpen(true)}
+        title={given !== null ? given.result.summary : 'Talk to the players'}>
+        <Icon name="press" size={15} /> {given !== null ? 'Talk given' : 'Team talk'}
+      </button>
+      {open && <TeamTalkDialog moment={moment} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function TeamTalkDialog({ moment, onClose }: { moment: TalkMoment | null; onClose: () => void }): JSX.Element {
+  const g = useGame();
+  const store = g.world!.players;
+  const given = g.givenTalk();
+  const md = g.matchday!;
+  return (
+    <div className="hol-overlay" onClick={onClose}>
+      <div className="hol-card talk-card" role="dialog" aria-label="Team talk" onClick={(e) => e.stopPropagation()}>
+        <header className="hol-top">
+          <span className="hol-crumbs">{md.stage === 'lineup' ? 'Before the match' : `Before set ${(md.snapshot?.set ?? 0) + 1}`} <Icon name="chevronRight" size={12} /> <b>Team talk</b></span>
+          <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={16} /></button>
+        </header>
+        <h2 className="hol-title">Team Talk</h2>
+        {given === null && moment !== null ? (
+          <>
+            <p className="hol-sub">What do you tell them? It depends on the moment — and on who is listening.</p>
+            <div className="talk-options">
+              {TALK_OPTIONS[moment].map((tone) => (
+                <button key={tone} className="talk-option" onClick={() => g.giveTeamTalk(tone)}>
+                  <Icon name="press" size={16} /> <span>“{TALK_LINES[tone]}”</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : given !== null ? (
+          <>
+            <p className="hol-sub">“{TALK_LINES[given.tone]}” — <b>{given.result.summary}</b></p>
+            <div className="talk-reactions">
+              {given.result.reactions.map((r) => (
+                <div key={r.p} className="talk-reaction">
+                  <PlayerFace playerId={store.id[r.p]} name={store.fullName(r.p)} size={26} />
+                  <span className="talk-name">{store.shortName(r.p)}</span>
+                  <span className={`talk-label ${REACTION_TONE[r.label]}`}>{r.label}</span>
+                </div>
+              ))}
+            </div>
+            <footer className="talk-foot"><button className="primary" onClick={onClose}>Done</button></footer>
+          </>
+        ) : <p className="hol-sub">There is nothing to say just now.</p>}
+      </div>
     </div>
   );
 }
@@ -593,6 +667,32 @@ const SHOUT_EFFECT: Readonly<Record<'lifted' | 'flat' | 'tense', string>> = {
   flat: 'it changes little',
   tense: 'they tighten up',
 };
+
+/** The match's sounds, on or off — remembered in this browser. */
+function SoundToggle(): JSX.Element {
+  const [on, setOn] = useState(soundOn);
+  return (
+    <button className={on ? '' : 'muted'} title={on ? 'Sound on — click to mute' : 'Sound off — click to hear the match'}
+      onClick={() => { setSoundOn(!on); setOn(!on); }}>
+      <Icon name={on ? 'sound' : 'mute'} size={15} />
+    </button>
+  );
+}
+
+/** Ask for the video on the last point — lit up when it was close and went against you. */
+function ChallengeButton({ shown }: { shown: boolean }): JSX.Element {
+  const g = useGame();
+  // Not before the point has been played out on the court: nobody challenges what he hasn't seen.
+  const why = shown ? g.challengeError() : 'Wait for the point to finish.';
+  const call = g.lastCall();
+  const close = why === null && call !== null && call.close;
+  return (
+    <button className={close ? 'hot' : ''} disabled={why !== null} onClick={() => g.challenge()}
+      title={why ?? (close ? 'That looked close — ask for the video' : 'Ask for the video: a wrong call is overturned, and you keep the challenge')}>
+      <Icon name="search" size={15} /> Challenge <span className="lv-badge">{g.challengesLeft()}</span>
+    </button>
+  );
+}
 
 /** A side's six on court and its libero, each with the live rating — the panel down either side of the court. */
 function LiveTeamCard({ team, serving, ratings, onPick }: {
@@ -999,6 +1099,7 @@ function LiveMatchView(): JSX.Element {
   useEffect(() => {
     if (md.timeoutActive === null) { setTimeoutSecondsLeft(TIMEOUT_SECONDS); return; }
     setTimeoutSecondsLeft(TIMEOUT_SECONDS);
+    playHooter();
     const interval = setInterval(() => {
       setTimeoutSecondsLeft((s) => Math.max(0, s - 1));
     }, 1000);
@@ -1052,6 +1153,16 @@ function LiveMatchView(): JSX.Element {
     if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
   }, [lastShoutSeq]);
+
+  // A video check goes up on the banner too: who asked, and what the video showed.
+  const lastChallengeSeq = md.lastChallenge?.seq;
+  useEffect(() => {
+    const c = md.lastChallenge;
+    if (c == null) return;
+    setSubAnnouncement({ text: `VIDEO CHECK — ${md.sides[c.team].shortName}: ${c.verdict}`, team: c.team, key: c.seq });
+    if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
+    subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3600);
+  }, [lastChallengeSeq]);
 
   /** A line on the banner, for either side. */
   const announce = (text: string, team: 0 | 1): void => {
@@ -1131,6 +1242,7 @@ function LiveMatchView(): JSX.Element {
           break;
         }
         animatingRef.current = true;
+        playWhistle();
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
         await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay, triggerRadar, (team) => {
@@ -1143,6 +1255,7 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
+        g.aiConsidersChallenge();
         // Anyone hurt in that rally: the stoppage for him, played out on the court.
         if (g.matchday?.snapshot?.matchOver !== true) {
           for (let live = g.beginInjuryStoppage(); live !== null && !cancelled.current; live = g.beginInjuryStoppage()) {
@@ -1225,7 +1338,7 @@ function LiveMatchView(): JSX.Element {
     : md.timeoutActive !== null
       ? 'Timeout'
       : md.paused && md.pauseUntil !== null
-        ? 'Substitution'
+        ? (md.videoCheck === true ? 'Video check' : 'Substitution')
         : md.paused ? 'Paused' : 'Live';
   const remaining = g.subsRemaining();
   const shoutWait = g.shoutWait();
@@ -1286,7 +1399,10 @@ function LiveMatchView(): JSX.Element {
                 return (
                   <div key={points.length - i} className={`lv-pbp-row ${won === 0 ? 'home' : 'away'}`}>
                     <span className="lv-pbp-score">{r.scoreBefore[0] + (won === 0 ? 1 : 0)}-{r.scoreBefore[1] + (won === 1 ? 1 : 0)}</span>
-                    <span className="lv-pbp-text">{d.before}{d.player !== '' && <strong>{d.player}</strong>}{d.after}</span>
+                    <span className="lv-pbp-text">
+                      {d.before}{d.player !== '' && <strong>{d.player}</strong>}{d.after}
+                      {r.overturned === true && <span className="lv-video-tag" title="Turned over on video: the point went the other way">Video: overturned</span>}
+                    </span>
                   </div>
                 );
               })}
@@ -1397,6 +1513,7 @@ function LiveMatchView(): JSX.Element {
         >
           <Icon name="whistle" size={15} /> Timeout <span className="lv-badge">{2 - md.timeoutsUsed[userTeamIdx]}</span>
         </button>
+        <ChallengeButton shown={revealed >= md.log.length} />
         <button className={overlay === 'subs' ? 'on' : ''} onClick={() => (overlay === 'subs' ? closeOverlay() : openSubs())}>
           <Icon name="swap" size={15} /> Substitution <span className={`lv-badge${remaining <= 0 ? ' bad' : ''}`}>{remaining}</span>
         </button>
@@ -1437,6 +1554,7 @@ function LiveMatchView(): JSX.Element {
               <Icon name="pause" size={14} /> Pause
             </button>
           )}
+        <SoundToggle />
         <Segmented
           size="sm"
           options={[[1, '1×'], [1.5, '1.5×'], [2, '2×']] as const}

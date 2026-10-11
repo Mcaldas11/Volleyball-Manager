@@ -203,6 +203,8 @@ export class PlayerStore {
   retiredYear!: Int16Array;
   /** How well he plays with his other hand, 1-20 — his hitting hand is always as strong as it gets. */
   offHand!: Uint8Array;
+  /** His traits, one bit each — see traits.ts. */
+  traits!: Uint16Array;
 
   private nextId = 1;
 
@@ -250,6 +252,7 @@ export class PlayerStore {
     this.nationalCaps = new Uint16Array(cap);
     this.retiredYear = new Int16Array(cap);
     this.offHand = new Uint8Array(cap).fill(5);
+    this.traits = new Uint16Array(cap);
   }
 
   private grow(needed: number): void {
@@ -268,7 +271,7 @@ export class PlayerStore {
       contractUntil: this.contractUntil, wage: this.wage, value: this.value,
       reputation: this.reputation, careerMatches: this.careerMatches, careerPoints: this.careerPoints,
       careerAces: this.careerAces, careerBlocks: this.careerBlocks, careerTitles: this.careerTitles,
-      nationalCaps: this.nationalCaps, retiredYear: this.retiredYear, offHand: this.offHand,
+      nationalCaps: this.nationalCaps, retiredYear: this.retiredYear, offHand: this.offHand, traits: this.traits,
     };
     const n = this.count;
 
@@ -313,6 +316,7 @@ export class PlayerStore {
     this.nationalCaps.set(old.nationalCaps.subarray(0, n));
     this.retiredYear.set(old.retiredYear.subarray(0, n));
     this.offHand.set(old.offHand.subarray(0, n));
+    this.traits.set(old.traits.subarray(0, n));
   }
 
   /** How at home he is playing `pos`, 0-100 — his natural position always 100. */
