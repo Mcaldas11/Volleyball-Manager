@@ -468,6 +468,8 @@ export function PlayerDetail(): JSX.Element | null {
   const retiring = plan !== undefined && plan.persuaded !== true;
   // The message he came to see the manager about, where the talks are.
   const retirementMessage = isOwn && plan !== undefined ? world.messages.find((m) => m.retirementOf === p) : undefined;
+  // Opened from a match: shown over it, to be read and closed.
+  const inMatch = g.matchday !== null;
 
   const group = (attrs: readonly AttributeName[], title: string): JSX.Element => (
     <div className="attr-col">
@@ -541,63 +543,68 @@ export function PlayerDetail(): JSX.Element | null {
           </div>
         </div>
         <div className="profile-actions">
-          {isYouth && (
-            <button className="primary" onClick={() => { g.promotePlayer(p); g.select(null); }}>
-              Promote to first team
-            </button>
-          )}
-          {((isOwn && !isYouth) || lentOut) && move === null && !retiring && (
-            <button className={expiring ? 'primary' : ''} onClick={() => g.startRenewal(p)}>
-              <Icon name="finances" size={14} />
-              {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
-            </button>
-          )}
-          {isOwn && !isYouth && move === null && <TransferMenu p={p} />}
-          {retirementMessage !== undefined && plan?.persuaded !== true && plan?.staffRole === undefined && (
-            <button className="primary" onClick={() => g.openMessage(retirementMessage.id)}>
-              <Icon name="press" size={14} /> His retirement
-            </button>
-          )}
-          {lentOut && (
-            <button onClick={() => g.compileLoanMatches(p)}>
-              <Icon name="stats" size={14} /> Compile matches
-            </button>
-          )}
-          {lentOut && (
-            <button
-              disabled={coachTalkBlock(world, p) !== null}
-              title={coachTalkBlock(world, p) ?? 'Ask his loan club\'s coach to play him more'}
-              onClick={() => g.openCoachTalk(p)}
-            >
-              <Icon name="press" size={14} /> Talk to the coach
-            </button>
-          )}
-          {lentOut && canRecall(world, p) && (
-            <button className="danger" title="His loan club has not given him the games it promised" onClick={() => g.recallFromLoan(p)}>
-              <Icon name="back" size={14} /> Recall from loan
-            </button>
-          )}
-          {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && (
-            <button
-              className="primary"
-              title={joinsLater ? `The window is shut — agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(p))}` : undefined}
-              onClick={() => g.startNegotiation(p)}
-            >
-              <Icon name="transfers" size={14} />
-              {transferTalks !== null ? 'Transfer talks' : club === null ? 'Offer contract' : 'Make offer'}
-            </button>
-          )}
-          {elsewhere && move === null && (
-            <button
-              disabled={!g.canBorrow(p) && loanTalks === null}
-              title={!g.canBorrow(p) ? 'Not available for loan right now'
-                : joinsLater ? `The window is shut — a loan agreed now starts on ${g.dateLabelForDay(g.joinDay(p))}`
-                  : 'Borrow him until the end of the season'}
-              onClick={() => g.startLoanRequest(p)}
-            >
-              <Icon name="swap" size={14} />
-              {loanTalks === null ? 'Request loan' : loanTalks.pending !== null ? 'Awaiting their answer' : 'Loan talks'}
-            </button>
+          {/* In a match there is only the reading of him: deals and talks wait for it to end. */}
+          {!inMatch && (
+            <>
+              {isYouth && (
+                <button className="primary" onClick={() => { g.promotePlayer(p); g.select(null); }}>
+                  Promote to first team
+                </button>
+              )}
+              {((isOwn && !isYouth) || lentOut) && move === null && !retiring && (
+                <button className={expiring ? 'primary' : ''} onClick={() => g.startRenewal(p)}>
+                  <Icon name="finances" size={14} />
+                  {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
+                </button>
+              )}
+              {isOwn && !isYouth && move === null && <TransferMenu p={p} />}
+              {retirementMessage !== undefined && plan?.persuaded !== true && plan?.staffRole === undefined && (
+                <button className="primary" onClick={() => g.openMessage(retirementMessage.id)}>
+                  <Icon name="press" size={14} /> His retirement
+                </button>
+              )}
+              {lentOut && (
+                <button onClick={() => g.compileLoanMatches(p)}>
+                  <Icon name="stats" size={14} /> Compile matches
+                </button>
+              )}
+              {lentOut && (
+                <button
+                  disabled={coachTalkBlock(world, p) !== null}
+                  title={coachTalkBlock(world, p) ?? 'Ask his loan club\'s coach to play him more'}
+                  onClick={() => g.openCoachTalk(p)}
+                >
+                  <Icon name="press" size={14} /> Talk to the coach
+                </button>
+              )}
+              {lentOut && canRecall(world, p) && (
+                <button className="danger" title="His loan club has not given him the games it promised" onClick={() => g.recallFromLoan(p)}>
+                  <Icon name="back" size={14} /> Recall from loan
+                </button>
+              )}
+              {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && (
+                <button
+                  className="primary"
+                  title={joinsLater ? `The window is shut — agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(p))}` : undefined}
+                  onClick={() => g.startNegotiation(p)}
+                >
+                  <Icon name="transfers" size={14} />
+                  {transferTalks !== null ? 'Transfer talks' : club === null ? 'Offer contract' : 'Make offer'}
+                </button>
+              )}
+              {elsewhere && move === null && (
+                <button
+                  disabled={!g.canBorrow(p) && loanTalks === null}
+                  title={!g.canBorrow(p) ? 'Not available for loan right now'
+                    : joinsLater ? `The window is shut — a loan agreed now starts on ${g.dateLabelForDay(g.joinDay(p))}`
+                      : 'Borrow him until the end of the season'}
+                  onClick={() => g.startLoanRequest(p)}
+                >
+                  <Icon name="swap" size={14} />
+                  {loanTalks === null ? 'Request loan' : loanTalks.pending !== null ? 'Awaiting their answer' : 'Loan talks'}
+                </button>
+              )}
+            </>
           )}
           <button onClick={() => g.select(null)}><Icon name="close" size={14} /> Close</button>
         </div>

@@ -10,7 +10,7 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  MatchFormat, MatchSimulator, registeredLiberos, simulateMatch, type MatchResult, type RallyLogEntry, type ShoutKind,
+  MatchFormat, MatchSimulator, registeredLiberos, simulateMatch, SUBS_PER_SET, type MatchResult, type RallyLogEntry, type ShoutKind,
   type SubstitutionPlan, type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
 import type { Club } from '../engine/model/club.ts';
@@ -1745,6 +1745,8 @@ class Game {
     if (this.openPendingDecision()) return;
     // The club's match: its squad, team sheet and instructions are the ones to see.
     this.teamView = 'club';
+    // A profile left open goes; one opened during the match shows over it.
+    this.selectedPlayer = null;
 
     const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, club);
     const side = (id: number): MatchSide => {
@@ -2687,7 +2689,7 @@ class Game {
   subsRemaining(): number {
     const md = this.matchday;
     const sim = this.liveSim;
-    if (md === null || sim === null) return 5;
+    if (md === null || sim === null) return SUBS_PER_SET;
     return sim.subsRemaining(md.userIsHome ? 0 : 1);
   }
 
@@ -2936,6 +2938,7 @@ class Game {
     const squad = squadOf(t, nation);
     // The national team's match: from now its squad, team sheet and instructions are the ones to see.
     this.teamView = 'national';
+    this.selectedPlayer = null;
     // Its own team sheet, as the manager left it.
     const sheet = this.nationalSheet();
     const { lineup, libero, defensiveLibero, bench } = pickLineup(

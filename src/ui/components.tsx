@@ -613,10 +613,16 @@ export function ClubLink({
   const g = useGame();
   const club = g.world?.clubs[id];
   if (club === undefined) return <>—</>;
+  // In a match a club's page can't be opened over it: the name is just a name.
+  const inMatch = g.matchday !== null;
   return (
     <span
-      className="club-link"
-      onClick={(e) => { e.stopPropagation(); g.selectClub(id); }}
+      className={`club-link${inMatch ? ' inert' : ''}`}
+      onClick={(e) => {
+        if (inMatch) return;
+        e.stopPropagation();
+        g.selectClub(id);
+      }}
     >
       {crest && <ClubCrest club={club} size={16} />}
       <span className="club-link-name">{short ? club.shortName : club.name}</span>

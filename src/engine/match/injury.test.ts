@@ -57,12 +57,12 @@ test('a player hurt too badly to go on comes off before the next serve, and take
   assert.equal(inj.off, true);
 });
 
-test("the live coach answers for his own: the match waits for him — and when the five are used up, the exceptional substitution", () => {
+test("the live coach answers for his own: the match waits for him — and when the six are used up, the exceptional substitution", () => {
   const { w, setup } = match(63);
   const sim = new MatchSimulator(w.players, setup);
   sim.answerInjuriesFor(0, true);
   sim.step();
-  // Five changes made already this set.
+  // Every change made already this set: like for like first, then whoever else.
   const bench = setup.home.bench.filter((p) => w.players.position[p] !== Position.Libero);
   let made = 0;
   for (const inc of bench) {
@@ -84,7 +84,7 @@ test("the live coach answers for his own: the match waits for him — and when t
   assert.equal(sim.injurySubstitute(0, victim, inc).ok, true, 'the exceptional substitution');
   assert.equal(sim.injuryWaiting(0), null);
   assert.ok(sim.snapshot().homeCourt.includes(inc) && !sim.snapshot().homeCourt.includes(victim));
-  assert.equal(sim.subsRemaining(0), 0, 'it used none of the five');
+  assert.equal(sim.subsRemaining(0), 0, 'it used none of the six');
 });
 
 test('a libero hurt: a spare named for the match takes over — with none, the other libero alone, or none at all', () => {

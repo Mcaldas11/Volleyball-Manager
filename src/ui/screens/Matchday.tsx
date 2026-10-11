@@ -27,6 +27,7 @@ import { defenceLayoutsOf, type DefenceLayouts } from '../../engine/match/defenc
 import { describeRallyHighlight } from './Match.tsx';
 import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
+import { PlayerDetail } from './Squad.tsx';
 
 /** National teams play in something like their flag's colour. */
 const NATION_HUES: Readonly<Record<string, number>> = {
@@ -131,8 +132,24 @@ export function MatchdayScreen(): JSX.Element | null {
   const g = useGame();
   const md = g.matchday;
   if (md === null) return null;
-  if (md.stage === 'lineup') return <LineupSetup />;
-  return md.stage === 'setBreak' ? <SetBreak /> : <LiveMatchView />;
+  return (
+    <>
+      {md.stage === 'lineup' ? <LineupSetup /> : md.stage === 'setBreak' ? <SetBreak /> : <LiveMatchView />}
+      {g.selectedPlayer !== null && <ProfileOverlay />}
+    </>
+  );
+}
+
+/** A player's profile, opened from the match — over it, rather than in place of it, until closed. */
+function ProfileOverlay(): JSX.Element {
+  const g = useGame();
+  return (
+    <div className="hol-overlay" onClick={() => g.select(null)}>
+      <div className="lv-profile content-fill" role="dialog" aria-label="Player profile" onClick={(e) => e.stopPropagation()}>
+        <div className="view-fade"><PlayerDetail /></div>
+      </div>
+    </div>
+  );
 }
 
 /** Average current ability of a squad's best six — a quick read of how strong a side is. */
@@ -379,7 +396,7 @@ const TIMEOUT_SECONDS = 30;
 /**
  * Someone down hurt: who, and what — and when it is the user's own player,
  * his call: let him play on with a knock, or take him off — and for whom, the
- * assistant's choice first; an exceptional substitution when the five are
+ * assistant's choice first; an exceptional substitution when the six are
  * spent. One who has to come off, has to.
  */
 function InjuryPanel(): JSX.Element | null {
@@ -436,7 +453,7 @@ function InjuryPanel(): JSX.Element | null {
                 <b>{store.currentAbility[o.p]}</b>
                 {o.pick && <span className="injury-flag pick">Assistant's pick</span>}
                 {o.exceptional && (
-                  <span className="injury-flag" title="Your five are spent: the rules allow an exceptional substitution for an injury, and it uses none of them">
+                  <span className="injury-flag" title="Your six are spent: the rules allow an exceptional substitution for an injury, and it uses none of them">
                     Exceptional
                   </span>
                 )}
@@ -687,7 +704,7 @@ function QuickSub({ at, onClose }: {
         })}
       </div>
       <footer className="lv-quicksub-foot">
-        <button className="link" onClick={() => { onClose(); g.select(p); }}>His profile <Icon name="arrowRight" size={12} /></button>
+        <button className="link" onClick={() => { g.select(p); onClose(); }}>His profile <Icon name="arrowRight" size={12} /></button>
       </footer>
     </div>
   );
@@ -947,25 +964,23 @@ function LiveMatchView(): JSX.Element {
   const [overlay, setOverlay] = useState<'subs' | 'tactics' | null>(null);
   /** One of the user's players clicked beside the court: his options, by the row. */
   const [quick, setQuick] = useState<{ p: number; x: number; y: number; side: 'left' | 'right' } | null>(null);
-  /** Opening the substitutions holds play until they are closed. */
   const openSubs = (): void => {
     setQuick(null);
     setOverlay('subs');
-    g.openCoachPanel();
   };
-  const closeOverlay = (): void => {
-    if (overlay === 'subs') g.closeCoachPanel();
-    setOverlay(null);
-  };
+  const closeOverlay = (): void => setOverlay(null);
   const pickPlayer = (p: number, row: DOMRect, side: 'left' | 'right'): void => {
     if (overlay === 'subs') return;
     setQuick({ p, x: side === 'left' ? row.right + 8 : row.left - 8, y: row.top, side });
-    g.openCoachPanel();
   };
-  const closeQuick = (): void => {
-    setQuick(null);
-    g.closeCoachPanel();
-  };
+  const closeQuick = (): void => setQuick(null);
+  // The substitutions, a player's options or his profile: while any is open, play holds — and
+  // going from one straight to another doesn't let a rally slip through in between.
+  const panelOpen = overlay === 'subs' || quick !== null || g.selectedPlayer !== null;
+  useEffect(() => {
+    if (panelOpen) g.openCoachPanel();
+    else g.closeCoachPanel();
+  }, [panelOpen]);
   const [shoutOpen, setShoutOpen] = useState(false);
   const shoutRef = useDismiss(shoutOpen, () => setShoutOpen(false));
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
@@ -1407,7 +1422,7 @@ function LiveMatchView(): JSX.Element {
             </div>
           )}
         </div>
-        <button className={overlay === 'tactics' ? 'on' : ''} onClick={() => { if (overlay === 'subs') g.closeCoachPanel(); setOverlay((o) => (o === 'tactics' ? null : 'tactics')); }}>
+        <button className={overlay === 'tactics' ? 'on' : ''} onClick={() => setOverlay((o) => (o === 'tactics' ? null : 'tactics'))}>
           <Icon name="tactics" size={15} /> Tactics
         </button>
         <span className="flex-spacer" />

@@ -34,11 +34,12 @@ straight into club selection.
 To run without the browser:
 
 ```bash
-npm run vm demo      # play one match through the full engine and print the report
-npm run vm calibrate # check the engine against real volleyball statistics
-npm run vm career 30 # simulate 30 seasons and check the world for drift
-npm run vm ratings   # check the 0-10 player ratings are centred for every position
-npm test              # unit tests
+npm run vm demo           # play one match through the full engine and print the report
+npm run vm calibrate      # check the engine against real volleyball statistics
+npm run vm career 30      # simulate 30 seasons and check the world for drift
+npm run vm ratings        # check the 0-10 player ratings are centred for every position
+npm run vm world standard # generate a world (small, standard or large) and report its shape
+npm test                  # unit tests
 ```
 
 ## CONTRIBUTING
@@ -58,40 +59,41 @@ Before submitting a change:
 
 ## FEATURES
 
-### CORE FEATURES
+### MATCH ENGINE
 
 - [x] Rally-by-rally match engine (serve → reception → set → attack → block →
       dig → transition), calibrated against eleven real elite-level
-      statistical targets, at ~134,000 rallies/second
+      statistical targets
 - [x] All six rotations simulated properly, including the reduced attacking
       options when the setter is front row, with a per-rotation performance
       report (side-out %, break-point %) so you can see exactly where a match
       was won or lost
-- [x] Full point-by-point rally log, box scores and win-probability tracking
-      for every watched match
-- [x] Per-rotation tactical instructions: preferred attacker, serve target,
-      block assignment, defensive shape, tempo
-- [x] In-match substitutions, up to the real six-per-set limit
-- [x] Team-level offensive, defensive, serve-risk and tempo systems
-- [x] Choose any club to manage, from any of 58 nations' league pyramids
-- [x] Manage the team's finances: sponsorship, TV rights, gate receipts,
-      wage budgets — and real bankruptcy risk
-- [x] Manage the squad's roster: sign and release players, set the starting
-      six and libero, respect a 16-player squad cap
-- [x] Weekly training, with development driven by age, potential, coaching
-      quality, facilities and the player's own professionalism
-- [x] Youth Academy with an annual intake, including rare "golden generation"
-      prospects
-- [x] Player ageing, injuries with permanent career effects, retirement, and
-      procedurally generated "regens" that keep the world populated across a
-      fifty-season career
-- [x] Scouting with a genuine fog of war — attributes are shown as ranges
-      that narrow with matches watched and with how well your scout knows
-      that part of the world, not as exact numbers
-- [x] Staff with real attributes: coaches, scouts, physios, doctors, youth
-      coaches, each with their own regional knowledge and specialisms
-- [x] League tables, promotion and relegation, season-long statistics leaders,
-      world rankings, and a strict Hall of Fame
+- [x] 5-1 and 4-2 systems, with the overlap rules respected: a side receiving
+      with its setter in zone 1 keeps its places all rally
+- [x] Combination plays — quicks, slides, back quicks, pipes — and a plan per
+      pass zone: what the setter may run off a perfect pass, a 3-6 m one or a
+      deep one
+- [x] Per-rotation instructions (preferred attacker, serve target, block
+      assignment, defensive shape, tempo) and a defensive layout against each
+      kind of attack
+- [x] Liberos as the rules have them: one or two registered for a match, a
+      reception and a defensive libero, unlimited libero changes, the libero
+      never serves — a middle in zone 1 serves while his side keeps the serve
+      and makes way for the libero the moment it is lost — and a registered
+      libero can't play outfield
+- [x] In-match substitutions up to the real six-per-set limit, two timeouts
+      a set, and a word from the touchline
+- [x] In-match injuries: a knock can be played on, at the risk of it getting
+      worse; a serious one forces a change
+- [x] Full point-by-point rally log, box scores, 0-10 match ratings and
+      win-probability tracking for every watched match
+
+### THE WORLD
+
+- [x] Choose any club to manage, from any of 60 nations' league pyramids — or
+      take a national team job, alongside a club or on its own
+- [x] Promotion and relegation in which two divisions trade as many clubs as
+      they send, and every regional group of a division is kept the same size
 - [x] Cups alongside the league: every nation's cup (a knockout for its top
       two divisions) and super cup (league champions against cup winners);
       Europe's Champions League (four groups, then a knockout with a
@@ -101,6 +103,43 @@ Before submitting a change:
       from the season before, every match is fitted around the leagues so no
       club plays two days running, and prize money, trophies and the season
       review all count them
+- [x] Multi-round championship and relegation playoffs for the top two
+      divisions
+- [x] National teams with their own squad, team sheet and tactics, kept apart
+      from the club's, and an international calendar: the World Championship,
+      the Olympic Games, the continental championships and the Nations League,
+      with caps and a world ranking
+- [x] Manage the team's finances: sponsorship, TV rights, gate receipts,
+      wage budgets — and real bankruptcy risk
+- [x] Manage the squad's roster: sign, release and loan players, set the
+      starting six and liberos, respect a 16-player squad cap. Loans carry
+      promised playing time, monthly reports, a word with the loan club's
+      coach and a recall when the promise isn't kept
+- [x] Pre-season friendlies, arranged with any club or by the board
+- [x] Weekly training plans, individual training, and players learning new
+      positions in training and on court, driven by age, potential, coaching
+      quality, facilities and the player's own professionalism
+- [x] Youth Academy with an annual intake, including rare "golden generation"
+      prospects
+- [x] Player ageing, injuries with permanent career effects, and procedurally
+      generated "regens" that keep the world populated across a fifty-season
+      career
+- [x] Retirement case by case: most players stop in their mid-thirties, many
+      play past 40, the oldest usually around 43 and a rare few towards 50.
+      A player's plans are known mid-season, and he can be persuaded to stay
+- [x] Scouting with a genuine fog of war — attributes are shown as ranges
+      that narrow with matches watched and with how well your scout knows
+      that part of the world, not as exact numbers
+- [x] Staff with real attributes: coaches, scouts, physios, doctors, youth
+      coaches, each with their own regional knowledge and specialisms — hired,
+      renewed and sacked through a staff market
+- [x] Every other coach picks his own tactics, and reads yours
+- [x] Awards: monthly and season awards, every player's accolades, a review of
+      each competition with its best moments and team awards (best attack,
+      defence, block, serve and passing, most clinical attack, comeback kings)
+      with each player's part in them, and a strict Hall of Fame
+- [x] Every player's club history, and every competition's team and player
+      statistics
 - [x] Import real players from the official FIVB VIS database, for anyone
       with their own FIVB credentials — see [FIVB Data](#fivb-data)
 - [x] Database of 100,000+ fictitious players, generated with realistic
@@ -110,13 +149,19 @@ Before submitting a change:
 
 ### INTERFACE
 
-- [x] A 2D live match viewer: a real court (not a static grid) with every
-      starter's photo in their zone, coloured by role, actually moving through
-      each phase of the rally — a setter releases to the net the moment their
-      side takes the serve, hitters press forward to attack, blockers shift to
-      match the hitter
+- [x] A live match viewer in 2D or 3D (three.js): a real court with a crowd,
+      a referee and both benches, every player moving through each phase of
+      the rally, substitutes warming up and walking on through the
+      substitution zone, the libero swapping in and out, and a medic running
+      on to an injured player
+- [x] A coach's bar during the match: a timeout opens the timeout screen;
+      the substitutions panel holds play while it is open; clicking one of
+      your players beside the court offers who could come on for him; any
+      player's profile opens over the match
 - [x] A live commentary ticker alongside the match, plus flashed callouts for
       the moments that deserve one — "MONSTER SPIKE!", "HUGE BLOCK!", "ACE!"
+- [x] Pre-match interviews, post-match press conferences, and a world news
+      feed with the fans' comments under each story
 - [x] Country flags throughout — clubs, players, staff, nations — resolved
       from FIVB confederation codes to real flag images
 - [x] Player photos, deterministic per player so the same face keeps showing
@@ -125,10 +170,10 @@ Before submitting a change:
       start a new one, without hunting through a save list first
 - [x] One button moves time on: Continue runs the calendar day by day until
       something happens — news in the inbox or a match day — and becomes
-      Next unread or Play match when that is what the day needs. Play a match
-      live or take an instant result; either way a full-time screen shows the
-      score, player of the match and box score before the rest of the
-      matchday comes in
+      Next unread or Play match when that is what the day needs. Go on
+      holiday to any date. Play a match live or take an instant result;
+      either way a full-time screen shows the score, player of the match and
+      box score before the rest of the matchday comes in
 - [x] An inbox laid out like a mail client: folders by department (transfers,
       contracts, scouting, medical, matchday, media, board, finance), an
       "action needed" filter, starring and archiving, and every message from
@@ -138,17 +183,15 @@ Before submitting a change:
 - [x] A club dashboard (next fixture, table, one to watch, form, top scorer,
       the board's mood, the money) and a month-by-month calendar of results,
       fixtures and transfer deadlines
+- [x] Every screen fits the window, Football Manager style: the page never
+      scrolls, long lists scroll inside their own panels, and the layout
+      follows the height that can actually be seen
 
 ### PLANNED FEATURES
 
-- [ ] National team management: squad selection already exists, but the VNL,
-      World Championship and Olympic tournaments are not yet scheduled, and
-      you cannot be offered a national job
-- [ ] Press conferences and a media system
-- [ ] In-match timeouts (substitutions already exist — see Interface above)
-- [ ] Full multi-round playoffs (currently only the first round is scheduled)
-- [ ] Performance work on the season rollover at world scale (~25s/season,
-      dominated by weekly training iterating every player alive)
+- [ ] Performance work on the season rollover at world scale (around 30
+      seconds a season on the small world, dominated by weekly training
+      iterating every player alive)
 
 ## LICENSE
 

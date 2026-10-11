@@ -270,6 +270,9 @@ const GRADE_SYMBOL = ['/', '-', '+', '#'];
 const SERVE_EDGE = 5;
 const ATTACK_DEFENCE_BALANCE = -8;
 
+/** Substitutions each side may make in a set, as the FIVB rules have it. */
+export const SUBS_PER_SET = 6;
+
 /**
  * How a coach judges a substitution — see `suggestSubstitution()`. The margin
  * is the fraction by which the replacement's current value (selection score x
@@ -1191,7 +1194,7 @@ export class MatchSimulator {
   /**
    * Bring a bench player on for one currently on court, if the rules allow
    * it — the substitute must be part of the matchday squad, the outgoing
-   * player must actually be on court, each side gets five substitutions per
+   * player must actually be on court, each side gets six substitutions per
    * set, and once a pair has swapped, only that pair may swap again (a
    * starter who comes off can only return for the player who replaced them,
    * never a different bench player). No libero re-entry rules are modelled.
@@ -1259,7 +1262,7 @@ export class MatchSimulator {
     if (t.court.includes(inPlayerIdx)) return 'That player is already on court.';
     if (t.registeredLiberos.has(inPlayerIdx)) return 'A libero named for the match cannot play in the six.';
     if (t.outForMatch.has(inPlayerIdx)) return 'He went off hurt — he takes no further part.';
-    if (this.subsUsedThisSet[team] >= 5) return 'No substitutions left this set.';
+    if (this.subsUsedThisSet[team] >= SUBS_PER_SET) return 'No substitutions left this set.';
 
     const pairing = this.subPairing[team];
     const requiredPartner = pairing.get(outPlayerIdx);
@@ -1279,7 +1282,7 @@ export class MatchSimulator {
   }
 
   subsRemaining(team: 0 | 1): number {
-    return 5 - this.subsUsedThisSet[team];
+    return SUBS_PER_SET - this.subsUsedThisSet[team];
   }
 
   /**
@@ -1291,12 +1294,12 @@ export class MatchSimulator {
    * come off (see `crossShift()`) — and be clearly more effective *at this
    * moment*: a fresh reserve against a starter who is running on empty, or
    * anyone against a starter who is having a nightmare. The margin required
-   * grows as the set's five substitutions get used up and while the set is
+   * grows as the set's six substitutions get used up and while the set is
    * going well, and shrinks when it is slipping away.
    */
   suggestSubstitution(team: 0 | 1): SubstitutionPlan | null {
     this.startIfNeeded();
-    if (this.matchOver || this.subsUsedThisSet[team] >= 5) return null;
+    if (this.matchOver || this.subsUsedThisSet[team] >= SUBS_PER_SET) return null;
     const t = this.teams[team];
     const lead = t.score - this.teams[1 - team].score;
     let margin = SUB_MARGIN + this.subsUsedThisSet[team] * SUB_MARGIN_PER_SUB_USED;

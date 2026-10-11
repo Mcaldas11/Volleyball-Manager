@@ -6,7 +6,7 @@ import { toTeamSetup } from '../season/seasonEngine.ts';
 import { selectionScore } from '../model/ability.ts';
 import type { PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
-import { MatchFormat, MatchSimulator, type MatchSetup } from './engine.ts';
+import { MatchFormat, MatchSimulator, SUBS_PER_SET, type MatchSetup } from './engine.ts';
 
 function buildMatch(worldSeed: number, matchSeed: number): { store: PlayerStore; setup: MatchSetup } {
   const world = generateWorld({ seed: worldSeed, startYear: 2026, scale: 'small', manager: stubManager() });
@@ -76,26 +76,25 @@ test('substitute() rejects a player outside the squad', () => {
   assert.equal(result.ok, false);
 });
 
-test('substitute() enforces the five-per-set limit', () => {
+test('substitute() enforces the six-per-set limit', () => {
   const { store, setup } = buildMatch(5, 333);
-  assert.ok(setup.home.bench.length >= 6, 'this test needs at least 6 bench players');
+  assert.ok(setup.home.bench.length >= SUBS_PER_SET, `this test needs at least ${SUBS_PER_SET} bench players`);
   const sim = new MatchSimulator(store, setup);
   sim.step();
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < SUBS_PER_SET; i++) {
     const outPlayer = setup.home.lineup[i];
     const inPlayer = setup.home.bench[i];
     const result = sim.substitute(0, outPlayer, inPlayer);
     assert.equal(result.ok, true, `substitution ${i} should succeed`);
   }
-
-  // Zone 5 was never touched by the loop above, so this is a fresh pair —
-  // it should still fail, but purely on the count limit, not the pairing rule.
-  const sixthOut = sim.snapshot().homeCourt[5];
-  const sixthIn = setup.home.bench[5];
-  const sixth = sim.substitute(0, sixthOut, sixthIn);
-  assert.equal(sixth.ok, false);
   assert.equal(sim.subsRemaining(0), 0);
+
+  // The first starter going back on for the man who replaced him is a pair the
+  // rules allow — it fails purely on the count.
+  const seventh = sim.substitute(0, setup.home.bench[0], setup.home.lineup[0]);
+  assert.equal(seventh.ok, false);
+  assert.equal(seventh.reason, 'No substitutions left this set.');
 });
 
 test('substitute() only lets a substituted starter return for the player who replaced them', () => {
@@ -202,7 +201,7 @@ test('setStartingLineup() changes the six only between sets, and the new six kee
   assert.equal(result.ok, true, result.reason);
   assert.deepEqual(sim.snapshot().homeCourt, newSix);
   assert.deepEqual(sim.startingLineup(0), newSix);
-  assert.equal(sim.subsRemaining(0), 5, 'a new line-up sheet is not a substitution');
+  assert.equal(sim.subsRemaining(0), SUBS_PER_SET, 'a new line-up sheet is not a substitution');
 
   // The six handed in carry on starting later sets too.
   assert.ok(playToNextSet(sim));
@@ -341,7 +340,7 @@ test('setLibero() swaps liberos freely — and whoever is named libero plays lib
   // never used up a substitution.
   assert.equal(sim.setLibero(0, 'defence', -1).ok, true);
   assert.deepEqual(sim.liberos(0), { reception: defence, defence: -1 });
-  assert.equal(sim.subsRemaining(0), 5);
+  assert.equal(sim.subsRemaining(0), SUBS_PER_SET);
 
   // Only the two named for the match play libero: an outside hitter off the bench can't…
   const outfield = setup.home.bench.find((p) => store.position[p] === Position.OutsideHitter)!;
