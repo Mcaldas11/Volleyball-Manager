@@ -553,7 +553,7 @@ export function SortTh<K extends string>({
  * the foot of the sheet.
  */
 export function ContractPaper({
-  kicker, title, subtitle, onClose, playerId, children,
+  kicker, title, subtitle, onClose, playerId, portrait, children,
 }: {
   kicker?: string;
   title: string;
@@ -562,13 +562,15 @@ export function ContractPaper({
   onClose?: () => void;
   /** Permanent id of the player being discussed, for the header portrait. */
   playerId?: number;
+  /** A portrait of anyone else — the staff have no photos. */
+  portrait?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   return (
     <div className="contract-wrap">
       <div className="contract">
         <div className="contract-head">
-          {playerId !== undefined && <PlayerFace playerId={playerId} name={title} size={64} />}
+          {playerId !== undefined ? <PlayerFace playerId={playerId} name={title} size={64} /> : portrait}
           <div className="contract-head-text">
             {kicker !== undefined && <span className="contract-kicker">{kicker}</span>}
             <h2 className="contract-title">{title}</h2>

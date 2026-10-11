@@ -19,9 +19,13 @@ import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { MATCHDAY_SQUAD, type Position } from '../engine/model/positions.ts';
 import { StaffRole, staffName, type Staff } from '../engine/model/staff.ts';
 import {
-  answerStaffApproach, backroomOf, compensationFor, longestContract, offerToStaff, releaseStaff, severanceFor, staffBudgetRoom,
-  staffInterest, staffMarket, staffOfferBlock, staffWageAsk, type StaffInterest, type StaffListing, type StaffReply,
+  backroomOf, compensationFor, longestContract, releaseStaff, roleCount, severanceFor, STAFF_SLOTS, staffBudgetRoom,
+  staffInterest, staffMarket, staffOfferBlock, staffWageAsk, type StaffInterest, type StaffListing,
 } from '../engine/world/staffMarket.ts';
+import {
+  answerStaffApproach, counterStaffApproach, openStaffTalks, setStaffListed, staffTalksBlock, staffTalksOf, staffTalksWith,
+  submitStaffOffer, withdrawStaffTalks, type StaffTalks,
+} from '../engine/world/staffDeals.ts';
 import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
 import { interestedClubs, type ClubInterest } from '../engine/world/interest.ts';
 import {
@@ -180,6 +184,18 @@ export interface Negotiation {
   /** Loan talks: the playing time you promise him. */
   loanPlayingTime: LoanPlayingTime;
   /** A problem with the offer itself (budget, window) before it is sent. */
+  message: string | null;
+}
+
+/** The staff talks screen: the offer being put together, before it is sent. */
+export interface StaffNegotiation {
+  talksId: number;
+  /** Compensation to his club — while that is what is being agreed. */
+  fee: number;
+  wage: number;
+  /** Seasons the contract runs, counting this one — it ends on 30 June. */
+  years: number;
+  /** A problem with the offer itself (budget, places) before it is sent. */
   message: string | null;
 }
 
@@ -469,6 +485,7 @@ class Game {
   /** Player the Scouting screen should jump to next time it opens; consumed once. */
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
+  staffNegotiation: StaffNegotiation | null = null;
   incomingOffer: IncomingOfferReview | null = null;
   /** A word with the coach of a club playing one of ours on loan. */
   coachTalk: CoachTalk | null = null;
@@ -551,6 +568,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.matchday = null;
@@ -609,6 +627,7 @@ class Game {
       this.selectedReview = null;
       this.selectedCompetition = null;
       this.negotiation = null;
+      this.staffNegotiation = null;
       this.incomingOffer = null;
       this.coachTalk = null;
       this.matchday = null;
@@ -741,6 +760,7 @@ class Game {
    */
   private employmentChanged(): void {
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.selectedPlayer = null;
@@ -848,6 +868,7 @@ class Game {
     this.selectedCoach = entry.selectedCoach ?? null;
     this.selectedNation = entry.selectedNation ?? null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.emit();
@@ -900,6 +921,7 @@ class Game {
     // itself is untouched (it lives in world.incomingOffers), only the
     // full-screen prompt for it closes.
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.emit();
@@ -1003,6 +1025,7 @@ class Game {
     this.selectedNation = null;
     this.selectedReview = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.emit();
@@ -1032,6 +1055,7 @@ class Game {
     this.selectedCoach = null;
     this.selectedNation = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.emit();
@@ -1070,6 +1094,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.inboxSelected = messageId;
@@ -1597,6 +1622,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.emit();
@@ -1783,6 +1809,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.emit();
@@ -2981,6 +3008,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.emit();
@@ -3499,6 +3527,7 @@ class Game {
       loanPlayingTime: t.lastOffer.playingTime ?? 'rotation',
       message: null,
     };
+    this.staffNegotiation = null;
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
@@ -3854,6 +3883,7 @@ class Game {
     this.selectedReview = null;
     this.selectedCompetition = null;
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.emit();
   }
 
@@ -3912,6 +3942,7 @@ class Game {
     }
     this.coachTalk = { playerIdx, request: requests[0], firm: false, result: null };
     this.negotiation = null;
+    this.staffNegotiation = null;
     this.incomingOffer = null;
     this.selectedPlayer = null;
     this.selectedClub = null;
@@ -4134,18 +4165,6 @@ class Game {
     };
   }
 
-  /** Offer one of the staff a new contract, or someone else a job. */
-  offerStaffContract(staffId: number, wage: number, years: number): StaffReply | null {
-    const world = this.world;
-    const club = this.club;
-    const s = world?.staff[staffId];
-    if (world === null || club === null || s === undefined) return null;
-    const reply = offerToStaff(world, club, s, { wage, years });
-    if (reply.outcome === 'accepted') this.notice = reply.text;
-    this.emit();
-    return reply;
-  }
-
   /** Let one of the staff go, paying up the rest of his contract. */
   releaseStaffMember(staffId: number): void {
     const world = this.world;
@@ -4164,21 +4183,171 @@ class Game {
     return world === null || s === undefined ? 0 : severanceFor(world, s);
   }
 
-  /** Someone to open talks with as the Staff screen opens — from a profile or a message. */
-  private staffTalksFor: number | null = null;
-
-  /** Go to the Staff screen, in talks with one man: one of the club's own to renew, or someone to hire. */
-  openStaffTalks(staffId: number): void {
-    this.staffTalksFor = staffId;
-    this.selectedCoach = null;
-    this.go('staff');
+  /** Every staff negotiation under way. */
+  staffTalks(): StaffTalks[] {
+    return this.world === null ? [] : staffTalksOf(this.world);
   }
 
-  /** The talks the Staff screen should open with, once. */
-  takeStaffTalks(): number | null {
-    const id = this.staffTalksFor;
-    this.staffTalksFor = null;
-    return id;
+  /** Talks under way with one man, if any. */
+  staffTalksWith(staffId: number): StaffTalks | null {
+    return this.world === null ? null : staffTalksWith(this.world, staffId) ?? null;
+  }
+
+  /** The staff talks the open screen is showing, if any. */
+  currentStaffTalks(): StaffTalks | null {
+    const n = this.staffNegotiation;
+    return n === null || this.world === null ? null : staffTalksOf(this.world).find((t) => t.id === n.talksId) ?? null;
+  }
+
+  /**
+   * Talk to a member of staff — to hire him, or to keep one of the club's own
+   * — the way it is done with players: talks already under way pick up where
+   * they are.
+   */
+  openStaffTalks(staffId: number): void {
+    const world = this.world;
+    const club = this.club;
+    const s = world?.staff[staffId];
+    if (world === null || club === null || s === undefined) return;
+    const existing = staffTalksWith(world, staffId);
+    if (existing !== undefined) {
+      this.openStaffTalksView(existing.id);
+      return;
+    }
+    const block = staffTalksBlock(world, club, s);
+    if (block !== null) {
+      this.notice = block;
+      this.emit();
+      return;
+    }
+    this.openStaffTalksView(openStaffTalks(world, club, s).id);
+  }
+
+  /** Show talks already under way. */
+  openStaffTalksView(talksId: number): void {
+    const t = this.world === null ? undefined : staffTalksOf(this.world).find((x) => x.id === talksId);
+    if (t === undefined) {
+      this.notice = 'Those talks are over.';
+      this.emit();
+      return;
+    }
+    this.staffNegotiation = { talksId, fee: t.lastOffer.fee, wage: t.lastOffer.wage, years: t.lastOffer.years, message: null };
+    this.negotiation = null;
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedCoach = null;
+    this.selectedNation = null;
+    this.selectedReview = null;
+    this.selectedCompetition = null;
+    this.incomingOffer = null;
+    this.coachTalk = null;
+    this.emit();
+  }
+
+  setStaffFee(fee: number): void {
+    if (this.staffNegotiation === null) return;
+    this.staffNegotiation.fee = fee;
+    this.staffNegotiation.message = null;
+    this.emit();
+  }
+
+  setStaffWage(wage: number): void {
+    if (this.staffNegotiation === null) return;
+    this.staffNegotiation.wage = wage;
+    this.staffNegotiation.message = null;
+    this.emit();
+  }
+
+  setStaffYears(years: number): void {
+    if (this.staffNegotiation === null) return;
+    this.staffNegotiation.years = years;
+    this.emit();
+  }
+
+  /** Fill the offer in with exactly what he is asking for. */
+  matchStaffDemands(): void {
+    const n = this.staffNegotiation;
+    const t = this.currentStaffTalks();
+    if (n === null || t === null) return;
+    n.wage = t.demands.wage;
+    n.years = Math.min(t.demands.maxYears, Math.max(t.demands.minYears, n.years));
+    n.message = null;
+    this.emit();
+  }
+
+  /** Put the compensation to his club. Their answer comes back in a few days. */
+  submitStaffFee(): void {
+    const n = this.staffNegotiation;
+    const t = this.currentStaffTalks();
+    const world = this.world;
+    const club = this.club;
+    if (n === null || t === null || world === null || club === null || t.stage !== 'fee' || t.pending !== null) return;
+    if (n.fee > club.finances.balance) {
+      n.message = 'The club can\'t find that much.';
+      this.emit();
+      return;
+    }
+    const due = submitStaffOffer(world, t, { fee: n.fee, wage: n.wage, years: n.years });
+    this.notice = `Approach made to ${world.clubs[t.fromClubId]?.name ?? 'his club'} — they will reply by ${this.dateLabelForDay(due)}.`;
+    this.staffNegotiation = null;
+    this.emit();
+  }
+
+  /** Put the terms to him. His answer — weighed against any rival offers — comes back in a few days. */
+  submitStaffTerms(): void {
+    const n = this.staffNegotiation;
+    const t = this.currentStaffTalks();
+    const world = this.world;
+    const club = this.club;
+    const s = t !== null ? world?.staff[t.staffId] : undefined;
+    if (n === null || t === null || world === null || club === null || s === undefined || t.stage !== 'terms' || t.pending !== null) return;
+    const renewal = t.kind === 'renewal';
+    if (!renewal && roleCount(world, club, s.role).have >= STAFF_SLOTS[s.role]) {
+      n.message = 'Every place in his role is taken — release someone first.';
+      this.emit();
+      return;
+    }
+    if (n.wage > staffBudgetRoom(world, club, renewal ? s : undefined)) {
+      n.message = 'Not enough room in the staff budget for that wage.';
+      this.emit();
+      return;
+    }
+    const due = submitStaffOffer(world, t, { fee: t.agreedFee, wage: n.wage, years: n.years });
+    this.notice = `Offer made to ${staffName(s)} — he will give his answer by ${this.dateLabelForDay(due)}.`;
+    this.staffNegotiation = null;
+    this.emit();
+  }
+
+  /** Close the staff talks screen — the talks themselves carry on. */
+  closeStaffNegotiation(): void {
+    this.staffNegotiation = null;
+    this.emit();
+  }
+
+  /** Walk away from the staff talks for good. */
+  withdrawStaffTalks(): void {
+    const t = this.currentStaffTalks();
+    const world = this.world;
+    if (t !== null && world !== null) {
+      withdrawStaffTalks(world, t);
+      const s = world.staff[t.staffId];
+      this.notice = `You have ended talks with ${s !== undefined ? staffName(s) : 'him'}.`;
+    }
+    this.staffNegotiation = null;
+    this.emit();
+  }
+
+  /** Make one of the staff available to other clubs, or take him off the list. */
+  toggleStaffListed(staffId: number): void {
+    const world = this.world;
+    const club = this.club;
+    const s = world?.staff[staffId];
+    if (world === null || club === null || s === undefined || s.clubId !== club.id) return;
+    setStaffListed(club, s, s.listed !== true);
+    this.notice = s.listed === true
+      ? `${staffName(s)} is available — other clubs will be told, and can come in for him.`
+      : `${staffName(s)} is no longer available.`;
+    this.emit();
   }
 
   // ---- Retirement ---------------------------------------------------------
@@ -4209,11 +4378,19 @@ class Game {
     return this.world === null ? [] : interestedClubs(this.world, p);
   }
 
-  /** Answer another club's approach for one of the staff. */
+  /** Answer another club's approach for one of the staff: let them talk to him — he then decides — or keep him. */
   answerStaffApproach(approachId: number, accept: boolean): void {
     const world = this.world;
     if (world === null) return;
     this.notice = answerStaffApproach(world, approachId, accept);
+    this.emit();
+  }
+
+  /** Ask a club that wants one of the staff for more. */
+  counterStaffApproach(approachId: number, fee: number): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = counterStaffApproach(world, approachId, fee);
     this.emit();
   }
 

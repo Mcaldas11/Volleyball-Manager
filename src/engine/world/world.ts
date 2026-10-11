@@ -26,6 +26,7 @@ import type { MonthAward } from './monthAwards.ts';
 import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
+import type { StaffTalks } from './staffDeals.ts';
 import type { RetirementPlan } from './retirement.ts';
 import type { TeamLine } from './teamAwards.ts';
 import type { InterviewSession } from './interviews.ts';
@@ -378,8 +379,10 @@ export interface GameMessage {
   seasonReview?: SeasonReview;
   /** Talks this message is an answer in — the inbox offers a way back into them. */
   talksId?: number;
-  /** A club's approach for one of the manager's staff — see staffMarket.ts. */
+  /** A club's approach for one of the manager's staff — see staffDeals.ts. */
   staffApproachId?: number;
+  /** Staff talks this message is an answer in — the inbox offers a way back into them. */
+  staffTalksId?: number;
   /** The member of staff a message is about. */
   staffId?: number;
   /** A player of the manager's who means to retire — the message offers the talks. */
@@ -641,9 +644,12 @@ export interface World {
   accolades?: Accolade[];
   /** Staff who have stopped listening to the manager's offers for now, by staff id: offers turned down, and until when. */
   staffTalks?: Record<number, { tries: number; until: number }>;
-  /** Other clubs' approaches for the manager's staff — see staffMarket.ts. */
+  /** Other clubs' approaches for the manager's staff — see staffDeals.ts. */
   staffApproaches?: StaffApproach[];
   nextStaffApproachId?: number;
+  /** The manager's talks to hire staff, or to keep his own — see staffDeals.ts. */
+  staffNegotiations?: StaffTalks[];
+  nextStaffTalksId?: number;
   /** Who stops at the end of the season, made known in January — see retirement.ts. */
   retirementPlans?: { season: number; plans: Record<number, RetirementPlan> };
   /** Where each club was expected to finish its league, from the squads it started the season with. */

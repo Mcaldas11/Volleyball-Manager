@@ -132,7 +132,9 @@ Before submitting a change:
       that part of the world, not as exact numbers
 - [x] Staff with real attributes: coaches, scouts, physios, doctors, youth
       coaches, each with their own regional knowledge and specialisms — hired,
-      renewed and sacked through a staff market
+      renewed, listed and sacked through a staff market that works like the
+      players' one: compensation agreed with his club, then his terms, answers
+      days later, rival clubs, and other clubs coming in for yours
 - [x] Every other coach picks his own tactics, and reads yours
 - [x] Awards: monthly and season awards, every player's accolades, a review of
       each competition with its best moments and team awards (best attack,

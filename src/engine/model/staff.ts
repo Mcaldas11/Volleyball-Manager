@@ -110,6 +110,8 @@ export interface Staff {
   warnedSeason?: number;
   /** The day he went out of work, for how long he has been looking. */
   freeSince?: number;
+  /** The manager has made him available: other clubs are told, and come in for him. */
+  listed?: boolean;
 }
 
 export function staffName(s: Staff): string {

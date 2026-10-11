@@ -5874,3 +5874,16 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   overflow-y: auto; background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius);
   box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.9);
 }
+
+/* Staff talks under way, a click from the market. */
+.staff-talks-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 16px 0; }
+.staff-talks-strip > .faint { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.staff-talks-chip { display: inline-flex; align-items: center; gap: 6px; }
+.staff-talks-chip .faint { font-size: 11px; }
+.staff-talks-chip.yours { border-color: var(--gold); }
+.staff-actions .icon-btn.on { color: var(--gold); border-color: var(--gold); }
+
+/* An approach for one of the staff: the asking price beside its button. */
+.staff-approach-actions { display: contents; }
+.staff-approach-ask { display: inline-flex; align-items: center; gap: 6px; }
+.staff-approach-ask .money-input { width: 120px; }

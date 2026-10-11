@@ -34,6 +34,7 @@ import { InterviewScreen } from './screens/Interview.tsx';
 import { MatchdayScreen } from './screens/Matchday.tsx';
 import { MatchResultScreen } from './screens/MatchResult.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
+import { StaffNegotiationScreen } from './screens/StaffNegotiation.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
@@ -51,6 +52,7 @@ function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.activeInterviewId !== null) return `interview-${g.activeInterviewId}`;
   if (g.postMatch !== null) return `result-${g.postMatch}`;
   if (g.negotiation !== null) return 'negotiation';
+  if (g.staffNegotiation !== null) return 'staff-negotiation';
   if (g.incomingOffer !== null) return 'offer';
   if (g.coachTalk !== null) return 'coach-talk';
   if (g.selectedClub !== null) return `club-${g.selectedClub}`;
@@ -206,6 +208,8 @@ function GameShell(): JSX.Element {
                 ? <MatchResultScreen />
                 : g.negotiation !== null
                   ? <NegotiationScreen />
+                  : g.staffNegotiation !== null
+                    ? <StaffNegotiationScreen />
                   : g.incomingOffer !== null
                     ? <IncomingOfferScreen />
                     : g.coachTalk !== null
@@ -304,7 +308,7 @@ function Sidebar({
   const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null || g.selectedCoach !== null ||
     g.selectedNation !== null ||
-    g.negotiation !== null || g.incomingOffer !== null || g.coachTalk !== null;
+    g.negotiation !== null || g.staffNegotiation !== null || g.incomingOffer !== null || g.coachTalk !== null;
   const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
 
   const item = (
@@ -442,6 +446,7 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   if (g.activeInterviewId !== null) return { title: 'Press Conference', tabs: null };
   if (g.postMatch !== null) return { title: 'Full Time', tabs: null };
   if (g.negotiation !== null) return { title: 'Contract Negotiation', tabs: null };
+  if (g.staffNegotiation !== null) return { title: 'Staff Negotiation', tabs: null };
   if (g.incomingOffer !== null) return { title: 'Transfer Offer', tabs: null };
   if (g.coachTalk !== null) return { title: 'Talk to the Coach', tabs: null };
   if (g.selectedNation !== null) return { title: 'National Team', tabs: null };
@@ -566,7 +571,7 @@ function ContinueButton(): JSX.Element {
   const decision = g.pendingDecision();
   const blocked = inMatch || g.activeInterviewId !== null || g.processing;
   const inInbox = g.screen === 'inbox' && g.selectedPlayer === null && g.selectedClub === null &&
-    g.selectedReview === null && g.negotiation === null && g.incomingOffer === null;
+    g.selectedReview === null && g.negotiation === null && g.staffNegotiation === null && g.incomingOffer === null;
 
   const opponentId = next === null ? -1 : next.home === world.userClubId ? next.away : next.home;
   const opponent = world.clubs[opponentId];

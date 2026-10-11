@@ -10,7 +10,7 @@ import {
   type LoanStats,
 } from '../../engine/world/loans.ts';
 import {
-  ClubCrest, Flag, initials, money, PlayerFace, RatingBadge, StarMeter,
+  ClubCrest, Flag, initials, money, MoneyInput, PlayerFace, RatingBadge, StarMeter,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
@@ -503,6 +503,43 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     );
   }
 
+  if (m.staffApproachId !== undefined) {
+    const a = world.staffApproaches?.find((x) => x.id === m.staffApproachId);
+    const suitor = a !== undefined ? world.clubs[a.clubId] : undefined;
+    const status = a === undefined ? 'Closed' : {
+      open: 'Awaiting your answer', countered: 'Your asking price is with them', deciding: 'Agreed — he is deciding',
+      accepted: 'He has gone', rejected: 'You kept him', declined: 'He chose to stay', expired: 'Lapsed',
+    }[a.status];
+    return (
+      <div className="paper-report">
+        <div className="paper-label">The approach</div>
+        {suitor !== undefined && <ReportRow k="Club">{suitor.name}</ReportRow>}
+        {a !== undefined && <ReportRow k="Compensation offered">{money(a.fee)}</ReportRow>}
+        {a?.status === 'countered' && a.counterFee !== undefined && <ReportRow k="You asked for">{money(a.counterFee)}</ReportRow>}
+        {a !== undefined && <ReportRow k="His wage there">{money(a.wage)} a season</ReportRow>}
+        <ReportRow k="Status" tone={a?.status === 'open' ? 'good' : undefined}>{status}</ReportRow>
+        {a?.status === 'open' && <ReportRow k="Expires">{g.longDateLabel(a.expiresOn)}</ReportRow>}
+      </div>
+    );
+  }
+
+  if (m.staffTalksId !== undefined) {
+    const t = world.staffNegotiations?.find((x) => x.id === m.staffTalksId);
+    return (
+      <div className="paper-report">
+        <div className="paper-label">Staff negotiation</div>
+        <ReportRow k="Stage">
+          {t === undefined ? 'Over' : t.kind === 'renewal' ? 'A new contract' : t.stage === 'fee' ? 'Agreeing his compensation with his club' : 'Personal terms'}
+        </ReportRow>
+        {t !== undefined && (
+          <ReportRow k="Next move" tone={t.pending === null ? 'good' : undefined}>
+            {t.pending === null ? 'Yours' : `Their answer by ${g.longDateLabel(t.pending.resolvesOn)}`}
+          </ReportRow>
+        )}
+      </div>
+    );
+  }
+
   if (m.talksId !== undefined) {
     const t = world.talks.find((x) => x.id === m.talksId);
     return (
@@ -785,6 +822,22 @@ function Roundup({ message: m }: { message: GameMessage }): JSX.Element {
   );
 }
 
+/** An approach for one of the staff: let them talk to him for what they offer, ask for more, or keep him. */
+function StaffApproachActions({ id, fee }: { id: number; fee: number }): JSX.Element {
+  const g = useGame();
+  const [ask, setAsk] = useState(Math.round(fee * 1.3 / 1000) * 1000);
+  return (
+    <span className="staff-approach-actions">
+      <button className="paper-btn primary-dark" onClick={() => g.answerStaffApproach(id, true)}>Let him go — {money(fee)}</button>
+      <span className="staff-approach-ask">
+        <MoneyInput value={ask} onChange={setAsk} min={fee} />
+        <button className="paper-btn" onClick={() => g.counterStaffApproach(id, ask)}>Ask for more</button>
+      </span>
+      <button className="paper-btn" onClick={() => g.answerStaffApproach(id, false)}>Not for sale</button>
+    </span>
+  );
+}
+
 /** The buttons along the foot of a message — whatever it lets the manager do next. */
 function MessageActions({ message: m }: { message: GameMessage }): JSX.Element | null {
   const g = useGame();
@@ -794,19 +847,28 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
   const out: JSX.Element[] = [];
   const p = m.playerIdx;
 
-  // Another club wants one of the staff: let him go, or keep him — and maybe give him a new deal.
+  // Another club wants one of the staff: let them talk to him, ask for more, or keep him — and maybe give him a new deal.
   const approach = m.staffApproachId !== undefined ? world.staffApproaches?.find((a) => a.id === m.staffApproachId) : undefined;
   if (approach !== undefined && approach.status === 'open') {
-    out.push(
-      <button key="let-go" className="paper-btn primary-dark" onClick={() => g.answerStaffApproach(approach.id, true)}>
-        Let him go — {money(approach.fee)}
-      </button>,
-      <button key="keep" className="paper-btn" onClick={() => g.answerStaffApproach(approach.id, false)}>Not for sale</button>,
-    );
+    out.push(<StaffApproachActions key="approach" id={approach.id} fee={approach.fee} />);
   } else if (approach !== undefined) {
-    out.push(<span key="answered" className="paper-note">{approach.status === 'accepted' ? 'He has gone.' : approach.status === 'rejected' ? 'You kept him.' : 'The approach lapsed.'}</span>);
+    out.push(
+      <span key="answered" className="paper-note">
+        {{
+          countered: 'Your asking price is with them.', deciding: 'Agreed — he is deciding.', accepted: 'He has gone.',
+          rejected: 'You kept him.', declined: 'He chose to stay.', expired: 'The approach lapsed.', open: '',
+        }[approach.status]}
+      </span>,
+    );
   }
-  if (m.staffId !== undefined) {
+  const staffTalks = m.staffTalksId !== undefined ? world.staffNegotiations?.find((t) => t.id === m.staffTalksId) : undefined;
+  if (staffTalks !== undefined) {
+    out.push(
+      <button key="staff-talks" className="paper-btn primary-dark" onClick={() => g.openStaffTalksView(staffTalks.id)}>
+        <Icon name="contract" size={15} /> {staffTalks.pending !== null ? 'View talks' : 'Continue talks'}
+      </button>,
+    );
+  } else if (m.staffId !== undefined) {
     const s = world.staff[m.staffId];
     out.push(s !== undefined && s.clubId === world.userClubId
       ? <button key="staff" className="paper-btn" onClick={() => g.openStaffTalks(s.id)}><Icon name="contract" size={15} /> Offer a new contract</button>

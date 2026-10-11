@@ -1,14 +1,14 @@
 /**
  * The backroom, the way FM runs it: the club's staff by department, every
  * place filled or open, each contract and what it costs to end; and alongside
- * it the market — the people out of work and those in work elsewhere — and
- * the talks, an offer at a time, to hire one or keep one.
+ * it the market — the people out of work and those in work elsewhere. Talks
+ * to hire one or keep one go the way the players' do, on their own screen.
  */
 
 import { useState, type JSX } from 'react';
 import { StaffRole, STAFF_ROLE_NAMES, staffName, staffRating, type Staff } from '../../engine/model/staff.ts';
 import {
-  HIRABLE_ROLES, STAFF_DUTIES, STAFF_SLOTS, medicalQuality, staffBudget, staffWageBill, type StaffInterest, type StaffReply,
+  HIRABLE_ROLES, STAFF_DUTIES, STAFF_SLOTS, medicalQuality, staffBudget, staffWageBill, type StaffInterest,
 } from '../../engine/world/staffMarket.ts';
 import { contractEndSeason, seasonEndYear } from '../../engine/world/world.ts';
 import { Bar, Card, ClubCrest, Empty, Flag, money, Segmented, StatTile } from '../components.tsx';
@@ -43,14 +43,14 @@ export function StaffScreen(): JSX.Element {
   const staff = g.backroom();
   const [role, setRole] = useState<StaffRole>(StaffRole.AssistantCoach);
   const [employed, setEmployed] = useState(false);
-  const [talks, setTalks] = useState<number | null>(() => g.takeStaffTalks());
+  const talks = g.staffTalks();
 
   const spent = staffWageBill(world, club);
   const budget = staffBudget(club);
   const coach = Math.max(0, ...staff.filter((s) => [StaffRole.AssistantCoach, StaffRole.StrengthCoach, StaffRole.YouthCoach].includes(s.role)).map(staffRating));
   const scouting = Math.max(0, ...staff.filter((s) => [StaffRole.HeadScout, StaffRole.Scout, StaffRole.RecruitmentAnalyst].includes(s.role)).map(staffRating));
   const expiring = staff.filter((s) => contractEndSeason(s.contractUntil) <= world.season).length;
-  const find = (r: StaffRole): void => { setRole(r); setTalks(null); };
+  const find = (r: StaffRole): void => setRole(r);
 
   return (
     <>
@@ -84,11 +84,10 @@ export function StaffScreen(): JSX.Element {
                   const open = STAFF_SLOTS[r] - mine.length;
                   return [
                     ...mine.map((s, i) => (
-                      <StaffRow key={s.id} s={s} first={i === 0} rows={mine.length + Math.max(0, open)} talking={talks === s.id}
-                        onRenew={() => setTalks(s.id)} />
+                      <StaffRow key={s.id} s={s} first={i === 0} rows={mine.length + Math.max(0, open)} />
                     )),
                     ...Array.from({ length: Math.max(0, open) }, (_, i) => (
-                      <tr key={`${r}-open-${i}`} className={`staff-vacant${role === r && talks === null ? ' active' : ''}`}>
+                      <tr key={`${r}-open-${i}`} className={`staff-vacant${role === r ? ' active' : ''}`}>
                         {mine.length === 0 && i === 0 && (
                           <td rowSpan={open} className="staff-role" title={STAFF_DUTIES[r]}>{STAFF_ROLE_NAMES[r]}</td>
                         )}
@@ -103,35 +102,44 @@ export function StaffScreen(): JSX.Element {
           </div>
         </Card>
 
-        {talks !== null
-          ? <StaffTalks staffId={talks} onClose={() => setTalks(null)} />
-          : (
-            <Card
-              title="Find staff"
-              icon="search"
-              flush
-              actions={(
-                <div className="toolbar-inline">
-                  <Dropdown size="sm" value={role} onChange={(v) => setRole(v)}
-                    options={HIRABLE_ROLES.map((r) => ({ value: r, label: STAFF_ROLE_NAMES[r] }))} />
-                  <Segmented size="sm" value={employed ? 1 : 0} onChange={(v) => setEmployed(v === 1)}
-                    options={[[0, 'Out of work'], [1, 'At other clubs']]} />
-                </div>
-              )}
-            >
-              <p className="staff-duty"><b>{STAFF_ROLE_NAMES[role]}</b> — {STAFF_DUTIES[role]}</p>
-              <StaffMarketTable role={role} employed={employed} onTalk={setTalks} />
-            </Card>
+        <Card
+          title="Find staff"
+          icon="search"
+          flush
+          actions={(
+            <div className="toolbar-inline">
+              <Dropdown size="sm" value={role} onChange={(v) => setRole(v)}
+                options={HIRABLE_ROLES.map((r) => ({ value: r, label: STAFF_ROLE_NAMES[r] }))} />
+              <Segmented size="sm" value={employed ? 1 : 0} onChange={(v) => setEmployed(v === 1)}
+                options={[[0, 'Out of work'], [1, 'At other clubs']]} />
+            </div>
           )}
+        >
+          {talks.length > 0 && (
+            <div className="staff-talks-strip">
+              <span className="faint">Talks</span>
+              {talks.map((t) => {
+                const who = world.staff[t.staffId];
+                return who === undefined ? null : (
+                  <button key={t.id} className={`sm staff-talks-chip${t.pending === null ? ' yours' : ''}`} onClick={() => g.openStaffTalksView(t.id)}
+                    title={t.pending === null ? 'Your move' : `Answer due ${g.dateLabelForDay(t.pending.resolvesOn)}`}>
+                    {staffName(who)}
+                    <span className="faint">{t.pending === null ? 'your move' : `reply ${g.dateLabelForDay(t.pending.resolvesOn)}`}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p className="staff-duty"><b>{STAFF_ROLE_NAMES[role]}</b> — {STAFF_DUTIES[role]}</p>
+          <StaffMarketTable role={role} employed={employed} />
+        </Card>
       </div>
     </>
   );
 }
 
 /** One of the club's staff: his contract and what can be done about it. */
-function StaffRow({ s, first, rows, talking, onRenew }: {
-  s: Staff; first: boolean; rows: number; talking: boolean; onRenew: () => void;
-}): JSX.Element {
+function StaffRow({ s, first, rows }: { s: Staff; first: boolean; rows: number }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const ends = contractEndSeason(s.contractUntil);
@@ -142,12 +150,15 @@ function StaffRow({ s, first, rows, talking, onRenew }: {
       g.releaseStaffMember(s.id);
     }
   };
+  const talks = g.staffTalksWith(s.id);
   return (
-    <tr className={talking ? 'selected' : undefined}>
+    <tr className={talks !== null ? 'selected' : undefined}>
       {first && <td rowSpan={rows} className="staff-role" title={STAFF_DUTIES[s.role]}>{STAFF_ROLE_NAMES[s.role]}</td>}
       <td className="strong">
         <Flag nation={s.nation} /> <span className="player-link" onClick={() => g.selectCoach(s.id)}>{staffName(s)}</span>
         {s.unsettled === true && <span className="staff-tag warn" title="He wanted a move you blocked: he'll want more to stay">Unsettled</span>}
+        {s.listed === true && <span className="staff-tag" title="Other clubs have been told he is available">Listed</span>}
+        {talks !== null && <span className="staff-tag" title="Contract talks under way">In talks</span>}
       </td>
       <td className="num">{world.year - s.birthYear}</td>
       <td><Rating value={staffRating(s)} /></td>
@@ -155,7 +166,9 @@ function StaffRow({ s, first, rows, talking, onRenew }: {
       <td className={expiring ? 'warn-text' : 'dim'}>{expiring ? 'This June' : `June ${seasonEndYear(world, ends)}`}</td>
       <td className="num">
         <span className="staff-actions">
-          <button className="sm icon-btn" title="Offer a new contract" onClick={onRenew}><Icon name="contract" size={13} /></button>
+          <button className="sm icon-btn" title={talks !== null ? 'Contract talks' : 'Offer a new contract'} onClick={() => g.openStaffTalks(s.id)}><Icon name="contract" size={13} /></button>
+          <button className={`sm icon-btn${s.listed === true ? ' on' : ''}`} title={s.listed === true ? 'Take him off the list' : 'Make him available — other clubs will come in for him'}
+            onClick={() => g.toggleStaffListed(s.id)}><Icon name="transfers" size={13} /></button>
           <button className="sm icon-btn danger" title="Release him — paying up his contract" onClick={release}><Icon name="close" size={13} /></button>
         </span>
       </td>
@@ -164,7 +177,7 @@ function StaffRow({ s, first, rows, talking, onRenew }: {
 }
 
 /** The market for a role: the best first, what each asks, and whether he'd come. */
-function StaffMarketTable({ role, employed, onTalk }: { role: StaffRole; employed: boolean; onTalk: (id: number) => void }): JSX.Element {
+function StaffMarketTable({ role, employed }: { role: StaffRole; employed: boolean }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const list = g.staffMarket(role, employed);
@@ -189,6 +202,7 @@ function StaffMarketTable({ role, employed, onTalk }: { role: StaffRole; employe
               <tr key={s.id}>
                 <td className="strong">
                   <Flag nation={s.nation} /> <span className="player-link" onClick={() => g.selectCoach(s.id)}>{staffName(s)}</span>
+                  {g.staffTalksWith(s.id) !== null && <span className="staff-tag">In talks</span>}
                   <span className="staff-club">{world.year - s.birthYear}{club !== undefined && <> · <ClubCrest club={club} size={13} /> {club.shortName}</>}</span>
                 </td>
                 <td><Rating value={rating} /></td>
@@ -196,7 +210,7 @@ function StaffMarketTable({ role, employed, onTalk }: { role: StaffRole; employe
                 {employed && <td className="num dim">{money(fee)}</td>}
                 <td><span className={`staff-interest ${interest}`} title={INTEREST_HINT[interest]}>{INTEREST_LABEL[interest]}</span></td>
                 <td className="num">
-                  <button className="sm primary staff-go" disabled={interest === 'refuses'} title={employed ? 'Approach him' : 'Offer him a contract'} onClick={() => onTalk(s.id)}>
+                  <button className="sm primary staff-go" disabled={interest === 'refuses'} title={employed ? 'Approach his club' : 'Offer him a contract'} onClick={() => g.openStaffTalks(s.id)}>
                     <Icon name="contract" size={13} />
                   </button>
                 </td>
@@ -206,77 +220,5 @@ function StaffMarketTable({ role, employed, onTalk }: { role: StaffRole; employe
         </tbody>
       </table>
     </div>
-  );
-}
-
-/** Talks with one man: to hire him, or to keep him — a wage, a length, and his answer. */
-function StaffTalks({ staffId, onClose }: { staffId: number; onClose: () => void }): JSX.Element {
-  const g = useGame();
-  const world = g.world!;
-  const s = world.staff[staffId];
-  const terms = g.staffTerms(staffId);
-  const own = s?.clubId === g.club?.id;
-  const [wage, setWage] = useState(terms?.ask ?? 0);
-  const [years, setYears] = useState(Math.min(2, terms?.longest ?? 2));
-  const [reply, setReply] = useState<StaffReply | null>(null);
-  if (s === undefined || terms === null) return <Card title="Talks"><Empty>Nobody to talk to.</Empty></Card>;
-  const club = s.clubId >= 0 ? world.clubs[s.clubId] : undefined;
-  const step = wage >= 100_000 ? 5_000 : 1_000;
-  const submit = (): void => {
-    const r = g.offerStaffContract(staffId, wage, years);
-    setReply(r);
-    if (r?.ask !== undefined && r.outcome === 'counter') setWage(r.ask);
-    if (r?.years !== undefined) setYears(r.years);
-    if (r?.outcome === 'accepted') setTimeout(onClose, 1600);
-  };
-  return (
-    <Card title={own ? 'New contract' : 'Contract offer'} icon="contract" className="staff-talks"
-      actions={<button className="sm ghost" onClick={onClose}><Icon name="close" size={12} /> Close</button>}>
-      <div className="staff-talks-head">
-        <span className="coach-initials">{staffName(s).split(' ').map((x) => x[0]).join('').slice(0, 2)}</span>
-        <div>
-          <b className="player-link" onClick={() => g.selectCoach(s.id)}>{staffName(s)}</b>
-          <span className="dim">
-            {STAFF_ROLE_NAMES[s.role]} · {world.year - s.birthYear} · <Flag nation={s.nation} />
-            {club !== undefined && !own && <> · <ClubCrest club={club} size={13} /> {club.name}</>}
-            {club === undefined && ' · out of work'}
-          </span>
-        </div>
-        <Rating value={staffRating(s)} />
-      </div>
-      <p className="staff-duty">{STAFF_DUTIES[s.role]}</p>
-
-      <div className="staff-terms">
-        <div><span>Now on</span><b>{s.clubId >= 0 ? money(s.wage) : '—'}</b></div>
-        <div><span>He asks</span><b>{money(terms.ask)}</b></div>
-        <div title={INTEREST_HINT[terms.interest]}><span>Mood</span><b className={`staff-interest ${terms.interest}`}>{INTEREST_LABEL[terms.interest]}</b></div>
-        {terms.fee > 0 && <div><span>Compensation</span><b>{money(terms.fee)}</b></div>}
-        <div><span>Budget left</span><b className={wage > terms.room ? 'bad' : undefined}>{money(Math.max(0, terms.room - wage))}</b></div>
-      </div>
-
-      {terms.block !== null && !own ? <p className="field-hint warn-text">{terms.block}</p> : (
-        <>
-          <div className="staff-offer">
-            <label>Wage a season</label>
-            <div className="staff-wage">
-              <button className="sm" onClick={() => setWage((w) => Math.max(2_000, w - step))}>−</button>
-              <b>{money(wage)}</b>
-              <button className="sm" onClick={() => setWage((w) => w + step)}>+</button>
-              <button className="sm ghost" onClick={() => setWage(terms.ask)}>His ask</button>
-            </div>
-            <label>Contract</label>
-            <Segmented size="sm" value={years} onChange={setYears}
-              options={[1, 2, 3, 4].filter((y) => y <= Math.max(terms.longest, 1)).map((y) => [y, `${y} season${y > 1 ? 's' : ''}`] as const)} />
-            <span className="faint">until 30 June {seasonEndYear(world, world.season + years - 1)}</span>
-          </div>
-          <div className="staff-submit">
-            <button className="primary" onClick={submit} disabled={reply?.outcome === 'accepted'}>
-              <Icon name="contract" size={14} /> {own ? 'Offer new contract' : terms.fee > 0 ? `Approach — ${money(terms.fee)} to his club` : 'Make offer'}
-            </button>
-          </div>
-        </>
-      )}
-      {reply !== null && <p className={`staff-reply ${reply.outcome}`}>{reply.text}</p>}
-    </Card>
   );
 }

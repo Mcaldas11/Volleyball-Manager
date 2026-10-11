@@ -8,14 +8,15 @@
  * come into the game, and anyone in work elsewhere can be approached, for a
  * compensation fee to his club. Each asks a wage that goes with how good he is
  * and how highly he thinks of himself; a club below his standing has to pay
- * him to come, and one far below it he won't consider. An offer is met, met
- * halfway, or turned down — try him too often and he stops listening.
+ * him to come, and one far below it he won't consider. The talks themselves
+ * run the way the players' do — see staffDeals.ts.
  *
  * Contracts run to 30 June, like the players'. The manager hears when one is
  * running out, can sit down and renew it — a man who has done well, or been
  * kept from a move he wanted, asks for more — and anyone he lets run out goes
  * at the season's end. Releasing someone early pays up the rest of his
- * contract. Other clubs come in for the good ones, with a fee to put to him.
+ * contract. Other clubs come in for the good ones, with a fee to put to him —
+ * and for any the manager lists as available.
  * The other clubs' coaches run their backrooms the same way: renewing most,
  * replacing whoever goes, filling the places they need.
  *
@@ -96,9 +97,6 @@ const CORE_ROLES: readonly StaffRole[] = [
 const STAFF_BUDGET_SHARE = 0.62;
 /** People out of work in each role, on the market at any time. */
 const POOL_PER_ROLE = 18;
-/** Offers turned down before a man stops listening — and for how long. */
-const PATIENCE = 3;
-const PATIENCE_DAYS = 30;
 /** How long a club's approach for one of the manager's staff stays open. */
 const APPROACH_DAYS = 14;
 /** The age staff retire at, give or take. */
@@ -218,20 +216,6 @@ export function longestContract(world: World, s: Staff, club: Club): number {
 
 // ---- Talks -------------------------------------------------------------------------------
 
-export interface StaffOffer {
-  wage: number;
-  /** Seasons, this one counting as the first. */
-  years: number;
-}
-
-export interface StaffReply {
-  outcome: 'accepted' | 'counter' | 'rejected' | 'refused';
-  text: string;
-  /** What he'd sign for, when he names it. */
-  ask?: number;
-  years?: number;
-}
-
 /** Why the club can't make him an offer at all, or null if it can. */
 export function staffOfferBlock(world: World, club: Club, s: Staff): string | null {
   if (s.retired === true) return `${staffName(s)} has retired.`;
@@ -246,70 +230,8 @@ export function staffOfferBlock(world: World, club: Club, s: Staff): string | nu
   return null;
 }
 
-function noteRebuff(world: World, s: Staff): boolean {
-  world.staffTalks ??= {};
-  const t = world.staffTalks[s.id] ?? { tries: 0, until: 0 };
-  t.tries++;
-  if (t.tries >= PATIENCE) {
-    t.until = world.day + PATIENCE_DAYS;
-    t.tries = 0;
-  }
-  world.staffTalks[s.id] = t;
-  return t.until > world.day;
-}
-
-/**
- * Put an offer to him — to join, or, for one of the club's own, to stay. He
- * signs if it meets his ask; a little short of it, he names his price; well
- * short, he turns it down. Turned down too often, he stops listening.
- */
-export function offerToStaff(world: World, club: Club, s: Staff, offer: StaffOffer): StaffReply {
-  const block = staffOfferBlock(world, club, s);
-  if (block !== null) return { outcome: 'refused', text: block };
-  const renewing = s.clubId === club.id;
-  const name = staffName(s);
-  const ask = staffWageAsk(world, s, club);
-  const longest = longestContract(world, s, club);
-  const years = Math.max(1, Math.min(4, Math.round(offer.years)));
-  const fee = renewing ? 0 : compensationFor(world, s);
-  const room = staffBudgetRoom(world, club, renewing ? s : undefined);
-  if (offer.wage > room) return { outcome: 'refused', text: `That is beyond the staff budget — ${euros(Math.max(0, room))} a season is left in it.` };
-  if (fee > Math.min(club.finances.balance, club.finances.transferBudget + fee * 0.5)) {
-    return { outcome: 'refused', text: `${world.clubs[s.clubId]?.name ?? 'His club'} want ${euros(fee)} in compensation — more than you can find.` };
-  }
-  // An unsettled man may simply want out.
-  if (renewing && s.unsettled === true && s.attributes.ambition >= 15 && s.attributes.loyalty <= 8) {
-    return { outcome: 'refused', text: `${name} has made up his mind to move on when his contract is up.` };
-  }
-
-  if (years > longest) {
-    return { outcome: 'counter', ask: Math.max(ask, offer.wage), years: longest, text: `${name} will sign for ${longest} season${longest > 1 ? 's' : ''} at most.` };
-  }
-  if (offer.wage >= ask) {
-    sign(world, club, s, offer.wage, years, fee);
-    return {
-      outcome: 'accepted',
-      text: renewing
-        ? `${name} has signed a new contract: ${euros(offer.wage)} a season until 30 June ${seasonEndYear(world, world.season + years - 1)}.`
-        : `${name} joins as ${STAFF_ROLE_NAMES[s.role]} — ${euros(offer.wage)} a season until 30 June ${seasonEndYear(world, world.season + years - 1)}` +
-          `${fee > 0 ? `, with ${euros(fee)} in compensation` : ''}.`,
-    };
-  }
-  const stops = noteRebuff(world, s);
-  if (offer.wage >= ask * 0.85) {
-    return {
-      outcome: 'counter', ask, years,
-      text: `${name} would sign for ${euros(ask)} a season.${stops ? ' He wants to think it over before he talks again.' : ''}`,
-    };
-  }
-  return {
-    outcome: 'rejected', ask,
-    text: `${name} turns it down — that is well short of what he is worth to you.${stops ? ' He won’t talk again for a while.' : ''}`,
-  };
-}
-
-/** He signs: off his old club, if he had one, and onto the club's books. */
-function sign(world: World, club: Club, s: Staff, wage: number, years: number, fee: number): void {
+/** He signs: off his old club, if he had one — the compensation paid to it — and onto the club's books. */
+export function signStaff(world: World, club: Club, s: Staff, wage: number, years: number, fee: number): void {
   const from = s.clubId >= 0 && s.clubId !== club.id ? world.clubs[s.clubId] : undefined;
   if (from !== undefined) {
     from.staff = from.staff.filter((id) => id !== s.id);
@@ -322,6 +244,7 @@ function sign(world: World, club: Club, s: Staff, wage: number, years: number, f
   s.wage = wage;
   s.contractUntil = seasonEndDay(world.season + years - 1);
   s.unsettled = false;
+  s.listed = false;
   s.freeSince = undefined;
   delete world.staffTalks?.[s.id];
   // Any approach for him is over.
@@ -337,6 +260,7 @@ export function releaseStaff(world: World, club: Club, s: Staff): number {
   s.clubId = -1;
   s.freeSince = world.day;
   s.unsettled = false;
+  s.listed = false;
   return cost;
 }
 
@@ -403,7 +327,15 @@ export interface StaffApproach {
   /** What it would pay him. */
   wage: number;
   expiresOn: number;
-  status: 'open' | 'accepted' | 'rejected' | 'expired';
+  /**
+   * Open for the manager's answer; his asking price with them; agreed, and he
+   * is deciding; gone; kept; turned down by the man himself; or lapsed.
+   */
+  status: 'open' | 'countered' | 'deciding' | 'accepted' | 'rejected' | 'declined' | 'expired';
+  /** The manager's asking price, while it is with them. */
+  counterFee?: number;
+  /** The day the answer that is due comes back. */
+  resolvesOn?: number;
 }
 
 /** Each day: the market kept stocked, the manager's staff courted, contracts running out flagged, a psychologist's word with the squad. */
@@ -426,7 +358,7 @@ function courtManagersStaff(world: World): void {
   world.staffApproaches ??= [];
   for (const s of backroomOf(world, club)) {
     const rating = staffRating(s);
-    if (rating < 11.5 || world.staffApproaches.some((a) => a.staffId === s.id && a.status === 'open')) continue;
+    if (rating < 11.5 || world.staffApproaches.some((a) => a.staffId === s.id && ['open', 'countered', 'deciding'].includes(a.status))) continue;
     if (!rng.chance(0.0025 * (rating - 11))) continue;
     const suitors = world.clubs.filter((c) => c.id !== club.id && c.players.length > 0 && c.reputation >= club.reputation * 0.95 &&
       backroomOf(world, c).filter((x) => x.role === s.role).every((x) => staffRating(x) < rating - 0.5) &&
@@ -444,37 +376,11 @@ function courtManagersStaff(world: World): void {
       subject: `${suitor.name} want ${staffName(s)}`,
       body: `${suitor.name} have asked for permission to speak to your ${STAFF_ROLE_NAMES[s.role].toLowerCase()} ${staffName(s)}, ` +
         `and offer ${euros(fee)} in compensation. They would pay him ${euros(wage)} a season — he is on ${euros(s.wage)} with you. ` +
-        `Let him go, or keep him: turning down a move he wants won't please him, though a new contract might.`,
+        `Let them talk to him, ask for more, or keep him: turning down a move he wants won't please him, though a new contract might.`,
       staffApproachId: id,
       staffId: s.id,
     });
   }
-}
-
-/** Answer a club's approach for one of the manager's staff. */
-export function answerStaffApproach(world: World, id: number, accept: boolean): string {
-  const a = world.staffApproaches?.find((x) => x.id === id);
-  const s = a !== undefined ? world.staff[a.staffId] : undefined;
-  const suitor = a !== undefined ? world.clubs[a.clubId] : undefined;
-  const club = s !== undefined && s.clubId >= 0 ? world.clubs[s.clubId] : undefined;
-  if (a === undefined || s === undefined || suitor === undefined || club === undefined || a.status !== 'open') return 'That approach is no longer open.';
-  if (!accept) {
-    a.status = 'rejected';
-    // A man kept from a bigger club, who wanted it, will want more to stay.
-    if (suitor.reputation > club.reputation && s.attributes.ambition >= 11) s.unsettled = true;
-    return s.unsettled === true
-      ? `You have told ${suitor.name} he is not for sale. ${staffName(s)} is disappointed — he will want more to stay.`
-      : `You have told ${suitor.name} that ${staffName(s)} is not for sale.`;
-  }
-  a.status = 'accepted';
-  club.staff = club.staff.filter((x) => x !== s.id);
-  club.finances.balance += a.fee;
-  suitor.staff.push(s.id);
-  s.clubId = suitor.id;
-  s.wage = a.wage;
-  s.contractUntil = seasonEndDay(world.season + 2);
-  s.unsettled = false;
-  return `${staffName(s)} leaves for ${suitor.name}; ${euros(a.fee)} comes in in compensation.`;
 }
 
 /** A psychologist's week: whoever is down gets some of it back — the better he is, the more. */
