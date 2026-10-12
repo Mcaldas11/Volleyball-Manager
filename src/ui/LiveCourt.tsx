@@ -253,6 +253,9 @@ export function LiveCourt({
       applySideline(now);
       m.step(dt, now);
       top.clearRect(0, 0, cssW, cssH);
+      // Each view draws on a clean slate: one leaving its text alignment or
+      // font behind threw the other's names and ratings off their players.
+      top.save();
       if (shownView === '2d') {
         drawTopDown(top, topProjector(cssW, cssH), m, props.current, now);
       } else if (court !== null) {
@@ -266,6 +269,7 @@ export function LiveCourt({
       } else {
         drawFlat(top, project, m, props.current, now);
       }
+      top.restore();
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -1096,6 +1100,7 @@ function drawLabel(
   if (labels === 'off' || (!showName && rating === undefined)) return;
   const size = Math.max(9, Math.min(12, 0.3 * s));
   ctx.font = `600 ${size}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = 'left';
   const name = showName ? store.shortName(p) : '';
   const nameW = name !== '' ? ctx.measureText(name).width + 8 : 0;
   const chipW = rating !== undefined ? size * 2.3 : 0;

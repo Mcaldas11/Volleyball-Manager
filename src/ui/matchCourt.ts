@@ -56,7 +56,9 @@ export interface Ball3 extends Ground {
  */
 export type Pose =
   | 'stand' | 'ready' | 'cover' | 'hold'
-  | 'serve' | 'float' | 'receive' | 'dig' | 'pass' | 'set' | 'spike' | 'block';
+  | 'serve' | 'float' | 'receive' | 'dig' | 'pass' | 'set' | 'spike' | 'block'
+  /** Full length for a ball he can't get to. */
+  | 'dive';
 
 /** Everything the live court shows at one instant. */
 export interface Scene {
@@ -725,6 +727,23 @@ export function rallyBeats(
     return { ms: Math.round(Math.min(1250, Math.max(480, ms))), arc: serveKmh >= 88 ? 0.45 : 0.9 };
   };
 
+  /** The defender nearest where a ball goes down, who goes full length for it and doesn't get there. */
+  const diverFor = (t: 0 | 1, to: Ball3, busy: readonly number[]): Array<[number, Pose]> => {
+    let best = -1;
+    let bestD = 3.4;
+    for (const [p, l] of forms[t]) {
+      if (busy.includes(p)) continue;
+      const w = toWorld(teams[t].near, l);
+      const d = Math.hypot(w.x - to.x, w.y - to.y);
+      // Right on top of him, it was simply too quick to move for.
+      if (d > 0.7 && d < bestD) {
+        best = p;
+        bestD = d;
+      }
+    }
+    return best >= 0 ? [[best, 'dive']] : [];
+  };
+
   contacts.forEach((c, i) => {
     const t = c.team;
     const o = (1 - t) as 0 | 1;
@@ -743,7 +762,7 @@ export function rallyBeats(
         forms[t] = defenceFormation(teams[t]);
         const spot = air(o, holeIn(forms[o], seed), 0);
         const { ms, arc } = served(spot);
-        push(spot, null, ms, arc, [], { kind: 'ace', team: t, speed: radar?.speed, height: radar?.height });
+        push(spot, null, ms, arc, diverFor(o, spot, []), { kind: 'ace', team: t, speed: radar?.speed, height: radar?.height });
         break;
       }
       case 'reception':
@@ -840,7 +859,8 @@ export function rallyBeats(
           const to = air(o, c.shot !== undefined ? shotSpot(c.shot, hu, r1, r2) : holeIn(forms[o], seed + i), 0);
           // A tip drops over the block, a roll shot loops: neither is hit through the court.
           push(to, null, flies(from, to, c.speed, soft ? 380 : 200, soft ? 760 : 380), c.shot === 'tip' ? 0.45 : c.shot === 'roll' ? 1.0 : 0,
-            blockPoses, { kind: 'kill', team: t, speed: c.speed, height: c.height, shot: c.shot, play: c.play });
+            [...blockPoses, ...diverFor(o, to, blockers)],
+            { kind: 'kill', team: t, speed: c.speed, height: c.height, shot: c.shot, play: c.play });
         } else if (c.kind === 'attackError' && c.shot === 'net') {
           // Into the net on his own side, and down.
           push(air(t, { u: hit.u, v: 0.02 }, 1.85), null, flies(from, air(t, { u: hit.u, v: 0.02 }, 1.85), c.speed, 120, 260), 0, [],

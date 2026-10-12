@@ -288,7 +288,7 @@ export function NationalHome(): JSX.Element {
         : `${t.name} · out of the tournament`;
 
   return (
-    <div className="home">
+    <div className="home-page">
       <section className="hm-banner">
         <div className="hm-banner-main">
           <div className="hm-kicker">Now managing · {nationName(nation)} national team · <span>{m.firstName} {m.lastName}</span></div>

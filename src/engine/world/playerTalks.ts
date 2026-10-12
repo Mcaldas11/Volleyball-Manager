@@ -64,12 +64,35 @@ export interface TransferRequest {
 
 export interface ChatResult {
   ok: boolean;
+  /** How it went, told: for a notice or the record. */
   text: string;
+  /** What he says back, in his own words. */
+  reply: string;
   morale: number;
 }
 
+/** What the manager says, for each topic — the line in the conversation. */
+export const CHAT_LINES: Readonly<Record<ChatTopic, string>> = {
+  praise: 'You\u2019ve been excellent lately. Keep it up.',
+  criticise: 'Your form isn\u2019t good enough. I expect more from you.',
+  encourage: 'Forget the last few games \u2014 I still believe in you.',
+  promise: 'You\u2019ll get more games. You have my word.',
+  mood: 'How are things? Anything on your mind?',
+};
+
+/** How he opens when the manager calls him in: his mood says it. */
+export function chatOpening(world: World, p: number): string {
+  const store = world.players;
+  const morale = store.morale[p];
+  if (world.transferRequests?.[p]?.status === 'refused') return 'If this is about me staying — I haven\u2019t changed my mind.';
+  if (morale >= 75) return 'Boss! You wanted to see me?';
+  if (morale >= 50) return 'You wanted a word?';
+  if (morale >= 30) return 'What is it?';
+  return '...Yes?';
+}
+
 /** His recent form, as his last few match ratings say it: null with none to go on. */
-function recentForm(world: World, p: number): number | null {
+export function recentForm(world: World, p: number): number | null {
   const form = world.ratingForm.get(p) ?? [];
   return form.length < 2 ? null : form.reduce((s, r) => s + r, 0) / form.length;
 }
@@ -94,19 +117,23 @@ export function talkToPlayer(world: World, club: Club, p: number, topic: ChatTop
   const block = chatBlock(world, club, p, topic);
   const store = world.players;
   const name = store.fullName(p);
-  if (block !== null) return { ok: false, text: block, morale: 0 };
+  if (block !== null) return { ok: false, text: block, reply: '', morale: 0 };
   const form = recentForm(world, p);
   const good = form !== null && form >= 6.6;
   const poor = form !== null && form <= 5.6;
   const takesIt = store.getAttr(p, 'professionalism') >= 12 || store.getAttr(p, 'temperament') >= 13;
   let morale = 0;
   let text = '';
+  let reply = '';
   switch (topic) {
     case 'praise':
       morale = good ? 8 : poor ? -3 : 3;
       text = good ? `${name} is delighted — he knows he has been playing well, and that you have noticed.`
         : poor ? `${name} shrugs it off. He knows he hasn't been at his best, and the praise rings hollow.`
           : `${name} appreciates the word.`;
+      reply = good ? 'Thanks, boss. I feel sharp — and it\u2019s good to know you\u2019ve noticed.'
+        : poor ? '...Thanks. But I know I haven\u2019t been at my best.'
+          : 'Thanks, boss. I appreciate it.';
       break;
     case 'criticise':
       morale = good ? -10 : poor ? (takesIt ? 4 : -8) : (takesIt ? 0 : -5);
@@ -114,42 +141,71 @@ export function talkToPlayer(world: World, club: Club, p: number, topic: ChatTop
         : poor && takesIt ? `${name} accepts it: he knows he has to do better, and means to.`
           : poor ? `${name} reacts badly. He doesn't take criticism well.`
             : takesIt ? `${name} takes it on board without a word.` : `${name} doesn't think he deserved that.`;
+      reply = good ? 'Not good enough? I\u2019ve been one of the best out there. I don\u2019t get it.'
+        : poor && takesIt ? 'You\u2019re right. I\u2019ll work on it \u2014 you\u2019ll see a difference.'
+          : poor ? 'That\u2019s out of order. I don\u2019t need this.'
+            : takesIt ? 'Understood.' : 'I don\u2019t think that\u2019s fair.';
       break;
     case 'encourage': {
       const down = poor || store.morale[p] < 40;
       morale = down ? 6 : 1;
       text = down ? `${name} is grateful — it was what he needed to hear.` : `${name} nods. He wasn't worried.`;
+      reply = down ? 'Thanks. I needed that.' : 'I\u2019m fine, boss, honestly.';
       break;
     }
     case 'promise':
       morale = 8;
       (world.promises ??= []).push({ p, clubId: club.id, madeOn: world.day, due: world.day + PROMISE_DAYS });
       text = `${name} is pleased — he'll hold you to it. He expects to be playing regularly within eight weeks.`;
+      reply = 'I\u2019ll hold you to that.';
       break;
     case 'mood':
       text = moodOf(world, club, p);
+      reply = moodInHisWords(world, p);
       break;
   }
   store.morale[p] = Math.max(0, Math.min(100, store.morale[p] + morale));
   if (topic !== 'mood') (world.playerChats ??= {})[p] = world.day;
-  return { ok: true, text, morale };
+  return { ok: true, text, reply, morale };
 }
 
-/** What is on a player's mind, in his words. */
+/** What is weighing on a player: each worry, as told about him and as he would say it. */
+function worriesOf(world: World, p: number): Array<[string, string]> {
+  const store = world.players;
+  const out: Array<[string, string]> = [];
+  if (store.playingTime[p] < 30 && store.getAttr(p, 'ambition') >= 11) out.push(['he wants to be playing more', 'I want to be playing more']);
+  if (contractEndSeason(store.contractUntil[p]) <= world.season) {
+    out.push(['his contract is running out and nobody has talked to him about it', 'my contract is running out and nobody has talked to me about it']);
+  }
+  const promise = (world.promises ?? []).find((x) => x.p === p);
+  if (promise !== undefined) {
+    const left = Math.max(0, promise.due - world.day);
+    out.push([`he is waiting on your promise of games — ${left} days left`, `I\u2019m still waiting on those games you promised me`]);
+  }
+  if (world.transferRequests?.[p]?.status === 'refused') out.push(['he still wants to leave', 'I still want to leave']);
+  return out;
+}
+
+/** What is on a player's mind, told. */
 export function moodOf(world: World, club: Club, p: number): string {
   const store = world.players;
   const name = store.fullName(p);
-  const worries: string[] = [];
-  if (store.playingTime[p] < 30 && store.getAttr(p, 'ambition') >= 11) worries.push('he wants to be playing more');
-  if (contractEndSeason(store.contractUntil[p]) <= world.season) worries.push('his contract is running out and nobody has talked to him about it');
-  const promise = (world.promises ?? []).find((x) => x.p === p);
-  if (promise !== undefined) worries.push(`he is waiting on your promise of games — ${Math.max(0, promise.due - world.day)} days left`);
-  if (world.transferRequests?.[p]?.status === 'refused') worries.push('he still wants to leave');
+  const worries = worriesOf(world, p).map(([told]) => told);
   const mood = store.morale[p] >= 75 ? 'very happy' : store.morale[p] >= 55 ? 'content' : store.morale[p] >= 35 ? 'a little low' : 'unhappy';
   void club;
   return worries.length === 0
     ? `${name} is ${mood} at the club — nothing on his mind.`
     : `${name} is ${mood}: ${worries.join('; ')}.`;
+}
+
+/** What is on his mind, in his own words. */
+export function moodInHisWords(world: World, p: number): string {
+  const morale = world.players.morale[p];
+  const worries = worriesOf(world, p).map(([, said]) => said);
+  const opening = morale >= 75 ? 'I\u2019m really happy here.' : morale >= 55 ? 'Things are fine.' : morale >= 35 ? 'Honestly? I\u2019m a bit down.' : 'I\u2019m not happy, boss.';
+  if (worries.length === 0) return `${opening} Nothing on my mind.`;
+  const list = worries.length === 1 ? worries[0] : `${worries.slice(0, -1).join(', ')} \u2014 and ${worries[worries.length - 1]}`;
+  return `${opening} ${list.charAt(0).toUpperCase()}${list.slice(1)}.`;
 }
 
 /** The promises falling due — kept or broken — and anyone unhappy long enough asking to leave. Weekly. */

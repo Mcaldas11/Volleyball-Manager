@@ -54,10 +54,10 @@ export function DressingRoomScreen(): JSX.Element {
                     </span>
                   </div>
                   <span className="room-influence" title="How much the room listens to him"><Bar value={(m.influence / top) * 100} /></span>
-                  <Morale value={store.morale[m.p]} />
-                  {room.captain !== m.p && t !== 'other' && (
-                    <button className="sm icon-btn" title="Make him captain" onClick={() => g.makeCaptain(m.p)}><Icon name="star" size={13} /></button>
-                  )}
+                  <span className="room-morale"><Morale value={store.morale[m.p]} /></span>
+                  {room.captain !== m.p && t !== 'other'
+                    ? <button className="sm icon-btn" title="Make him captain" onClick={() => g.makeCaptain(m.p)}><Icon name="star" size={13} /></button>
+                    : <span />}
                 </div>
               ))}
             </div>

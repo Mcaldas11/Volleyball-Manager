@@ -21,6 +21,7 @@ import {
 import { CalendarScreen } from './screens/Calendar.tsx';
 import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
 import { CoachTalkScreen } from './screens/CoachTalk.tsx';
+import { PlayerTalkScreen } from './screens/PlayerTalk.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CoachProfile } from './screens/CoachProfile.tsx';
 import { TrainingScreen } from './screens/Training.tsx';
@@ -58,6 +59,7 @@ function viewKey(g: ReturnType<typeof useGame>): string {
   if (g.staffNegotiation !== null) return 'staff-negotiation';
   if (g.incomingOffer !== null) return 'offer';
   if (g.coachTalk !== null) return 'coach-talk';
+  if (g.playerTalk !== null) return 'player-talk';
   if (g.selectedClub !== null) return `club-${g.selectedClub}`;
   if (g.selectedPlayer !== null) return `player-${g.selectedPlayer}`;
   if (g.selectedReview !== null) return `review-${g.selectedReview}`;
@@ -222,6 +224,8 @@ function GameShell(): JSX.Element {
                     ? <IncomingOfferScreen />
                     : g.coachTalk !== null
                     ? <CoachTalkScreen />
+                    : g.playerTalk !== null
+                    ? <PlayerTalkScreen />
                       : g.selectedNation !== null
                         ? <NationProfile />
                       : g.selectedCoach !== null
@@ -322,7 +326,7 @@ function Sidebar({
   const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
   const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null || g.selectedCoach !== null ||
     g.selectedNation !== null ||
-    g.negotiation !== null || g.staffNegotiation !== null || g.incomingOffer !== null || g.coachTalk !== null;
+    g.negotiation !== null || g.staffNegotiation !== null || g.incomingOffer !== null || g.coachTalk !== null || g.playerTalk !== null;
   const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
 
   const item = (
@@ -463,6 +467,7 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   if (g.staffNegotiation !== null) return { title: 'Staff Negotiation', tabs: null };
   if (g.incomingOffer !== null) return { title: 'Transfer Offer', tabs: null };
   if (g.coachTalk !== null) return { title: 'Talk to the Coach', tabs: null };
+  if (g.playerTalk !== null) return { title: 'Player Talk', tabs: null };
   if (g.selectedNation !== null) return { title: 'National Team', tabs: null };
   if (g.selectedCoach !== null) return { title: 'Coach', tabs: null };
   if (g.selectedClub !== null) {

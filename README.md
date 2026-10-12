@@ -82,9 +82,10 @@ Before submitting a change:
       and makes way for the libero the moment it is lost — and a registered
       libero can't play outfield
 - [x] In-match substitutions up to the real six-per-set limit, two timeouts
-      a set, a word from the touchline, and the video challenge: two a set, a
-      wrong call turned over — point, serve and box score — and the challenge
-      kept
+      a set, a word from the touchline, and the video challenge: two a set,
+      the point played again on the court — the decisive touch in slow
+      motion — before the verdict; a wrong call turned over — point, serve
+      and box score — and the challenge kept
 - [x] Team talks before the match and at every set break: what lands depends
       on the moment and on each player's personality, the dressing room's
       leaders counting most
@@ -134,9 +135,10 @@ Before submitting a change:
 - [x] Player ageing, injuries with permanent career effects, and procedurally
       generated "regens" that keep the world populated across a fifty-season
       career
-- [x] One-to-one talks with players — praise, criticism, encouragement, a
-      promise of games that is called in later — and players kept unhappy
-      asking to leave
+- [x] One-to-one talks with players, held as a conversation in your office:
+      praise, criticism, encouragement, a promise of games that is called in
+      later — each answered in the player's own words — and players kept
+      unhappy asking to leave
 - [x] A dressing room with its leaders, a captain and a cohesion that grows
       with time together, suffers with new faces and a leader's departure,
       and is worth a little on court
@@ -170,8 +172,9 @@ Before submitting a change:
 - [x] A live match viewer in 2D or 3D (three.js): a real court with a crowd,
       a referee and both benches, every player moving through each phase of
       the rally, substitutes warming up and walking on through the
-      substitution zone, the libero swapping in and out, and a medic running
-      on to an injured player
+      substitution zone, the libero swapping in and out, defenders diving
+      full length for balls — flat out on the floor, or over sideways — and
+      a medic running on to an injured player
 - [x] A coach's bar during the match: a timeout opens the timeout screen;
       the substitutions panel holds play while it is open; clicking one of
       your players beside the court offers who could come on for him; any

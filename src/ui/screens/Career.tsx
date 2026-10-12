@@ -648,7 +648,7 @@ export function UnemployedHome(): JSX.Element {
     .slice(0, 6);
 
   return (
-    <div className="home">
+    <div className="home-page">
       <section className="hm-banner">
         <div className="hm-banner-main">
           <div className="hm-kicker">Out of work · <span>{m.firstName} {m.lastName}</span></div>

@@ -23,7 +23,6 @@ import {
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { ClubHistoryCard } from '../clubHistory.tsx';
-import { CHAT_HINTS, CHAT_NAMES, CHAT_TOPICS } from '../../engine/world/playerTalks.ts';
 import { affiliatesOf } from '../../engine/world/affiliates.ts';
 import { useGame } from '../state.ts';
 
@@ -410,37 +409,6 @@ function TransferMenu({ p }: { p: number }): JSX.Element {
   );
 }
 
-/** A word with one of the squad: praise, criticism, encouragement, a promise of games — or just how he is. */
-function TalkMenu({ p }: { p: number }): JSX.Element {
-  const g = useGame();
-  const [open, setOpen] = useState(false);
-  const ref = useDismiss(open, () => setOpen(false));
-  return (
-    <div className="profile-menu" ref={ref}>
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <Icon name="press" size={14} /> Talk <Icon name="chevronDown" size={13} />
-      </button>
-      {open && (
-        <div className="menu-pop menu-pop-right">
-          {CHAT_TOPICS.map((topic) => {
-            const block = g.chatBlock(p, topic);
-            return (
-              <button key={topic} disabled={block !== null} title={block ?? undefined}
-                onClick={() => { setOpen(false); g.talkToPlayer(p, topic); }}>
-                <Icon name="press" size={15} />
-                <span className="menu-pop-stack">
-                  <span>{CHAT_NAMES[topic]}</span>
-                  <span className="faint">{block ?? CHAT_HINTS[topic]}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Short tags for where a player stands in the market: listed for transfer or loan, or here on loan. */
 export function MarketTags({ p, borrowed }: { p: number; borrowed: boolean }): JSX.Element {
   const g = useGame();
@@ -602,7 +570,11 @@ export function PlayerDetail(): JSX.Element | null {
                   {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
                 </button>
               )}
-              {isOwn && !isYouth && <TalkMenu p={p} />}
+              {isOwn && !isYouth && (
+                <button onClick={() => g.openPlayerTalk(p)} title="Call him in for a word">
+                  <Icon name="press" size={14} /> Talk
+                </button>
+              )}
               {isOwn && !isYouth && move === null && <TransferMenu p={p} />}
               {retirementMessage !== undefined && plan?.persuaded !== true && plan?.staffRole === undefined && (
                 <button className="primary" onClick={() => g.openMessage(retirementMessage.id)}>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../../engine/model/players.ts';
-import type { ShoutKind } from '../../engine/match/engine.ts';
+import type { LastCall, ShoutKind } from '../../engine/match/engine.ts';
 import {
   abilityClass, Bar, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
   Segmented, StarMeter, useDismiss,
@@ -25,7 +25,7 @@ import {
 import { TacticsBoard } from '../tacticsBoard.tsx';
 import { defenceLayoutsOf, type DefenceLayouts } from '../../engine/match/defence.ts';
 import { describeRallyHighlight } from './Match.tsx';
-import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide } from '../state.ts';
+import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide, type VideoReview } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
@@ -680,6 +680,45 @@ function SoundToggle(): JSX.Element {
 }
 
 /** Ask for the video on the last point — lit up when it was close and went against you. */
+/** What the bench is asking the video, by what the referee gave. */
+const VIDEO_QUESTION: Readonly<Record<LastCall['call'], string>> = {
+  kill: 'The kill was given — was the ball in?',
+  ace: 'The ace was given — was the serve in?',
+  attackError: 'Given out — did the attack land in?',
+  blocked: 'The block was given — did it come off the hands and out?',
+};
+
+/**
+ * The video check, over the court: who asked and what, the replay running
+ * underneath like the television's — then the verdict, stamped.
+ */
+function VideoCheck({ review, side, kit }: { review: VideoReview; side: MatchSide; kit: Kit }): JSX.Element {
+  const g = useGame();
+  const v = review.verdict;
+  return (
+    <div className={`vr${v !== null ? ' decided' : ''}`}>
+      <div className="vr-top">
+        <span className="vr-tag"><i className="vr-rec" /> Video check</span>
+        <span className="vr-ask">
+          <b style={{ borderColor: kit.shirt }}>{side.shortName}</b> {VIDEO_QUESTION[review.call]}
+        </span>
+        {v === null && <span className="vr-replay">Replay</span>}
+      </div>
+      {v !== null && (
+        <div className={`vr-verdict ${v.overturned ? 'over' : 'stands'}`}>
+          <b>{v.overturned ? 'Overturned' : 'Call stands'}</b>
+          <span>{v.text}</span>
+        </div>
+      )}
+      {v === null && (
+        <button className="sm vr-skip" onClick={() => g.finishVideoReview()}>
+          <Icon name="forward" size={13} /> Skip to the verdict
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ChallengeButton({ shown }: { shown: boolean }): JSX.Element {
   const g = useGame();
   // Not before the point has been played out on the court: nobody challenges what he hasn't seen.
@@ -1120,6 +1159,15 @@ function LiveMatchView(): JSX.Element {
     radarTimer.current = setTimeout(() => setRadar(null), RADAR_MS / (g.matchday?.speed ?? 1));
   };
 
+  /** How each side defends right now: the user's as set, the other as its club has it. */
+  const defenceNow = (team: 0 | 1): DefenceLayouts | undefined => {
+    const now = g.matchday;
+    if (now === null) return undefined;
+    if (team === (now.userIsHome ? 0 : 1)) return defenceLayoutsOf(g.matchTactics() ?? undefined);
+    const club = now.sides[team].clubId >= 0 ? world.clubs[now.sides[team].clubId] : undefined;
+    return club !== undefined ? defenceLayoutsOf(club.tactics) : undefined;
+  };
+
   const triggerBigPlay = (play: BigPlay): void => {
     setBigPlay({ ...play, key: Date.now() });
     if (bigPlayTimer.current !== undefined) clearTimeout(bigPlayTimer.current);
@@ -1153,16 +1201,6 @@ function LiveMatchView(): JSX.Element {
     if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
   }, [lastShoutSeq]);
-
-  // A video check goes up on the banner too: who asked, and what the video showed.
-  const lastChallengeSeq = md.lastChallenge?.seq;
-  useEffect(() => {
-    const c = md.lastChallenge;
-    if (c == null) return;
-    setSubAnnouncement({ text: `VIDEO CHECK — ${md.sides[c.team].shortName}: ${c.verdict}`, team: c.team, key: c.seq });
-    if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
-    subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3600);
-  }, [lastChallengeSeq]);
 
   /** A line on the banner, for either side. */
   const announce = (text: string, team: 0 | 1): void => {
@@ -1255,7 +1293,6 @@ function LiveMatchView(): JSX.Element {
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
-        g.aiConsidersChallenge();
         // Anyone hurt in that rally: the stoppage for him, played out on the court.
         if (g.matchday?.snapshot?.matchOver !== true) {
           for (let live = g.beginInjuryStoppage(); live !== null && !cancelled.current; live = g.beginInjuryStoppage()) {
@@ -1263,6 +1300,8 @@ function LiveMatchView(): JSX.Element {
           }
           if (cancelled.current) break;
         }
+        // A close call that went against the other bench: they may ask for the video.
+        g.aiConsidersChallenge();
         if (g.matchday?.snapshot?.matchOver === true) {
           // Full time: let the last point sink in, then on to the report.
           await sleep(2200 / current.speed);
@@ -1289,6 +1328,51 @@ function LiveMatchView(): JSX.Element {
       clearTimeout(subAnnounceTimer.current);
     };
   }, []);
+
+  // The video: the point played again on this court — up to the decisive touch
+  // at near full speed, the last of it in slow motion — then the referee's
+  // verdict, held a moment before play goes on.
+  const reviewSeq = md.videoReview?.seq;
+  useEffect(() => {
+    const review = g.matchday?.videoReview;
+    if (review == null) return;
+    const cancelled = { current: false };
+    // Skipping to the verdict stops the video where it is.
+    const stop = { get current(): boolean { return cancelled.current || g.matchday?.videoReview?.verdict != null; } };
+    void (async () => {
+      animatingRef.current = true;
+      setBigPlay(null);
+      setRadar(null);
+      if (review.verdict === null) {
+        await sleep(900);
+        if (stop.current) { if (cancelled.current) return; } else {
+          const { entry } = review.log;
+          const roles = g.liveRoles();
+          setScene(setupScene(review.log, entry.serveTeam, roles, nearTeam, (p) => (servesJump(store, p) ? 'jump' : 'float')));
+          await sleep(900);
+          const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
+          const beats = rallyBeats(review.log, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceNow);
+          const slow = Math.min(2, beats.length);
+          if (!stop.current) await playBeats(beats.slice(0, beats.length - slow), 0.85, stop, setScene, () => undefined);
+          if (!stop.current) await playBeats(beats.slice(beats.length - slow), 0.28, stop, setScene, () => undefined);
+          if (cancelled.current) return;
+          await sleep(700);
+          if (cancelled.current) return;
+        }
+        playWhistle();
+        g.finishVideoReview();
+      }
+      await sleep(2800);
+      if (cancelled.current) return;
+      animatingRef.current = false;
+      g.closeVideoReview();
+      setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam, store));
+    })();
+    return () => {
+      cancelled.current = true;
+      animatingRef.current = false;
+    };
+  }, [reviewSeq]);
 
   // The newest point is at the top of the list: keep it in view.
   useEffect(() => {
@@ -1337,6 +1421,8 @@ function LiveMatchView(): JSX.Element {
       ? 'Injury'
     : md.timeoutActive !== null
       ? 'Timeout'
+      : md.videoReview != null
+        ? 'Video check'
       : md.paused && md.pauseUntil !== null
         ? (md.videoCheck === true ? 'Video check' : 'Substitution')
         : md.paused ? 'Paused' : 'Live';
@@ -1411,7 +1497,7 @@ function LiveMatchView(): JSX.Element {
         </div>
 
         <div className="lv-center">
-          <div className="card court-panel lv-court">
+          <div className={`card court-panel lv-court${md.videoReview != null && md.videoReview.verdict === null ? ' reviewing' : ''}`}>
             <LiveCourt
               scene={scene} store={store} roles={g.liveRoles()} kits={kits} teamOf={teamOf} ratings={ratings} labels={labels}
               injury={md.injury != null ? { p: md.injury.inj.p, team: md.injury.inj.team, phase: md.injury.phase } : null}
@@ -1447,6 +1533,7 @@ function LiveMatchView(): JSX.Element {
               </div>
             )}
             {md.injury != null && <InjuryPanel />}
+            {md.videoReview != null && <VideoCheck review={md.videoReview} side={md.sides[md.videoReview.team]} kit={kits[md.videoReview.team]} />}
             {md.timeoutActive !== null && overlay !== 'subs' && (
               <TimeoutPanel
                 secondsLeft={timeoutSecondsLeft}
@@ -1545,7 +1632,8 @@ function LiveMatchView(): JSX.Element {
         <span className="flex-spacer" />
         {md.paused
           ? (
-            <button disabled={md.timeoutActive !== null || md.injury != null} onClick={() => g.resume()}>
+            <button disabled={md.timeoutActive !== null || md.injury != null || md.videoReview != null} onClick={() => g.resume()}
+              title={md.videoReview != null ? 'The referee is at the video screen' : undefined}>
               <Icon name="play" size={14} /> Resume
             </button>
           )

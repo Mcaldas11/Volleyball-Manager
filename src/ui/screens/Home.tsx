@@ -39,7 +39,7 @@ export function HomeScreen(): JSX.Element {
   const g = useGame();
   if (g.club === null) return g.world!.career.nationalTeam !== undefined ? <NationalHome /> : <UnemployedHome />;
   return (
-    <div className="home">
+    <div className="home-page">
       <NowManaging />
       <div className="home-row">
         <LeagueTableCard />

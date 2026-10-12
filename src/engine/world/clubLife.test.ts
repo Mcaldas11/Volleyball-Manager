@@ -95,6 +95,8 @@ test('one-to-one: praise in form lifts him; a promise kept or broken; a player k
   store.morale[a] = 50;
   const praise = talkToPlayer(world, club, a, 'praise');
   assert.ok(praise.ok && store.morale[a] > 50);
+  assert.match(praise.reply, /noticed/, 'in his own words, as he would say it');
+  assert.match(talkToPlayer(world, club, a, 'mood').reply, /\./, 'how he is, said back');
   assert.equal(talkToPlayer(world, club, a, 'encourage').ok, false, 'not twice in a fortnight');
 
   store.playingTime[b] = 10;

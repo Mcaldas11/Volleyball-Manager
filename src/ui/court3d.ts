@@ -184,6 +184,8 @@ function shirtTexture(look: Look): CanvasTexture {
 
 class Figure {
   readonly root = new Group();
+  /** The whole body tipped about the feet: a dive, a sprawl, flat out on the floor. */
+  private readonly tip = new Group();
   private readonly pelvis = new Group();
   private readonly spine = new Group();
   readonly head = new Group();
@@ -215,15 +217,19 @@ class Figure {
     this.materials = [this.shirt, this.shorts, skin, hair, pad, sock, shoe, eye];
     this.kitKey = JSON.stringify(look.kit);
 
+    // Only the big parts throw a shadow: eyes, hands, socks and shoes are lost
+    // in it anyway, and every caster is drawn a second time for the shadow map.
+    const SMALL = new Set<BufferGeometry>([g.neck, g.eye, g.sleeve, g.hand, g.shortsLeg, g.pad, g.sock, g.shoe, ...g.hair]);
     const part = (geo: BufferGeometry, m: Material, parent: Group, x = 0, y = 0, z = 0): Mesh => {
       const mesh = new Mesh(geo, m);
       mesh.position.set(x, y, z);
-      mesh.castShadow = true;
+      mesh.castShadow = !SMALL.has(geo);
       parent.add(mesh);
       return mesh;
     };
 
-    this.root.add(this.pelvis);
+    this.root.add(this.tip);
+    this.tip.add(this.pelvis);
     part(g.shorts, this.shorts, this.pelvis, 0, 0, 0.03);
     this.pelvis.add(this.spine);
     this.spine.position.z = BONES.spine;
@@ -284,6 +290,8 @@ class Figure {
     this.root.position.set(b.x, b.y, b.lift);
     this.root.rotation.set(0, 0, b.yaw);
     this.root.scale.setScalar(b.scale);
+    this.tip.position.z = r.root.rise;
+    this.tip.rotation.set(r.root.pitch, r.root.roll, 0);
     this.pelvis.position.set(0, r.pelvis.y, r.pelvis.z);
     this.pelvis.rotation.set(r.pelvis.pitch, 0, 0);
     this.spine.rotation.set(r.spine.x, r.spine.y, r.spine.z);
@@ -610,7 +618,9 @@ export class Court3D {
   resize(width: number, height: number, dpr: number): void {
     this.width = width;
     this.height = height;
-    this.renderer.setPixelRatio(dpr);
+    // Past one and a half pixels per CSS pixel the court looks no sharper,
+    // and every frame costs half as much again — or more.
+    this.renderer.setPixelRatio(Math.min(dpr, 1.5));
     this.renderer.setSize(width, height, false);
     courtCamera(width, height, this.camera);
   }

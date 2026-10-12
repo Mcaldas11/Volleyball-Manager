@@ -81,6 +81,48 @@ const DIG_LOW = shape(PLATFORM, {
 const DIG_HIT = shape(DIG_LOW, { ...arms(1.22, -0.25, 0.03) });
 const DIG_UP = shape(DIG_LOW, { crouch: 0.34, lean: 0.34, stride: 0.34, ...arms(1.0, -0.2, 0.1) });
 
+/** Launched full length at a ball out of reach: long and low, both arms out for it. */
+const DIVE_REACH = shape(DIG_LOW, {
+  crouch: 0.2, hipShift: 0.04, tilt: 0.18, lean: 0.16, dive: 0.9, nod: -1.05, stance: 0.14, stride: 0.5,
+  ...arms(1.5, -0.2, 0.04),
+});
+/** The ball on the forearms at full stretch. */
+const DIVE_HIT = shape(DIVE_REACH, { dive: 1.05, crouch: 0.12, ...arms(1.62, -0.22, 0.03) });
+/** Down on the floor chest first, the arms still out past the head: the pancake. */
+const DIVE_FLAT = shape(STAND, {
+  crouch: 0, hipShift: 0, tilt: 0.02, lean: 0.04, dive: 1.47, nod: -0.85, stance: 0.17, stride: 0.04, tuck: 0, point: 0,
+  hFlex: 2.7, hAbd: 0.32, hElbow: 0.25, oFlex: 2.85, oAbd: 0.22, oElbow: 0.15,
+});
+/** Pushing back up: hands under the shoulders, a knee drawn up under the body. */
+const DIVE_PUSH = shape(STAND, {
+  crouch: 0.5, hipShift: -0.04, tilt: 0.55, lean: 0.6, dive: 0.72, nod: -0.35, stance: 0.22, stride: 0.48,
+  ...arms(1.15, 0.36, 0.35),
+});
+/** Over sideways after a ball wide of him: the leg out, down on the hip, the arms reaching for it. */
+const SPRAWL_REACH = shape(DIG_LOW, {
+  crouch: 0.36, tilt: 0.3, lean: 0.24, roll: 0.62, dive: 0.12, stance: 0.5, stride: 0.16, nod: -0.7,
+  ...arms(1.75, -0.12, 0.05),
+});
+const SPRAWL_HIT = shape(SPRAWL_REACH, { roll: 0.82, ...arms(1.9, -0.12, 0.04) });
+const SPRAWL_FLAT = shape(STAND, {
+  crouch: 0.16, tilt: 0.12, lean: 0.16, roll: 1.32, dive: 0.08, nod: -0.45, stance: 0.42, stride: 0.12,
+  hFlex: 2.35, hAbd: 0.25, hElbow: 0.35, oFlex: 2.1, oAbd: 0.3, oElbow: 0.5,
+});
+const SPRAWL_UP = shape(STAND, {
+  crouch: 0.5, tilt: 0.45, lean: 0.45, roll: 0.55, dive: 0.2, nod: -0.3, stance: 0.34, stride: 0.3,
+  ...arms(0.9, 0.4, 0.6),
+});
+
+/** A sideways shape tipped over towards `side`: +1 his right, -1 his left. */
+function sideways(s: Shape, side: number): Shape {
+  return side >= 0 ? s : { ...s, roll: -s.roll };
+}
+
+/** How far off their feet a shape has someone: 0 standing, 1 and more flat out. */
+function grounded(s: Shape): number {
+  return Math.max(Math.abs(s.dive), Math.abs(s.roll));
+}
+
 /** Squared up under the ball, hands shaped above the forehead. */
 const SET_PREP = shape(READY, {
   crouch: 0.16, hipShift: 0, tilt: 0.12, lean: -0.02, nod: -0.75, stance: 0.2, stride: 0.16, ...arms(2.55, 0.42, 1.75),
@@ -130,6 +172,8 @@ const CLAP_OPEN = shape(STAND, { nod: -0.1, ...arms(1.35, 0.32, 1.1) });
 const CLAP = shape(CLAP_OPEN, { ...arms(1.42, -0.12, 1.0) });
 /** Hands on hips, head down. */
 const HIPS = shape(STAND, { lean: 0.06, nod: 0.45, ...arms(-0.25, 0.55, 1.9, 0.6) });
+/** Bent over, hands on the knees: that one hurt. */
+const KNEES = shape(STAND, { crouch: 0.2, hipShift: -0.06, tilt: 0.5, lean: 0.72, nod: 0.25, stance: 0.24, ...arms(0.62, 0.22, 0.2) });
 
 /** Running flat out: tall, leaning into it, elbows bent and the arms pumping. */
 /** Down hurt: on one knee, bent over, a hand on the ankle. */
@@ -418,7 +462,7 @@ const TURN_RATE = 10; // rad/s
 /** How fast the ball spins off each kind of contact. */
 const SPIN: Partial<Record<Pose, number>> = { spike: 32, serve: 36, float: 0.4, set: -3, receive: 6, dig: 9, pass: 5 };
 
-const CONTACTS: ReadonlySet<Pose> = new Set<Pose>(['serve', 'float', 'receive', 'dig', 'pass', 'set', 'spike', 'block']);
+const CONTACTS: ReadonlySet<Pose> = new Set<Pose>(['serve', 'float', 'receive', 'dig', 'pass', 'set', 'spike', 'block', 'dive']);
 
 /** The way something at (dx, dy) from a player lies, as a facing. */
 function yawTo(dx: number, dy: number): number {
@@ -433,6 +477,13 @@ function wrap(a: number): number {
 function clampYaw(yaw: number, around: number, max: number): number {
   const d = wrap(yaw - around);
   return around + Math.max(-max, Math.min(max, d));
+}
+
+/** A court offset in the body frame of a player facing `yaw`: [right, ahead]. */
+function toBody(yaw: number, dx: number, dy: number): [number, number] {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return [dx * c + dy * s, -dx * s + dy * c];
 }
 
 /** Body-frame offset (right, ahead) in court metres for a player facing `yaw`. */
@@ -904,6 +955,13 @@ export class CourtMotion {
           const hand = this.placeFor(b, ball, yaw, hit, 'both');
           // Down (or up) to the ball's height, as far as the legs go.
           drop = Math.max(-0.12, Math.min(dig ? 0.12 : 0.22, hand[2] - ball.z));
+          // A ball near the floor, or more ground than the legs can make in
+          // time: he goes full length for it.
+          const travel = Math.hypot(b.tx + b.ox - b.x, b.ty + b.oy - b.y);
+          if (dig && (ball.z < 0.36 || travel > 0.8 + (2.6 * pre) / 1000)) {
+            this.diveFor(b, ball, pre, now, tc, true);
+            break;
+          }
         }
         const lower = (s: Shape): Shape => ({ ...s, crouch: s.crouch + drop });
         const keys = timeline(pre, [
@@ -935,6 +993,12 @@ export class CourtMotion {
           jump ? runUp(b, -pre, T, 0) : null);
         break;
       }
+      case 'dive': {
+        // A ball he can't get to: he goes full length for it anyway, and it
+        // is down past his hands.
+        if (sc.ball !== null) this.diveFor(b, sc.ball, pre, now, tc, false);
+        break;
+      }
       case 'block': {
         // Up just after the hitter, hands over the net at the top — as high
         // as the blocker's own hands got, when the scene knows it.
@@ -952,6 +1016,50 @@ export class CourtMotion {
       default:
         break;
     }
+  }
+
+  /**
+   * Full length for a ball: forward and flat out on the chest for one in
+   * front of him, over sideways on the hip for one wide; the hands meeting
+   * it at the stretch if he `gets` there, falling just short if not. Then a
+   * moment on the floor, and back up.
+   */
+  private diveFor(b: Body, ball: Ball3, pre: number, now: number, tc: number, gets: boolean): void {
+    const dx = ball.x - b.x;
+    const dy = ball.y - b.y;
+    const [right, ahead] = toBody(b.yaw, dx, dy);
+    const wide = Math.abs(right) > Math.abs(ahead) * 1.1 + 0.25;
+    const side = Math.sign(right) || 1;
+    // Forwards he turns to the ball; sideways he keeps facing the play.
+    const yaw = wide ? b.yaw : yawTo(dx, dy);
+    const [reachShape, hitShape, flat, up] = wide
+      ? [sideways(SPRAWL_REACH, side), sideways(SPRAWL_HIT, side), sideways(SPRAWL_FLAT, side), sideways(SPRAWL_UP, side)]
+      : [DIVE_REACH, DIVE_HIT, DIVE_FLAT, DIVE_PUSH];
+    if (gets) {
+      this.placeFor(b, ball, yaw, hitShape, 'both');
+    } else {
+      // As far towards it as he can push off from, the hands landing short of it.
+      const h = reach(hitShape, b.hand, 'both', b.scale);
+      const o = toCourt(yaw, h[0], h[1]);
+      const short = 0.3 + ((b.seed * 13) % 5) * 0.06;
+      const d = Math.hypot(dx, dy);
+      const k = d > 1e-3 ? short / d : 0;
+      const feetX = ball.x - o.x - dx * k;
+      const feetY = ball.y - o.y - dy * k;
+      // Never further than his legs can take him first.
+      const far = Math.hypot(feetX - b.x, feetY - b.y);
+      const can = Math.min(far, (MAX_SPEED * 0.55 * pre) / 1000);
+      const u = far > 1e-3 ? can / far : 0;
+      b.ox = b.x + (feetX - b.x) * u - b.tx;
+      b.oy = b.y + (feetY - b.y) * u - b.ty;
+    }
+    const lunge = Math.min(320, pre * 0.75);
+    const keys = timeline(pre, [
+      [-pre, READY], [-lunge, DIG_LOW], [-Math.min(150, lunge * 0.5), reachShape], [0, hitShape, 'whip'],
+      [wide ? 240 : 210, flat], [wide ? 640 : 700, flat], [wide ? 940 : 1020, up], [wide ? 1280 : 1380, READY],
+    ]);
+    if (b.action !== null) b.fade = { from: b.shape, t0: now };
+    b.action = { kind: 'dig', t0: now, tc, keys, jump: null, yaw, path: null, end: wide ? 1380 : 1480 };
   }
 
   /** Which side of the net a team is playing on: -1 the near half, +1 the far. */
@@ -1005,8 +1113,12 @@ export class CourtMotion {
       const style = (b.seed * 7 + 3) % 3;
       let keys: Key[];
       let jump: Jump | null = null;
-      if (!won) {
-        keys = timeline(0, [[0, b.shape], [320, HIPS], [1300, HIPS], [1750, STAND]]);
+      if (!won && grounded(b.shape) > 0.5) {
+        // Down after a ball that got past him: a moment on the floor first.
+        keys = timeline(0, [[0, b.shape], [650, b.shape], [1000, DIVE_PUSH], [1450, HIPS], [2100, HIPS], [2500, STAND]]);
+      } else if (!won) {
+        const sag = style === 1 ? KNEES : HIPS;
+        keys = timeline(0, [[0, b.shape], [320, sag], [1300, sag], [1750, STAND]]);
       } else if (style === 0) {
         keys = timeline(0, [[0, b.shape], [180, ARMS_UP], [950, ARMS_UP], [1400, STAND]]);
         jump = { up: 120, peak: 300, down: 480, h: 0.22 };
@@ -1174,8 +1286,10 @@ export class CourtMotion {
       const dx = (waiting ? path.from.x : goalX) - b.x;
       const dy = (waiting ? path.from.y : goalY) - b.y;
       const dist = Math.hypot(dx, dy);
-      // Down hurt, nobody moves him; on a bad leg, he hobbles.
-      const top = (b.hurtGoal ?? 0) >= 1 ? 0 : b.limp === true ? MAX_SPEED * 0.2 : MAX_SPEED;
+      // Down hurt, nobody moves him; on a bad leg, he hobbles. Flat out on
+      // the floor after a dive, he goes nowhere until he is up again.
+      const floored = Math.min(1, Math.max(0, (grounded(b.shape) - 1.0) * 3));
+      const top = ((b.hurtGoal ?? 0) >= 1 ? 0 : b.limp === true ? MAX_SPEED * 0.2 : MAX_SPEED) * (1 - floored);
       if (dist > 0.001 && b.lift < 0.05) {
         const move = Math.min(dist, Math.min(top, dist / SETTLE) * dt);
         b.x += (dx / dist) * move;
@@ -1199,7 +1313,9 @@ export class CourtMotion {
     else if (ball !== null && b.pose !== 'stand' && b.pose !== 'hold') face = clampYaw(yawTo(ball.x - b.x, ball.y - b.y), net, 1.2);
     else face = net;
     const turn = wrap(face - b.yaw);
-    b.yaw = wrap(b.yaw + Math.max(-TURN_RATE * dt, Math.min(TURN_RATE * dt, turn * (1 - Math.exp(-dt / 0.06)))));
+    // Lying on the floor, the body doesn't spin round to the ball.
+    const turnRate = TURN_RATE * (grounded(b.shape) > 0.7 ? 0.05 : 1);
+    b.yaw = wrap(b.yaw + Math.max(-turnRate * dt, Math.min(turnRate * dt, turn * (1 - Math.exp(-dt / 0.06)))));
 
     // ---- Off the floor ----
     const jumpNow = action !== null && action.jump !== null ? liftAt(action.jump, rel) : 0;

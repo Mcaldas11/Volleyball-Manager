@@ -28,7 +28,7 @@ import {
 } from '../engine/world/staffDeals.ts';
 import { cohesionEdge, cohesionOf, dressingRoom, setCaptain, type DressingRoom } from '../engine/world/dressingRoom.ts';
 import { applyTalkMorale, favouriteness, giveTalk, type TalkMoment, type TalkResult, type TalkTone } from '../engine/world/teamTalk.ts';
-import { answerTransferRequest, chatBlock, talkToPlayer, type ChatTopic } from '../engine/world/playerTalks.ts';
+import { answerTransferRequest, CHAT_LINES, chatBlock, chatOpening, talkToPlayer, type ChatTopic } from '../engine/world/playerTalks.ts';
 import { requestUpgrade, upgradeBlock, type FacilityKind } from '../engine/world/facilities.ts';
 import { chooseSponsor, setTicketPrice } from '../engine/world/commercial.ts';
 import { endAffiliation, proposeAffiliation } from '../engine/world/affiliates.ts';
@@ -106,6 +106,37 @@ import {
   deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
   newSaveId, saveGame as writeSaveWorld, type SaveMeta,
 } from './persistence.ts';
+
+/** One line of a one-to-one: the manager, the player, or what the room saw. */
+export interface PlayerTalkLine {
+  who: 'you' | 'him' | 'note';
+  text: string;
+  /** What it did to his morale, on a note. */
+  morale?: number;
+}
+
+/** A video check under way: the point shown again, then the referee's verdict. */
+export interface VideoReview {
+  seq: number;
+  /** The side that asked. */
+  team: 0 | 1;
+  /** The point being looked at, as it was played. */
+  log: MatchdayLogEntry;
+  /** What the referee gave. */
+  call: LastCall['call'];
+  /** Null while the video is still running. */
+  verdict: { overturned: boolean; text: string } | null;
+  /** Play goes on by itself once it is over — it was running when the video was asked for. */
+  resume: boolean;
+}
+
+/** A one-to-one in progress. */
+export interface PlayerTalk {
+  p: number;
+  lines: PlayerTalkLine[];
+  /** What has been raised this time. */
+  asked: ChatTopic[];
+}
 
 export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
@@ -436,6 +467,8 @@ export interface MatchdayState {
   lastChallenge?: { seq: number; team: 0 | 1; overturned: boolean; verdict: string } | null;
   /** The stoppage under way is for the video, not a substitution. */
   videoCheck?: boolean;
+  /** The video being looked at: the point played again on the court, then the verdict. */
+  videoReview?: VideoReview | null;
   /** The coach has a panel open — the substitutions, or one player's options: play holds until it is closed. */
   coachPanel?: boolean;
   /** Play was running when he opened it: closing it starts it again. */
@@ -517,6 +550,8 @@ class Game {
   incomingOffer: IncomingOfferReview | null = null;
   /** A word with the coach of a club playing one of ours on loan. */
   coachTalk: CoachTalk | null = null;
+  /** A one-to-one with one of the squad, in his office. */
+  playerTalk: PlayerTalk | null = null;
   /** Fixture id of the press conference currently open full-screen, if any. */
   /** The press conference on screen, by its id. */
   activeInterviewId: number | null = null;
@@ -605,6 +640,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.matchday = null;
     this.liveSim = null;
     this.pendingManager = null;
@@ -664,6 +700,7 @@ class Game {
       this.staffNegotiation = null;
       this.incomingOffer = null;
       this.coachTalk = null;
+      this.playerTalk = null;
       this.matchday = null;
       this.liveSim = null;
       this.currentSaveId = id;
@@ -797,6 +834,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
@@ -905,6 +943,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -958,6 +997,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -974,6 +1014,7 @@ class Game {
       this.selectedCompetition = null;
       this.incomingOffer = null;
       this.coachTalk = null;
+      this.playerTalk = null;
     }
     this.emit();
   }
@@ -991,6 +1032,7 @@ class Game {
       this.selectedCompetition = null;
       this.incomingOffer = null;
       this.coachTalk = null;
+      this.playerTalk = null;
     }
     this.emit();
   }
@@ -1008,6 +1050,7 @@ class Game {
       this.selectedCompetition = null;
       this.incomingOffer = null;
       this.coachTalk = null;
+      this.playerTalk = null;
     }
     this.selectedCoach = staffId;
     if (staffId !== null) this.selectedNation = null;
@@ -1028,6 +1071,7 @@ class Game {
       this.selectedCompetition = null;
       this.incomingOffer = null;
       this.coachTalk = null;
+      this.playerTalk = null;
     }
     this.selectedNation = nation;
     this.emit();
@@ -1062,6 +1106,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -1092,6 +1137,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -1131,6 +1177,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.inboxSelected = messageId;
     m.read = true;
     this.emit();
@@ -1196,6 +1243,7 @@ class Game {
     this.selectedCompetition = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -1257,6 +1305,7 @@ class Game {
     this.selectedCompetition = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -1659,6 +1708,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -1846,6 +1896,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -2220,6 +2271,8 @@ class Game {
   pause(): void {
     const md = this.matchday;
     if (md === null) return;
+    // Paused during the video: it stays paused after the verdict too.
+    if (md.videoReview != null) md.videoReview.resume = false;
     md.paused = true;
     md.pauseUntil = null; // a manual pause is indefinite, not a timed stoppage
     md.pausedForPanel = false; // his own pause: closing a panel doesn't undo it
@@ -2228,7 +2281,8 @@ class Game {
 
   resume(): void {
     const md = this.matchday;
-    if (md === null) return;
+    // Not while the referee is at the screen: the video runs to its verdict first.
+    if (md === null || md.videoReview != null) return;
     md.paused = false;
     md.pauseUntil = null;
     md.videoCheck = false;
@@ -2382,6 +2436,7 @@ class Game {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null) return 'No match.';
+    if (md.videoReview != null) return 'The video is being looked at.';
     return sim.challengeError(md.userIsHome ? 0 : 1);
   }
 
@@ -2399,19 +2454,74 @@ class Game {
   aiConsidersChallenge(): void {
     const md = this.matchday;
     const sim = this.liveSim;
-    if (md === null || sim === null || md.timeoutActive !== null) return;
+    if (md === null || sim === null || md.timeoutActive !== null || md.videoReview != null) return;
     const aiTeam: 0 | 1 = md.userIsHome ? 1 : 0;
     const call = sim.lastCall();
     if (call !== null && call.close && call.winner !== aiTeam && sim.challengeError(aiTeam) === null && Math.random() < 0.45) {
-      this.resolveChallenge(aiTeam);
+      this.requestVideo(aiTeam);
     }
   }
 
   /** Ask for the video on the last point. */
-  challenge(): ChallengeResult | null {
+  challenge(): void {
     const md = this.matchday;
-    if (md === null) return null;
-    return this.resolveChallenge(md.userIsHome ? 0 : 1);
+    if (md === null) return;
+    this.requestVideo(md.userIsHome ? 0 : 1);
+  }
+
+  /**
+   * A side asks for the video: play stops, and the point is shown again on
+   * the court — the live view plays it, then calls {@link finishVideoReview}.
+   * Nothing is decided until the video has been seen.
+   */
+  private requestVideo(team: 0 | 1): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.videoReview != null) return;
+    const call = sim.lastCall();
+    const why = sim.challengeError(team);
+    const log = md.log[md.log.length - 1];
+    if (why !== null || call === null || log === undefined) {
+      this.notice = why ?? 'There is nothing to challenge.';
+      this.emit();
+      return;
+    }
+    md.videoReview = { seq: ++this.subSeq, team, log, call: call.call, verdict: null, resume: !md.paused || md.pausedForPanel === true };
+    md.paused = true;
+    md.pauseUntil = null;
+    md.videoCheck = true;
+    this.emit();
+  }
+
+  /** The video has been seen: the referee gives his verdict. */
+  finishVideoReview(): void {
+    const md = this.matchday;
+    const review = md?.videoReview;
+    if (md == null || review == null || review.verdict !== null) return;
+    const result = this.resolveChallenge(review.team);
+    review.verdict = result?.ok === true
+      ? { overturned: result.overturned === true, text: result.verdict ?? '' }
+      : { overturned: false, text: result?.reason ?? 'The call stands.' };
+    this.emit();
+  }
+
+  /** The verdict has been given: play goes on — unless the coach has it stopped. */
+  closeVideoReview(): void {
+    const md = this.matchday;
+    const review = md?.videoReview;
+    if (md == null || review == null) return;
+    if (review.verdict === null) this.finishVideoReview();
+    md.videoReview = null;
+    if (review.resume && md.coachPanel === true) {
+      // A panel opened during the video holds play until it is closed.
+      md.pausedForPanel = true;
+      md.pauseUntil = null;
+    } else if (review.resume) {
+      md.pauseUntil = Date.now() + 400;
+    } else {
+      md.videoCheck = false;
+    }
+    this.emit();
   }
 
   /** A side's challenge: the call looked at, and the match put right if it was wrong. */
@@ -2472,12 +2582,40 @@ class Game {
     return world === null || club === null ? 'No club.' : chatBlock(world, club, p, topic);
   }
 
-  /** Talk to one of the squad. */
-  talkToPlayer(p: number, topic: ChatTopic): void {
+  /** Call one of the squad in for a word: the conversation opens with him answering the door. */
+  openPlayerTalk(p: number): void {
+    const world = this.world;
+    if (world === null || this.club === null || !this.club.players.includes(p)) return;
+    this.playerTalk = { p, lines: [{ who: 'him', text: chatOpening(world, p) }], asked: [] };
+    this.negotiation = null;
+    this.staffNegotiation = null;
+    this.incomingOffer = null;
+    this.coachTalk = null;
+    this.emit();
+  }
+
+  /** Say it: he answers there and then, and it shows in his morale. */
+  sayToPlayer(topic: ChatTopic): void {
     const world = this.world;
     const club = this.club;
-    if (world === null || club === null) return;
-    this.notice = talkToPlayer(world, club, p, topic).text;
+    const t = this.playerTalk;
+    if (world === null || club === null || t === null) return;
+    const result = talkToPlayer(world, club, t.p, topic);
+    if (!result.ok) {
+      this.notice = result.text;
+      this.emit();
+      return;
+    }
+    t.lines.push({ who: 'you', text: CHAT_LINES[topic] });
+    t.lines.push({ who: 'him', text: result.reply });
+    // How he took it, as the room would have seen it; his mood needs no telling twice.
+    if (topic !== 'mood') t.lines.push({ who: 'note', text: result.text, morale: result.morale });
+    t.asked.push(topic);
+    this.emit();
+  }
+
+  closePlayerTalk(): void {
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -2576,7 +2714,9 @@ class Game {
     const restart = md.pausedForPanel === true;
     md.coachPanel = false;
     md.pausedForPanel = false;
-    if (restart && md.paused && md.pauseUntil === null && md.timeoutActive === null && md.injury == null) {
+    // The video is still running: play restarts once it is over.
+    if (restart && md.videoReview != null) md.videoReview.resume = true;
+    else if (restart && md.paused && md.pauseUntil === null && md.timeoutActive === null && md.injury == null) {
       md.paused = false;
     }
     this.emit();
@@ -3320,6 +3460,7 @@ class Game {
     this.staffNegotiation = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -3845,6 +3986,7 @@ class Game {
     this.selectedCompetition = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -4235,6 +4377,7 @@ class Game {
     this.notice = `Your terms have gone to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -4283,6 +4426,7 @@ class Game {
     if (result === null) {
       this.notice = coachTalkBlock(world, t.playerIdx) ?? 'That is not something to ask him for.';
       this.coachTalk = null;
+      this.playerTalk = null;
     } else {
       t.result = result;
     }
@@ -4291,6 +4435,7 @@ class Game {
 
   closeCoachTalk(): void {
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -4339,6 +4484,7 @@ class Game {
       : `${name} is talking terms with ${buyer?.name ?? 'them'} — he will decide by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -4359,6 +4505,7 @@ class Game {
     this.notice = `Asking price sent to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -4370,6 +4517,7 @@ class Game {
     world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.notice = 'You turned down the offer.';
     this.emit();
   }
@@ -4378,6 +4526,7 @@ class Game {
   closeOfferView(): void {
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 
@@ -4550,6 +4699,7 @@ class Game {
     this.selectedCompetition = null;
     this.incomingOffer = null;
     this.coachTalk = null;
+    this.playerTalk = null;
     this.emit();
   }
 

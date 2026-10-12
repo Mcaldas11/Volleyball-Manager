@@ -137,10 +137,12 @@ export function FacilitiesScreen(): JSX.Element {
               {mine && project !== undefined && (
                 <p className="biz-status">{project.stage === 'asked' ? `With the board — answer by ${g.dateLabelForDay(project.until)}` : `Being built — done ${g.dateLabelForDay(project.until)}`}</p>
               )}
-              <button className="sm" disabled={block !== null} title={block ?? 'Ask the board to pay for it'} onClick={() => g.requestUpgrade(kind)}>
-                <Icon name="board" size={13} /> Request upgrade
-              </button>
-              {block !== null && !mine && <span className="faint biz-why">{block}</span>}
+              <div className="biz-foot">
+                <button className="sm" disabled={block !== null} title={block ?? 'Ask the board to pay for it'} onClick={() => g.requestUpgrade(kind)}>
+                  <Icon name="board" size={13} /> Request upgrade
+                </button>
+                {block !== null && !mine && <span className="faint biz-why">{block}</span>}
+              </div>
             </Card>
           );
         })}

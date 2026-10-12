@@ -271,3 +271,18 @@ test('a serve waved on before a stoppage is waved on again once play is back on'
   run(1000);
   assert.equal(calls.filter((c) => c.kind === 'serve').length, waved + 1);
 });
+
+test('a dive takes the whole body to the floor: flat out, head and hands low and out in front of the feet', () => {
+  const standing = jointPositions(buildRig(STAND, STILL));
+  const flat = jointPositions(buildRig({ ...STAND, crouch: 0, dive: 1.47, nod: -0.85, ...{ hFlex: 2.8, oFlex: 2.8, hElbow: 0.2, oElbow: 0.2 } }, STILL));
+  assert.ok(standing.head[2] > 1.6, 'up on his feet');
+  assert.ok(flat.head[2] < 0.5, `head down by the floor (${flat.head[2].toFixed(2)} m)`);
+  assert.ok(flat.head[1] > 1.4, 'and well out in front of where he stood');
+  for (const hand of flat.hands) {
+    assert.ok(hand[1] > flat.head[1], 'the arms stretched out past the head');
+    assert.ok(hand[2] > -0.05 && hand[2] < 0.6, 'along the floor, not through it');
+  }
+  // Sideways: over towards the side he rolls to.
+  const sprawl = jointPositions(buildRig({ ...STAND, roll: 1.3 }, STILL));
+  assert.ok(sprawl.head[0] > 1.2 && sprawl.head[2] < 0.7);
+});

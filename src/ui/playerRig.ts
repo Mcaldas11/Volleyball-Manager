@@ -17,6 +17,11 @@
  * 1.95 m tall; everyone else is that body scaled to their own height. Angles
  * follow one rule: a positive rotation about `x` swings a limb hanging down
  * forwards (and tips one standing up backwards).
+ *
+ * A player can also leave their feet altogether: `dive` tips the whole body
+ * forward about the floor between the feet — far enough and they are flat
+ * out on it, chest down, arms stretched past the head — and `roll` tips it
+ * over sideways, for a sprawl after a ball wide of them.
  */
 
 export const REF_HEIGHT = 1.95;
@@ -74,6 +79,10 @@ export interface Shape {
   tuck: number;
   /** Toes pointed, rad — only in the air. */
   point: number;
+  /** The whole body tipped forward about the feet, rad: about π/2 is flat out on the floor. */
+  dive: number;
+  /** The whole body tipped over sideways about the feet, rad: towards the player's right (+) or left (-). */
+  roll: number;
   /** Shoulder: raised forward (flex), out to the side (abd), turned about the
    *  arm (twist); and the elbow bent. Straight up is a flex of π. */
   hFlex: number;
@@ -87,7 +96,7 @@ export interface Shape {
 }
 
 const SHAPE_KEYS = [
-  'crouch', 'hipShift', 'tilt', 'lean', 'twist', 'bend', 'nod', 'stance', 'stride', 'tuck', 'point',
+  'crouch', 'hipShift', 'tilt', 'lean', 'twist', 'bend', 'nod', 'stance', 'stride', 'tuck', 'point', 'dive', 'roll',
   'hFlex', 'hAbd', 'hTwist', 'hElbow', 'oFlex', 'oAbd', 'oTwist', 'oElbow',
 ] as const satisfies ReadonlyArray<keyof Shape>;
 
@@ -107,7 +116,7 @@ export function arms(flex: number, abd: number, elbow: number, twist = 0): Parti
 /** Standing easy between rallies. */
 export const STAND: Shape = {
   crouch: 0.02, hipShift: 0, tilt: 0.03, lean: 0.04, twist: 0, bend: 0, nod: 0.08,
-  stance: 0.12, stride: 0.05, tuck: 0, point: 0,
+  stance: 0.12, stride: 0.05, tuck: 0, point: 0, dive: 0, roll: 0,
   hFlex: 0.1, hAbd: 0.14, hTwist: 0, hElbow: 0.35, oFlex: 0.1, oAbd: 0.14, oTwist: 0, oElbow: 0.35,
 };
 
@@ -146,6 +155,8 @@ export interface Limb {
 }
 
 export interface Rig {
+  /** The whole body tipped about the floor between the feet — x first, then y — and lifted, m. */
+  root: { pitch: number; roll: number; rise: number };
   pelvis: { y: number; z: number; pitch: number };
   spine: { x: number; y: number; z: number };
   head: { x: number; z: number };
@@ -199,8 +210,10 @@ function solveLeg(dx: number, dy: number, dz: number): { x: number; y: number; b
 /** The angle of every joint for a shape, with running and looking laid on top. */
 export function buildRig(s: Shape, m: Motion): Rig {
   const speed = Math.hypot(m.moveX, m.moveY);
+  // Off their feet — launched at a ball, or down on the floor — the legs stop running.
+  const down = Math.min(1, Math.max(Math.abs(s.dive), Math.abs(s.roll)) / 0.6);
   // How much of a running cycle shows: none standing, all of it at a jog.
-  const run = Math.min(1, speed / 1.4) * (1 - m.airborne);
+  const run = Math.min(1, speed / 1.4) * (1 - m.airborne) * (1 - down);
   const stride = strideLength(speed);
   // Running, the hips sink as each foot takes the weight under the body and
   // rise through the stride.
@@ -262,6 +275,8 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const armR = armOf(1);
   const shoulderLift = (flex: number): number => 0.05 * Math.min(1, Math.max(0, (flex - 1.6) / 1.4));
   return {
+    // The chest's depth keeps a body flat out on the floor from sinking through it.
+    root: { pitch: -s.dive, roll: s.roll, rise: 0.03 * Math.max(Math.sin(Math.abs(s.dive)), Math.sin(Math.abs(s.roll))) },
     pelvis: { y: s.hipShift, z: pelvisZ, pitch },
     spine: { x: -(s.lean + drive), y: s.bend * m.hand, z: twist },
     head: {
@@ -321,7 +336,8 @@ export interface Joints {
 
 /** Where a rig puts the joints, in the body frame of the reference player. */
 export function jointPositions(r: Rig): Joints {
-  const pelvis = child({ m: I3, t: [0, 0, 0] }, [0, r.pelvis.y, r.pelvis.z], rx(r.pelvis.pitch));
+  const root: Frame = { m: mul(rx(r.root.pitch), ry(r.root.roll)), t: [0, 0, r.root.rise] };
+  const pelvis = child(root, [0, r.pelvis.y, r.pelvis.z], rx(r.pelvis.pitch));
   const spine = child(pelvis, [0, 0, BONES.spine], mul(mul(rx(r.spine.x), ry(r.spine.y)), rz(r.spine.z)));
   const head = child(child(spine, [0, 0, BONES.neck], mul(rx(r.head.x), rz(r.head.z))), [0, 0, BONES.head]);
   const sides = [-1, 1] as const;
