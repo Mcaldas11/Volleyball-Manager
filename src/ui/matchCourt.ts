@@ -30,6 +30,7 @@ import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/co
 import type { RallyContact, Shot } from '../engine/match/engine.ts';
 import { passZone, type PlayCall } from '../engine/match/tactics.ts';
 import { shotSpot, type AttackSource, type DefenceLayout, type DefenceLayouts } from '../engine/match/defence.ts';
+import type { Landing } from '../engine/match/landing.ts';
 import { Position } from '../engine/model/positions.ts';
 
 /** A point on the floor, in court metres. */
@@ -115,6 +116,12 @@ function sourceOfLaneName(lane: string | undefined): AttackSource {
   if (lane === 'Quick (middle)' || lane === 'Pipe') return 'mb';
   if (lane === 'Opposite' || lane === 'Back-row right') return 'opp';
   return 'oh';
+}
+
+/** Where the engine has a ball come down, in the defending side's frame: its
+ *  spot is relative to the hitter, `hu` across the court. */
+function spotOf(l: Landing, hu: number): Local {
+  return { u: hu >= 0.5 ? 1 - l.across : l.across, v: l.deep };
 }
 
 /** A spot kept on the court, for a defender to dig it from. */
@@ -639,7 +646,7 @@ export function rallyBeats(
   // The middle going up for the quick as the decoy, as the next set goes out.
   let decoyNext: number | null = null;
   // The last attack: where it went and from where — for whoever digs it, or covers it.
-  let lastAttack: { shot?: Shot; hu: number; team: 0 | 1; speed?: number; from: Ball3 } | null = null;
+  let lastAttack: { shot?: Shot; hu: number; team: 0 | 1; speed?: number; from: Ball3; land?: Landing } | null = null;
   let pass: { spot: ReturnType<typeof passSpot>; ms: number } | null = null;
   let firstTouch = -1;
   let setFrom: { p: number; at: Local } | null = null;
@@ -760,7 +767,8 @@ export function rallyBeats(
       }
       case 'ace': {
         forms[t] = defenceFormation(teams[t]);
-        const spot = air(o, holeIn(forms[o], seed), 0);
+        // Where the engine has it land — on a close call, by a line — or into the biggest hole.
+        const spot = air(o, c.land !== undefined ? { u: c.land.across, v: c.land.deep } : holeIn(forms[o], seed), 0);
         const { ms, arc } = served(spot);
         push(spot, null, ms, arc, diverFor(o, spot, []), { kind: 'ace', team: t, speed: radar?.speed, height: radar?.height });
         break;
@@ -845,18 +853,20 @@ export function rallyBeats(
         const hu = 1 - hit.u;
         const r1 = wobble(seed, i + 3);
         const r2 = wobble(seed, i + 11);
-        lastAttack = { shot: c.shot, hu, team: t, speed: c.speed, from };
+        lastAttack = { shot: c.shot, hu, team: t, speed: c.speed, from, land: c.land };
         const soft = c.shot === 'tip' || c.shot === 'roll';
         if (c.kind === 'kill' && c.shot === 'blockout') {
           // Off the outside hand of the block — the blocker nearest the hitter — and away out of court.
           const blocker = blockers[0];
           const hands = air(t, { u: blocker !== undefined ? 1 - at(o, blocker).u : hit.u, v: 0.03 }, 3.05);
           push(hands, blocker ?? null, flies(from, hands, c.speed, 100, 180), 0, blockPoses);
-          const out = air(o, shotSpot('blockout', hu, r1, r2), 0);
+          const out = air(o, c.land !== undefined ? spotOf(c.land, hu) : shotSpot('blockout', hu, r1, r2), 0);
           push(out, null, flies(hands, out, c.speed !== undefined ? c.speed * 0.8 : undefined, 260, 620), 0.8, blockPoses,
             { kind: 'kill', team: t, speed: c.speed, height: c.height, shot: 'blockout' });
         } else if (c.kind === 'kill') {
-          const to = air(o, c.shot !== undefined ? shotSpot(c.shot, hu, r1, r2) : holeIn(forms[o], seed + i), 0);
+          // Exactly where the engine has it come down: anywhere in the court.
+          const to = air(o, c.land !== undefined ? spotOf(c.land, hu)
+            : c.shot !== undefined ? shotSpot(c.shot, hu, r1, r2) : holeIn(forms[o], seed + i), 0);
           // A tip drops over the block, a roll shot loops: neither is hit through the court.
           push(to, null, flies(from, to, c.speed, soft ? 380 : 200, soft ? 760 : 380), c.shot === 'tip' ? 0.45 : c.shot === 'roll' ? 1.0 : 0,
             [...blockPoses, ...diverFor(o, to, blockers)],
@@ -867,7 +877,8 @@ export function rallyBeats(
             { kind: 'attackError', team: o, shot: 'net' });
           push(air(t, { u: hit.u, v: 0.1 }, 0), null, 380, 0.1);
         } else if (c.kind === 'attackError') {
-          const to = air(o, c.shot !== undefined ? shotSpot(c.shot, hu, r1, r2) : { u: Math.min(0.95, Math.max(0.05, hu)), v: 1.12 }, 0);
+          const to = air(o, c.land !== undefined ? spotOf(c.land, hu)
+            : c.shot !== undefined ? shotSpot(c.shot, hu, r1, r2) : { u: Math.min(0.95, Math.max(0.05, hu)), v: 1.12 }, 0);
           push(to, null, flies(from, to, c.speed, 200, 420), 0.3, [], { kind: 'attackError', team: o, shot: c.shot });
         } else if (c.kind === 'blocked') {
           // The stuff block is the blocker who made it, when he is one of those up there.
@@ -910,7 +921,8 @@ export function rallyBeats(
         } else if (shot !== undefined && lastAttack !== null) {
           // The defender reads it and gets to it: all the way to a tip or a roll
           // shot, most of the way across to a ball hit hard.
-          const target = inCourt(shotSpot(shot, lastAttack.hu, wobble(seed, i + 3), wobble(seed, i + 11)));
+          const target = inCourt(lastAttack.land !== undefined ? spotOf(lastAttack.land, lastAttack.hu)
+            : shotSpot(shot, lastAttack.hu, wobble(seed, i + 3), wobble(seed, i + 11)));
           const soft = shot === 'tip' || shot === 'roll';
           const k = soft ? 1 : 0.7;
           spot = { u: spot.u + (target.u - spot.u) * k, v: spot.v + (target.v - spot.v) * k };

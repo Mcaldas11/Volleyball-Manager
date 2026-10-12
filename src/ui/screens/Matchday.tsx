@@ -4,6 +4,7 @@ import { INJURY_NAMES, type PlayerStore } from '../../engine/model/players.ts';
 import {
   CHALLENGE_CHECK_NAMES, challengeChecksFor, type ChallengeCheck, type LastCall, type ShoutKind,
 } from '../../engine/match/engine.ts';
+import { BALL_FOOTPRINT, gapWords, type BallMark } from '../../engine/match/landing.ts';
 import {
   abilityClass, Bar, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
   Segmented, StarMeter, useDismiss,
@@ -704,6 +705,7 @@ function VideoCheck({ review, side, kit }: { review: VideoReview; side: MatchSid
       </div>
       {v !== null && (
         <div className={`vr-verdict ${v.overturned ? 'over' : 'stands'}`}>
+          {v.mark !== undefined && <BallMarkView mark={v.mark} />}
           <b>{v.overturned ? 'Overturned' : 'Call stands'}</b>
           <span>{v.text}</span>
           <em>{v.overturned ? `${side.shortName} keep their challenge` : `${side.shortName} lose a challenge`}</em>
@@ -714,6 +716,43 @@ function VideoCheck({ review, side, kit }: { review: VideoReview; side: MatchSid
           <Icon name="forward" size={13} /> Skip to the verdict
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * The video's ball mark, the way the broadcast shows it: the floor seen from
+ * straight above, close up — the court, the line, the floor beyond it — and
+ * the ball's footprint where it came down, with the ball's size around it.
+ * In if any of the footprint is on the line.
+ */
+function BallMarkView({ mark }: { mark: BallMark }): JSX.Element {
+  // Metres from the line's outer edge, outwards positive: the ball's centre.
+  const centre = mark.gap + BALL_FOOTPRINT;
+  const ballR = 0.105;
+  // A window wide enough for both the line and the ball, however far out it went.
+  const x0 = Math.min(-0.32, centre - ballR - 0.08);
+  const x1 = Math.max(0.32, centre + ballR + 0.08);
+  const h = (x1 - x0) * 0.56;
+  const isIn = mark.gap <= 0;
+  const lineName = mark.line === 'end' ? 'End line' : 'Sideline';
+  return (
+    <div className={`vr-mark ${isIn ? 'in' : 'out'}`}>
+      <svg viewBox={`${x0} ${-h / 2} ${x1 - x0} ${h}`} preserveAspectRatio="xMidYMid meet" aria-label={`Ball mark: ${isIn ? 'in' : 'out'}`}>
+        {/* The court, the line on its edge, and the floor beyond. */}
+        <rect x={x0} y={-h / 2} width={-x0} height={h} fill="#c76f36" />
+        <rect x={0} y={-h / 2} width={x1} height={h} fill="#2b5c8c" />
+        <rect x={-0.05} y={-h / 2} width={0.05} height={h} fill="#f4f1ea" />
+        {/* The whole ball, for its size, and the footprint it left. */}
+        <circle cx={centre} cy={0} r={ballR} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={0.004} strokeDasharray="0.012 0.01" />
+        <ellipse cx={centre} cy={0} rx={BALL_FOOTPRINT} ry={BALL_FOOTPRINT * 1.35} fill={isIn ? 'rgba(46, 204, 113, 0.85)' : 'rgba(231, 76, 60, 0.85)'}
+          stroke="#fff" strokeWidth={0.004} className="vr-mark-ball" />
+      </svg>
+      <div className="vr-mark-read">
+        <span>{lineName}</span>
+        <b>{isIn ? 'IN' : 'OUT'}</b>
+        <span>{gapWords(mark.gap)}</span>
+      </div>
     </div>
   );
 }

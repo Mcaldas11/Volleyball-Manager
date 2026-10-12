@@ -35,6 +35,7 @@ import { chooseSponsor, setTicketPrice } from '../engine/world/commercial.ts';
 import { endAffiliation, proposeAffiliation } from '../engine/world/affiliates.ts';
 import { loanToAffiliate } from '../engine/world/deals.ts';
 import { challengeChecksFor, type ChallengeCheck, type ChallengeResult, type LastCall } from '../engine/match/engine.ts';
+import type { BallMark } from '../engine/match/landing.ts';
 import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
 import { interestedClubs, type ClubInterest } from '../engine/world/interest.ts';
 import {
@@ -128,7 +129,7 @@ export interface VideoReview {
   /** What the side asked the video to look at. */
   check: ChallengeCheck;
   /** Null while the video is still running. */
-  verdict: { overturned: boolean; text: string } | null;
+  verdict: { overturned: boolean; text: string; mark?: BallMark } | null;
   /** Play goes on by itself once it is over — it was running when the video was asked for. */
   resume: boolean;
 }
@@ -2564,7 +2565,7 @@ class Game {
     if (md == null || review == null || review.verdict !== null) return;
     const result = this.resolveChallenge(review.team, review.check);
     review.verdict = result?.ok === true
-      ? { overturned: result.overturned === true, text: result.verdict ?? '' }
+      ? { overturned: result.overturned === true, text: result.verdict ?? '', mark: result.mark }
       : { overturned: false, text: result?.reason ?? 'The call stands.' };
     this.emit();
   }

@@ -87,7 +87,13 @@ Before submitting a change:
       net — and the point played again on the court, the decisive touch in
       slow motion, before the verdict; the referee can miss one thing on a
       close call, and only the right question turns it over — point, serve
-      and box score — and keeps the challenge
+      and box score — and keeps the challenge. On the line, the video
+      measures where the ball really came down — the same spot the court
+      showed — and shows its mark against the line, to the centimetre
+- [x] Every attack comes down somewhere of its own: down the line, deep in
+      the far corner, short on the 3 m line, through the seam, tipped behind
+      the block — the hitters reach the whole court, and a ball hit out lands
+      out
 - [x] Team talks before the match and at every set break: what lands depends
       on the moment and on each player's personality, the dressing room's
       leaders counting most

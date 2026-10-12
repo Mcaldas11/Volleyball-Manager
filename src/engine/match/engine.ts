@@ -32,7 +32,8 @@ import {
   unrotate,
   rotationOf,
 } from './court.ts';
-import { coverage, coverEdge, defenceLayoutsOf, type AttackSource } from './defence.ts';
+import { coverage, coverEdge, defenceLayoutsOf, hitterAcross, type AttackSource } from './defence.ts';
+import { ballMark, gapWords, landingFor, nearestLine, onLine, type BallMark, type CourtLine, type Landing } from './landing.ts';
 import { pressureOf, rateRally, type Highlight } from './highlights.ts';
 import {
   aggravate, drawInjury, injuryRiskPerRally, KNOCK_HAMPER, MATCH_INJURIES, AGGRAVATE_PER_RALLY, type MatchInjury,
@@ -199,6 +200,8 @@ export interface RallyContact {
   decoy?: number;
   /** How many went up to block it. */
   blockers?: number;
+  /** Where an attack came down — or, on a close call, an ace — relative to the hitter: see landing.ts. */
+  land?: Landing;
 }
 
 export interface RallyLogEntry {
@@ -337,14 +340,17 @@ export interface ChallengeResult {
   overturned?: boolean;
   /** What the video showed, for the commentary. */
   verdict?: string;
+  /** On a ball in or out: where it came down against the line, as the video measured it. */
+  mark?: BallMark;
 }
 
 /** What the video showed when the call stands: on the thing asked about. */
-function callStands(call: LastCall, check: ChallengeCheck): string {
+function callStands(call: LastCall, check: ChallengeCheck, mark?: BallMark): string {
   if (!challengeChecksFor(call.call, call.blockout).includes(check)) return 'Nothing to see there — the call stands.';
   if (check === 'netTouch') return 'No net touch — the call stands.';
   if (check === 'blockTouch') return call.blockout ? 'Touch on the block — the call stands.' : 'No touch on the block — the call stands.';
-  return call.call === 'attackError' ? 'Out — the call stands.' : 'In — the call stands.';
+  const how = mark !== undefined ? ` — ${gapWords(mark.gap)}` : '';
+  return call.call === 'attackError' ? `Out${how}. The call stands.` : `In${how}. The call stands.`;
 }
 
 /** How much more often the setter gives a hitter the ball he loves — see traits.ts. */
@@ -881,6 +887,20 @@ export class MatchSimulator {
     const doubt = !close ? null : checks.length === 1 || this.callRng.chance(0.65) ? checks[0]
       : checks[1 + this.callRng.int(0, checks.length - 2)];
     if (doubt !== null) entry.doubt = doubt;
+    // A ball on the line: where it really came down, a few centimetres either
+    // side of it — on the side the referee gave it, or, when he got it wrong,
+    // the other. What the court shows and what the video measures are the same.
+    if (doubt === 'inOut') {
+      const calledIn = end.kind !== 'attackError';
+      const truthIn = wrong ? !calledIn : calledIn;
+      const gap = truthIn ? -this.callRng.range(0.002, 0.04) : this.callRng.range(0.003, 0.045);
+      // A serve has no hitter's sideline: its spot is the receiving court's own.
+      const base: Landing = end.land ?? { across: this.callRng.range(0.1, 0.9), deep: this.callRng.range(0.3, 0.95) };
+      const line: CourtLine = end.kind === 'attackError' ? ballMark(base).line
+        : end.kind === 'ace' && end.land === undefined ? (this.callRng.chance(0.6) ? 'end' : this.callRng.chance(0.5) ? 'ownSide' : 'farSide')
+          : nearestLine(base);
+      end.land = onLine(base, line, gap);
+    }
     this.last = {
       call: { winner: entry.winner, call: end.kind, blockout, close, doubt, challenged: false },
       wrong,
@@ -932,9 +952,11 @@ export class MatchSimulator {
     const last = this.last!;
     last.call.challenged = true;
     const end = last.entry.contacts[last.entry.contacts.length - 1];
+    // On a ball in or out, the video measures where it came down.
+    const mark = check === 'inOut' && end.land !== undefined && end.kind !== 'blocked' ? ballMark(end.land) : undefined;
     if (!last.wrong || check !== last.call.doubt) {
       this.teams[team].challenges--;
-      return { ok: true, overturned: false, verdict: callStands(last.call, check) };
+      return { ok: true, overturned: false, verdict: callStands(last.call, check, mark), mark };
     }
     // Put the point back as it was before it was given...
     const won = last.call.winner;
@@ -957,18 +979,18 @@ export class MatchSimulator {
       own(end.team, end.player).attackErrors++;
       verdict = check === 'netTouch' ? 'The hitter touched the net — the call is overturned.'
         : check === 'blockTouch' ? 'No touch on the block — it was out. The call is overturned.'
-          : 'Out — the call is overturned.';
+          : `Out — ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
     } else if (end.kind === 'ace') {
       own(end.team, end.player).serveAces--;
       own(end.team, end.player).serveErrors++;
-      verdict = 'The serve was out — the call is overturned.';
+      verdict = `The serve was out — ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
     } else if (end.kind === 'attackError') {
       own(end.team, end.player).attackErrors--;
       // In, or off the block: his point. A blocker in the net: their fault, not his kill.
       if (check !== 'netTouch') own(end.team, end.player).attackKills++;
       verdict = check === 'netTouch' ? 'A blocker touched the net — the call is overturned.'
         : check === 'blockTouch' ? 'Touch off the block — the call is overturned.'
-          : 'In — it caught the line. The call is overturned.';
+          : `In — ${mark !== undefined ? gapWords(mark.gap) : 'it caught the line'}. The call is overturned.`;
     } else {
       own(end.team, end.player).attackBlocked--;
       if (end.by !== undefined) own(won, end.by).blockPoints--;
@@ -979,7 +1001,7 @@ export class MatchSimulator {
     last.entry.overturned = true;
     this.last = null;
     this.awardPoint(team);
-    return { ok: true, overturned: true, verdict };
+    return { ok: true, overturned: true, verdict, mark };
   }
 
   // ---- Getting hurt -------------------------------------------------------------------
@@ -1229,6 +1251,13 @@ export class MatchSimulator {
    * goes straight down; the back row hits deep. Rolled on the match's own
    * dice for what only shows, so it changes nothing about how the rally ends.
    */
+  /** Where a shot came down, for the record — on the match's dice for what
+   *  only shows, so it changes nothing about how the rally ends. */
+  private landing(shot: Shot | undefined, source: AttackSource): Landing | undefined {
+    if (!this.recording) return undefined;
+    return landingFor(shot, hitterAcross(source), () => this.flair.float());
+  }
+
   private pickShot(
     lane: number, outcome: 'kill' | 'dug' | 'blocked' | 'error', blockers: number, setQuality: number, ar: PlayerMatchRatings,
     call?: PlayCall,
@@ -2185,7 +2214,7 @@ export class MatchSimulator {
       const shot = this.pickShot(lane, 'error', blockCount, setOnIt, ar, call, covered);
       this.push({
         ...tags, kind: 'attackError', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
-        speed: this.spikeSpeed(ar, lane, false, shot), height,
+        speed: this.spikeSpeed(ar, lane, false, shot), height, land: this.landing(shot, source),
       });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
@@ -2195,7 +2224,7 @@ export class MatchSimulator {
       const shot = this.pickShot(lane, 'kill', blockCount, setOnIt, ar, call, covered);
       this.push({
         ...tags, kind: 'kill', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
-        speed: this.spikeSpeed(ar, lane, true, shot), height,
+        speed: this.spikeSpeed(ar, lane, true, shot), height, land: this.landing(shot, source),
       });
       return { point: attacking, nextQuality: 0, toucher: -1 };
     }
@@ -2204,7 +2233,7 @@ export class MatchSimulator {
     const shot = this.pickShot(lane, 'dug', blockCount, setOnIt, ar, call, covered);
     this.push({
       ...tags, kind: 'attack', team: attacking, player: attacker, detail: LANE_NAMES[lane], shot,
-      speed: this.spikeSpeed(ar, lane, false, shot), height,
+      speed: this.spikeSpeed(ar, lane, false, shot), height, land: this.landing(shot, source),
     });
     const digger = this.pickDigger(def);
     const dr = def.rate(digger);

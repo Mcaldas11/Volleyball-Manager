@@ -6164,3 +6164,14 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .report-note { margin: 8px 0; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--text-dim); font-size: 12.5px; }
 /* With a report open beside it, the list keeps to what fits: the result always in view. */
 .fixtures-layout.with-report :is(.fx-stage, .fx-sets) { display: none; }
+
+/* The video's ball mark: the floor from above, close up. */
+.vr-mark { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; padding: 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.35); }
+.vr-mark svg { width: 230px; height: 128px; border-radius: 4px; display: block; }
+.vr-mark-ball { animation: vr-ball-in 0.5s ease-out both; transform-box: fill-box; transform-origin: center; }
+@keyframes vr-ball-in { from { opacity: 0; transform: scale(2.2); } to { opacity: 1; transform: none; } }
+.vr-mark-read { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 110px; }
+.vr-mark-read span { font-size: 12px; color: var(--text-dim); text-transform: none; }
+.vr-mark-read b { font: 800 34px/1 var(--font-display) !important; letter-spacing: 0.06em; }
+.vr-mark.in .vr-mark-read b { color: var(--good) !important; }
+.vr-mark.out .vr-mark-read b { color: var(--bad) !important; }
