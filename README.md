@@ -208,6 +208,10 @@ Before submitting a change:
 - [x] A club dashboard (next fixture, table, one to watch, form, top scorer,
       the board's mood, the money) and a month-by-month calendar of results,
       fixtures and transfer deadlines
+- [x] Fixtures & Results a season at a time, any past season a pick away,
+      and every match already played opens its report: the box score and
+      the rotations kept with the save for good, the rally log while it is
+      still in memory
 - [x] Match sounds — the whistle, the ball, the crowd, the timeout hooter —
       made in the browser, with a mute button
 - [x] In-game help, a topic at a time, and a welcome tour for a first career

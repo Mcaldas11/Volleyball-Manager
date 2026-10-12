@@ -9,6 +9,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { bareResult, reportResult } from '../engine/world/matchReports.ts';
 import {
   MatchFormat, MatchSimulator, registeredLiberos, simulateMatch, SUBS_PER_SET, type MatchResult, type RallyLogEntry, type ShoutKind,
   type SubstitutionPlan, type SubstitutionReason, type TeamSetup,
@@ -1835,9 +1836,66 @@ class Game {
       .sort((a, b) => a.day - b.day);
   }
 
+  /**
+   * Every match of every club the manager has been in charge of, while he
+   * was — the whole career, in order. A club given by hand, with no job on
+   * the record, counts throughout.
+   */
+  private careerFixtures(): Fixture[] {
+    const world = this.world;
+    if (world === null) return [];
+    const jobs = world.career.jobs;
+    const mine = (f: Fixture): boolean => {
+      if (jobs.length === 0) return f.home === world.userClubId || f.away === world.userClubId;
+      return jobs.some((j) => (f.home === j.clubId || f.away === j.clubId) && f.day >= j.startDay && (j.endDay < 0 || f.day <= j.endDay));
+    };
+    return world.fixtures.filter((f) => world.competitions[f.competitionId]?.kind !== 'international' && mine(f))
+      .sort((a, b) => a.day - b.day);
+  }
+
+  /** The seasons the manager has had matches in, the latest first — this one always. */
+  managerSeasons(): number[] {
+    const world = this.world;
+    if (world === null) return [];
+    const seasons = new Set<number>([world.season]);
+    for (const f of this.careerFixtures()) seasons.add(Math.floor(f.day / DAYS_PER_SEASON));
+    return [...seasons].sort((a, b) => b - a);
+  }
+
+  /** The manager's matches in one season, in order: his club's, and any other he had charge of that season. */
+  managerFixtures(season: number): Fixture[] {
+    return this.careerFixtures().filter((f) => Math.floor(f.day / DAYS_PER_SEASON) === season);
+  }
+
   /** Replay the user's most recent completed match through the full engine. */
   reviewLast(): WatchedMatch | null {
     return this.watched;
+  }
+
+  /**
+   * Open the report of a match already played: in full — the rally log too —
+   * while it is still in memory; its box score and rotations from the save
+   * once it isn't; the score and the sets for one played before reports were kept.
+   */
+  openMatchReport(fixtureId: number): void {
+    const world = this.world;
+    const fixture = world?.fixtures[fixtureId];
+    if (world === null || fixture === undefined || !fixture.played) return;
+    const detailed = this.ctx.detailedResults.get(fixture.id);
+    const kept = world.matchReports?.get(fixture.id);
+    this.watched = {
+      fixture,
+      result: detailed ?? (kept !== undefined ? reportResult(fixture, kept) : bareResult(fixture)),
+      homeName: world.clubs[fixture.home]?.name ?? '?',
+      awayName: world.clubs[fixture.away]?.name ?? '?',
+    };
+    this.emit();
+  }
+
+  /** Close the match report beside the fixtures. */
+  closeMatchReport(): void {
+    this.watched = null;
+    this.emit();
   }
 
   // ---- Matchday -----------------------------------------------------------

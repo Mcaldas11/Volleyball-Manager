@@ -14,25 +14,42 @@ import {
 } from '../components.tsx';
 import { useGame, type WatchedMatch } from '../state.ts';
 import { CompetitionStatsView } from '../competitionStats.tsx';
+import { Dropdown } from '../dropdown.tsx';
+import { Icon } from '../icons.tsx';
+import { seasonLabel } from './Squad.tsx';
 
 type NameLookup = { shortName: (i: number) => string };
 
+/**
+ * The manager's matches, a season at a time — this one first, any before it
+ * a pick away. A match already played opens its report beside the list.
+ */
 export function FixturesScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const fixtures = g.ownFixtures();
+  const seasons = g.managerSeasons();
+  const [season, setSeason] = useState(world.season);
+  const fixtures = g.managerFixtures(season);
   const watched = g.reviewLast();
+  // Which side of each match was his: the club he had charge of then.
+  const jobs = world.career.jobs;
+  const oursAt = (f: (typeof fixtures)[number]): number => {
+    const job = jobs.find((j) => (f.home === j.clubId || f.away === j.clubId) && f.day >= j.startDay && (j.endDay < 0 || f.day <= j.endDay));
+    return job?.clubId ?? world.userClubId;
+  };
   const played = fixtures.filter((f) => f.played);
   const wins = played.filter((f) => {
-    const isHome = f.home === world.userClubId;
+    const isHome = f.home === oursAt(f);
     return isHome ? f.homeSets > f.awaySets : f.awaySets > f.homeSets;
   }).length;
-  const nextIdx = fixtures.findIndex((f) => !f.played);
+  const current = season === world.season;
+  const nextIdx = current ? fixtures.findIndex((f) => !f.played) : -1;
 
   return (
     <>
       <div className="tiles">
-        <StatTile label="Played" value={`${played.length}/${fixtures.length}`} sub="matches this season" />
+        <StatTile label="Played" value={`${played.length}/${fixtures.length}`}
+          sub={current ? 'matches this season' : `matches in ${seasonLabel(world, season)}`} />
         <StatTile label="Won" value={wins} tone="good" />
         <StatTile label="Lost" value={played.length - wins} tone={played.length - wins > 0 ? 'bad' : undefined} />
         <StatTile
@@ -42,34 +59,50 @@ export function FixturesScreen(): JSX.Element {
       </div>
 
       <div className={`fixtures-layout${watched !== null ? ' with-report' : ''}`}>
-        <Card title="Schedule" icon="schedule" flush>
+        <Card title="Schedule" icon="schedule" flush
+          actions={(
+            <Dropdown<number>
+              size="sm"
+              value={season}
+              onChange={setSeason}
+              title="Season"
+              options={seasons.map((s) => ({ value: s, label: s === world.season ? `${seasonLabel(world, s)} · this season` : seasonLabel(world, s) }))}
+            />
+          )}>
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Competition</th>
-                  <th>Stage</th>
+                  <th className="fx-stage">Stage</th>
                   <th>Venue</th>
                   <th>Opponent</th>
                   <th>Result</th>
-                  <th>Sets</th>
+                  <th className="fx-sets">Sets</th>
                 </tr>
               </thead>
               <tbody>
+                {fixtures.length === 0 && (
+                  <tr><td colSpan={7} className="faint">No matches that season.</td></tr>
+                )}
                 {fixtures.map((f, i) => {
-                  const isHome = f.home === world.userClubId;
+                  const isHome = f.home === oursAt(f);
                   const opponent = world.clubs[isHome ? f.away : f.home];
                   const comp = world.competitions[f.competitionId];
                   const won = f.played && ((isHome && f.homeSets > f.awaySets) || (!isHome && f.awaySets > f.homeSets));
+                  const open = watched?.fixture.id === f.id;
                   return (
-                    <tr key={f.id} className={i === nextIdx ? 'next-fixture' : ''}>
+                    <tr key={f.id}
+                      className={`${i === nextIdx ? 'next-fixture' : ''}${f.played ? ' clickable' : ''}${open ? ' selected' : ''}`}
+                      title={f.played ? 'Open the match report' : undefined}
+                      onClick={f.played ? () => g.openMatchReport(f.id) : undefined}>
                       <td className="dim">
                         {g.weekdayLabelForDay(f.day)} {g.dateLabelForDay(f.day)}
                         {i === nextIdx && <span className="next-tag">Next</span>}
                       </td>
                       <td className={comp?.kind === 'league' ? 'faint' : 'strong'}>{comp?.name ?? ''}</td>
-                      <td className="faint">{stageLabel(world, f)}</td>
+                      <td className="faint fx-stage">{stageLabel(world, f)}</td>
                       <td><span className={`venue-tag ${isHome ? 'home' : 'away'}`}>{isHome ? 'Home' : 'Away'}</span></td>
                       <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
                       <td>
@@ -81,7 +114,7 @@ export function FixturesScreen(): JSX.Element {
                           )
                           : <span className="faint">—</span>}
                       </td>
-                      <td className="faint mono">
+                      <td className="faint mono fx-sets">
                         {f.setScores.map(([h, a]) => `${isHome ? h : a}-${isHome ? a : h}`).join('  ')}
                       </td>
                     </tr>
@@ -92,7 +125,7 @@ export function FixturesScreen(): JSX.Element {
           </div>
         </Card>
 
-        {watched !== null && <MatchScreen />}
+        {watched !== null && <MatchScreen key={watched.fixture.id} onClose={() => g.closeMatchReport()} />}
       </div>
     </>
   );
@@ -107,10 +140,12 @@ type ReportTab = 'log' | 'box' | 'rotations';
  * contact by contact, with the running win probability and the full box score
  * alongside. If a set was lost in rotation 3, the rotation table says so.
  */
-export function MatchScreen(): JSX.Element {
+export function MatchScreen({ onClose }: { onClose?: () => void } = {}): JSX.Element {
   const g = useGame();
   const watched = g.reviewLast();
-  const [tab, setTab] = useState<ReportTab>('log');
+  const hasLog = (watched?.result.log?.length ?? 0) > 0;
+  const hasBox = watched !== null && watched.result.stats.home.players.size + watched.result.stats.away.players.size > 0;
+  const [tab, setTab] = useState<ReportTab>(hasLog ? 'log' : 'box');
   if (watched === null) return <Empty>No match has been played yet.</Empty>;
 
   const { result, homeName, awayName } = watched;
@@ -118,21 +153,30 @@ export function MatchScreen(): JSX.Element {
   const homeClub = world.clubs[watched.fixture.home];
   const awayClub = world.clubs[watched.fixture.away];
   const homeWon = result.homeSets > result.awaySets;
+  const comp = world.competitions[watched.fixture.competitionId];
+  // The rally log only while it is still in memory; the box score kept for good.
+  const tabs: Array<readonly [ReportTab, string]> = [
+    ...(hasLog ? [['log', 'Rally log'] as const] : []),
+    ...(hasBox ? [['box', 'Box score'] as const, ['rotations', 'Rotation analysis'] as const] : []),
+  ];
 
   return (
     <Card
-      title="Last Match Report"
+      title="Match Report"
       icon="stats"
       className="match-report"
       actions={(
-        <Segmented<ReportTab>
-          size="sm"
-          options={[['log', 'Rally log'], ['box', 'Box score'], ['rotations', 'Rotation analysis']]}
-          value={tab}
-          onChange={setTab}
-        />
+        <>
+          {tabs.length > 1 && <Segmented<ReportTab> size="sm" options={tabs} value={tab} onChange={setTab} />}
+          {onClose !== undefined && (
+            <button className="icon-btn" title="Close the report" onClick={onClose}><Icon name="close" size={15} /></button>
+          )}
+        </>
       )}
     >
+      <div className="report-when faint">
+        {comp?.name ?? ''} · {stageLabel(world, watched.fixture)} · {g.weekdayLabelForDay(watched.fixture.day)} {g.dateLabelForDay(watched.fixture.day)}
+      </div>
       <div className="report-score">
         <div className={`report-team${homeWon ? ' won' : ''}`}>
           {homeClub !== undefined && <ClubCrest club={homeClub} size={44} />}
@@ -162,19 +206,25 @@ export function MatchScreen(): JSX.Element {
         {result.mvp >= 0 && <span className="mvp-tag">MVP</span>}
         {result.mvp >= 0 && <PlayerLink idx={result.mvp} />}
         {result.mvp >= 0 && <MvpRating />}
-        <span className="faint">{result.totalRallies} rallies simulated</span>
+        <span className="faint">{result.totalRallies} rallies</span>
       </div>
 
       <div className="report-body">
-        {tab === 'log' && (
+        {!hasBox && (
+          <p className="report-note">
+            Only the score was kept of this match: it was played before match reports were saved. Every match from now on
+            keeps its box score and rotations.
+          </p>
+        )}
+        {tab === 'log' && hasLog && (
           <RallyLog
             log={result.log ?? []}
             homeCode={homeClub?.shortName ?? homeName.slice(0, 3).toUpperCase()}
             awayCode={awayClub?.shortName ?? awayName.slice(0, 3).toUpperCase()}
           />
         )}
-        {tab === 'box' && <BoxScore />}
-        {tab === 'rotations' && <RotationAnalysis />}
+        {tab === 'box' && hasBox && <BoxScore />}
+        {tab === 'rotations' && hasBox && <RotationAnalysis />}
       </div>
     </Card>
   );

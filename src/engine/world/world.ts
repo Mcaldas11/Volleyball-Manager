@@ -27,6 +27,7 @@ import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
 import type { StaffTalks } from './staffDeals.ts';
+import type { MatchReport } from './matchReports.ts';
 import type { PlayerPromise, TransferRequest } from './playerTalks.ts';
 import type { SponsorOffer } from './commercial.ts';
 import type { RetirementPlan } from './retirement.ts';
@@ -696,6 +697,8 @@ export interface World {
   teamLines?: Record<string, Record<number, TeamLine>>;
   /** Every player's spells at clubs, oldest first, packed as numbers — see clubHistory.ts. Keyed by player index. */
   clubSpells?: Map<number, number[]>;
+  /** The box score of every match of the manager's club, by fixture id — see matchReports.ts. */
+  matchReports?: Map<number, MatchReport>;
 }
 
 export function dayOfSeason(world: World): number {

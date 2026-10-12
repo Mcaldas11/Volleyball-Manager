@@ -14,6 +14,7 @@
  */
 
 import { internationalDay } from '../world/internationals.ts';
+import { keepMatchReport } from '../world/matchReports.ts';
 import { newsDay } from '../world/news.ts';
 import type { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
@@ -356,6 +357,8 @@ export function applyMatchResult(
   fixture.setScores = result.setScores;
   fixture.mvp = result.mvp;
   collectHighlights(world, fixture, result);
+  // The manager's own matches: the box score is kept, to be read again.
+  keepMatchReport(world, fixture, result);
 
   const homeStats = result.stats.home.players;
   const awayStats = result.stats.away.players;
