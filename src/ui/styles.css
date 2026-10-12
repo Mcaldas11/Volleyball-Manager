@@ -2669,6 +2669,8 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .bracket-seed { width: 14px; flex: none; color: var(--text-faint); font-size: 10.5px; }
 .bracket-slot .club-link { flex: 1; min-width: 0; }
 .bracket-score { flex: none; font: 800 15px/1 var(--font-display); }
+/* A series' games, game by game, under the tie. */
+.bracket-games { display: flex; gap: 8px; padding: 4px 10px 5px 31px; border-top: 1px solid var(--line); font-size: 11px; color: var(--text-dim); }
 .bracket-bye { justify-content: center; }
 .bracket-round-winner { justify-content: center; }
 .bracket-round-winner .bracket-slot { justify-content: center; padding: 14px 18px; font-size: 14px; background: linear-gradient(155deg, var(--gold-soft), transparent); }
@@ -5547,6 +5549,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .dedit { gap: 8px; color: var(--club-bright); }
 .dedit-head { display: flex; flex-direction: column; gap: 6px; }
 .dedit-head .tboard-zones { margin-left: 0; }
+.dedit-title { font: 700 12px/1.2 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
 .tboard-zones button.wide { width: auto; padding: 0 10px; font-weight: 700; }
 .dedit-svg { width: 100%; height: auto; touch-action: none; user-select: none; }
 .dedit-man { cursor: grab; }

@@ -304,6 +304,15 @@ function presetOf(layout: DefenceLayout, source: AttackSource): DefencePreset | 
 
 const SHORT_PRESET: Readonly<Record<string, string>> = { Perimeter: 'Perim.', Rotation: 'Rot.', 'Man-up': 'Man-up', Custom: 'Custom' };
 
+/** The defence behind the block in a line: one name if it is the same
+ *  against every attack, else each attack's — "Outside Perim. · Middle Rot.". */
+function behindTheBlock(t: TeamTactics): string {
+  const layouts = defenceLayoutsOf(t);
+  const names = ATTACK_SOURCES.map((s) => defenceName(layouts[s], s));
+  if (names.every((n) => n === names[0])) return names[0] === 'Custom' ? 'Your own' : names[0];
+  return ATTACK_SOURCES.map((s, i) => `${ATTACK_SOURCE_NAMES[s].slice(0, 3)} ${names[i] === 'Custom' ? 'own' : SHORT_PRESET[names[i]] ?? names[i]}`).join(' · ');
+}
+
 /** A layout's name: the standard one it is, or custom. */
 export function defenceName(layout: DefenceLayout, source: AttackSource): string {
   const p = presetOf(layout, source);
@@ -359,6 +368,7 @@ function DefenceEditor({ tactics: t, onChange }: { tactics: TeamTactics; onChang
   return (
     <div className="zcourt dedit">
       <div className="dedit-head">
+        <span className="dedit-title">Defence behind the block</span>
         <span className="zrot-label">Attack from</span>
         <span className="tboard-zones">
           {ATTACK_SOURCES.map((s) => (
@@ -584,7 +594,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
             })}
             <Overview title="Out of possession" active={phase === 'out'} onClick={() => setPhase('out')} rows={[
               ...outKeys.map((k) => [cards[k].title, cards[k].value] as [string, string]),
-              ['Behind block', ATTACK_SOURCES.map((s) => SHORT_PRESET[defenceName(defenceLayoutsOf(t)[s], s)] ?? 'Custom').join(' · ')],
+              ['Behind the block', behindTheBlock(t)],
             ]} />
           </aside>
         )}

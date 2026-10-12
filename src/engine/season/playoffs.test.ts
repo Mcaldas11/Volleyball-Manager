@@ -4,7 +4,8 @@ import { compareTableRows } from '../model/club.ts';
 import { generateWorld } from '../world/worldGen.ts';
 import { stubManager } from '../world/world.ts';
 import { advanceDay, newSeasonContext, startSeason } from './seasonEngine.ts';
-import { finalStandingsOrder, playoffBandSizes } from './playoffs.ts';
+import { finalStandingsOrder, playoffBandSizes, seriesScore, SERIES_WINS } from './playoffs.ts';
+import { SERIES_GAME_GAP } from './schedule.ts';
 
 /** Run a fresh world forward a full season (well past rollover) and hand
  *  back its tier-1 league, still mid-season so its playoff state is intact —
@@ -59,6 +60,37 @@ test('the beaten semi-finalists play for third place, alongside the final, and f
   assert.deepEqual(finalStandingsOrder(league).slice(2, 4), champ.finalOrder.slice(2, 4));
   // Only the title playoff has one.
   for (const g of league.playoffGroups) if (g.id !== 'championship') assert.equal(g.thirdPlace, undefined);
+});
+
+test('the title playoff goes the CBV way: 1v8, 2v7, 3v6, 4v5, best-of-three series with the better seed at home in games one and three, and a single final on neutral ground', () => {
+  const { world, league } = simulateOneSeason(107);
+  const champ = league.playoffGroups.find((g) => g.id === 'championship')!;
+  assert.equal(champ.seeds.length, 8);
+  // Quarter-finals: 1v8, 4v5, 2v7, 3v6 down the bracket — so the semi-finals are A v D and B v C.
+  assert.deepEqual(champ.rounds[0].map((t) => [t.homeSeed, t.awaySeed]), [[0, 7], [3, 4], [1, 6], [2, 5]]);
+  for (const round of champ.rounds.slice(0, -1)) {
+    for (const tie of round) {
+      const games = tie.games!;
+      assert.equal(tie.winsNeeded, SERIES_WINS);
+      const [h, a] = seriesScore(world, champ, tie);
+      // First to two: two or three games, never more, and the winner the one with two.
+      assert.equal(Math.max(h, a), 2);
+      assert.equal(games.length, h + a);
+      assert.ok(games.length === 2 || games.length === 3);
+      assert.equal(tie.winnerSeed, h === 2 ? tie.homeSeed : tie.awaySeed);
+      const better = champ.seeds[Math.min(tie.homeSeed, tie.awaySeed)];
+      games.forEach((id, i) => {
+        const f = world.fixtures[id];
+        assert.equal(f.home === better, i !== 1, `game ${i + 1}: the better seed hosts games one and three`);
+        if (i > 0) assert.ok(f.day >= world.fixtures[games[i - 1]].day + SERIES_GAME_GAP);
+      });
+    }
+  }
+  // The final: one match, on neutral ground.
+  const final = champ.rounds[champ.rounds.length - 1][0];
+  assert.equal(final.games, undefined);
+  assert.equal(world.fixtures[final.fixtureId].neutralVenue, true);
+  assert.equal(champ.finalOrder[0], champ.seeds[final.winnerSeed]);
 });
 
 test('finalStandingsOrder is a permutation of every club in the table', () => {

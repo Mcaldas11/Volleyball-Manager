@@ -6,7 +6,7 @@ import { MONSTER_SPIKE_KMH } from '../../engine/match/highlights.ts';
 import { matchRating } from '../../engine/match/playerRating.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
-import { playoffBandSizes } from '../../engine/season/playoffs.ts';
+import { playoffBandSizes, seriesScore } from '../../engine/season/playoffs.ts';
 import { knockoutRoundName, knockoutRounds, stageLabel } from '../../engine/season/cups.ts';
 import type { Competition, PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
 import {
@@ -730,27 +730,46 @@ function BracketTie({
   group: PlayoffGroup;
   world: World;
 }): JSX.Element {
+  const series = tie.games !== undefined;
   const fixture = tie.fixtureId >= 0 ? world.fixtures[tie.fixtureId] : undefined;
   const played = fixture !== undefined && fixture.played;
+  // A series shows the games won; a single match, its sets — each against the right club.
+  const wins = series ? seriesScore(world, group, tie) : null;
+  const games = (tie.games ?? []).map((id) => world.fixtures[id]).filter((f) => f !== undefined && f.played);
+  const scoreOf = (seed: number): number | string => {
+    if (wins !== null) return games.length > 0 ? wins[seed === tie.homeSeed ? 0 : 1] : '';
+    if (!played || fixture === undefined) return '';
+    return fixture.home === group.seeds[seed] ? fixture.homeSets : fixture.awaySets;
+  };
 
-  const slot = (seed: number, sets: number | undefined): JSX.Element | null => {
+  const slot = (seed: number): JSX.Element | null => {
     if (seed === -1) return null;
     const clubId = group.seeds[seed];
     return (
       <div className={`bracket-slot${tie.winnerSeed === seed ? ' winner' : ''}`}>
         <span className="bracket-seed">{seed + 1}</span>
         <ClubLink id={clubId} short />
-        <span className="bracket-score">{played ? sets : ''}</span>
+        <span className="bracket-score">{scoreOf(seed)}</span>
       </div>
     );
   };
 
   return (
     <div className="bracket-tie">
-      {slot(tie.homeSeed, fixture?.homeSets)}
+      {slot(tie.homeSeed)}
       {tie.awaySeed === -1
         ? <div className="bracket-slot bracket-bye"><span className="faint">Bye</span></div>
-        : slot(tie.awaySeed, fixture?.awaySets)}
+        : slot(tie.awaySeed)}
+      {series && (
+        <div className="bracket-games" title="Best of three: first to two wins">
+          {games.length === 0
+            ? <span className="faint">Best of 3</span>
+            : games.map((f, i) => {
+              const mine = f.home === group.seeds[tie.homeSeed];
+              return <span key={i}>{mine ? f.homeSets : f.awaySets}-{mine ? f.awaySets : f.homeSets}</span>;
+            })}
+        </div>
+      )}
     </div>
   );
 }

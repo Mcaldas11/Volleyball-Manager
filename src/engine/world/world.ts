@@ -126,8 +126,14 @@ export interface Competition {
 export interface PlayoffTie {
   homeSeed: number;
   awaySeed: number;
+  /** The match being played or awaited: in a series, its latest game. */
   fixtureId: number;
   winnerSeed: number;
+  /** A series: the wins that take it — 2, a best of three — and every
+   *  game's fixture so far, in order. Absent for a single match, and on
+   *  older saves. */
+  winsNeeded?: number;
+  games?: number[];
 }
 
 export type PlayoffGroupId = 'championship' | 'placement' | 'relegation';

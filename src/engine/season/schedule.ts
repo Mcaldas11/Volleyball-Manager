@@ -103,7 +103,9 @@ export const PLAYOFF_ROUND_BASE = 1000;
 /** The day the regular season's own fixtures are guaranteed finished by. */
 export const PLAYOFF_START_OFFSET = 272;
 /** Days of rest between one playoff round and the next. */
-export const PLAYOFF_ROUND_GAP = 10;
+export const PLAYOFF_ROUND_GAP = 5;
+/** Days between the games of a playoff series. */
+export const SERIES_GAME_GAP = 3;
 
 /** Schedule one playoff tie as a single deciding match. Shared by every round
  *  of every bracket (championship, placement, relegation alike). */

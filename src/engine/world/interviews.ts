@@ -25,6 +25,7 @@ import type { Rng } from '../core/rng.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { NO_CLUB } from '../model/players.ts';
 import { isCupCompetition, isCupFinal, stageLabel } from '../season/cups.ts';
+import { playoffTieOf, tieHasFixture } from '../season/playoffs.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
 import { cityBankFor } from './cities.ts';
 import { NATIONS } from './nations.ts';
@@ -237,9 +238,10 @@ function contextFor(world: World, f: Fixture, kind: InterviewKind): { ctx: Ctx; 
 
   // What kind of match.
   if (comp !== undefined && comp.kind === 'league' && f.round >= PLAYOFF_ROUND_BASE) {
-    const group = comp.playoffGroups.find((g) => g.rounds.some((r) => r.some((t) => t.fixtureId === f.id)));
-    const round = group?.rounds.find((r) => r.some((t) => t.fixtureId === f.id));
-    if (comp.playoffGroups.some((g) => g.thirdPlace?.fixtureId === f.id)) {
+    const at = playoffTieOf(comp, f.id);
+    const group = at?.group;
+    const round = group?.rounds.find((r) => r.some((t) => tieHasFixture(t, f.id)));
+    if (at?.stage === 'thirdPlace') {
       tags.add('knockout');
       occasions.push('Third-place match');
     } else if (group?.id === 'championship') {
@@ -257,6 +259,8 @@ function contextFor(world: World, f: Fixture, kind: InterviewKind): { ctx: Ctx; 
       tags.add('relegation').add('relegationPlayoff');
       occasions.push('Relegation playoff');
     } else occasions.push('Placement playoff');
+    // The third game of a series settles it.
+    if (at?.game === 3) occasions[occasions.length - 1] += ' — game three, the decider';
   } else if (comp !== undefined && isCupCompetition(comp)) {
     if (comp.kind === 'continental') tags.add('continental');
     if (comp.kind === 'clubworld') tags.add('clubworld');

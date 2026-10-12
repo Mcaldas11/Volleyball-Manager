@@ -1,6 +1,14 @@
 /**
  * End-of-season knockout playoffs.
  *
+ * Each tie is a best-of-three series — first to two wins goes through — the
+ * better seed at home in games one and three; the title final is a single
+ * match on neutral ground. That is the Brazilian Superliga's format
+ * (CBV, Regulamento Específico da Superliga 2025/26, arts. 29-32), quarter-
+ * finals pairing 1v8, 2v7, 3v6 and 4v5 and the semi-finals 1v8's winner
+ * against 4v5's and 2v7's against 3v6's — which the bracket's standard
+ * seeding gives.
+ *
  * A league's final table is carved into three bands once the regular season
  * finishes: the top band plays off for the title, a middle band plays off
  * for its final placing, and the bottom band plays off for who actually goes
@@ -19,11 +27,14 @@
 
 import { compareTableRows } from '../model/club.ts';
 import {
-  PLAYOFF_ROUND_GAP, PLAYOFF_START_OFFSET, schedulePlayoffFixture,
+  PLAYOFF_ROUND_BASE, PLAYOFF_ROUND_GAP, PLAYOFF_START_OFFSET, schedulePlayoffFixture, SERIES_GAME_GAP,
 } from './schedule.ts';
 import {
   dayOfSeason, type Competition, type PlayoffGroup, type PlayoffGroupId, type PlayoffTie, type World,
 } from '../world/world.ts';
+
+/** Wins that take a playoff series: a best of three. */
+export const SERIES_WINS = 2;
 
 /** Called once per day. Creates each eligible league's playoff bands the day
  *  after its regular season ends, and advances any band whose current round
@@ -170,13 +181,70 @@ function makeGroup(
   };
   const round0 = buildFirstRound(seeds.length);
   const day = world.day + 3;
+  // A band of two is its own final.
+  const single = id === 'championship' && round0.length === 1;
   for (const tie of round0) {
-    if (tie.winnerSeed === -1) {
-      tie.fixtureId = schedulePlayoffFixture(world, comp, day, 0, seeds[tie.homeSeed], seeds[tie.awaySeed]);
-    }
+    if (tie.winnerSeed === -1) openTie(world, comp, group, tie, day, 0, single);
   }
   group.rounds.push(round0);
   return group;
+}
+
+/** Start a tie: the first game of its series — or, for the title final, its
+ *  one match, on neutral ground. */
+function openTie(
+  world: World, comp: Competition, group: PlayoffGroup, tie: PlayoffTie, day: number, roundNo: number, single: boolean,
+): void {
+  if (single) {
+    const better = Math.min(tie.homeSeed, tie.awaySeed);
+    const worse = Math.max(tie.homeSeed, tie.awaySeed);
+    tie.fixtureId = schedulePlayoffFixture(world, comp, day, roundNo, group.seeds[better], group.seeds[worse]);
+    const f = world.fixtures[tie.fixtureId];
+    if (f !== undefined) {
+      f.neutralVenue = true;
+      f.importance = 0.95;
+    }
+    return;
+  }
+  tie.winsNeeded = SERIES_WINS;
+  tie.games = [];
+  nextGame(world, comp, group, tie, day, roundNo);
+}
+
+/** The next game of a series: the better seed at home in games one and three. */
+function nextGame(world: World, comp: Competition, group: PlayoffGroup, tie: PlayoffTie, day: number, roundNo: number): void {
+  const games = tie.games ?? (tie.games = []);
+  const better = Math.min(tie.homeSeed, tie.awaySeed);
+  const worse = Math.max(tie.homeSeed, tie.awaySeed);
+  const [home, away] = games.length % 2 === 0 ? [better, worse] : [worse, better];
+  const id = schedulePlayoffFixture(world, comp, day, roundNo, group.seeds[home], group.seeds[away]);
+  // A decider matters more than an opener.
+  const [h, a] = seriesScore(world, group, tie);
+  const f = world.fixtures[id];
+  if (f !== undefined && h === a && h > 0) f.importance = 0.92;
+  games.push(id);
+  tie.fixtureId = id;
+}
+
+/** Games won in a tie by its home seed and its away seed — a single match
+ *  counted as a series of one. */
+export function seriesScore(world: World, group: PlayoffGroup, tie: PlayoffTie): [number, number] {
+  const games = tie.games ?? (tie.fixtureId >= 0 ? [tie.fixtureId] : []);
+  let home = 0;
+  let away = 0;
+  for (const id of games) {
+    const f = world.fixtures[id];
+    if (f === undefined || !f.played) continue;
+    const winner = f.homeSets > f.awaySets ? f.home : f.away;
+    if (winner === group.seeds[tie.homeSeed]) home++;
+    else away++;
+  }
+  return [home, away];
+}
+
+/** Whether a fixture is one of a tie's games. */
+export function tieHasFixture(tie: PlayoffTie, fixtureId: number): boolean {
+  return tie.fixtureId === fixtureId || (tie.games?.includes(fixtureId) ?? false);
 }
 
 /**
@@ -230,7 +298,12 @@ function advanceGroup(world: World, comp: Competition, group: PlayoffGroup): voi
     if (tie.winnerSeed !== -1 || tie.fixtureId === -1) continue;
     const fixture = world.fixtures[tie.fixtureId];
     if (fixture === undefined || !fixture.played) continue;
-    tie.winnerSeed = fixture.homeSets > fixture.awaySets ? tie.homeSeed : tie.awaySeed;
+    const need = tie.winsNeeded ?? 1;
+    const [home, away] = seriesScore(world, group, tie);
+    if (home >= need) tie.winnerSeed = tie.homeSeed;
+    else if (away >= need) tie.winnerSeed = tie.awaySeed;
+    // Level, or one up with a game to come: the next one, a few days on.
+    else nextGame(world, comp, group, tie, Math.max(world.day + 1, fixture.day + SERIES_GAME_GAP), fixture.round - PLAYOFF_ROUND_BASE);
   }
   if (!ties.every((t) => t.winnerSeed !== -1)) return;
 
@@ -243,7 +316,7 @@ function advanceGroup(world: World, comp: Competition, group: PlayoffGroup): voi
   const next = buildNextRound(round);
   const day = world.day + PLAYOFF_ROUND_GAP;
   for (const tie of next) {
-    tie.fixtureId = schedulePlayoffFixture(world, comp, day, group.rounds.length, group.seeds[tie.homeSeed], group.seeds[tie.awaySeed]);
+    openTie(world, comp, group, tie, day, group.rounds.length, group.id === 'championship' && next.length === 1);
   }
   // Into the title final: the two beaten semi-finalists play for third the same day.
   if (next.length === 1 && group.id === 'championship' && round.every((t) => t.homeSeed !== -1 && t.awaySeed !== -1)) {
@@ -255,14 +328,18 @@ function advanceGroup(world: World, comp: Competition, group: PlayoffGroup): voi
   group.currentRound++;
 }
 
-/** The playoff tie a fixture decides, the group it is in and what it is for. */
+/** The playoff tie a fixture is part of, the group it is in, what it is
+ *  for — and, in a series, which game it is (from 1). */
 export function playoffTieOf(comp: Competition, fixtureId: number):
-  { group: PlayoffGroup; tie: PlayoffTie; stage: 'final' | 'thirdPlace' | 'semi' | 'earlier' } | null {
+  { group: PlayoffGroup; tie: PlayoffTie; stage: 'final' | 'thirdPlace' | 'semi' | 'earlier'; game: number | null } | null {
   for (const group of comp.playoffGroups) {
-    if (group.thirdPlace?.fixtureId === fixtureId) return { group, tie: group.thirdPlace, stage: 'thirdPlace' };
+    if (group.thirdPlace?.fixtureId === fixtureId) return { group, tie: group.thirdPlace, stage: 'thirdPlace', game: null };
     for (const round of group.rounds) {
-      const tie = round.find((t) => t.fixtureId === fixtureId);
-      if (tie !== undefined) return { group, tie, stage: round.length === 1 ? 'final' : round.length === 2 ? 'semi' : 'earlier' };
+      const tie = round.find((t) => tieHasFixture(t, fixtureId));
+      if (tie !== undefined) {
+        const game = tie.games !== undefined ? tie.games.indexOf(fixtureId) + 1 : null;
+        return { group, tie, stage: round.length === 1 ? 'final' : round.length === 2 ? 'semi' : 'earlier', game };
+      }
     }
   }
   return null;

@@ -113,7 +113,9 @@ Before submitting a change:
       club plays two days running, and prize money, trophies and the season
       review all count them
 - [x] Multi-round championship and relegation playoffs for the top two
-      divisions
+      divisions, in the Brazilian Superliga's format: best-of-three series —
+      the better seed at home in games one and three — and a single title
+      final on neutral ground
 - [x] National teams with their own squad, team sheet and tactics, kept apart
       from the club's, and an international calendar: the World Championship,
       the Olympic Games, the continental championships and the Nations League,

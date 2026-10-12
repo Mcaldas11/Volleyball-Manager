@@ -700,10 +700,12 @@ export function stageLabel(world: World, fixture: Fixture): string {
     if (fixture.round < PLAYOFF_ROUND_BASE) return `Matchday ${fixture.round + 1}`;
     const at = playoffTieOf(comp, fixture.id);
     if (at === null) return 'Playoffs';
-    if (at.group.id === 'relegation') return 'Relegation playoff';
-    if (at.group.id === 'placement') return 'Placement playoff';
-    return at.stage === 'final' ? 'Playoff final' : at.stage === 'thirdPlace' ? 'Third-place match'
-      : at.stage === 'semi' ? 'Playoff semi-final' : 'Playoff quarter-final';
+    const name = at.group.id === 'relegation' ? 'Relegation playoff'
+      : at.group.id === 'placement' ? 'Placement playoff'
+        : at.stage === 'final' ? 'Playoff final' : at.stage === 'thirdPlace' ? 'Third-place match'
+          : at.stage === 'semi' ? 'Playoff semi-final' : 'Playoff quarter-final';
+    // A best-of-three series: which game this is.
+    return at.game !== null ? `${name} · Game ${at.game}` : name;
   }
   const cup = comp.cup;
   if (fixture.round < PLAYOFF_ROUND_BASE) {
