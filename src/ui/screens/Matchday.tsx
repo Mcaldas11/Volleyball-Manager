@@ -226,7 +226,7 @@ function LineupSetup(): JSX.Element {
           {md.national === null && <MatchdayTacticSelect />}
           <MatchdayFormation />
           <TeamTalkButton />
-          <button className="primary lg" onClick={() => g.kickOff()}>
+          <button className="primary lg" onClick={() => g.kickOff()} data-tour="kickoff">
             <Icon name="whistle" size={18} /> Kick off
           </button>
         </div>
@@ -413,7 +413,7 @@ function TeamTalkButton(): JSX.Element {
   const moment = g.talkMoment();
   return (
     <>
-      <button className={`md-talk-btn${given !== null ? ' done' : ''}`} onClick={() => setOpen(true)}
+      <button className={`md-talk-btn${given !== null ? ' done' : ''}`} onClick={() => setOpen(true)} data-tour="team-talk"
         title={given !== null ? given.result.summary : 'Talk to the players'}>
         <Icon name="press" size={15} /> {given !== null ? 'Talk given' : 'Team talk'}
       </button>
@@ -564,7 +564,7 @@ function TimeoutPanel({
           <span className="faint">Adjust the instructions here, or open Tactics for the system and each rotation — changes apply from the next rally.</span>
         </div>
         <span className="timeout-countdown">0:{secondsLeft.toString().padStart(2, '0')}</span>
-        <button className="primary" onClick={() => g.resumeFromTimeout()}>
+        <button className="primary" onClick={() => g.resumeFromTimeout()} data-tour="resume-timeout">
           <Icon name="play" size={14} /> Resume play
         </button>
       </div>
@@ -787,7 +787,7 @@ function ChallengeButton({ shown }: { shown: boolean }): JSX.Element {
     if (why !== null) setOpen(false);
   }, [why]);
   return (
-    <div className="lv-shout" ref={ref}>
+    <div className="lv-shout" ref={ref} data-tour="challenge">
       <button className={`${close ? 'hot' : ''}${open ? ' on' : ''}`} disabled={why !== null} onClick={() => setOpen((o) => !o)}
         title={why ?? (close && call?.doubt != null ? `That looked close — ${DOUBT_WORDS[call.doubt]}` : 'Ask the video to look at one thing')}>
         <Icon name="search" size={15} /> Challenge <span className="lv-badge">{g.challengesLeft()}</span>
@@ -1673,6 +1673,7 @@ function LiveMatchView(): JSX.Element {
       <div className="lv-coachbar">
         <span className="lv-coach-label">Coach</span>
         <button
+          data-tour="timeout"
           disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
           onClick={() => g.callTimeout()}
           title="Call a timeout"
@@ -1680,7 +1681,7 @@ function LiveMatchView(): JSX.Element {
           <Icon name="whistle" size={15} /> Timeout <span className="lv-badge">{2 - md.timeoutsUsed[userTeamIdx]}</span>
         </button>
         <ChallengeButton shown={revealed >= md.log.length} />
-        <button className={overlay === 'subs' ? 'on' : ''} onClick={() => (overlay === 'subs' ? closeOverlay() : openSubs())}>
+        <button data-tour="subs" className={overlay === 'subs' ? 'on' : ''} onClick={() => (overlay === 'subs' ? closeOverlay() : openSubs())}>
           <Icon name="swap" size={15} /> Substitution <span className={`lv-badge${remaining <= 0 ? ' bad' : ''}`}>{remaining}</span>
         </button>
         <div className="lv-shout" ref={shoutRef}>
@@ -1728,7 +1729,7 @@ function LiveMatchView(): JSX.Element {
           value={md.speed}
           onChange={(sp) => g.setSpeed(sp)}
         />
-        <button className="lv-skip" onClick={() => g.finishMatchdayNow()} title="Skip to the result">
+        <button className="lv-skip" onClick={() => g.finishMatchdayNow()} title="Skip to the result" data-tour="skip-result">
           Skip to result <Icon name="arrowRight" size={14} />
         </button>
       </div>

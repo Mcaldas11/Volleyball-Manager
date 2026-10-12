@@ -37,7 +37,8 @@ import { MatchResultScreen } from './screens/MatchResult.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { StaffNegotiationScreen } from './screens/StaffNegotiation.tsx';
 import { DressingRoomScreen } from './screens/DressingRoom.tsx';
-import { HelpDialog, WelcomeTour } from './help.tsx';
+import { HelpDialog } from './help.tsx';
+import { TutorialOverlay } from './tutorial.tsx';
 import { AffiliatesScreen, CommercialScreen, FacilitiesScreen } from './screens/ClubBusiness.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
@@ -249,7 +250,7 @@ function GameShell(): JSX.Element {
       <ReplayViewer />
       <ProcessingWindow />
       <HelpDialog />
-      <WelcomeTour />
+      <TutorialOverlay />
     </div>
   );
 }
@@ -334,6 +335,7 @@ function Sidebar({
   ): JSX.Element => (
     <button
       key={key}
+      data-tour={`nav-${key}`}
       className={`side-item${active ? ' active' : ''}`}
       onClick={onClick}
       disabled={takeover}
@@ -553,6 +555,7 @@ function Header(): JSX.Element {
             {info.tabs.map(([id, label]) => (
               <button
                 key={id}
+                data-tour={`tab-${id}`}
                 className={`hdr-tab${g.screen === id && g.selectedClub === null && g.selectedPlayer === null && g.selectedCompetition === null ? ' active' : ''}`}
                 onClick={() => g.go(id)}
               >
@@ -625,7 +628,7 @@ function ContinueButton(): JSX.Element {
   }
 
   return (
-    <div className="continue" ref={ref}>
+    <div className="continue" ref={ref} data-tour="continue">
       <button className={`continue-main${g.processing ? ' busy' : ''}`} disabled={blocked} onClick={action}>
         {g.processing ? <span className="spinner" /> : <Icon name={icon} size={16} />}
         <span className="continue-label">{label}</span>

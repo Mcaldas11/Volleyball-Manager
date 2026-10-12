@@ -83,7 +83,7 @@ function WeekPlan(): JSX.Element {
           </div>
           <button className="icon-btn" onClick={() => setMonday(monday + 7)} title="Next week"><Icon name="chevronRight" size={16} /></button>
           <span className="flex-spacer" />
-          <label className="tr-field">
+          <label className="tr-field" data-tour="train-focus">
             <span>Weekly focus</span>
             <Dropdown size="sm" value={settings.focus} onChange={(v) => setWeek({ focus: v })} options={FOCUS_OPTIONS.map(([value, label]) => ({ value, label }))} />
           </label>

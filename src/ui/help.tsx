@@ -1,6 +1,6 @@
 /**
- * Help: what every part of the game does, a topic at a time — and the short
- * tour a new manager gets on his first day, once per browser.
+ * Help: what every part of the game does, a topic at a time — and the way
+ * back into the tutorial (tutorial.tsx).
  */
 
 import { useState, type JSX, type ReactNode } from 'react';
@@ -121,9 +121,11 @@ export function HelpDialog(): JSX.Element | null {
             {TOPICS.map((x) => (
               <button key={x.id} className={x.id === t.id ? 'active' : ''} onClick={() => setTopic(x.id)}>{x.title}</button>
             ))}
-            <button className="help-tour" onClick={() => { g.closeHelp(); g.startWelcome(); }}>
-              <Icon name="playOutline" size={13} /> The welcome tour
-            </button>
+            {g.club !== null && (
+              <button className="help-tour" onClick={() => { g.closeHelp(); g.startTutorial(); }}>
+                <Icon name="playOutline" size={13} /> The tutorial
+              </button>
+            )}
           </nav>
           <article className="help-text">
             <h2>{t.title}</h2>
@@ -133,40 +135,6 @@ export function HelpDialog(): JSX.Element | null {
             )}
           </article>
         </div>
-      </div>
-    </div>
-  );
-}
-
-const TOUR: ReadonlyArray<{ title: string; icon: Parameters<typeof Icon>[0]['name']; text: string }> = [
-  { title: 'Welcome to the club', icon: 'home', text: 'You are the head coach. The board has set a target for the season — your Home screen shows it, with your next match and the league table.' },
-  { title: 'The inbox', icon: 'inbox', text: 'Everything arrives here: offers, injuries, the board, the press. Messages marked Action needed wait for your answer.' },
-  { title: 'Moving time on', icon: 'play', text: 'Continue runs the calendar until something needs you. When it says Play match, it is match day.' },
-  { title: 'Your team', icon: 'squad', text: 'Squad, Dressing Room, Lineup and Training are your team. Talk to your players, pick your six, set your tactics.' },
-  { title: 'Help is always here', icon: 'help', text: 'The ? at the top opens the help, a topic at a time — and this tour again, whenever you want it.' },
-];
-
-/** A new manager's first look round: five steps, once per browser. */
-export function WelcomeTour(): JSX.Element | null {
-  const g = useGame();
-  const [step, setStep] = useState(0);
-  if (!g.welcomeOpen) return null;
-  const s = TOUR[step];
-  const last = step === TOUR.length - 1;
-  const done = (): void => { setStep(0); g.closeWelcome(); };
-  return (
-    <div className="hol-overlay">
-      <div className="hol-card tour-card" role="dialog" aria-label="Welcome">
-        <div className="tour-icon"><Icon name={s.icon} size={30} /></div>
-        <h2 className="hol-title">{s.title}</h2>
-        <p className="hol-sub">{s.text}</p>
-        <div className="tour-dots">{TOUR.map((_, i) => <span key={i} className={i === step ? 'on' : ''} />)}</div>
-        <footer className="tour-foot">
-          <button className="ghost" onClick={done}>Skip</button>
-          <span className="flex-spacer" />
-          {step > 0 && <button onClick={() => setStep(step - 1)}>Back</button>}
-          <button className="primary" onClick={() => (last ? done() : setStep(step + 1))}>{last ? 'Start' : 'Next'}</button>
-        </footer>
       </div>
     </div>
   );

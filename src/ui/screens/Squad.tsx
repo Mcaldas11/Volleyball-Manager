@@ -139,6 +139,7 @@ export function SquadScreen(): JSX.Element {
         title="Players"
         icon="squad"
         flush
+        className="squad-players"
         actions={<Segmented size="sm" options={POSITION_FILTERS} value={posFilter} onChange={setPosFilter} />}
       >
         <div className="table-wrap">
@@ -571,7 +572,7 @@ export function PlayerDetail(): JSX.Element | null {
                 </button>
               )}
               {isOwn && !isYouth && (
-                <button onClick={() => g.openPlayerTalk(p)} title="Call him in for a word">
+                <button onClick={() => g.openPlayerTalk(p)} title="Call him in for a word" data-tour="talk">
                   <Icon name="press" size={14} /> Talk
                 </button>
               )}

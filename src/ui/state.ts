@@ -615,12 +615,8 @@ class Game {
   newGame(scale: WorldScale, seed: number): void {
     const manager = this.pendingManager;
     if (manager === null) return;
-    // A first career in this browser starts with the tour.
-    try {
-      if (window.localStorage.getItem(WELCOME_KEY) === null) this.welcomeOpen = true;
-    } catch {
-      // No storage: no tour — the help has it.
-    }
+    // Every new career offers the tutorial — its first card has the way out for those who know the game.
+    this.welcomeOpen = true;
     const world = generateWorld({ seed, startYear: 2026, scale, manager });
     this.ctx = newSeasonContext();
     startSeason(world, this.ctx);
@@ -2421,6 +2417,40 @@ class Game {
       // Without storage it shows again next time.
     }
     this.emit();
+  }
+
+  // ---- The tutorial -----------------------------------------------------------------------
+
+  /** Where the tutorial's step began: which step, what it compares against, the day. */
+  tutorialStart: { step: number; snap: string; day: number } = { step: -1, snap: '', day: 0 };
+
+  /** Start the tutorial from the beginning — kept with the career, so it goes on after a reload. */
+  startTutorial(): void {
+    const world = this.world;
+    if (world === null) return;
+    world.tutorial = 0;
+    this.tutorialStart = { step: -1, snap: '', day: world.day };
+    this.helpOpen = false;
+    this.emit();
+  }
+
+  /** Move the tutorial to a step. */
+  tutorialGoTo(step: number): void {
+    const world = this.world;
+    if (world === null || world.tutorial === undefined) return;
+    world.tutorial = Math.max(0, step);
+    this.emit();
+  }
+
+  /** Note what a step began from — without a redraw: the step waits on the player. */
+  markTutorialStart(step: number, snap: string): void {
+    this.tutorialStart = { step, snap, day: this.world?.day ?? 0 };
+  }
+
+  /** The tutorial is over — finished or left. */
+  endTutorial(): void {
+    if (this.world !== null) this.world.tutorial = undefined;
+    this.closeWelcome();
   }
 
   // ---- Team talks --------------------------------------------------------------------

@@ -699,6 +699,8 @@ export interface World {
   clubSpells?: Map<number, number[]>;
   /** The box score of every match of the manager's club, by fixture id — see matchReports.ts. */
   matchReports?: Map<number, MatchReport>;
+  /** The tutorial's step while it runs (see the UI's tutorial.tsx); absent otherwise. */
+  tutorial?: number;
 }
 
 export function dayOfSeason(world: World): number {
