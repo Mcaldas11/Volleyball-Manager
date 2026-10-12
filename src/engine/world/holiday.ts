@@ -13,6 +13,7 @@
 import { PlayerFlag } from '../model/players.ts';
 import { applicationBlock, applyForJob } from './career.ts';
 import { acceptIncomingOffer } from './deals.ts';
+import { bidTurnedDown } from './offerStance.ts';
 import type { World } from './world.ts';
 
 /** Bids for the manager's players: take them all, take those at the player's value, or turn them down. */
@@ -83,6 +84,7 @@ export function answerOffers(world: World, policy: OfferPolicy, onlyListed: bool
       accepted++;
     } else {
       world.incomingOffers = world.incomingOffers.filter((o) => o !== offer);
+      bidTurnedDown(world, offer, 'declined');
       declined++;
     }
   }

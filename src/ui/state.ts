@@ -9,6 +9,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { bidTurnedDown } from '../engine/world/offerStance.ts';
 import { bareResult, reportResult } from '../engine/world/matchReports.ts';
 import {
   MatchFormat, MatchSimulator, registeredLiberos, simulateMatch, SUBS_PER_SET, type MatchResult, type RallyLogEntry, type ShoutKind,
@@ -4604,12 +4605,14 @@ class Game {
     this.emit();
   }
 
-  /** Reject the offer outright — the buying club walks away for good. */
+  /** Reject the offer outright — the buying club walks away for good, and the player has his feelings about it. */
   declineOffer(): void {
     const n = this.incomingOffer;
     const world = this.world;
     if (n === null || world === null) return;
+    const offer = world.incomingOffers.find((o) => o.id === n.offerId);
     world.incomingOffers = world.incomingOffers.filter((o) => o.id !== n.offerId);
+    if (offer !== undefined) bidTurnedDown(world, offer, 'declined');
     this.incomingOffer = null;
     this.coachTalk = null;
     this.playerTalk = null;

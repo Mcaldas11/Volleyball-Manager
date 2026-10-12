@@ -17,6 +17,7 @@
  */
 
 import type { Club } from '../model/club.ts';
+import { bidTurnedDown, stanceLine, type OfferStance } from './offerStance.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { endLoan, loanOf, MAX_SQUAD, type LoanPlayingTime } from './loans.ts';
 import { pendingMoveOf } from './moves.ts';
@@ -327,6 +328,9 @@ export interface IncomingOffer {
   loan?: { wageShare: number; playingTime?: LoanPlayingTime };
   /** Loan offers: the terms you asked for, while they are with them. */
   counterLoan?: { wageShare: number; playingTime: LoanPlayingTime };
+  /** How the player takes the bid, and how hard he pulls towards the move — see offerStance.ts. */
+  stance?: OfferStance;
+  pull?: number;
 }
 
 export const MAX_PENDING_OFFERS = 2;
@@ -336,8 +340,10 @@ export const MAX_PENDING_OFFERS = 2;
  * Called weekly; does nothing most weeks.
  */
 export function generateIncomingOffers(world: World): void {
-  // Bids never acted on lapse; ones already in motion are seen through.
+  // Bids never acted on lapse — and a player who wanted one takes it badly; ones already in motion are seen through.
+  const lapsed = world.incomingOffers.filter((o) => (o.status ?? 'open') === 'open' && o.expiresOnDay <= world.day);
   world.incomingOffers = world.incomingOffers.filter((o) => (o.status ?? 'open') !== 'open' || o.expiresOnDay > world.day);
+  for (const o of lapsed) bidTurnedDown(world, o, 'lapsed');
   // Unsolicited bids only come in while a transfer window is open; one agreed
   // after it shuts is completed when the next one opens.
   if (windowCloseDay(world.day) === null) return;
@@ -379,16 +385,17 @@ export function generateIncomingOffers(world: World): void {
   if (fee > buyingClub.finances.transferBudget || fee > buyingClub.finances.balance) return;
 
   const id = world.nextOfferId++;
-  world.incomingOffers.push({
+  const offer: IncomingOffer = {
     id, playerIdx, buyingClubId: buyingClub.id, fee, expiresOnDay: world.day + 14, status: 'open',
-  });
+  };
+  world.incomingOffers.push(offer);
   world.messages.push({
     id: world.messages.length,
     day: world.day,
     year: world.year,
     subject: `Transfer offer: ${euros(fee)} for ${store.fullName(playerIdx)}`,
     body: `${buyingClub.name} have tabled a formal offer of ${euros(fee)} for ${store.fullName(playerIdx)}. ` +
-      'Accept it, ask for more, or turn it down.',
+      `${stanceLine(world, offer)} Accept it, ask for more, or turn it down.`,
     offerId: id,
     playerIdx,
     from: buyingClub.name,
@@ -430,16 +437,17 @@ export function generateListedBids(world: World): void {
     if (fee > buyer.finances.transferBudget || fee > buyer.finances.balance) continue;
 
     const id = world.nextOfferId++;
-    world.incomingOffers.push({
+    const offer: IncomingOffer = {
       id, playerIdx: p, buyingClubId: buyer.id, fee, expiresOnDay: world.day + 14, status: 'open',
-    });
+    };
+    world.incomingOffers.push(offer);
     world.messages.push({
       id: world.messages.length,
       day: world.day,
       year: world.year,
       subject: `Bid for ${store.fullName(p)}: ${euros(fee)}`,
       body: `${buyer.name} have seen ${store.fullName(p)} on the transfer list and bid ${euros(fee)} for him. ` +
-        'Accept it, ask for more, or turn it down.',
+        `${stanceLine(world, offer)} Accept it, ask for more, or turn it down.`,
       offerId: id,
       playerIdx: p,
       from: buyer.name,

@@ -12,7 +12,11 @@ import { playedInMatch } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
+import { postMessage } from './inbox.ts';
 import type { Fixture, World } from './world.ts';
+
+/** The games for a club worth marking. */
+const MILESTONES: readonly number[] = [50, 100, 150, 200, 250, 300, 400, 500];
 
 export interface ClubSpell {
   club: number;
@@ -96,6 +100,17 @@ export function recordClubMatch(
       const { flat, at } = noteClub(world, p, club, world.season);
       flat[at + APPS]++;
       flat[at + POINTS] += s.attackKills + s.serveAces + s.blockPoints;
+      // A round number of games for the manager's club: the club marks it.
+      if (club === world.userClubId && flat[at + LOAN] === 0 && MILESTONES.includes(flat[at + APPS])) {
+        const name = world.players.fullName(p);
+        const games = flat[at + APPS];
+        postMessage(world, {
+          category: 'news', from: 'Club Media', playerIdx: p,
+          subject: `${name}: ${games} games for ${world.clubs[club]?.name ?? 'the club'}`,
+          body: `${name} has played his ${games}th game for the club, with ${flat[at + POINTS]} points along the way. ` +
+            (games >= 200 ? 'A club great — the supporters gave him a standing ovation.' : 'The supporters gave him a warm round of applause.'),
+        });
+      }
     }
   }
 }

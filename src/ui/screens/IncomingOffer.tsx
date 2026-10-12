@@ -5,6 +5,7 @@ import {
 import { ClubLink, ContractPaper, ContractRow, money, MoneyInput } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { STANCE_NAMES, stanceOf } from '../../engine/world/offerStance.ts';
 import { Dropdown } from '../dropdown.tsx';
 
 /**
@@ -28,6 +29,8 @@ export function IncomingOfferScreen(): JSX.Element | null {
   const value = store.value[n.playerIdx];
   const vsValue = value > 0 ? Math.round(((fee - value) / value) * 100) : 0;
   const rivals = world.incomingOffers.filter((o) => o.playerIdx === n.playerIdx && o.id !== n.offerId);
+  // How he takes it: keen to go, happy to stay, or either way.
+  const stance = offer !== undefined ? stanceOf(world, offer) : 'open';
   // Offers can be taken any day; with the window shut he only goes once it opens.
   const joinDay = g.joinDay(n.playerIdx);
   const shutNote = joinDay > world.day && (
@@ -145,6 +148,12 @@ export function IncomingOfferScreen(): JSX.Element | null {
         </span>
       </ContractRow>
       <ContractRow label="Market value">{money(value)}</ContractRow>
+      <ContractRow label="The player">
+        <span className={stance === 'keen' ? 'warn' : stance === 'staying' ? 'good' : 'faint'}>{STANCE_NAMES[stance]}</span>
+        <span className="faint">
+          {stance === 'keen' ? ' · turn it down and he may ask to leave' : stance === 'staying' ? ' · he may refuse to go' : ''}
+        </span>
+      </ContractRow>
       {status === 'open' && shutNote}
       {status === 'open' && <ContractRow label="Expires">{g.dateLabelForDay(n.expiresOnDay)}</ContractRow>}
       {rivals.length > 0 && (

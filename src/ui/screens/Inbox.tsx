@@ -3,14 +3,14 @@ import { INJURY_NAMES } from '../../engine/model/players.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import { messageNeedsAction, messageSender, injuryDuration, ordinal } from '../../engine/world/inbox.ts';
 import {
-  contractEndSeason, messageCategory, type GameMessage, type MessageCategory,
+  contractEndSeason, messageCategory, type GameMessage, type MessageCategory, type ReportTable,
 } from '../../engine/world/world.ts';
 import {
   canRecall, coachTalkBlock, fitMatches, promiseShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport,
   type LoanStats,
 } from '../../engine/world/loans.ts';
 import {
-  ClubCrest, Flag, initials, money, MoneyInput, PlayerFace, RatingBadge, StarMeter,
+  ClubCrest, ClubLink, Flag, initials, money, MoneyInput, PlayerFace, PlayerLink, RatingBadge, StarMeter,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
@@ -349,6 +349,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
+  if (m.tables !== undefined && m.tables.length > 0) return <ReportTables tables={m.tables} />;
+
   if (m.award !== undefined) return <AwardSheet award={m.award} />;
 
   if (m.competitionReview !== undefined) return <CompetitionReviewSheet review={m.competitionReview} />;
@@ -672,6 +674,39 @@ function LoanReportSheet({ report: r }: { report: LoanReport }): JSX.Element {
         <div className="paper-label">Staff verdict</div>
         <p className="paper-verdict">{r.verdict}</p>
       </div>
+    </div>
+  );
+}
+
+/** A staff report's tables: a player's name opens him, his club's opens the club. */
+function ReportTables({ tables }: { tables: readonly ReportTable[] }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  return (
+    <div className="paper-roundup">
+      {tables.map((t, i) => (
+        <div key={i} className="paper-report">
+          <div className="paper-label">{t.label}</div>
+          <table className="data-table paper-table report-table">
+            <thead>
+              <tr>{t.columns.map((c, j) => <th key={j}>{c}</th>)}</tr>
+            </thead>
+            <tbody>
+              {t.rows.map((r, k) => (
+                <tr key={k} className={r.tone ?? ''}>
+                  {r.cells.map((c, j) => (
+                    <td key={j} className={typeof c === 'number' ? 'num' : ''}>
+                      {j === 0 && r.p !== undefined ? <PlayerLink idx={r.p} />
+                        : j === 1 && r.clubId !== undefined && world.clubs[r.clubId] !== undefined ? <ClubLink id={r.clubId} short />
+                          : c}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   );
 }

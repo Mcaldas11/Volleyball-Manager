@@ -145,6 +145,16 @@ Before submitting a change:
 - [x] Player ageing, injuries with permanent career effects, and procedurally
       generated "regens" that keep the world populated across a fifty-season
       career
+- [x] A player has his say on every bid for him — wants the move, would
+      rather stay, or could go either way — and it shows on the offer: turn
+      down a move he wanted and he may hand in a transfer request; sell one
+      who wanted to stay and he will most likely refuse. A request to leave
+      can be taken back, once he has settled
+- [x] Staff reports in the inbox: the assistant's weekly word on the squad,
+      the scouts' report on every opponent two days out, a warning before an
+      unhappy player asks to leave, club milestones; and for the national
+      team, the squad's club form (weekly with only a country to coach),
+      their injuries as they happen, and the world ranking each month
 - [x] One-to-one talks with players, held as a conversation in your office:
       praise, criticism, encouragement, a promise of games that is called in
       later — each answered in the player's own words — and players kept

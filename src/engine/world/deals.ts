@@ -17,6 +17,7 @@
  */
 
 import type { Club } from '../model/club.ts';
+import { bidTurnedDown, stanceLine, stanceOf, stanceOnAgreedSale } from './offerStance.ts';
 import { PlayerFlag } from '../model/players.ts';
 import {
   completeTransfer, contractDemands, evaluateCounterFee, evaluateFeeOffer, payFee, resolveIncomingMove,
@@ -663,8 +664,10 @@ function removeOffers(world: World, keep: (o: IncomingOffer) => boolean): void {
 
 function processSales(world: World): void {
   const store = world.players;
-  // Bids never acted on lapse; ones already in motion are seen through.
+  // Bids never acted on lapse — a player who wanted one takes it badly; ones already in motion are seen through.
+  const lapsed = world.incomingOffers.filter((o) => (o.status ?? 'open') === 'open' && o.expiresOnDay <= world.day);
   removeOffers(world, (o) => (o.status ?? 'open') !== 'open' || o.expiresOnDay > world.day);
+  for (const o of lapsed) bidTurnedDown(world, o, 'lapsed');
   removeOffers(world, (o) => store.clubId[o.playerIdx] === world.userClubId);
 
   for (const o of [...world.incomingOffers]) {
@@ -719,6 +722,9 @@ function processSales(world: World): void {
       continue;
     }
     const decision = resolveIncomingMove(world, buyer, o.playerIdx);
+    // How he felt about the move all along: one who wanted it goes, one who wanted to stay most likely won't.
+    const stance = stanceOf(world, o);
+    decision.accepted = stanceOnAgreedSale(world, o, decision.accepted);
     if (decision.accepted) {
       const day = agreeTransfer(world, buyer, o.playerIdx, decision.wage, o.fee, 2);
       removeOffers(world, (x) => x.playerIdx !== o.playerIdx);
@@ -742,7 +748,9 @@ function processSales(world: World): void {
       removeOffers(world, (x) => x.id !== o.id);
       say(world, {
         subject: `${name} rejects ${buyer.name}`,
-        body: `${name} has turned down the move to ${buyer.name} — he is staying.`,
+        body: stance === 'staying'
+          ? `${name} has turned down the move to ${buyer.name}. He never wanted to leave — and he is hurt that the club was ready to let him go.`
+          : `${name} has turned down the move to ${buyer.name} — he is staying.`,
         playerIdx: o.playerIdx,
         from: name,
         category: 'offer',
@@ -766,13 +774,14 @@ function processSales(world: World): void {
     const fee = Math.round((top * world.rng.range(1.05, 1.2)) / 1000) * 1000;
     if (fee > club.finances.transferBudget || fee > club.finances.balance) continue;
     const id = world.nextOfferId++;
-    world.incomingOffers.push({
+    const rival: IncomingOffer = {
       id, playerIdx: p, buyingClubId: club.id, fee, expiresOnDay: world.day + 14, status: 'open',
-    });
+    };
+    world.incomingOffers.push(rival);
     say(world, {
       subject: `Rival bid for ${store.fullName(p)}`,
       body: `${club.name} have joined the race for ${store.fullName(p)} with a bid of ${euros(fee)}, ` +
-        `topping the ${euros(top)} already on the table.`,
+        `topping the ${euros(top)} already on the table. ${stanceLine(world, rival)}`,
       offerId: id,
       playerIdx: p,
       from: club.name,

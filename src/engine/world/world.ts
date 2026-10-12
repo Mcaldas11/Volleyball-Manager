@@ -418,6 +418,8 @@ export interface GameMessage {
   loanRecall?: boolean;
   /** A compiled account of a loan: games, statistics, development. */
   loanReport?: LoanReport;
+  /** A staff report's tables — see reports.ts. */
+  tables?: ReportTable[];
   /** International news of the user's players — call-ups, match days with
    *  each player's numbers, the way home — drawn as a report in the inbox. */
   intl?: IntlReport;
@@ -701,6 +703,22 @@ export interface World {
   matchReports?: Map<number, MatchReport>;
   /** The tutorial's step while it runs (see the UI's tutorial.tsx); absent otherwise. */
   tutorial?: number;
+  /** The day the staff last warned the manager a player was unhappy, by player. */
+  unhappyWarned?: Record<number, number>;
+  /** Each nation's place in the world ranking at the last monthly report — see reports.ts. */
+  lastRanks?: Record<number, number>;
+  /** The fixtures the scouts have already sent a report on, the latest few. */
+  scoutedFixtures?: number[];
+  /** National squad players the manager has been told are injured, and since when. */
+  intlInjuries?: Record<number, number>;
+}
+
+/** A table in a report: a heading, its columns, and its rows — the first cell
+ *  a player's name when the row names him (`p`), the second his club's (`clubId`). */
+export interface ReportTable {
+  label: string;
+  columns: string[];
+  rows: Array<{ cells: Array<string | number>; p?: number; clubId?: number; tone?: 'good' | 'bad' }>;
 }
 
 export function dayOfSeason(world: World): number {

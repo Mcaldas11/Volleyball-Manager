@@ -14,7 +14,9 @@
 
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
+import { StaffRole } from '../model/staff.ts';
 import { postMessage } from './inbox.ts';
+import { hash01 } from './offerStance.ts';
 import { contractEndSeason, type World } from './world.ts';
 
 export type ChatTopic = 'praise' | 'criticise' | 'encourage' | 'promise' | 'mood';
@@ -60,6 +62,8 @@ export interface PlayerPromise {
 export interface TransferRequest {
   day: number;
   status: 'open' | 'listed' | 'promised' | 'refused';
+  /** Why he asked: kept unhappy too long, or a move he wanted turned down. Absent on older saves. */
+  reason?: 'unhappy' | 'blockedMove';
 }
 
 export interface ChatResult {
@@ -236,15 +240,28 @@ export function playerHappinessWeek(world: World): void {
     }
   }
   if (club === undefined) return;
-  // Anyone unhappy for long enough asks to leave.
+  // Anyone unhappy for long enough asks to leave — and the staff see it coming.
   const weeks = (world.unhappyWeeks ??= {});
+  const warned = (world.unhappyWarned ??= {});
   for (const p of club.players) {
     if (store.morale[p] < 30) weeks[p] = (weeks[p] ?? 0) + 1;
     else if (store.morale[p] >= 45) delete weeks[p];
+    if ((weeks[p] ?? 0) === 2 && world.transferRequests?.[p] === undefined && world.day - (warned[p] ?? -999) > 60) {
+      warned[p] = world.day;
+      const name = store.fullName(p);
+      const why = store.playingTime[p] < 30 ? 'he is not getting the games he wants'
+        : store.morale[p] < 20 ? 'he is miserable, and it is starting to show in training' : 'something is eating at him';
+      postMessage(world, {
+        category: 'contract', from: assistantName(world, club.id), playerIdx: p,
+        subject: `${name} is unhappy`,
+        body: `A word about ${name}, boss: ${why}. If nothing changes, I'd expect him to ask to leave within a few weeks. ` +
+          'A talk with him — or some games — might settle him.',
+      });
+    }
     if ((weeks[p] ?? 0) < UNHAPPY_WEEKS || store.hasFlag(p, PlayerFlag.Transferable)) continue;
     const asked = world.transferRequests?.[p];
     if (asked !== undefined && world.day - asked.day < ASK_AGAIN_DAYS) continue;
-    (world.transferRequests ??= {})[p] = { day: world.day, status: 'open' };
+    (world.transferRequests ??= {})[p] = { day: world.day, status: 'open', reason: 'unhappy' };
     delete weeks[p];
     const name = store.fullName(p);
     postMessage(world, {
@@ -254,6 +271,46 @@ export function playerHappinessWeek(world: World): void {
         'You can let him go, promise him the games he wants, or tell him he is staying.',
     });
   }
+}
+
+/**
+ * A request to leave isn't for ever. A player who has settled since — happier,
+ * playing, or over the move that fell through — may take it back: asked and
+ * not answered, told he is staying, or listed at his own request. Weekly.
+ */
+export function changesOfMind(world: World): void {
+  const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
+  const requests = world.transferRequests;
+  if (club === undefined || requests === undefined) return;
+  const store = world.players;
+  for (const p of club.players) {
+    const req = requests[p];
+    if (req === undefined || req.status === 'promised' || world.day - req.day < 21) continue;
+    const playing = store.playingTime[p] >= 40;
+    const settled = store.morale[p] >= 62 && (playing || (req.reason === 'blockedMove' && store.morale[p] >= 70));
+    if (!settled) continue;
+    const chance = req.status === 'open' ? 0.18 : req.status === 'refused' ? 0.14 : 0.1;
+    if (hash01(p, world.day) >= chance) continue;
+    const name = store.fullName(p);
+    const wasListed = req.status === 'listed';
+    if (wasListed) store.setFlag(p, PlayerFlag.Transferable, false);
+    delete requests[p];
+    delete world.unhappyWeeks?.[p];
+    store.morale[p] = Math.min(100, store.morale[p] + 4);
+    postMessage(world, {
+      category: 'contract', from: name, playerIdx: p,
+      subject: `${name} changes his mind`,
+      body: wasListed
+        ? `${name} has asked to come off the transfer list. He is happier now, and wants to stay and fight for his place.`
+        : `${name} has withdrawn his transfer request. He has settled — he wants to stay.`,
+    });
+  }
+}
+
+/** Who speaks for the coaching staff: the assistant coach, by name, if the club has one. */
+function assistantName(world: World, clubId: number): string {
+  const a = world.staff.find((s) => s.clubId === clubId && s.role === StaffRole.AssistantCoach);
+  return a !== undefined ? `${a.firstName} ${a.lastName}` : 'Assistant Coach';
 }
 
 /** The manager's answer to a request to leave. */

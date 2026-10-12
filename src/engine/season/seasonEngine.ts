@@ -51,7 +51,8 @@ import { coachesSetUp } from '../world/aiTactics.ts';
 import { analysisEdge, medicalQuality, staffDay, topUpStaffPool } from '../world/staffMarket.ts';
 import { processStaffDeals } from '../world/staffDeals.ts';
 import { cohesionEdge, cohesionOf, dressingRoomWeek } from '../world/dressingRoom.ts';
-import { playerHappinessWeek } from '../world/playerTalks.ts';
+import { changesOfMind, playerHappinessWeek } from '../world/playerTalks.ts';
+import { reportsDay } from '../world/reports.ts';
 import { crowdAt, sponsorDay, ticketPriceOf } from '../world/commercial.ts';
 import { facilitiesDay } from '../world/facilities.ts';
 import { affiliatesDay } from '../world/affiliates.ts';
@@ -539,6 +540,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   progressCups(world);
   // A competition just finished gets its review; one about to start, a look at its field.
   competitionReviewsDay(world);
+  // The staff's reports: the national squad's club form, the ranking, the assistant's week, the next opponent.
+  reportsDay(world);
 
   // Training and injury rolls happen on a weekly cadence rather than daily, so
   // their cost does not scale with how many matches were played.
@@ -548,6 +551,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
       weeklyTraining(world);
       dressingRoomWeek(world);
       playerHappinessWeek(world);
+      changesOfMind(world);
       trainPositions(world);
       rollInjuries(world);
       generateIncomingOffers(world);
