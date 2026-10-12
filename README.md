@@ -83,9 +83,11 @@ Before submitting a change:
       libero can't play outfield
 - [x] In-match substitutions up to the real six-per-set limit, two timeouts
       a set, a word from the touchline, and the video challenge: two a set,
-      the point played again on the court — the decisive touch in slow
-      motion — before the verdict; a wrong call turned over — point, serve
-      and box score — and the challenge kept
+      asked about one thing — the ball in or out, a touch off the block, the
+      net — and the point played again on the court, the decisive touch in
+      slow motion, before the verdict; the referee can miss one thing on a
+      close call, and only the right question turns it over — point, serve
+      and box score — and keeps the challenge
 - [x] Team talks before the match and at every set break: what lands depends
       on the moment and on each player's personality, the dressing room's
       leaders counting most

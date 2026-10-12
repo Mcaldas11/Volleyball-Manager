@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../../engine/model/players.ts';
-import type { LastCall, ShoutKind } from '../../engine/match/engine.ts';
+import {
+  CHALLENGE_CHECK_NAMES, challengeChecksFor, type ChallengeCheck, type LastCall, type ShoutKind,
+} from '../../engine/match/engine.ts';
 import {
   abilityClass, Bar, ChoiceField, ClubCrest, clubHue, Flag, PlayerFace, Pos, POSITION_ACCENT, RatingBadge,
   Segmented, StarMeter, useDismiss,
@@ -680,14 +682,6 @@ function SoundToggle(): JSX.Element {
 }
 
 /** Ask for the video on the last point — lit up when it was close and went against you. */
-/** What the bench is asking the video, by what the referee gave. */
-const VIDEO_QUESTION: Readonly<Record<LastCall['call'], string>> = {
-  kill: 'The kill was given — was the ball in?',
-  ace: 'The ace was given — was the serve in?',
-  attackError: 'Given out — did the attack land in?',
-  blocked: 'The block was given — did it come off the hands and out?',
-};
-
 /**
  * The video check, over the court: who asked and what, the replay running
  * underneath like the television's — then the verdict, stamped.
@@ -695,12 +689,16 @@ const VIDEO_QUESTION: Readonly<Record<LastCall['call'], string>> = {
 function VideoCheck({ review, side, kit }: { review: VideoReview; side: MatchSide; kit: Kit }): JSX.Element {
   const g = useGame();
   const v = review.verdict;
+  const contacts = review.log.entry.contacts;
+  const blockout = review.call === 'kill' && contacts[contacts.length - 1]?.shot === 'blockout';
   return (
     <div className={`vr${v !== null ? ' decided' : ''}`}>
       <div className="vr-top">
         <span className="vr-tag"><i className="vr-rec" /> Video check</span>
         <span className="vr-ask">
-          <b style={{ borderColor: kit.shirt }}>{side.shortName}</b> {VIDEO_QUESTION[review.call]}
+          <b style={{ borderColor: kit.shirt }}>{side.shortName}</b>
+          <span className="vr-check">{CHALLENGE_CHECK_NAMES[review.check]}</span>
+          {checkQuestion(review.call, blockout, review.check)}
         </span>
         {v === null && <span className="vr-replay">Replay</span>}
       </div>
@@ -708,6 +706,7 @@ function VideoCheck({ review, side, kit }: { review: VideoReview; side: MatchSid
         <div className={`vr-verdict ${v.overturned ? 'over' : 'stands'}`}>
           <b>{v.overturned ? 'Overturned' : 'Call stands'}</b>
           <span>{v.text}</span>
+          <em>{v.overturned ? `${side.shortName} keep their challenge` : `${side.shortName} lose a challenge`}</em>
         </div>
       )}
       {v === null && (
@@ -719,17 +718,56 @@ function VideoCheck({ review, side, kit }: { review: VideoReview; side: MatchSid
   );
 }
 
+/** The question a check puts to the video, on the call the referee made. */
+function checkQuestion(call: LastCall['call'], blockout: boolean, check: ChallengeCheck): string {
+  if (check === 'inOut') return call === 'attackError' ? 'Was the ball in?' : call === 'ace' ? 'Was the serve out?' : 'Was the ball out?';
+  if (check === 'blockTouch') return blockout ? 'Did it really touch the block?' : 'Did it come off the block?';
+  return call === 'kill' ? 'Did the hitter touch the net?' : 'Did a blocker touch the net?';
+}
+
+/** What looked close on a point, as everyone saw it. */
+const DOUBT_WORDS: Readonly<Record<ChallengeCheck, string>> = {
+  inOut: 'right on the line', blockTouch: 'a touch off the block?', netTouch: 'was that the net?',
+};
+
+/**
+ * The video challenge: the bench says what the video should look at — the
+ * line, a touch off the block, the net. Right about the thing the referee
+ * missed, the point is turned over and the challenge kept; anything else, the
+ * call stands and the challenge is gone.
+ */
 function ChallengeButton({ shown }: { shown: boolean }): JSX.Element {
   const g = useGame();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
   // Not before the point has been played out on the court: nobody challenges what he hasn't seen.
   const why = shown ? g.challengeError() : 'Wait for the point to finish.';
   const call = g.lastCall();
   const close = why === null && call !== null && call.close;
+  useEffect(() => {
+    if (why !== null) setOpen(false);
+  }, [why]);
   return (
-    <button className={close ? 'hot' : ''} disabled={why !== null} onClick={() => g.challenge()}
-      title={why ?? (close ? 'That looked close — ask for the video' : 'Ask for the video: a wrong call is overturned, and you keep the challenge')}>
-      <Icon name="search" size={15} /> Challenge <span className="lv-badge">{g.challengesLeft()}</span>
-    </button>
+    <div className="lv-shout" ref={ref}>
+      <button className={`${close ? 'hot' : ''}${open ? ' on' : ''}`} disabled={why !== null} onClick={() => setOpen((o) => !o)}
+        title={why ?? (close && call?.doubt != null ? `That looked close — ${DOUBT_WORDS[call.doubt]}` : 'Ask the video to look at one thing')}>
+        <Icon name="search" size={15} /> Challenge <span className="lv-badge">{g.challengesLeft()}</span>
+      </button>
+      {open && why === null && call !== null && (
+        <div className="menu-pop lv-shout-menu lv-challenge-menu">
+          <div className="lv-challenge-head">What should the video look at?</div>
+          {challengeChecksFor(call.call, call.blockout).map((c) => (
+            <button key={c} onClick={() => { setOpen(false); g.challenge(c); }}>
+              <span className="menu-pop-stack">
+                <span>{CHALLENGE_CHECK_NAMES[c]}{call.doubt === c && <span className="lv-close-tag">Looked close</span>}</span>
+                <span className="faint">{checkQuestion(call.call, call.blockout, c)}</span>
+              </span>
+            </button>
+          ))}
+          <p className="lv-challenge-note">Right, and the point is yours and you keep the challenge. Wrong, and it is lost.</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1558,6 +1596,8 @@ function LiveMatchView(): JSX.Element {
           <div className="lv-caption">
             <span className="lv-caption-text">
               {lastText === null ? 'Waiting for the first serve' : <>{lastText.before}{lastText.player !== '' && <strong>{lastText.player}</strong>}{lastText.after}</>}
+              {/* A close call, as everyone in the hall saw it — not what the video will show. */}
+              {last?.doubt !== undefined && last.overturned !== true && <span className="lv-close-call">Close: {DOUBT_WORDS[last.doubt]}</span>}
             </span>
             <b>{view.homeScore}-{view.awayScore}</b>
           </div>

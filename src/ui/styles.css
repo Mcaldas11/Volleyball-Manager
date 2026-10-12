@@ -6145,3 +6145,13 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .content-fill .tactics-page > .tboard > .tboard-body { flex: 1 1 0; grid-template-rows: minmax(0, 1fr); }
 .content-fill .tactics-page .tboard-overview { max-height: 100%; min-height: 0; overflow-y: auto; }
 .content-fill .tactics-page .tboard-overview > * { flex: none; }
+
+/* The challenge: what the video should look at. */
+.lv-challenge-menu { min-width: 290px; }
+.lv-challenge-head { padding: 8px 12px 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.lv-challenge-note { margin: 4px 0 0; padding: 8px 12px 6px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-dim); }
+.lv-close-tag { margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--gold-soft); color: var(--gold-bright); font-size: 10px; font-weight: 800; vertical-align: 1px; }
+.lv-close-call { margin-left: 8px; padding: 1px 7px; border-radius: 4px; background: var(--gold-soft); color: var(--gold-bright); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.vr-check { padding: 1px 7px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); font-weight: 800; }
+.vr-verdict em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.vr-verdict.over em { color: var(--gold); }

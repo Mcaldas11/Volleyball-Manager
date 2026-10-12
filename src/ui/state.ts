@@ -33,7 +33,7 @@ import { requestUpgrade, upgradeBlock, type FacilityKind } from '../engine/world
 import { chooseSponsor, setTicketPrice } from '../engine/world/commercial.ts';
 import { endAffiliation, proposeAffiliation } from '../engine/world/affiliates.ts';
 import { loanToAffiliate } from '../engine/world/deals.ts';
-import type { ChallengeResult, LastCall } from '../engine/match/engine.ts';
+import { challengeChecksFor, type ChallengeCheck, type ChallengeResult, type LastCall } from '../engine/match/engine.ts';
 import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
 import { interestedClubs, type ClubInterest } from '../engine/world/interest.ts';
 import {
@@ -124,6 +124,8 @@ export interface VideoReview {
   log: MatchdayLogEntry;
   /** What the referee gave. */
   call: LastCall['call'];
+  /** What the side asked the video to look at. */
+  check: ChallengeCheck;
   /** Null while the video is still running. */
   verdict: { overturned: boolean; text: string } | null;
   /** Play goes on by itself once it is over — it was running when the video was asked for. */
@@ -2457,16 +2459,20 @@ class Game {
     if (md === null || sim === null || md.timeoutActive !== null || md.videoReview != null) return;
     const aiTeam: 0 | 1 = md.userIsHome ? 1 : 0;
     const call = sim.lastCall();
-    if (call !== null && call.close && call.winner !== aiTeam && sim.challengeError(aiTeam) === null && Math.random() < 0.45) {
-      this.requestVideo(aiTeam);
+    if (call !== null && call.close && call.doubt !== null && call.winner !== aiTeam && sim.challengeError(aiTeam) === null
+      && Math.random() < 0.45) {
+      // Their bench asks about what looked close, as a rule — now and then about something else.
+      const others = challengeChecksFor(call.call, call.blockout).filter((c) => c !== call.doubt);
+      const check = others.length === 0 || Math.random() < 0.85 ? call.doubt : others[Math.floor(Math.random() * others.length)];
+      this.requestVideo(aiTeam, check);
     }
   }
 
-  /** Ask for the video on the last point. */
-  challenge(): void {
+  /** Ask for the video on the last point, about one thing: the line, a touch off the block, the net. */
+  challenge(check: ChallengeCheck): void {
     const md = this.matchday;
     if (md === null) return;
-    this.requestVideo(md.userIsHome ? 0 : 1);
+    this.requestVideo(md.userIsHome ? 0 : 1, check);
   }
 
   /**
@@ -2474,7 +2480,7 @@ class Game {
    * the court — the live view plays it, then calls {@link finishVideoReview}.
    * Nothing is decided until the video has been seen.
    */
-  private requestVideo(team: 0 | 1): void {
+  private requestVideo(team: 0 | 1, check: ChallengeCheck): void {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null || md.videoReview != null) return;
@@ -2486,7 +2492,7 @@ class Game {
       this.emit();
       return;
     }
-    md.videoReview = { seq: ++this.subSeq, team, log, call: call.call, verdict: null, resume: !md.paused || md.pausedForPanel === true };
+    md.videoReview = { seq: ++this.subSeq, team, log, call: call.call, check, verdict: null, resume: !md.paused || md.pausedForPanel === true };
     md.paused = true;
     md.pauseUntil = null;
     md.videoCheck = true;
@@ -2498,7 +2504,7 @@ class Game {
     const md = this.matchday;
     const review = md?.videoReview;
     if (md == null || review == null || review.verdict !== null) return;
-    const result = this.resolveChallenge(review.team);
+    const result = this.resolveChallenge(review.team, review.check);
     review.verdict = result?.ok === true
       ? { overturned: result.overturned === true, text: result.verdict ?? '' }
       : { overturned: false, text: result?.reason ?? 'The call stands.' };
@@ -2525,12 +2531,12 @@ class Game {
   }
 
   /** A side's challenge: the call looked at, and the match put right if it was wrong. */
-  private resolveChallenge(team: 0 | 1): ChallengeResult | null {
+  private resolveChallenge(team: 0 | 1, check: ChallengeCheck): ChallengeResult | null {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null) return null;
     const before = md.snapshot;
-    const result = sim.challenge(team);
+    const result = sim.challenge(team, check);
     if (!result.ok) {
       this.notice = result.reason ?? 'No challenge.';
       this.emit();

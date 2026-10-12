@@ -213,6 +213,8 @@ export interface RallyLogEntry {
   homeWinProb: number;
   /** The call turned over on video: the point went the other way. */
   overturned?: boolean;
+  /** A close call: what looked close — the line, a touch off the block, the net. */
+  doubt?: ChallengeCheck;
 }
 
 export interface MatchResult {
@@ -283,13 +285,45 @@ export const CHALLENGES_PER_SET = 2;
 const CLOSE_CALL = 0.3;
 const WRONG_CALL = 0.32;
 
+/**
+ * What a side asks the video to look at, as under the FIVB's challenge
+ * system: the ball in or out, a touch off the block, a touch of the net.
+ * The engine plays the rally as it really happened; the referee can miss
+ * one thing on a close call — and a challenge only turns it over if it asks
+ * about that thing.
+ */
+export type ChallengeCheck = 'inOut' | 'blockTouch' | 'netTouch';
+
+export const CHALLENGE_CHECK_NAMES: Readonly<Record<ChallengeCheck, string>> = {
+  inOut: 'Ball in or out',
+  blockTouch: 'Touch off the block',
+  netTouch: 'Net touch',
+};
+
+/** What a call could have got wrong, the likeliest first: a kill landed out or
+ *  the hitter touched the net — off the block and out, there was no touch; an
+ *  ace was out; an attack called out was in, touched the block, or a blocker
+ *  touched the net; a stuff block came with the blocker in the net. */
+export function challengeChecksFor(call: LastCall['call'], blockout = false): readonly ChallengeCheck[] {
+  switch (call) {
+    case 'kill': return blockout ? ['blockTouch', 'netTouch'] : ['inOut', 'netTouch'];
+    case 'ace': return ['inOut'];
+    case 'attackError': return ['inOut', 'blockTouch', 'netTouch'];
+    case 'blocked': return ['netTouch'];
+  }
+}
+
 /** The point just played, as a video check sees it. */
 export interface LastCall {
   winner: 0 | 1;
   /** What the referee gave: the ball in, the serve in, the attack out, the block. */
   call: 'kill' | 'ace' | 'attackError' | 'blocked';
+  /** A kill off the block and out: the touch is what is in question. */
+  blockout: boolean;
   /** Close enough that the bench saw it differently. */
   close: boolean;
+  /** What looked close, on a close call: everyone saw it — not what the video will show. */
+  doubt: ChallengeCheck | null;
   /** Already looked at. */
   challenged: boolean;
 }
@@ -303,6 +337,14 @@ export interface ChallengeResult {
   overturned?: boolean;
   /** What the video showed, for the commentary. */
   verdict?: string;
+}
+
+/** What the video showed when the call stands: on the thing asked about. */
+function callStands(call: LastCall, check: ChallengeCheck): string {
+  if (!challengeChecksFor(call.call, call.blockout).includes(check)) return 'Nothing to see there — the call stands.';
+  if (check === 'netTouch') return 'No net touch — the call stands.';
+  if (check === 'blockTouch') return call.blockout ? 'Touch on the block — the call stands.' : 'No touch on the block — the call stands.';
+  return call.call === 'attackError' ? 'Out — the call stands.' : 'In — the call stands.';
 }
 
 /** How much more often the setter gives a hitter the ball he loves — see traits.ts. */
@@ -833,8 +875,14 @@ export class MatchSimulator {
     if (end === undefined || (end.kind !== 'kill' && end.kind !== 'ace' && end.kind !== 'attackError' && end.kind !== 'blocked')) return;
     const close = this.callRng.chance(CLOSE_CALL);
     const wrong = close && this.callRng.chance(WRONG_CALL);
+    // What was close: usually the likeliest thing for that call, now and then another.
+    const blockout = end.kind === 'kill' && end.shot === 'blockout';
+    const checks = challengeChecksFor(end.kind, blockout);
+    const doubt = !close ? null : checks.length === 1 || this.callRng.chance(0.65) ? checks[0]
+      : checks[1 + this.callRng.int(0, checks.length - 2)];
+    if (doubt !== null) entry.doubt = doubt;
     this.last = {
-      call: { winner: entry.winner, call: end.kind, close, challenged: false },
+      call: { winner: entry.winner, call: end.kind, blockout, close, doubt, challenged: false },
       wrong,
       entry,
       serving,
@@ -871,22 +919,22 @@ export class MatchSimulator {
   }
 
   /**
-   * Ask for the video: if the referee got the last point wrong, it goes the
+   * Ask for the video on one thing — the ball in or out, a touch off the
+   * block, the net. If the referee got exactly that wrong, the point goes the
    * other way — the score, the serve and the rotation put back, the box score
-   * put right — and the challenge is kept; if he got it right, it is lost.
+   * put right — and the challenge is kept. Anything else — he got it right,
+   * or the side asked about the wrong thing — and the call stands and the
+   * challenge is lost.
    */
-  challenge(team: 0 | 1): ChallengeResult {
+  challenge(team: 0 | 1, check: ChallengeCheck): ChallengeResult {
     const reason = this.challengeError(team);
     if (reason !== null) return { ok: false, reason };
     const last = this.last!;
     last.call.challenged = true;
     const end = last.entry.contacts[last.entry.contacts.length - 1];
-    if (!last.wrong) {
+    if (!last.wrong || check !== last.call.doubt) {
       this.teams[team].challenges--;
-      return {
-        ok: true, overturned: false,
-        verdict: end.kind === 'blocked' ? 'Clean block — the call stands.' : end.kind === 'attackError' ? 'Out — the call stands.' : 'In — the call stands.',
-      };
+      return { ok: true, overturned: false, verdict: callStands(last.call, check) };
     }
     // Put the point back as it was before it was given...
     const won = last.call.winner;
@@ -904,22 +952,27 @@ export class MatchSimulator {
     const own = (side: 0 | 1, p: number) => statsFor(this.teams[side].stats, p);
     let verdict = '';
     if (end.kind === 'kill') {
+      // No point for the hitter: out, into the net, or off nobody's hands.
       own(end.team, end.player).attackKills--;
       own(end.team, end.player).attackErrors++;
-      verdict = 'Out — the call is overturned.';
+      verdict = check === 'netTouch' ? 'The hitter touched the net — the call is overturned.'
+        : check === 'blockTouch' ? 'No touch on the block — it was out. The call is overturned.'
+          : 'Out — the call is overturned.';
     } else if (end.kind === 'ace') {
       own(end.team, end.player).serveAces--;
       own(end.team, end.player).serveErrors++;
       verdict = 'The serve was out — the call is overturned.';
     } else if (end.kind === 'attackError') {
       own(end.team, end.player).attackErrors--;
-      own(end.team, end.player).attackKills++;
-      verdict = 'In — the call is overturned.';
+      // In, or off the block: his point. A blocker in the net: their fault, not his kill.
+      if (check !== 'netTouch') own(end.team, end.player).attackKills++;
+      verdict = check === 'netTouch' ? 'A blocker touched the net — the call is overturned.'
+        : check === 'blockTouch' ? 'Touch off the block — the call is overturned.'
+          : 'In — it caught the line. The call is overturned.';
     } else {
       own(end.team, end.player).attackBlocked--;
-      own(end.team, end.player).attackKills++;
       if (end.by !== undefined) own(won, end.by).blockPoints--;
-      verdict = 'Off the block and out — the call is overturned.';
+      verdict = 'The blocker touched the net — the call is overturned.';
     }
     // ...and give it the other way.
     last.entry.winner = team;
