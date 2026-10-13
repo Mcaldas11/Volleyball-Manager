@@ -153,13 +153,15 @@ export async function saveGame(id: string, meta: SaveMeta, world: World, season:
   }
 }
 
-export async function loadGame(id: string): Promise<{ world: World; season: SeasonContext }> {
+/** A saved career, read back and set up — `onRead` hears when the reading is done and the setting up begins. */
+export async function loadGame(id: string, onRead?: () => Promise<void>): Promise<{ world: World; season: SeasonContext }> {
   const db = await openDb();
   const tx = db.transaction([WORLD_STORE, SEASON_STORE], 'readonly');
   const worldReq = tx.objectStore(WORLD_STORE).get(id) as IDBRequest<World | undefined>;
   const seasonReq = tx.objectStore(SEASON_STORE).get(id) as IDBRequest<SavedSeason | undefined>;
   const [raw, season] = await Promise.all([reqToPromise(worldReq), reqToPromise(seasonReq)]);
   if (raw === undefined) throw new Error('That save could not be found.');
+  if (onRead !== undefined) await onRead();
   const world = reviveWorld(raw);
   return { world, season: reviveSeason(world, season) };
 }

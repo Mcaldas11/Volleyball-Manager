@@ -14,6 +14,7 @@ import { FriendlyDialog } from './friendlyDialog.tsx';
 import { ReplayViewer } from './replay.tsx';
 import { TacticPicker } from './tacticPicker.tsx';
 import { ProcessingWindow } from './processing.tsx';
+import { TaskWindow } from './taskWindow.tsx';
 import { CLUBLESS_SCREENS, NATIONAL_TEAM_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import { NationalSquadScreen } from './screens/National.tsx';
 import {
@@ -179,7 +180,7 @@ export function App(): JSX.Element {
   return (
     <>
       <AppBody />
-      <FileWorkVeil />
+      <TaskWindow />
     </>
   );
 }
@@ -195,22 +196,6 @@ function AppBody(): JSX.Element {
   return <GameShell />;
 }
 
-/** A career file being written or read: everything waits until it is done. */
-function FileWorkVeil(): JSX.Element | null {
-  const g = useGame();
-  if (g.fileWork === null || !g.busy) return null;
-  return (
-    <div className="file-veil" role="alert" aria-busy="true">
-      <div className="file-veil-card">
-        <span className="spinner" />
-        <div>
-          <strong>{g.fileWork}</strong>
-          <small>A long career in a large world can take a minute or two.</small>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function GameShell(): JSX.Element {
   const g = useGame();

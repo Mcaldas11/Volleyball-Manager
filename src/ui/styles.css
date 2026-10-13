@@ -1165,35 +1165,6 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 }
 .toast > .icon:first-child { color: var(--gold); }
 .toast-close { color: var(--text-faint); margin-left: 4px; }
-/* A career file being written or read: the game waits under this. */
-.file-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(4, 7, 12, 0.66);
-  cursor: progress;
-}
-.file-veil-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 22px;
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-left: 3px solid var(--gold);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-pop);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-.file-veil-card > .spinner { flex: none; }
-.file-veil-card strong { display: block; }
-.file-veil-card small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--text-dim); }
-.file-veil .spinner { width: 16px; height: 16px; border-color: rgba(255, 248, 230, 0.25); border-top-color: var(--gold); }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -4138,6 +4109,51 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .proc-day-kicker { margin-top: 6px; font: 800 17px/1.1 var(--font-display); }
 .proc-day-line { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
 .proc-day-when { margin-left: 2px; opacity: 0.8; }
+
+/* The window up while the game waits on something — a save, a load, a file, a new world.
+   Everything in it moves by transform or opacity, so it keeps moving while the work holds the page. */
+.task-overlay { z-index: 1100; cursor: progress; }
+.task-window {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  padding: 12px 14px 16px;
+  background: linear-gradient(180deg, var(--surface-2), var(--bg-deep));
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  animation: proc-turn 0.25s ease;
+}
+.task-card { gap: 12px; padding: 16px 16px 14px; }
+.task-card-top { display: flex; align-items: center; gap: 14px; }
+.task-card-text { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.task-title { font: 800 24px/1.05 var(--font-display); letter-spacing: 0.01em; }
+.task-detail { overflow: hidden; font-size: 13px; white-space: nowrap; text-overflow: ellipsis; opacity: 0.85; }
+.task-card .spinner { flex: none; width: 16px; height: 16px; }
+/* A ball in the air: up and down, turning as it goes. */
+.task-ball { flex: none; display: grid; place-items: center; width: 34px; height: 40px; animation: task-bounce 0.8s cubic-bezier(0.33, 0, 0.66, 1) infinite alternate; will-change: transform; }
+.task-ball-spin { display: grid; place-items: center; animation: spin 1.6s linear infinite; will-change: transform; }
+@keyframes task-bounce { from { transform: translateY(7px); } to { transform: translateY(-7px); } }
+/* The bar: running end to end while the whole isn't known, filling once it is. */
+.task-bar { position: relative; height: 5px; overflow: hidden; border-radius: 3px; background: rgba(255, 248, 230, 0.2); }
+.task-bar > span { position: absolute; inset: 0; border-radius: 3px; background: #fff8e6; transform-origin: left center; transition: transform 0.2s ease; }
+.task-bar.running > span { right: auto; width: 38%; transition: none; animation: task-run 1.15s ease-in-out infinite; will-change: transform; }
+@keyframes task-run { from { transform: translateX(-105%); } to { transform: translateX(270%); } }
+.task-steps { display: flex; flex-direction: column; gap: 2px; margin: 12px 0 0; padding: 0; list-style: none; }
+.task-steps li { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+.task-steps li:last-child { border-bottom: none; }
+.task-steps li.next { color: var(--text-faint); }
+.task-steps li.done { color: var(--text-dim); }
+.task-steps li.now { color: var(--text); font-weight: 600; }
+.task-step-mark { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); }
+.task-step-mark i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.4; }
+.task-steps li.done .task-step-mark { border-color: var(--good); color: var(--good); }
+.task-steps li.now .task-step-mark { border-color: var(--gold); }
+.task-steps li.now .task-step-mark i { background: var(--gold); opacity: 1; animation: task-pulse 0.9s ease-in-out infinite alternate; will-change: transform, opacity; }
+@keyframes task-pulse { from { transform: scale(0.6); opacity: 0.5; } to { transform: scale(1.25); opacity: 1; } }
+.task-step-name { flex: 1; min-width: 0; }
+.task-steps em { font-style: normal; font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 700; color: var(--gold-bright); }
+.task-hint { margin: 10px 2px 0; font-size: 12px; color: var(--text-faint); }
 
 .proc-holiday { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; color: var(--text-dim); }
 .proc-holiday .hol-bar { margin: 2px 0; }

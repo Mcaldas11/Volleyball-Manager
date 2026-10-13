@@ -186,6 +186,20 @@ interface SheetOwner {
 
 export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
 
+/** Something the game waits on — a save, a load, a career file in or out, a new world —
+ *  shown in a window of its own while it runs. */
+export interface GameTask {
+  /** What is being done: "Saving the game". */
+  title: string;
+  /** Whose career and where it stands — or the file, or the world being made. */
+  detail: string;
+  /** The stages in order, and the one under way. */
+  steps: string[];
+  step: number;
+  /** A big career or world: the window says it may take a while. */
+  slow: boolean;
+}
+
 /** What a new career takes charge of: a club, a national team, or both. */
 export type CareerMode = 'club' | 'national' | 'both';
 
@@ -610,8 +624,8 @@ class Game {
 
   // ---- Menu / save-game flow --------------------------------------------
   menuStage: MenuStage = 'main';
-  /** A career file being written or read — the game waits, under a veil saying so. */
-  fileWork: string | null = null;
+  /** What the game is busy with — a save, a load, a career file, a new world — under a window saying so. */
+  task: GameTask | null = null;
   /** What the career being created takes charge of. */
   careerMode: CareerMode = 'club';
   /** Club and country: the club is taken, the nation still to pick. */
@@ -644,9 +658,31 @@ class Game {
   newGame(scale: WorldScale, seed: number, gender: 'men' | 'women' = 'men'): void {
     const manager = this.pendingManager;
     if (manager === null) return;
+    this.beginCareer(generateWorld({ seed, startYear: 2026, scale, manager, gender }), scale, gender);
+  }
+
+  /** A new career's world, built under the processing window: the world, then its first season. */
+  async createWorld(scale: WorldScale, seed: number, gender: 'men' | 'women' = 'men'): Promise<void> {
+    const manager = this.pendingManager;
+    if (manager === null || this.task !== null) return;
+    const size = `${scale[0].toUpperCase()}${scale.slice(1)}`;
+    await this.beginTask('Building the world', `${size} world · the ${gender === 'women' ? "women's" : "men's"} game`,
+      ['Nations, clubs and players', 'The season ahead'], scale !== 'small');
+    try {
+      const world = generateWorld({ seed, startYear: 2026, scale, manager, gender });
+      await this.taskStep(1);
+      this.beginCareer(world, scale, gender);
+    } catch (err) {
+      this.notice = `Could not build the world — ${err instanceof Error ? err.message : String(err)}`;
+    }
+    this.endTask();
+    this.emit();
+  }
+
+  /** A freshly made world, its season under way, taken up as the career in play. */
+  private beginCareer(world: World, scale: WorldScale, gender: 'men' | 'women'): void {
     // Every new career offers the tutorial — its first card has the way out for those who know the game.
     this.welcomeOpen = true;
-    const world = generateWorld({ seed, startYear: 2026, scale, manager, gender });
     setUiGame(gender);
     this.ctx = newSeasonContext();
     startSeason(world, this.ctx);
@@ -705,10 +741,12 @@ class Game {
   }
 
   async loadGame(id: string): Promise<void> {
-    this.busy = true;
-    this.emit();
+    if (this.task !== null) return;
+    const saved = this.saves.find((s) => s.id === id);
+    await this.beginTask('Loading the career', saved !== undefined ? careerLine(saved) : '',
+      ['Reading the save', 'Setting up the world'], isBigCareer(saved));
     try {
-      const { world, season } = await readSaveWorld(id);
+      const { world, season } = await readSaveWorld(id, () => this.taskStep(1));
       this.world = world;
       setUiGame(world.gender ?? 'men');
       this.teamView = 'club';
@@ -743,8 +781,33 @@ class Game {
     } catch {
       this.notice = 'Could not load that save.';
     }
-    this.busy = false;
+    this.endTask();
     this.emit();
+  }
+
+  /** Puts the task's window up, and lets it paint before the work starts — the work may hold the page. */
+  private async beginTask(title: string, detail: string, steps: string[], slow: boolean): Promise<void> {
+    this.task = { title, detail, steps, step: 0, slow };
+    setTaskProgress(null);
+    this.busy = true;
+    this.emit();
+    await nextPaint();
+  }
+
+  /** On to the task's next stage, shown before it starts. */
+  private async taskStep(step: number, detail?: string): Promise<void> {
+    if (this.task === null) return;
+    this.task = { ...this.task, step, detail: detail ?? this.task.detail };
+    setTaskProgress(null);
+    this.emit();
+    await nextPaint();
+  }
+
+  /** The task done: its window comes down with the next emit. */
+  private endTask(): void {
+    this.task = null;
+    setTaskProgress(null);
+    this.busy = false;
   }
 
   /** The summary a save of the career as it stands is listed by. */
@@ -796,31 +859,28 @@ class Game {
   }
 
   /** A career out to a file, written a piece at a time: straight into the place
-   *  picked, or downloaded. The game waits while it is written. */
-  private async exportTo(meta: SaveMeta, load: () => Promise<{ world: World; season: SeasonContext }>, done: string): Promise<void> {
-    if (this.fileWork !== null) return;
-    this.fileWork = 'Exporting the career…';
+   *  picked, or downloaded. The game waits while it is written. The last of
+   *  `steps` is the writing; `load` takes the task through any before it. */
+  private async exportTo(meta: SaveMeta, steps: string[], load: () => Promise<{ world: World; season: SeasonContext }>): Promise<void> {
+    if (this.task !== null) return;
     const name = careerFileName(meta);
     const target = await this.pickCareerFile(name);
-    if (target === 'cancelled') {
-      this.fileWork = null;
-      return;
-    }
-    this.busy = true;
-    this.emit();
+    if (target === 'cancelled') return;
+    await this.beginTask('Exporting the career', careerLine(meta), steps, isBigCareer(meta));
     try {
       const { world, season } = await load();
+      await this.taskStep(steps.length - 1);
+      const written = progressEvery((bytes: number) => ({ fraction: null, label: `${(bytes / 1e6).toFixed(1)} MB` }));
       if (target !== null) {
-        await careerFileStream(meta, world, season).pipeTo(await target.createWritable());
+        await careerFileStream(meta, world, season, written).pipeTo(await target.createWritable());
       } else {
-        this.download(await exportCareer(meta, world, season), name);
+        this.download(await exportCareer(meta, world, season, written), name);
       }
-      this.notice = done;
+      this.notice = 'Career exported — keep the file somewhere safe.';
     } catch (err) {
       this.notice = `Could not export the career — ${err instanceof Error ? err.message : String(err)}`;
     }
-    this.fileWork = null;
-    this.busy = false;
+    this.endTask();
     this.emit();
   }
 
@@ -830,26 +890,26 @@ class Game {
     if (world === null) return;
     const season = this.ctx;
     const meta = this.currentMeta(world, this.currentSaveId ?? newSaveId());
-    await this.exportTo(meta, async () => ({ world, season }), 'Career exported — keep the file somewhere safe.');
+    await this.exportTo(meta, ['Writing the file'], async () => ({ world, season }));
   }
 
   /** A saved career, straight from the list, as a file. */
   async exportSavedCareer(id: string): Promise<void> {
     const meta = this.saves.find((s) => s.id === id);
     if (meta === undefined) return;
-    await this.exportTo(meta, () => readSaveWorld(id), 'Career exported — keep the file somewhere safe.');
+    await this.exportTo(meta, ['Reading the save', 'Setting up the world', 'Writing the file'], () => readSaveWorld(id, () => this.taskStep(1)));
     // Reading a save sets its game up: back to the one in play.
     if (this.world !== null) setUiGame(this.world.gender ?? 'men');
   }
 
   /** A career file brought in: saved as a career of its own, and listed. */
   async importCareerFile(file: File): Promise<void> {
-    if (this.fileWork !== null) return;
-    this.fileWork = 'Importing the career…';
-    this.busy = true;
-    this.emit();
+    if (this.task !== null) return;
+    await this.beginTask('Importing the career', file.name, ['Reading the file', 'Saving the career'], file.size > 20_000_000);
     try {
-      const { meta, world, season } = await importCareer(file);
+      const read = progressEvery((fraction: number) => ({ fraction, label: `${Math.round(fraction * 100)}%` }));
+      const { meta, world, season } = await importCareer(file, read);
+      await this.taskStep(1, careerLine(meta));
       const id = newSaveId();
       await writeSaveWorld(id, { ...meta, id, updatedAt: Date.now() }, world, season);
       this.notice = `Imported ${meta.managerName}'s career — ${meta.clubName}, ${meta.inGameDate}.`;
@@ -858,30 +918,46 @@ class Game {
       this.notice = err instanceof Error ? err.message : 'Could not import that file.';
     }
     if (this.world !== null) setUiGame(this.world.gender ?? 'men');
-    this.fileWork = null;
-    this.busy = false;
+    this.endTask();
     this.emit();
+  }
+
+  /** The career in play written to its save. False, with the reason as the notice, when it could not be. */
+  private async writeCurrentSave(world: World, meta: SaveMeta): Promise<boolean> {
+    try {
+      await writeSaveWorld(meta.id, meta, world, this.ctx);
+      this.notice = 'Game saved.';
+      return true;
+    } catch (err) {
+      this.notice = err instanceof Error ? err.message : 'Could not save this career.';
+      return false;
+    }
   }
 
   async saveCurrentGame(): Promise<void> {
     const world = this.world;
-    if (world === null) return;
+    if (world === null || this.task !== null) return;
     if (this.currentSaveId === null) this.currentSaveId = newSaveId();
-    this.busy = true;
-    this.emit();
-    try {
-      const meta = this.currentMeta(world, this.currentSaveId);
-      await writeSaveWorld(this.currentSaveId, meta, world, this.ctx);
-      this.notice = 'Game saved.';
-    } catch (err) {
-      this.notice = err instanceof Error ? err.message : 'Could not save this career.';
-    }
-    this.busy = false;
+    const meta = this.currentMeta(world, this.currentSaveId);
+    await this.beginTask('Saving the game', careerLine(meta), ['Writing the save'], isBigCareer(meta));
+    await this.writeCurrentSave(world, meta);
+    this.endTask();
     this.emit();
   }
 
+  /** Saved, then back to the main menu — unless the save failed: then the career stays open, not lost. */
   async exitToMenu(): Promise<void> {
-    await this.saveCurrentGame();
+    const world = this.world;
+    if (world === null || this.task !== null) return;
+    if (this.currentSaveId === null) this.currentSaveId = newSaveId();
+    const meta = this.currentMeta(world, this.currentSaveId);
+    await this.beginTask('Saving and exiting', careerLine(meta), ['Writing the save', 'Back to the main menu'], isBigCareer(meta));
+    if (!(await this.writeCurrentSave(world, meta))) {
+      this.endTask();
+      this.emit();
+      return;
+    }
+    await this.taskStep(1);
     this.resetHistory();
     this.world = null;
     this.currentSaveId = null;
@@ -891,6 +967,7 @@ class Game {
     // Said at once: a render already under way must not find the world gone while it still thinks it's there.
     this.emit();
     await this.refreshSaves();
+    this.endTask();
     this.emit();
   }
 
@@ -1464,7 +1541,7 @@ class Game {
   async continueGame(maxDays = 1): Promise<void> {
     const world = this.world;
     // Not while the career is being written to a file: it is read as it goes.
-    if (world === null || this.processing || this.fileWork !== null || this.matchday !== null || this.activeInterviewId !== null) return;
+    if (world === null || this.processing || this.task !== null || this.matchday !== null || this.activeInterviewId !== null) return;
     if (this.postMatch !== null) {
       this.finishPostMatch();
       return;
@@ -5349,6 +5426,66 @@ export const game = new Game();
 export function useGame(): Game {
   useSyncExternalStore(game.subscribe, game.getSnapshot, game.getSnapshot);
   return game;
+}
+
+/** How far the task under way has got, when that can be told: a share done, or a running count. */
+export interface TaskProgress {
+  /** 0 to 1; null when the whole is not known. */
+  fraction: number | null;
+  label: string;
+}
+
+// Kept apart from the game's store: a tick re-renders the task's window, not the whole game.
+let taskProgress: TaskProgress | null = null;
+const progressListeners = new Set<() => void>();
+
+function setTaskProgress(progress: TaskProgress | null): void {
+  taskProgress = progress;
+  for (const listener of progressListeners) listener();
+}
+
+function subscribeTaskProgress(listener: () => void): () => void {
+  progressListeners.add(listener);
+  return () => {
+    progressListeners.delete(listener);
+  };
+}
+
+export function useTaskProgress(): TaskProgress | null {
+  return useSyncExternalStore(subscribeTaskProgress, () => taskProgress, () => taskProgress);
+}
+
+/** A progress report, passed on a few times a second at most — and always at the end. */
+function progressEvery<T>(toProgress: (value: T) => TaskProgress): (value: T) => void {
+  let last = 0;
+  return (value) => {
+    const progress = toProgress(value);
+    const now = Date.now();
+    if (now - last < 120 && progress.fraction !== 1) return;
+    last = now;
+    setTaskProgress(progress);
+  };
+}
+
+/** Resolves once what the page shows now has been painted — so a window put up before work
+ *  that holds the page is on screen, its animations running, before the work starts. */
+function nextPaint(): Promise<void> {
+  if (typeof requestAnimationFrame !== 'function') return Promise.resolve();
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    // A hidden tab paints nothing: don't wait on it.
+    setTimeout(resolve, 150);
+  });
+}
+
+/** A saved career in a line: the club and the date. */
+function careerLine(meta: SaveMeta): string {
+  return `${meta.clubName} · ${meta.inGameDate}`;
+}
+
+/** A large world, or one some seasons in: its window says it may take a while. */
+function isBigCareer(meta: SaveMeta | undefined): boolean {
+  return meta !== undefined && (meta.scale === 'large' || meta.season >= 4);
 }
 
 export const PHASE_NAMES: Record<SeasonPhase, string> = {

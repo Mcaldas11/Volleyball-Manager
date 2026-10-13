@@ -305,6 +305,11 @@ Before submitting a change:
       holiday to any date. Play a match live or take an instant result;
       either way a full-time screen shows the score, player of the match and
       box score before the rest of the matchday comes in
+- [x] Whatever makes the game wait — saving, save and exit, loading,
+      exporting or importing a career file, building a new world — puts up
+      a processing window: what is being done, a ball in the air, a bar
+      that fills where the progress is known, and the stages ticking off.
+      It keeps moving even while a big save holds the page
 - [x] An inbox laid out like a mail client: folders by department (transfers,
       contracts, scouting, medical, matchday, media, board, finance), an
       "action needed" filter, starring and archiving, and every message from

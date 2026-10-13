@@ -344,15 +344,11 @@ export function WorldSetup(): JSX.Element {
   const [scale, setScale] = useState<'small' | 'standard' | 'large'>('standard');
   const [gender, setGender] = useState<'men' | 'women'>('men');
   const [seed, setSeed] = useState('20260728');
-  const [building, setBuilding] = useState(false);
+  // The world is built under the processing window, which holds everything else still.
+  const building = g.task !== null;
 
   const start = (): void => {
-    setBuilding(true);
-    // Yield a frame so the button state paints before the world is built.
-    setTimeout(() => {
-      g.newGame(scale, Number(seed) || 1, gender);
-      setBuilding(false);
-    }, 30);
+    void g.createWorld(scale, Number(seed) || 1, gender);
   };
 
   return (

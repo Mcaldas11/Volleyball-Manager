@@ -223,11 +223,25 @@ function encodeFile(value: object): ReadableStream<Uint8Array> {
   return stream.pipeThrough(new CompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
 }
 
-/** A file's text, a line at a time — gunzipped if it was gzipped. */
-async function* fileTextLines(file: Blob): AsyncGenerator<string> {
+/** The bytes as they pass, counted for whoever wants to know how far along they are. */
+function counted(stream: ReadableStream<Uint8Array>, onBytes: ((total: number) => void) | undefined): ReadableStream<Uint8Array> {
+  if (onBytes === undefined) return stream;
+  let total = 0;
+  return stream.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      total += chunk.byteLength;
+      onBytes(total);
+      controller.enqueue(chunk);
+    },
+  }));
+}
+
+/** A file's text, a line at a time — gunzipped if it was gzipped. `onProgress` hears how much of it has been read. */
+async function* fileTextLines(file: Blob, onProgress?: (fraction: number) => void): AsyncGenerator<string> {
   const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
   const gzipped = head[0] === 0x1f && head[1] === 0x8b;
-  let bytes = file.stream() as ReadableStream<Uint8Array>;
+  const size = Math.max(1, file.size);
+  let bytes = counted(file.stream() as ReadableStream<Uint8Array>, onProgress && ((n) => onProgress(Math.min(1, n / size))));
   if (gzipped) {
     if (typeof DecompressionStream === 'undefined') throw new CareerFileError('This browser cannot open compressed career files.');
     bytes = bytes.pipeThrough(new DecompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
@@ -259,8 +273,8 @@ function setOwn(target: Record<string, unknown>, key: string, value: unknown): v
 }
 
 /** A career file read back as the object it was written from. */
-export async function readCareerFile(file: Blob): Promise<Record<string, unknown>> {
-  const lines = fileTextLines(file);
+export async function readCareerFile(file: Blob, onProgress?: (fraction: number) => void): Promise<Record<string, unknown>> {
+  const lines = fileTextLines(file, onProgress);
   let first: IteratorResult<string>;
   let header: { format?: unknown; version?: unknown };
   try {
@@ -343,8 +357,11 @@ export async function readCareerFile(file: Blob): Promise<Record<string, unknown
   return { ...root, format: FORMAT, version: VERSION };
 }
 
-/** A career as the bytes of its file, made as they are read: never all in memory at once. */
-export function careerFileStream(meta: SaveMeta, world: World, season: SeasonContext): ReadableStream<Uint8Array> {
+/** A career as the bytes of its file, made as they are read: never all in memory at once.
+ *  `onBytes` hears how much of the file has been written. */
+export function careerFileStream(
+  meta: SaveMeta, world: World, season: SeasonContext, onBytes?: (total: number) => void,
+): ReadableStream<Uint8Array> {
   const file: CareerFile = {
     format: FORMAT,
     version: VERSION,
@@ -352,19 +369,23 @@ export function careerFileStream(meta: SaveMeta, world: World, season: SeasonCon
     world,
     season: { stats: season.stats, seasonStartAbility: season.seasonStartAbility },
   };
-  return encodeFile(file);
+  return counted(encodeFile(file), onBytes);
 }
 
 /** A career written out as a file. */
-export async function exportCareer(meta: SaveMeta, world: World, season: SeasonContext): Promise<Blob> {
-  return new Response(careerFileStream(meta, world, season)).blob();
+export async function exportCareer(
+  meta: SaveMeta, world: World, season: SeasonContext, onBytes?: (total: number) => void,
+): Promise<Blob> {
+  return new Response(careerFileStream(meta, world, season, onBytes)).blob();
 }
 
-/** A career read back from a file — ready to play, or to save. */
-export async function importCareer(file: Blob): Promise<{ meta: SaveMeta; world: World; season: SeasonContext }> {
+/** A career read back from a file — ready to play, or to save. `onProgress` hears how much has been read. */
+export async function importCareer(
+  file: Blob, onProgress?: (fraction: number) => void,
+): Promise<{ meta: SaveMeta; world: World; season: SeasonContext }> {
   let parsed: CareerFile;
   try {
-    parsed = (await readCareerFile(file)) as unknown as CareerFile;
+    parsed = (await readCareerFile(file, onProgress)) as unknown as CareerFile;
   } catch (err) {
     if (err instanceof CareerFileError) throw err;
     throw new Error(`Could not read that career file: ${err instanceof Error ? err.message : String(err)}`);
