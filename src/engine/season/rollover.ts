@@ -41,7 +41,7 @@ import { recordAbilities } from '../world/abilityHistory.ts';
 import { noteTrophy, ownerSeasonEnd } from '../world/owners.ts';
 import { returnLoans, wageBill } from '../world/loans.ts';
 import { completeDueMoves } from '../world/deals.ts';
-import { clubBooks } from './books.ts';
+import { clubBooks, settlement } from './books.ts';
 import { beginSeasonReview, postSeasonReview } from './seasonReview.ts';
 import { captureFinishes, seasonObjectives, seasonReckoning } from '../world/career.ts';
 
@@ -237,9 +237,10 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
 
   for (const club of world.clubs) {
     const f = club.finances;
-    const { totalIncome: income, totalCosts: costs } = clubBooks(world, club);
+    const books = clubBooks(world, club);
+    const income = books.totalIncome;
 
-    f.balance += income - costs;
+    f.balance += settlement(books, f);
 
     if (f.balance < 0) f.seasonsInDebt++;
     else f.seasonsInDebt = 0;

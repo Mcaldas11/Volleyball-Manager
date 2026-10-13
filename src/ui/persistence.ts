@@ -20,6 +20,7 @@ import { setNationsGame } from '../engine/world/nations.ts';
 import { Rng } from '../engine/core/rng.ts';
 import { PLAYING_TIME_UNKNOWN, PlayerStore, POSITION_SLOTS, StringTable } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
+import { GATE_RESCALE } from '../engine/model/club.ts';
 import { contractEndSeason, DAYS_PER_SEASON, seasonEndDay, type World } from '../engine/world/world.ts';
 import type { WorldScale } from '../engine/world/worldGen.ts';
 import { cancelOffCycleClubWorld, ensureCupCompetitions } from '../engine/season/cups.ts';
@@ -124,18 +125,31 @@ export async function listSaves(): Promise<SaveMeta[]> {
 
 export async function saveGame(id: string, meta: SaveMeta, world: World, season: SeasonContext): Promise<void> {
   const db = await openDb();
+  let tx: IDBTransaction | null = null;
   try {
     const saved: SavedSeason = { stats: season.stats, seasonStartAbility: season.seasonStartAbility };
-    const tx = db.transaction([META_STORE, WORLD_STORE, SEASON_STORE], 'readwrite');
+    tx = db.transaction([META_STORE, WORLD_STORE, SEASON_STORE], 'readwrite');
     tx.objectStore(META_STORE).put(meta);
     tx.objectStore(WORLD_STORE).put(world, id);
     tx.objectStore(SEASON_STORE).put(saved, id);
     await txDone(tx);
-  } catch (err) {
+  } catch (caught) {
+    // A put the browser refuses aborts the transaction, and the next call only says it has
+    // finished: the abort's own reason is the one worth telling.
+    let err: unknown = caught;
+    if (caught instanceof DOMException && caught.name === 'InvalidStateError' && tx !== null) {
+      err = tx.error ?? await new Promise<unknown>((resolve) => {
+        const settle = (): void => resolve(tx!.error ?? caught);
+        tx!.addEventListener('abort', settle);
+        setTimeout(settle, 1000);
+      });
+    }
     if (err instanceof DOMException && err.name === 'QuotaExceededError') {
       throw new Error('Not enough browser storage space to save this career.');
     }
-    throw new Error('Could not save this career.');
+    // What the browser said, so a failure can be told apart from another.
+    const why = err instanceof Error && err.message !== '' ? ` (${err.message})` : '';
+    throw new Error(`Could not save this career${why}.`);
   }
 }
 
@@ -199,6 +213,11 @@ export function reviveWorld(raw: World): World {
   }
   // Saves from before playing time was tracked: everyone starts in between.
   raw.players.playingTime ??= new Uint8Array(raw.players.id.length).fill(PLAYING_TIME_UNKNOWN);
+  // Saves from before the books stopped counting the gate twice: the gates pay what the economy was balanced on.
+  if (raw.gateBooked !== true) {
+    for (const club of raw.clubs) club.finances.ticketIncomePerMatch = Math.round(club.finances.ticketIncomePerMatch * GATE_RESCALE);
+    raw.gateBooked = true;
+  }
   // Saves from before the playoff system existed have no bracket state at all.
   for (const comp of raw.competitions) {
     comp.playoffGroups ??= [];

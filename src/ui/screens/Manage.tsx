@@ -9,6 +9,7 @@ import {
   MAX_SQUAD, POSITION_NAMES, POSITION_SHORT, POSITIONS, type Position,
 } from '../../engine/model/positions.ts';
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
+import { clubBooks } from '../../engine/season/books.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import {
   abilityClass, Bar, Card, ChoiceField, ClubLink, Empty, Flag, KV, money, moneyShort, MoneyInput,
@@ -291,41 +292,30 @@ function MoneyLine({
 export function FinancesScreen(): JSX.Element {
   const g = useGame();
   const club = g.club!;
-  const store = g.world!.players;
   const f = club.finances;
   // Senior-squad wages only — matches the affordability check a transfer
   // negotiation actually runs (see submitTermsOffer), so this is "room left
   // to sign someone," not the club's total wage-type spend. Loans count for
   // the share of the wage the club pays.
   const wages = g.wageBill();
-  const youthWages = club.youthPlayers.reduce((s, p) => s + store.wage[p], 0);
-  const staffWages = club.staff.reduce((s, id) => s + (g.world!.staff[id]?.wage ?? 0), 0);
-  // Mirrors settleFinances() in rollover.ts exactly, so this is a true preview
-  // of what rollover will do if the season ended today.
-  const totalIncome = f.sponsorshipIncome + f.tvRightsIncome + f.merchandiseIncome + f.seasonIncome;
-  const bonuses = f.bonuses ?? 0;
-  const totalCosts = wages + bonuses + youthWages + staffWages +
-    f.arenaMaintenance + f.medicalCosts + f.youthAcademyCosts + f.seasonExpenditure;
+  // The season's books exactly as the rollover settles them (clubBooks), so
+  // this is a true preview of the season's result if it ended today.
+  const books = clubBooks(g.world!, club);
+  const totalIncome = books.totalIncome;
+  const totalCosts = books.totalCosts;
   const result = totalIncome - totalCosts;
   const envelope = f.wageBudget + f.transferBudget;
   const wageShare = envelope > 0 ? (f.wageBudget / envelope) * 100 : 50;
 
-  const incomeLines: Array<[string, number]> = [
-    ['Sponsorship', f.sponsorshipIncome],
-    ['TV rights', f.tvRightsIncome],
-    ['Merchandise', f.merchandiseIncome],
-    ['Gate receipts so far', f.seasonIncome],
-  ];
-  const costLines: Array<[string, number]> = [
-    ['Player wages', wages],
-    ...(bonuses > 0 ? [['Bonuses so far', bonuses] as [string, number]] : []),
-    ['Youth wages', youthWages],
-    ['Staff wages', staffWages],
-    ['Arena maintenance', f.arenaMaintenance],
-    ['Medical', f.medicalCosts],
-    ['Youth academy', f.youthAcademyCosts],
-    ['Travel so far', f.seasonExpenditure],
-  ];
+  // The streams that run with the season say so; the occasional ones show once there is something.
+  const SO_FAR: Readonly<Record<string, string>> = {
+    'Gate receipts': 'Gate receipts so far', 'Prize money': 'Prize money so far', 'Player bonuses': 'Bonuses so far', Travel: 'Travel so far',
+  };
+  const OCCASIONAL = new Set(['Prize money', 'Player bonuses', 'Affiliates']);
+  const lines = (from: Array<[string, number]>): Array<[string, number]> =>
+    from.filter(([k, v]) => v !== 0 || !OCCASIONAL.has(k)).map(([k, v]) => [SO_FAR[k] ?? k, v]);
+  const incomeLines = lines(books.income);
+  const costLines = lines(books.costs);
   const maxLine = Math.max(...incomeLines.map(([, v]) => v), ...costLines.map(([, v]) => v), 1);
 
   return (
@@ -373,7 +363,6 @@ export function FinancesScreen(): JSX.Element {
 
         <Card title="Income (annual)" icon="stats">
           {incomeLines.map(([k, v]) => <MoneyLine key={k} label={k} value={v} max={maxLine} tone="income" />)}
-          {f.prizeMoney > 0 && <KV k="Of which prize money" cls="good">{money(f.prizeMoney)}</KV>}
           <KV k="Per match (full house)" cls="good">{money(f.ticketIncomePerMatch)}</KV>
           <div className="money-total"><span>Income so far</span><strong className="good">{money(totalIncome)}</strong></div>
           <p className="footnote">

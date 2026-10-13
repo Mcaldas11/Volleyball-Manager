@@ -1165,6 +1165,35 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 }
 .toast > .icon:first-child { color: var(--gold); }
 .toast-close { color: var(--text-faint); margin-left: 4px; }
+/* A career file being written or read: the game waits under this. */
+.file-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 7, 12, 0.66);
+  cursor: progress;
+}
+.file-veil-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.file-veil-card > .spinner { flex: none; }
+.file-veil-card strong { display: block; }
+.file-veil-card small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--text-dim); }
+.file-veil .spinner { width: 16px; height: 16px; border-color: rgba(255, 248, 230, 0.25); border-top-color: var(--gold); }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

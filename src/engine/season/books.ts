@@ -4,7 +4,7 @@
  * and the season review can never disagree about what a season made or lost.
  */
 
-import type { Club } from '../model/club.ts';
+import type { Club, Finances } from '../model/club.ts';
 import { wageBill } from '../world/loans.ts';
 import type { World } from '../world/world.ts';
 import { affiliateFee } from '../world/affiliates.ts';
@@ -55,4 +55,13 @@ export function clubBooks(world: World, club: Club): ClubBooks {
   ];
   const sum = (lines: Array<[string, number]>): number => lines.reduce((s, [, v]) => s + v, 0);
   return { income, costs, totalIncome: sum(income), totalCosts: sum(costs) };
+}
+
+/**
+ * What the books still owe the bank when the season closes. Gate receipts,
+ * prize money and travel went through the balance match by match; the books
+ * count them, but the bank already has them — only the rest is settled.
+ */
+export function settlement(books: ClubBooks, f: Finances): number {
+  return (books.totalIncome - f.seasonIncome) - (books.totalCosts - f.seasonExpenditure);
 }

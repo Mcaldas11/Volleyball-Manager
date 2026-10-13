@@ -741,6 +741,8 @@ export interface World {
   abilityHistory?: AbilityHistory;
   /** The women's game, when it is the one played. Absent: the men's. */
   gender?: 'women';
+  /** Gate receipts are booked once, and the gates pay accordingly (see GATE_RESCALE). Absent: an older save. */
+  gateBooked?: true;
 }
 
 /** How often a regular report comes: `auto` lets the report choose. */

@@ -176,6 +176,15 @@ function readCollapsed(): boolean {
 }
 
 export function App(): JSX.Element {
+  return (
+    <>
+      <AppBody />
+      <FileWorkVeil />
+    </>
+  );
+}
+
+function AppBody(): JSX.Element {
   const g = useGame();
 
   if (g.world === null) return <MenuScreen />;
@@ -184,6 +193,23 @@ export function App(): JSX.Element {
   if (step === 'club') return <ClubSelect />;
   if (step === 'nation') return <NationSelect />;
   return <GameShell />;
+}
+
+/** A career file being written or read: everything waits until it is done. */
+function FileWorkVeil(): JSX.Element | null {
+  const g = useGame();
+  if (g.fileWork === null || !g.busy) return null;
+  return (
+    <div className="file-veil" role="alert" aria-busy="true">
+      <div className="file-veil-card">
+        <span className="spinner" />
+        <div>
+          <strong>{g.fileWork}</strong>
+          <small>A long career in a large world can take a minute or two.</small>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function GameShell(): JSX.Element {

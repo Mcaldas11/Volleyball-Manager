@@ -4,6 +4,7 @@ import { generateWorld } from '../engine/world/worldGen.ts';
 import { seasonEndDay, stubManager } from '../engine/world/world.ts';
 import { newSeasonContext, playFixture, startSeason } from '../engine/season/seasonEngine.ts';
 import { reviveSeason, reviveWorld } from './persistence.ts';
+import { GATE_RESCALE } from '../engine/model/club.ts';
 
 test('world round-trips through structuredClone with prototypes restored', () => {
   const world = generateWorld({ seed: 1, startYear: 2026, scale: 'small', manager: stubManager(3) });
@@ -116,4 +117,21 @@ test('a women\'s world comes back from a save as the women\'s game — and a men
   const menBack = reviveWorld(structuredClone(men));
   assert.equal(menBack.players.women, false);
   assert.equal(nationStrength(iran), menIran);
+});
+
+test('a save from before the gate was booked once has its gates brought up — once', () => {
+  const world = generateWorld({ seed: 3, startYear: 2026, scale: 'small', manager: stubManager() });
+  assert.equal(world.gateBooked, true, 'a new world is born with them');
+  const old = structuredClone(world);
+  delete old.gateBooked;
+  for (const c of old.clubs) c.finances.ticketIncomePerMatch = 10_000;
+  const back = reviveWorld(old);
+  assert.equal(back.gateBooked, true);
+  assert.ok(back.clubs.every((c) => c.finances.ticketIncomePerMatch === Math.round(10_000 * GATE_RESCALE)));
+  // Loaded again, nothing more happens.
+  const again = reviveWorld(structuredClone(back));
+  assert.ok(again.clubs.every((c) => c.finances.ticketIncomePerMatch === Math.round(10_000 * GATE_RESCALE)));
+  // A new world's gates are left as they were made.
+  const fresh = reviveWorld(structuredClone(world));
+  assert.deepEqual(fresh.clubs.map((c) => c.finances.ticketIncomePerMatch), world.clubs.map((c) => c.finances.ticketIncomePerMatch));
 });

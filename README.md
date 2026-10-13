@@ -157,7 +157,9 @@ Before submitting a change:
 - [x] Manage the team's finances: sponsorship, TV rights, gate receipts,
       wage budgets — and real bankruptcy risk. Set the ticket price, pick each
       summer's shirt sponsor (steady, performance or long-term), ask the board
-      for better facilities, and take on up to two affiliate clubs
+      for better facilities, and take on up to two affiliate clubs. Gate
+      receipts, prize money and travel reach the bank as each match is played
+      and are settled once, with everything else, when the season closes
 - [x] Manage the squad's roster: sign, release and loan players, set the
       starting six and liberos, respect a 16-player squad cap. Loans carry
       promised playing time, monthly reports, a word with the loan club's
@@ -268,7 +270,10 @@ Before submitting a change:
 - [x] Save and load a career, locally in the browser (IndexedDB) — multiple
       careers side by side, each resumable from the main menu — and export
       any of them to a file, to keep or move to another computer, and import
-      it back from the main menu
+      it back from the main menu. The file is written and read as a stream of
+      small JSON lines, never one string, so a career of any length goes out
+      (a large world nine seasons in: a 77 MB file); where the browser allows,
+      the player picks where it is saved
 
 ### INTERFACE
 

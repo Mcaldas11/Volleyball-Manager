@@ -19,7 +19,7 @@ import { rivalryName, rivalsOf, type Rivalry } from '../engine/world/rivals.ts';
 import { useSyncExternalStore } from 'react';
 import { applyPlan, suggestPlan, undoPlan, type GamePlan } from '../engine/world/gamePlan.ts';
 import type { InboxPrefs } from '../engine/world/world.ts';
-import { careerFileName, exportCareer, importCareer } from './saveFile.ts';
+import { careerFileName, careerFileStream, exportCareer, importCareer } from './saveFile.ts';
 import { bidTurnedDown } from '../engine/world/offerStance.ts';
 import { bareResult, reportResult } from '../engine/world/matchReports.ts';
 import {
@@ -610,6 +610,8 @@ class Game {
 
   // ---- Menu / save-game flow --------------------------------------------
   menuStage: MenuStage = 'main';
+  /** A career file being written or read — the game waits, under a veil saying so. */
+  fileWork: string | null = null;
   /** What the career being created takes charge of. */
   careerMode: CareerMode = 'club';
   /** Club and country: the club is taken, the nation still to pick. */
@@ -776,44 +778,74 @@ class Game {
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
+  /** Where an exported career goes: a place the player picks, where the browser
+   *  lets them — asked first, while the click still counts as theirs — and
+   *  otherwise the downloads folder (null). 'cancelled' when they close the dialog. */
+  private async pickCareerFile(name: string): Promise<FileSystemFileHandle | null | 'cancelled'> {
+    const pick = (window as unknown as { showSaveFilePicker?: (options: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
+    if (typeof pick !== 'function') return null;
+    try {
+      return await pick.call(window, {
+        suggestedName: name,
+        types: [{ description: 'Volleyball Manager career', accept: { 'application/octet-stream': ['.vmcareer'] } }],
+      });
+    } catch (err) {
+      // Not allowed here (an embedded page, say): it downloads instead.
+      return err instanceof DOMException && err.name === 'AbortError' ? 'cancelled' : null;
+    }
+  }
+
+  /** A career out to a file, written a piece at a time: straight into the place
+   *  picked, or downloaded. The game waits while it is written. */
+  private async exportTo(meta: SaveMeta, load: () => Promise<{ world: World; season: SeasonContext }>, done: string): Promise<void> {
+    if (this.fileWork !== null) return;
+    this.fileWork = 'Exporting the career…';
+    const name = careerFileName(meta);
+    const target = await this.pickCareerFile(name);
+    if (target === 'cancelled') {
+      this.fileWork = null;
+      return;
+    }
+    this.busy = true;
+    this.emit();
+    try {
+      const { world, season } = await load();
+      if (target !== null) {
+        await careerFileStream(meta, world, season).pipeTo(await target.createWritable());
+      } else {
+        this.download(await exportCareer(meta, world, season), name);
+      }
+      this.notice = done;
+    } catch (err) {
+      this.notice = `Could not export the career — ${err instanceof Error ? err.message : String(err)}`;
+    }
+    this.fileWork = null;
+    this.busy = false;
+    this.emit();
+  }
+
   /** The career as it stands, as a file to keep — a copy outside the browser. */
   async exportCurrentCareer(): Promise<void> {
     const world = this.world;
     if (world === null) return;
-    this.busy = true;
-    this.emit();
-    try {
-      const meta = this.currentMeta(world, this.currentSaveId ?? newSaveId());
-      this.download(await exportCareer(meta, world, this.ctx), careerFileName(meta));
-      this.notice = 'Career exported — keep the file somewhere safe.';
-    } catch {
-      this.notice = 'Could not export this career.';
-    }
-    this.busy = false;
-    this.emit();
+    const season = this.ctx;
+    const meta = this.currentMeta(world, this.currentSaveId ?? newSaveId());
+    await this.exportTo(meta, async () => ({ world, season }), 'Career exported — keep the file somewhere safe.');
   }
 
   /** A saved career, straight from the list, as a file. */
   async exportSavedCareer(id: string): Promise<void> {
     const meta = this.saves.find((s) => s.id === id);
     if (meta === undefined) return;
-    this.busy = true;
-    this.emit();
-    try {
-      const { world, season } = await readSaveWorld(id);
-      this.download(await exportCareer(meta, world, season), careerFileName(meta));
-      this.notice = 'Career exported.';
-    } catch {
-      this.notice = 'Could not export that save.';
-    }
+    await this.exportTo(meta, () => readSaveWorld(id), 'Career exported — keep the file somewhere safe.');
     // Reading a save sets its game up: back to the one in play.
     if (this.world !== null) setUiGame(this.world.gender ?? 'men');
-    this.busy = false;
-    this.emit();
   }
 
   /** A career file brought in: saved as a career of its own, and listed. */
   async importCareerFile(file: File): Promise<void> {
+    if (this.fileWork !== null) return;
+    this.fileWork = 'Importing the career…';
     this.busy = true;
     this.emit();
     try {
@@ -826,6 +858,7 @@ class Game {
       this.notice = err instanceof Error ? err.message : 'Could not import that file.';
     }
     if (this.world !== null) setUiGame(this.world.gender ?? 'men');
+    this.fileWork = null;
     this.busy = false;
     this.emit();
   }
@@ -855,6 +888,8 @@ class Game {
     this.saveCreatedAt = null;
     this.currentScale = null;
     this.menuStage = 'main';
+    // Said at once: a render already under way must not find the world gone while it still thinks it's there.
+    this.emit();
     await this.refreshSaves();
     this.emit();
   }
@@ -1428,7 +1463,8 @@ class Game {
    */
   async continueGame(maxDays = 1): Promise<void> {
     const world = this.world;
-    if (world === null || this.processing || this.matchday !== null || this.activeInterviewId !== null) return;
+    // Not while the career is being written to a file: it is read as it goes.
+    if (world === null || this.processing || this.fileWork !== null || this.matchday !== null || this.activeInterviewId !== null) return;
     if (this.postMatch !== null) {
       this.finishPostMatch();
       return;

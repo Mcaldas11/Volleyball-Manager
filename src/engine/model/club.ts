@@ -207,6 +207,16 @@ export function tvRightsFor(reputation: number): number {
   return Math.round(Math.pow(reputation / 10000, 2.6) * 2_800_000 * SQUAD_INCOME);
 }
 
+/**
+ * What a full house pays, per seat, against the club's standing. The season's
+ * books once counted gate receipts (and prize money, and travel) twice; with
+ * that put right, the gate pays what the economy was balanced on — the same
+ * clubs stay afloat, the same few go under.
+ */
+const GATE_YIELD = 1.3;
+/** Saves from before had their gates set at 0.72 a seat: this brings them up. */
+export const GATE_RESCALE = GATE_YIELD / 0.72;
+
 export function newFinances(reputation: number, arenaCapacity: number): Finances {
   const scale = reputation / 10000;
   const sponsorship = sponsorshipFor(reputation);
@@ -216,7 +226,7 @@ export function newFinances(reputation: number, arenaCapacity: number): Finances
     wageBudget: Math.round(sponsorship * 0.64 + tv * 0.62),
     transferBudget: Math.round(sponsorship * 0.08),
     sponsorshipIncome: sponsorship,
-    ticketIncomePerMatch: Math.round(arenaCapacity * (6 + scale * 26) * 0.72),
+    ticketIncomePerMatch: Math.round(arenaCapacity * (6 + scale * 26) * GATE_YIELD),
     merchandiseIncome: Math.round(Math.pow(scale, 2) * 900_000),
     tvRightsIncome: tv,
     prizeMoney: 0,
