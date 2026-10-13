@@ -16,6 +16,7 @@
  * have their say (see fans.ts). The feed keeps its most recent stories only.
  */
 
+import { rivalryName } from './rivals.ts';
 import { Rng } from '../core/rng.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { INJURY_NAMES, PlayerFlag } from '../model/players.ts';
@@ -358,7 +359,10 @@ function matchReport(world: World, f: Fixture): void {
   const shock = loser.reputation - winner.reputation > SHOCK_GAP * 0.7;
   // Its own dice for the wording, so the paper never moves the world's.
   const rng = new Rng(f.id * 7919 + 3);
-  const headline = shock
+  const rivalry = rivalryName(world, f);
+  const headline = rivalry !== null
+    ? rng.pick([`${winner.name} win ${rivalry}`, `${rivalry[0].toUpperCase()}${rivalry.slice(1)} goes to ${winner.name}`, `${winner.name} have the bragging rights: ${score} over ${loser.name}`])
+    : shock
     ? `Shock: ${winner.name} beat ${loser.name} ${score}`
     : Math.min(f.homeSets, f.awaySets) === 0
       ? rng.pick([`${winner.name} sweep aside ${loser.name}`, `${winner.name} cruise past ${loser.name} ${score}`])
@@ -370,7 +374,7 @@ function matchReport(world: World, f: Fixture): void {
     kind: 'result',
     headline,
     body: `${winner.name} beat ${loser.name} ${score} (${sets}) ${homeWon ? 'at home' : 'on the road'} ` +
-      `in the ${comp.name}${stage !== '' ? `, ${stage.toLowerCase()}` : ''}.` +
+      `in the ${comp.name}${stage !== '' ? `, ${stage.toLowerCase()}` : ''}${rivalry !== null ? ` — ${rivalry}, in front of a full house` : ''}.` +
       `${mvp >= 0 ? ` ${store.fullName(mvp)} was named player of the match.` : ''}`,
     nation: winner.nation,
     clubId: winner.id,
@@ -378,7 +382,7 @@ function matchReport(world: World, f: Fixture): void {
     playerIdx: mvp >= 0 ? mvp : undefined,
     competitionId: comp.id,
     fans: {
-      story: shock ? 'shock' : 'match', club: winner.id, other: loser.id, score,
+      story: rivalry !== null ? 'derby' : shock ? 'shock' : 'match', club: winner.id, other: loser.id, score,
       player: mvp >= 0 && store.clubId[mvp] === winner.id ? mvp : undefined,
     },
   });
@@ -400,6 +404,21 @@ function results(world: World, fixtures: readonly Fixture[]): void {
     if (!followed(world, home) || !followed(world, away)) continue;
     const homeWon = f.homeSets > f.awaySets;
     const [winner, loser] = homeWon ? [home, away] : [away, home];
+    const rivalry = comp.tier === 1 ? rivalryName(world, f) : null;
+    if (rivalry !== null) {
+      const score = homeWon ? `${f.homeSets}-${f.awaySets}` : `${f.awaySets}-${f.homeSets}`;
+      postNews(world, {
+        kind: 'result',
+        headline: `${winner.name} win ${rivalry}`,
+        body: `${winner.name} beat ${loser.name} ${score}${homeWon ? ' at home' : ' on the road'} in ${rivalry}.`,
+        nation: winner.nation,
+        clubId: winner.id,
+        otherClubId: loser.id,
+        competitionId: comp.id,
+        fans: { story: 'derby', club: winner.id, other: loser.id, score },
+      });
+      continue;
+    }
     // A narrow win needs a bigger gap to be a shock.
     const narrow = Math.min(f.homeSets, f.awaySets) === 2;
     if (loser.reputation - winner.reputation < SHOCK_GAP * (narrow ? 1.5 : 1)) continue;

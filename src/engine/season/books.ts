@@ -44,6 +44,7 @@ export function clubBooks(world: World, club: Club): ClubBooks {
   ];
   const costs: Array<[string, number]> = [
     ['Player wages', playerWages],
+    ['Player bonuses', f.bonuses ?? 0],
     ['Youth wages', youthWages],
     ['Staff wages', staffWages],
     ['Arena maintenance', f.arenaMaintenance],

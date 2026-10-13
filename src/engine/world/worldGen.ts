@@ -25,7 +25,7 @@ import { StaffRole, type Staff, type StaffAttributes } from '../model/staff.ts';
 import { defaultTactics } from '../match/tactics.ts';
 import { cityBankFor } from './cities.ts';
 import { bankFor } from './names.ts';
-import { NATIONS, type Confederation } from './nations.ts';
+import { NATIONS, nationStrength, setNationsGame, type Confederation } from './nations.ts';
 import { estimateValue, generatePlayer } from './playerGen.ts';
 import { generateYouthIntake } from './progression.ts';
 import { ensureCupCompetitions } from '../season/cups.ts';
@@ -42,6 +42,8 @@ export interface WorldGenOptions {
   startYear: number;
   scale: WorldScale;
   manager: ManagerProfile;
+  /** The men's game or the women's. Absent: the men's. */
+  gender?: 'men' | 'women';
 }
 
 /**
@@ -77,6 +79,11 @@ function clubsPerDivision(tier: number, rng: Rng): number {
 
 export function generateWorld(opts: WorldGenOptions): World {
   const world = newWorld(opts.seed, opts.startYear, opts.manager);
+  // The women's game: its players, its nations' standing.
+  const gender = opts.gender ?? 'men';
+  if (gender === 'women') world.gender = 'women';
+  world.players.women = gender === 'women';
+  setNationsGame(gender);
   const rng = world.rng;
   const usedNames = new Set<string>();
 
@@ -145,7 +152,7 @@ function createLeague(
   const groupSuffix = groupCount > 1 ? ` — Group ${String.fromCharCode(65 + group)}` : '';
 
   const reputation = Math.round(
-    def.strength * 95 * (1 / (1 + (tier - 1) * 0.62)),
+    nationStrength(nation) * 95 * (1 / (1 + (tier - 1) * 0.62)),
   );
 
   const comp: Competition = {
@@ -204,7 +211,7 @@ function createClub(
   // not how volleyball works. The convex curve keeps the very best clubs
   // concentrated in Italy, Poland, Brazil and Russia, as they are in reality.
   const tierFactor = 1 / (1 + (tier - 1) * 0.68);
-  const strengthCurve = Math.pow(def.strength / 98, 2.6);
+  const strengthCurve = Math.pow(nationStrength(nation) / 98, 2.6);
   club.reputation = Math.round(
     Math.min(10000, 10000 * strengthCurve * tierFactor * rng.gaussianClamped(0.9, 0.12, 0.6, 1.18)),
   );
@@ -345,7 +352,7 @@ function lateCareer(age: number, pos: Position, veterans: Rng): number {
 function pickForeignNation(rng: Rng, exclude: number): number {
   for (let attempt = 0; attempt < 12; attempt++) {
     const weights = NATIONS.map((n, i) =>
-      i === exclude ? 0 : Math.pow(n.strength / 100, 3.4) * n.poolSize,
+      i === exclude ? 0 : Math.pow(nationStrength(i) / 100, 3.4) * n.poolSize,
     );
     const pick = rng.weightedIndex(weights);
     if (pick !== exclude) return pick;
@@ -472,7 +479,7 @@ function createNationalTeams(world: World): void {
       squad: [],
       // Seed ranking points from volleyball standing so the first world ranking
       // is plausible rather than random.
-      rankingPoints: Math.round(NATIONS[n].strength * 4.2 + world.rng.gaussian(0, 12)),
+      rankingPoints: Math.round(nationStrength(n) * 4.2 + world.rng.gaussian(0, 12)),
       managedByUser: false,
       olympicGolds: 0,
       worldTitles: 0,

@@ -144,7 +144,12 @@ export interface CourtState {
 
 export const COURT_HALF_WIDTH = 4.5;
 export const COURT_HALF_LENGTH = 9;
-export const NET_HEIGHT = 2.43;
+/** The net: 2.43 m in the men's game, 2.24 in the women's — see gameGender.ts. */
+export let NET_HEIGHT = 2.43;
+
+export function setNetHeight(h: number): void {
+  NET_HEIGHT = h;
+}
 
 /**
  * The parabola bulge `h` for z(t) = lerp(a, b, t) + 4h·t(1-t) whose highest
@@ -345,8 +350,9 @@ function spread(f: Formation): Formation {
 }
 
 /**
- * Serve receive. The passers spread across the court in the same
- * left-to-right order as their rotational spots; front-row players who don't
+ * Serve receive. The passers — three, or the two or four the coach lined up —
+ * spread across the court in the same left-to-right order as their
+ * rotational spots; front-row players who don't
  * pass wait at the net; a back-row setter hides at the net behind the
  * front-row team-mate in their own column, ready to release; any other
  * back-row non-passer (usually the opposite) hides deep, ready to hit from
@@ -355,7 +361,8 @@ function spread(f: Formation): Formation {
 function receiveFormation(t: Team): Formation {
   const f: Formation = new Map();
   const passers = [...t.passers].sort((a, b) => column(t.zoneOf(a)) - column(t.zoneOf(b)));
-  const lanes = passers.length >= 3 ? [0.18, 0.5, 0.82] : passers.length === 2 ? [0.3, 0.7] : [0.5];
+  const lanes = passers.length >= 4 ? [0.12, 0.37, 0.63, 0.88]
+    : passers.length === 3 ? [0.18, 0.5, 0.82] : passers.length === 2 ? [0.3, 0.7] : [0.5];
   passers.forEach((p, i) => f.set(p, { u: lanes[i], v: isFrontRow(t.zoneOf(p)) ? 0.58 : 0.66 }));
 
   for (let z = 0; z < 6; z++) {
@@ -542,6 +549,8 @@ function wobble(seed: number, i: number): number {
 function teamsOf(
   court: CourtState, positions: Uint8Array, nearTeam: 0 | 1, serving: 0 | 1, receiving: 0 | 1 | null = null,
   serveKind: ServeKind = () => undefined,
+  /** The receiving side's passers, when the coach lined up two or four rather than three. */
+  passers?: readonly number[],
 ): [Team, Team] {
   const teams: [Team, Team] = [
     buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, serving === 0, positions, serveKind),
@@ -552,6 +561,7 @@ function teamsOf(
   if (receiving !== null) {
     const t = teams[receiving];
     t.noSwitch = t.role(t.zones[0]) === Position.Setter && t.role(t.zones[1]) === Position.OutsideHitter;
+    if (passers !== undefined && passers.every((p) => t.zones.includes(p))) t.passers = [...passers];
   }
   return teams;
 }
@@ -616,12 +626,14 @@ export function rallyBeats(
   winner: 0 | 1 | null = null,
   /** Where each side's coach has the defence stand behind the block, against each kind of attack. */
   defenceOf?: (team: 0 | 1) => DefenceLayouts | undefined,
+  /** The receiving side's passers, when it lined up other than the usual three. */
+  passers?: readonly number[],
 ): Beat[] {
   // The server stands where his serve — as the engine played it — starts.
   const first = contacts[0];
   const kindOf: ServeKind = (p) =>
     first !== undefined && first.player === p && (first.detail === 'jump' || first.detail === 'float') ? first.detail : undefined;
-  const teams = teamsOf(court, positions, nearTeam, serveTeam, (1 - serveTeam) as 0 | 1, kindOf);
+  const teams = teamsOf(court, positions, nearTeam, serveTeam, (1 - serveTeam) as 0 | 1, kindOf, passers);
   const forms = openingFormations(teams, serveTeam);
   const beats: Beat[] = [];
   const at = (t: 0 | 1, p: number): Local => forms[t].get(p) ?? { u: 0.5, v: 0.5 };

@@ -59,14 +59,14 @@ test('the paper covers the leagues that matter, and every story names its countr
 
 test('a rumour is a bigger club after a player whose contract is running out', () => {
   const { world, clubId, news, standing } = season(23, 300);
-  const rumours = news.filter((n) => n.kind === 'rumour');
+  // The papers' gossip about other clubs' players (the manager's own have theirs — see market.ts).
+  const rumours = news.filter((n) => n.kind === 'rumour' && n.otherClubId !== clubId);
   assert.ok(rumours.length > 5);
   const store = world.players;
   for (const r of rumours) {
     const club = world.clubs[r.otherClubId!];
     const [suitorRep, clubRep] = standing.get(r.id)!;
     assert.ok(suitorRep > clubRep, 'the suitor is the bigger club');
-    assert.notEqual(club.id, clubId, 'not about the manager\'s own players');
     const p = r.playerIdx!;
     // Still in his last season, unless he has moved since.
     if (store.clubId[p] === club.id) assert.ok(store.contractUntil[p] <= seasonEndDay(world.season));

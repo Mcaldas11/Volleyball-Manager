@@ -17,13 +17,13 @@ import type { Club } from '../model/club.ts';
 import { POSITION_NAMES, type Position } from '../model/positions.ts';
 import { cityBankFor } from './cities.ts';
 import { bankFor } from './names.ts';
-import { NATIONS } from './nations.ts';
+import { NATIONS, nationStrength } from './nations.ts';
 import type { World } from './world.ts';
 
 /** What a story is, as the fans see it. */
 export type FanStory =
   | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top' | 'retiring' | 'retired'
-  | 'playerAward' | 'coachAward' | 'title' | 'match'
+  | 'playerAward' | 'coachAward' | 'title' | 'match' | 'derby'
   | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified';
 
 /** What a story's comments turn on. */
@@ -281,6 +281,26 @@ const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>>
       ['neutral', 'Expected result, to be honest.'],
     ],
   },
+  derby: {
+    club: [
+      ['delighted', 'THIS CITY IS OURS! {score}!'],
+      ['delighted', 'Bragging rights for another year. Enjoy work tomorrow, {o} fans.'],
+      ['happy', '{p} owns this fixture.'],
+      ['delighted', 'Best night of the season. Nothing beats winning the derby.'],
+      ['happy', 'That atmosphere... goosebumps from the first serve.'],
+    ],
+    other: [
+      ['angry', 'Losing the derby. Worst feeling there is.'],
+      ['angry', "Can't show my face at work tomorrow."],
+      ['worried', 'They wanted it more. That hurts.'],
+      ['angry', 'You do NOT lose to {c}. Not in our own city.'],
+      ['neutral', 'Gutted. We owe them one for the return match.'],
+    ],
+    neutral: [
+      ['neutral', 'What an atmosphere in that one.'],
+      ['happy', 'Derbies are what this sport is about.'],
+    ],
+  },
   nationTitle: {
     nation: [
       ['delighted', 'CHAMPIONS! So proud of this team!'],
@@ -368,7 +388,7 @@ const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>>
 /** How many comments a story draws. */
 const COMMENTS: Readonly<Record<FanStory, number>> = {
   rumour: 4, signing: 5, extension: 3, sacked: 4, appointed: 4, injury: 3, shock: 5, top: 4, retiring: 4, retired: 4,
-  playerAward: 3, coachAward: 3, title: 6, match: 5,
+  playerAward: 3, coachAward: 3, title: 6, match: 5, derby: 6,
   nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4, qualified: 4,
 };
 
@@ -444,7 +464,7 @@ function rivalOf(world: World, rng: Rng, clubId: number | undefined, not: Readon
 
 /** A neutral's nation: one of the volleyball countries not in the story. */
 function neutralNation(rng: Rng, not: ReadonlyArray<number | undefined>): number {
-  const pool = NATIONS.map((_, i) => i).filter((i) => !not.includes(i) && NATIONS[i].strength >= 70);
+  const pool = NATIONS.map((_, i) => i).filter((i) => !not.includes(i) && nationStrength(i) >= 70);
   return pool.length > 0 ? rng.pick(pool) : 0;
 }
 
@@ -496,7 +516,7 @@ export function fanComments(world: World, story: { id: number; fans?: FanBrief }
     else nation = neutralNation(rng, [b.nation, b.otherNation]);
     if (side === 'rival' && clubId === undefined) continue;
     const club = clubId !== undefined ? world.clubs[clubId] : undefined;
-    const reach = club !== undefined ? 20 + club.reputation / 40 : nation !== undefined ? 60 + (NATIONS[nation]?.strength ?? 50) * 2 : 40;
+    const reach = club !== undefined ? 20 + club.reputation / 40 : nation !== undefined ? 60 + (NATIONS[nation] !== undefined ? nationStrength(nation) : 50) * 2 : 40;
     const likes = Math.round(reach * rng.float() * (mood === 'delighted' || mood === 'angry' ? 1.6 : 1));
     out.push({
       handle: handle(rng, club?.nation ?? nation ?? 0, club),

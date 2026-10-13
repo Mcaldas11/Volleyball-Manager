@@ -73,6 +73,9 @@ export function rollOffHand(store: PlayerStore, i: number): void {
   store.offHand[i] = own.chance(0.04) ? own.int(14, 19) : Math.round(own.gaussianClamped(setter ? 9 : 5, 3, 1, 15));
 }
 
+/** How much shorter, on average, a woman player is than a man in the same position. */
+export const WOMEN_HEIGHT_GAP = 12;
+
 export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOptions): number {
   const i = store.create();
   const nationDef = NATIONS[opts.nation] ?? NATIONS[0];
@@ -82,7 +85,7 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
   store.nation[i] = opts.nation;
 
   // ---- Identity ----
-  const bank = bankFor(nationDef.nameGroup);
+  const bank = bankFor(nationDef.nameGroup, store.women);
   store.firstName[i] = store.names.intern(rng.pick(bank.first));
   store.lastName[i] = store.names.intern(rng.pick(bank.last));
   store.birthYear[i] = opts.currentYear - opts.age;
@@ -93,12 +96,14 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
   // the correlation is real but weak, since technique separates elite players
   // far more than centimetres do.
   const levelBias = (opts.potential / 2000 - 0.5) * 2.4;
+  // Women players stand about twelve centimetres shorter, position for position.
+  const mean = HEIGHT_MEAN[position] - (store.women ? WOMEN_HEIGHT_GAP : 0);
   const height = Math.round(
     rng.gaussianClamped(
-      HEIGHT_MEAN[position] + nationDef.heightBias + levelBias,
+      mean + nationDef.heightBias + levelBias,
       HEIGHT_SD,
-      HEIGHT_MEAN[position] - 15,
-      HEIGHT_MEAN[position] + 16,
+      mean - 15,
+      mean + 16,
     ),
   );
   store.heightCm[i] = height;
@@ -226,7 +231,8 @@ function setReach(store: PlayerStore, i: number, height: number, position: Posit
   // recorded reach should reflect that rather than the low draw above.
   if (position === Position.Libero) vj = Math.max(vj, Math.round(8 + (vj / 20) * 8));
   const standingReach = height * 1.302;
-  const jump = 52 + ((vj - 1) / 19) * 58;
+  // A woman's approach jump is lower: 44-90 cm against 52-110.
+  const jump = store.women ? 44 + ((vj - 1) / 19) * 46 : 52 + ((vj - 1) / 19) * 58;
   store.spikeReachCm[i] = Math.round(standingReach + jump);
   store.blockReachCm[i] = Math.round(standingReach + jump * 0.78);
 }

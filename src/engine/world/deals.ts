@@ -29,8 +29,9 @@ import {
   startLoan, wageRoom, type LoanPlayingTime,
 } from './loans.ts';
 import { moveDay, pendingMoveOf, seasonOfDay, windowOpeningLabel } from './moves.ts';
-import { euros, seasonEndDay, seasonEndYear, type GameMessage, type World } from './world.ts';
+import { euros, seasonEndDay, seasonEndYear, windowCloseDay, type GameMessage, type World } from './world.ts';
 import { AFFILIATE_DISCOUNT, affiliateLoanBlock, isAffiliate } from './affiliates.ts';
+import { agentOf, agentPatience, extrasOf, pruneExtras, releaseClauseOf, setExtras } from './contractTerms.ts';
 
 export interface TalksOffer {
   /** Transfer fee — only while talking to the selling club. */
@@ -43,6 +44,12 @@ export interface TalksOffer {
   wageShare?: number;
   /** Loan talks only: the playing time you promise him. */
   playingTime?: LoanPlayingTime;
+  /** The small print — see contractTerms.ts. */
+  appearanceBonus?: number;
+  titleBonus?: number;
+  releaseClause?: number;
+  option?: boolean;
+  agentFee?: number;
 }
 
 /** Another club after the same player, and the wage it is offering him. */
@@ -74,6 +81,8 @@ export interface Talks {
   /** How the last answer went. */
   reply: 'feeRejected' | 'close' | 'far' | null;
   rivals: RivalSuitor[];
+  /** A rival's formal bid with the selling club — to beat by `until`, or he goes to them. */
+  rivalBid?: { clubId: number; fee: number; until: number };
   /** Left idle past this day, the talks lapse. */
   expiresOn: number;
 }
@@ -96,6 +105,10 @@ export const REPLY_DAYS: Readonly<Record<'fee' | 'terms' | 'renewal' | 'counter'
 const IDLE_DAYS = 21;
 /** Chance per idle day that a rival closes the deal while you wait. */
 const RIVAL_SIGNS_CHANCE = 0.03;
+/** Chance per day, while the fee is still being talked over, that a rival puts in a formal bid of its own. */
+const RIVAL_TABLES_BID_CHANCE = 0.05;
+/** Days the selling club gives the manager to beat it. */
+const BEAT_IT_DAYS = 5;
 /** Chance per day that another club tops a bid for one of yours. */
 const RIVAL_BID_CHANCE = 0.05;
 /** Most bids one of your players can have on the table at once. */
@@ -300,7 +313,8 @@ export function openTalks(world: World, club: Club, playerIdx: number, kind: Tal
     agreedFee: 0,
     valuation: null,
     demands,
-    patience: TALKS_PATIENCE,
+    // Some agents sit through more than others.
+    patience: kind === 'loan' ? TALKS_PATIENCE : agentPatience(agentOf(world, playerIdx).style),
     lastOffer: {
       fee: kind === 'transfer' && stage === 'fee' ? store.value[playerIdx] : 0,
       wage: store.wage[playerIdx],
@@ -368,6 +382,32 @@ function signForRival(world: World, t: Talks, rival: RivalSuitor): void {
   closeTalks(world, t);
 }
 
+/** A rival puts a formal bid in for the player the manager is after: the selling club tells him to beat it. */
+function tableRivalBid(world: World, t: Talks): void {
+  const store = world.players;
+  const seller = world.clubs[t.sellingClubId];
+  const rival = world.rng.pick(t.rivals);
+  const club = world.clubs[rival.clubId];
+  if (seller === undefined || club === undefined) return;
+  const base = Math.max(t.valuation ?? 0, store.value[t.playerIdx], t.lastOffer.fee);
+  const fee = Math.round((base * world.rng.range(1.05, 1.2)) / 1000) * 1000;
+  if (fee > club.finances.balance) return;
+  t.rivalBid = { clubId: club.id, fee, until: world.day + BEAT_IT_DAYS };
+  t.valuation = Math.max(t.valuation ?? 0, fee);
+  t.expiresOn = Math.max(t.expiresOn, t.rivalBid.until + 1);
+  const name = store.fullName(t.playerIdx);
+  say(world, {
+    subject: `Rival bid for ${name}`,
+    body: `${seller.name} have a bid of ${euros(fee)} from ${club.name} for ${name}. They will sell to whoever pays most: ` +
+      `beat it within ${BEAT_IT_DAYS} days, or he goes to ${club.name}.`,
+    talksId: t.id,
+    playerIdx: t.playerIdx,
+    from: seller.name,
+    clubId: club.id,
+    category: 'offer',
+  });
+}
+
 /** Why an agreed deal can no longer go through, if it can't. */
 function dealProblem(world: World, club: Club, t: Talks, offer: TalksOffer): string | null {
   const store = world.players;
@@ -377,7 +417,43 @@ function dealProblem(world: World, club: Club, t: Talks, offer: TalksOffer): str
   if (t.kind === 'transfer' && t.agreedFee > Math.min(club.finances.transferBudget, club.finances.balance)) {
     return 'the club can no longer afford the fee';
   }
+  if ((offer.agentFee ?? 0) > club.finances.balance - (t.kind === 'transfer' ? t.agreedFee : 0)) {
+    return 'the club can no longer afford the agent\'s fee';
+  }
   return null;
+}
+
+/** The small print of an agreed contract goes in; the agent is paid. Returns a line for the message. */
+function signSmallPrint(world: World, club: Club, p: number, offer: TalksOffer, until: number): string {
+  setExtras(world, p, {
+    clubId: club.id, until,
+    releaseClause: offer.releaseClause || undefined,
+    appearanceBonus: offer.appearanceBonus || undefined,
+    titleBonus: offer.titleBonus || undefined,
+    option: offer.option || undefined,
+  });
+  const lines: string[] = [];
+  const fee = offer.agentFee ?? 0;
+  if (fee > 0) {
+    club.finances.balance -= fee;
+    club.finances.transferBudget = Math.max(0, club.finances.transferBudget - fee);
+    lines.push(`${agentOf(world, p).name}, his agent, has been paid ${euros(fee)}.`);
+  }
+  const print = smallPrintLine(offer);
+  if (print !== '') lines.push(print);
+  return lines.length > 0 ? ` ${lines.join(' ')}` : '';
+}
+
+/** "A release clause of €2M; €500 an appearance; ..." — the small print, said. */
+export function smallPrintLine(o: { releaseClause?: number; appearanceBonus?: number; titleBonus?: number; option?: boolean }): string {
+  const parts: string[] = [];
+  if ((o.appearanceBonus ?? 0) > 0) parts.push(`${euros(o.appearanceBonus!)} an appearance`);
+  if ((o.titleBonus ?? 0) > 0) parts.push(`${euros(o.titleBonus!)} a trophy`);
+  if ((o.releaseClause ?? 0) > 0) parts.push(`a release clause of ${euros(o.releaseClause!)}`);
+  if (o.option === true) parts.push('an option on one more season');
+  if (parts.length === 0) return '';
+  const said = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+  return `The contract carries ${said}.`;
 }
 
 function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
@@ -386,8 +462,14 @@ function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
   const seller = world.clubs[t.sellingClubId];
   if (seller === undefined) { closeTalks(world, t); return; }
   const buyer = world.clubs[world.userClubId];
-  const result = evaluateFeeOffer(world, seller, t.playerIdx, offer.fee,
-    buyer !== undefined && isAffiliate(buyer, seller.id) ? AFFILIATE_DISCOUNT : 1);
+  // With a rival's bid on the table, the club sells to whoever pays most.
+  const rivalBid = t.rivalBid;
+  const result = rivalBid !== undefined
+    ? offer.fee > rivalBid.fee
+      ? { accepted: true, reason: `It beats ${world.clubs[rivalBid.clubId]?.name ?? 'the rival'}'s bid.`, valuation: rivalBid.fee }
+      : { accepted: false, reason: `${world.clubs[rivalBid.clubId]?.name ?? 'Another club'} have bid ${euros(rivalBid.fee)} — you will have to beat it.`, valuation: rivalBid.fee }
+    : evaluateFeeOffer(world, seller, t.playerIdx, offer.fee, buyer !== undefined && isAffiliate(buyer, seller.id) ? AFFILIATE_DISCOUNT : 1);
+  if (result.accepted) t.rivalBid = undefined;
   t.valuation = result.valuation;
   t.expiresOn = idleDeadline(world);
   const rivals = t.rivals.map((r) => world.clubs[r.clubId]?.name).filter((n): n is string => n !== undefined);
@@ -396,9 +478,12 @@ function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
     t.stage = 'terms';
     t.agreedFee = offer.fee;
     t.reply = null;
+    const clause = releaseClauseOf(world, t.playerIdx);
     say(world, {
       subject: `Bid accepted: ${name}`,
-      body: `${seller.name} have accepted your offer of ${euros(offer.fee)} for ${name}. ` +
+      body: (clause !== null && offer.fee >= clause
+        ? `Your ${euros(offer.fee)} meets the release clause in ${name}'s contract: ${seller.name} could not refuse it. `
+        : `${seller.name} have accepted your offer of ${euros(offer.fee)} for ${name}. `) +
         `You can now talk personal terms with the player.${hurry}`,
       talksId: t.id,
       playerIdx: t.playerIdx,
@@ -451,9 +536,10 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
       store.wage[p] = offer.wage;
       store.contractUntil[p] = seasonEndDay(endSeason);
       store.morale[p] = Math.min(100, store.morale[p] + 6);
+      const print = signSmallPrint(world, club, p, offer, seasonEndDay(endSeason));
       say(world, {
         subject: `New contract: ${name}`,
-        body: `${name} has agreed a new deal worth ${euros(offer.wage)} a season, running until ${ends}.`,
+        body: `${name} has agreed a new deal worth ${euros(offer.wage)} a season, running until ${ends}.${print}`,
         playerIdx: p,
         category,
       });
@@ -471,7 +557,8 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
     }
     const seller = t.sellingClubId >= 0 ? world.clubs[t.sellingClubId] : undefined;
     const day = agreeTransfer(world, club, p, offer.wage, t.agreedFee, offer.years);
-    const paid = seller !== undefined && t.agreedFee > 0 ? ` ${euros(t.agreedFee)} has been paid to ${seller.name}.` : '';
+    const print = signSmallPrint(world, club, p, offer, seasonEndDay(seasonOfDay(day) + offer.years - 1));
+    const paid = (seller !== undefined && t.agreedFee > 0 ? ` ${euros(t.agreedFee)} has been paid to ${seller.name}.` : '') + print;
     say(world, {
       subject: `${name} signs`,
       body: day > world.day
@@ -515,10 +602,10 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
     subject: renewal ? `Contract talks: ${name}` : `Reply from ${name}'s agent`,
     from: renewal ? name : `${name}'s agent`,
     playerIdx: p,
-    body: response.gap === 'far'
+    body: (response.gap === 'far'
       ? `That offer is nowhere near what ${name} wants. He is asking for ${euros(d.wage)} a season.`
       : `${name} is close to agreeing. He would sign for ${euros(d.wage)} a season as a ` +
-        `${SQUAD_ROLE_NAMES[d.role].toLowerCase()}, on a ${years}-season contract.`,
+        `${SQUAD_ROLE_NAMES[d.role].toLowerCase()}, on a ${years}-season contract.`) + smallPrintAsks(world, t, offer),
     talksId: t.id,
     category,
   });
@@ -614,7 +701,18 @@ function processTalks(world: World, club: Club): void {
       else resolveTerms(world, club, t, offer);
       continue;
     }
-    if (t.kind === 'transfer' && t.rivals.length > 0 && world.rng.chance(RIVAL_SIGNS_CHANCE)) {
+    // A rival's bid on the table: beaten in time, or he goes to them.
+    if (t.rivalBid !== undefined && world.day > t.rivalBid.until) {
+      const rival = t.rivals.find((r) => r.clubId === t.rivalBid!.clubId) ?? t.rivals[0];
+      if (rival !== undefined) { signForRival(world, t, rival); continue; }
+      t.rivalBid = undefined;
+    }
+    if (t.kind === 'transfer' && t.stage === 'fee' && t.rivalBid === undefined && t.rivals.length > 0 &&
+      world.rng.chance(RIVAL_TABLES_BID_CHANCE)) {
+      tableRivalBid(world, t);
+      continue;
+    }
+    if (t.kind === 'transfer' && t.rivalBid === undefined && t.rivals.length > 0 && world.rng.chance(RIVAL_SIGNS_CHANCE)) {
       signForRival(world, t, world.rng.pick(t.rivals));
       continue;
     }
@@ -628,6 +726,21 @@ function processTalks(world: World, club: Club): void {
       closeTalks(world, t);
     }
   }
+}
+
+/** What the offer left out that he asked for: his agent's fee, a release clause. */
+function smallPrintAsks(world: World, t: Talks, offer: TalksOffer): string {
+  const d = t.demands;
+  const asks: string[] = [];
+  if ((offer.agentFee ?? 0) < (d.agentFee ?? 0)) asks.push(`his agent, ${agentOf(world, t.playerIdx).name}, wants ${euros(d.agentFee ?? 0)} for the deal`);
+  const max = d.clauseMax ?? null;
+  if (max !== null && ((offer.releaseClause ?? 0) <= 0 || (offer.releaseClause ?? 0) > max)) {
+    asks.push(`he wants a release clause of no more than ${euros(max)}`);
+  }
+  if (offer.option === true) asks.push('he does not like the club option');
+  if (asks.length === 0) return '';
+  const said = listNames(asks);
+  return ` And ${said}.`;
 }
 
 // ---- Sales: other clubs' bids for your players --------------------------------------
@@ -786,6 +899,51 @@ function processSales(world: World): void {
       playerIdx: p,
       from: club.name,
       clubId: club.id,
+      category: 'offer',
+    });
+  }
+}
+
+/** Weekly chance that a club able to pay it meets a release clause set at his value — less, the higher the clause. */
+const CLAUSE_BID_CHANCE = 0.12;
+
+/**
+ * A club pays the release clause of one of your players: there is nothing to
+ * answer — his club can't refuse — and he decides in a few days whether to
+ * go. Only while a window is open; called weekly.
+ */
+export function generateClauseBids(world: World): void {
+  pruneExtras(world);
+  const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
+  if (club === undefined || world.contractExtras === undefined || world.contractExtras.size === 0) return;
+  if (windowCloseDay(world.day) === null) return;
+  const store = world.players;
+  for (const p of club.players) {
+    const clause = extrasOf(world, p)?.releaseClause ?? 0;
+    if (clause <= 0 || loanOf(world, p) !== undefined || pendingMoveOf(world, p) !== undefined) continue;
+    if (world.incomingOffers.some((o) => o.playerIdx === p && o.clause === true)) continue;
+    const level = store.currentAbility[p] / 2000;
+    const suitors = world.clubs.filter((c) =>
+      c.id !== club.id && c.players.length > 0 && c.players.length < MAX_SQUAD &&
+      c.reputation / 10000 >= level - 0.05 && c.finances.transferBudget >= clause && c.finances.balance >= clause);
+    if (suitors.length === 0) continue;
+    const cheap = (store.value[p] * 1.2) / clause;
+    if (!world.rng.chance(Math.min(CLAUSE_BID_CHANCE, CLAUSE_BID_CHANCE * cheap * cheap * cheap))) continue;
+    const buyer = world.rng.pick(suitors);
+    const offer: IncomingOffer = {
+      id: world.nextOfferId++, playerIdx: p, buyingClubId: buyer.id, fee: clause,
+      expiresOnDay: world.day + 14, status: 'accepted', clause: true,
+      resolvesOn: world.day + world.rng.int(REPLY_DAYS.decision[0], REPLY_DAYS.decision[1]),
+    };
+    world.incomingOffers.push(offer);
+    say(world, {
+      subject: `Release clause met: ${store.fullName(p)}`,
+      body: `${buyer.name} have paid the ${euros(clause)} release clause in ${store.fullName(p)}'s contract. ` +
+        `The club can't refuse it: it is up to him now, and he will decide in the next few days. ${stanceLine(world, offer)}`,
+      offerId: offer.id,
+      playerIdx: p,
+      from: buyer.name,
+      clubId: buyer.id,
       category: 'offer',
     });
   }

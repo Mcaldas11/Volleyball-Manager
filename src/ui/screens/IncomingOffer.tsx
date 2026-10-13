@@ -141,7 +141,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
       onClose={() => g.closeOfferView()}
     >
       <ContractRow label="From"><ClubLink id={buyingClub.id} /></ContractRow>
-      <ContractRow label="Offer">
+      <ContractRow label={offer?.clause === true ? 'Release clause paid' : 'Offer'}>
         <span className="gold-text">{money(fee)}</span>
         <span className={`contract-delta ${vsValue >= 0 ? 'good' : 'bad'}`}>
           {vsValue >= 0 ? '+' : ''}{vsValue}% vs value
@@ -181,7 +181,9 @@ export function IncomingOfferScreen(): JSX.Element | null {
         <div className="contract-awaiting">
           <Icon name="clock" size={18} />
           <span>
-            <b>Fee agreed</b> — {store.fullName(n.playerIdx)} is talking terms with {buyingClub.name} and will decide
+            <b>{offer.clause === true ? 'Release clause met' : 'Fee agreed'}</b> —{' '}
+            {offer.clause === true && <>the club can't refuse it. </>}
+            {store.fullName(n.playerIdx)} is talking terms with {buyingClub.name} and will decide
             by {g.dateLabelForDay(offer.resolvesOn ?? world.day)}.
           </span>
         </div>

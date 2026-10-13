@@ -218,6 +218,8 @@ export interface RallyLogEntry {
   overturned?: boolean;
   /** A close call: what looked close — the line, a touch off the block, the net. */
   doubt?: ChallengeCheck;
+  /** The receiving side's passers, when it lined up other than the usual three — see ReceptionFormation. */
+  passers?: number[];
 }
 
 export interface MatchResult {
@@ -407,6 +409,19 @@ const READ_DIG = 0.06;
 
 /** A side fully prepared for a part of the game is this much sharper at it. */
 const PREP_EDGE = 0.03;
+
+/**
+ * The receive line. Two passers each cover more of the court and pass a
+ * little worse; four cover less and pass a little better. The outside a
+ * two-man line hides attacks the first ball fresher; the opposite in a
+ * four-man line attacks it worse when he has just passed it.
+ */
+/** How fast the ball travels in the women's game, against the men's. */
+export const WOMEN_BALL_SPEED = 0.8;
+const TWO_PASSER_EDGE = 0.95;
+const FOUR_PASSER_EDGE = 1.03;
+const FREED_HITTER_EDGE = 1.045;
+const PASSED_IT_COST = 0.95;
 
 /**
  * Serving at a man: how often the serve finds the weakest passer or the
@@ -644,7 +659,12 @@ export class MatchSimulator {
   private totalRallies = 0;
   private currentSet = 0;
   /** Scratch buffers, reused every rally to keep the loop allocation-free. */
-  private readonly recvUnit = [0, 0, 0];
+  private readonly recvUnit = [0, 0, 0, 0];
+  /** This rally's serve receive, when the side lined up other than the usual three: the outside it
+   *  hid — free to attack the first ball — or the opposite it added, who passes and then has to hit. */
+  private freedHitter = -1;
+  private extraPasser = -1;
+  private rallyPassers: number[] | null = null;
   private readonly laneWeights = new Float64Array(6);
   private readonly laneAttacker = new Int32Array(6);
 
@@ -1222,7 +1242,7 @@ export class MatchSimulator {
         homeCourt: court.homeCourt, awayCourt: court.awayCourt, homeLibero: court.homeLibero, awayLibero: court.awayLibero,
         roles: players.map((p) => [p, this.roles[p]]),
         contacts: entry.contacts, star: r.star, starTeam: r.starTeam, speed: r.speed, height: r.height,
-        attacks: rated.attacks, digs: rated.digs,
+        attacks: rated.attacks, digs: rated.digs, ...(entry.passers !== undefined ? { passers: entry.passers } : {}),
       };
     };
     if (rated.point !== null && rated.point.score > (best.point?.score ?? -Infinity)) best.point = make('point', rated.point);
@@ -1240,7 +1260,8 @@ export class MatchSimulator {
       : lane === AttackLane.Pipe || lane === AttackLane.BackRowRight ? -3 : 0;
     const angle = shot === 'cut' ? 0.92 : 1;
     const v = (82 + kind + 0.4 * ar.attackPower * ar.fatigue + 0.12 * ar.spikeReachEdge + this.flair.gaussian(0, 4) + (kill ? 3 : 0)) * angle;
-    return Math.round(clamp(v, 60, 134));
+    // The women's game hits about a fifth slower.
+    return Math.round(clamp(v, 60, 134) * (this.store.women ? WOMEN_BALL_SPEED : 1));
   }
 
   /**
@@ -1379,7 +1400,7 @@ export class MatchSimulator {
   private serveSpeed(sr: PlayerMatchRatings, jump: boolean): number | undefined {
     if (!this.recording) return undefined;
     const v = jump ? 78 + 0.45 * sr.serveJump + this.flair.gaussian(0, 4) : 58 + 0.15 * sr.serveFloat + this.flair.gaussian(0, 3);
-    return Math.round(clamp(v, 50, 132));
+    return Math.round(clamp(v, 50, 132) * (this.store.women ? WOMEN_BALL_SPEED : 1));
   }
 
   /** An engine-coached side's change between rallies, if one is warranted and the last has settled. */
@@ -1914,6 +1935,7 @@ export class MatchSimulator {
       contacts: this.contacts,
       homeWinProb: this.estimateWinProbability(),
     };
+    if (this.rallyPassers !== null) entry.passers = this.rallyPassers;
     if (this.log) this.log.push(entry);
     return entry;
   }
@@ -1923,6 +1945,10 @@ export class MatchSimulator {
     const srv = this.teams[serving];
     const rcv = this.teams[1 - serving];
     const rng = this.rng;
+    // A new rally: nobody has lined up to receive yet.
+    this.rallyPassers = null;
+    this.freedHitter = -1;
+    this.extraPasser = -1;
 
     // ---- Serve ----
     const server = srv.court[0];
@@ -1963,9 +1989,13 @@ export class MatchSimulator {
     const rStats = statsFor(rcv.stats, receiver);
     rStats.receptionsTotal++;
 
+    // Two passers cover more court each, four less.
+    // (Set by pickReceiver just above — read afresh, not as the rally began.)
+    const line = this.rallyPassers as number[] | null;
+    const lineUp = line === null ? 1 : line.length === 2 ? TWO_PASSER_EDGE : FOUR_PASSER_EDGE;
     const recvSkill =
       rr.reception * rr.fatigue * rr.confidence * DEFENSE_PROFILE[rcv.tactics.defense].receptionBonus *
-      (1 + PREP_EDGE * rcv.prep.reception);
+      (1 + PREP_EDGE * rcv.prep.reception) * lineUp;
     // SERVE_EDGE is the inherent difficulty of handling a professional serve,
     // independent of who is hitting it. The wide contest scale keeps a single
     // serve/reception mismatch from swinging the pass grade to an extreme —
@@ -2125,8 +2155,13 @@ export class MatchSimulator {
     // A left-hander on the right side takes the set without it crossing his
     // body, and swings at the line the block finds hardest to close.
     if (ar.leftHanded && (lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight)) attackBase *= LEFTY_EDGE;
+    // Off the pass: an outside spared the serve gets to the ball fresh; an
+    // opposite who has just passed it gets there late.
+    const firstBall = transition ? 1
+      : attacker === this.freedHitter ? FREED_HITTER_EDGE
+        : attacker === this.extraPasser && attacker === firstTouch ? PASSED_IT_COST : 1;
     const attackRating =
-      attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setOnIt) *
+      firstBall * attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setOnIt) *
       (1 + OFF_HAND_EDGE * (ar.offHand - OFF_HAND_TYPICAL) * (1 - setOnIt)) *
       (transition ? 1 + PREP_EDGE * atk.prep.transition : 1) +
       rng.gaussian(0, (1 - ar.consistency) * 9);
@@ -2294,8 +2329,9 @@ export class MatchSimulator {
    * gives, so the tactic has to actually change who touches the ball.
    */
   private pickReceiver(rcv: TeamRuntime, srvTactics: TeamTactics, rotTac: ServeTarget): number {
-    const n = receptionUnit(rcv.court, this.roles, rcv.liberoIdx, this.recvUnit);
+    let n = receptionUnit(rcv.court, this.roles, rcv.liberoIdx, this.recvUnit);
     if (n === 0) return rcv.court[0];
+    n = this.lineUpPassers(rcv, n);
 
     const target = rotTac !== ServeTarget.Auto ? rotTac : autoTarget(srvTactics);
 
@@ -2333,6 +2369,44 @@ export class MatchSimulator {
     }
 
     return this.recvUnit[this.rng.int(0, n - 1)];
+  }
+
+  /**
+   * The receive line as the coach set it for this rotation: the usual three;
+   * two, the weaker-passing outside hidden from the serve; or four, the
+   * opposite on court passing as well. Returns how many are in the line.
+   */
+  private lineUpPassers(rcv: TeamRuntime, n: number): number {
+    this.freedHitter = -1;
+    this.extraPasser = -1;
+    this.rallyPassers = null;
+    const form = rcv.tactics.rotations[rcv.rotation()]?.receivers ?? 3;
+    if (form === 3 || n !== 3) return n;
+    const unit = this.recvUnit;
+    if (form === 2) {
+      // Only a line with the libero in it can do without an outside.
+      if (rcv.liberoIdx < 0 || !unit.slice(0, 3).includes(rcv.liberoIdx)) return n;
+      let hide = -1;
+      for (let i = 0; i < 3; i++) {
+        if (unit[i] === rcv.liberoIdx) continue;
+        if (hide < 0 || rcv.rate(unit[i]).reception < rcv.rate(unit[hide]).reception) hide = i;
+      }
+      this.freedHitter = unit[hide];
+      unit.splice(hide, 1);
+      unit.push(0);
+      this.rallyPassers = unit.slice(0, 2);
+      return 2;
+    }
+    // Four: the opposite comes into the line.
+    for (let z = 0; z < 6; z++) {
+      const p = effectivePlayerAt(rcv.court, z, this.roles, rcv.liberoIdx, false);
+      if (this.roles[p] !== Position.Opposite || unit.slice(0, 3).includes(p)) continue;
+      unit[3] = p;
+      this.extraPasser = p;
+      this.rallyPassers = unit.slice(0, 4);
+      return 4;
+    }
+    return n;
   }
 
   /**

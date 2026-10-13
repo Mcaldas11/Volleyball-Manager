@@ -15,6 +15,8 @@
  * Each comes as a message with its tables, which the inbox lays out.
  */
 
+import { fixturesAhead, loadOf, tripTo } from './fatigue.ts';
+import { fixtureRivalry, rivalryName } from './rivals.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { POSITION_SHORT, type Position } from '../model/positions.ts';
@@ -23,7 +25,7 @@ import { OffensiveSystem, ServeStrategy, Tempo } from '../match/tactics.ts';
 import { MONTH_STARTS, postMessage } from './inbox.ts';
 import { worldRanking } from './internationals.ts';
 import { NATIONS } from './nations.ts';
-import { currentPhase, dayOfSeason, SeasonPhase, type ReportTable, type World } from './world.ts';
+import { currentPhase, dayOfSeason, inboxPrefsOf, SeasonPhase, type ReportTable, type World } from './world.ts';
 
 /** A player's recent match ratings, the latest last: the last `n`. */
 function recent(world: World, p: number, n: number): number[] {
@@ -87,7 +89,9 @@ function nationalPool(world: World, nation: number): number[] {
 /** Every fortnight of the club season: the national squad at their clubs, and who is knocking on the door. */
 export function nationalFormReport(world: World): void {
   const nation = world.career.nationalTeam;
-  const every = world.userClubId >= 0 ? FORM_REPORT_DAYS : 7;
+  const pref = inboxPrefsOf(world).nationalForm;
+  if (pref === 'off') return;
+  const every = pref === 'weekly' ? 7 : pref === 'fortnightly' ? FORM_REPORT_DAYS : world.userClubId >= 0 ? FORM_REPORT_DAYS : 7;
   if (nation === undefined || nation < 0 || !clubSeasonOn(world) || world.day % every !== 3) return;
   const store = world.players;
   const squad = nationalPool(world, nation);
@@ -153,7 +157,7 @@ export function nationalFormReport(world: World): void {
  */
 export function nationalInjuryNews(world: World): void {
   const nation = world.career.nationalTeam;
-  if (nation === undefined || nation < 0) return;
+  if (nation === undefined || nation < 0 || !inboxPrefsOf(world).nationalInjuries) return;
   const team = world.nationalTeams.find((t) => t.nation === nation);
   if (team === undefined) return;
   const store = world.players;
@@ -184,7 +188,7 @@ export function nationalInjuryNews(world: World): void {
 /** On the first of each month: where the national side stands in the world. */
 export function rankingReport(world: World): void {
   const nation = world.career.nationalTeam;
-  if (nation === undefined || nation < 0 || !MONTH_STARTS.includes(dayOfSeason(world))) return;
+  if (nation === undefined || nation < 0 || !MONTH_STARTS.includes(dayOfSeason(world)) || !inboxPrefsOf(world).ranking) return;
   const order = worldRanking(world);
   const rank = order.indexOf(nation) + 1;
   if (rank <= 0) return;
@@ -213,7 +217,9 @@ export function rankingReport(world: World): void {
 export function assistantReport(world: World): void {
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
   const phase = currentPhase(world);
-  if (club === undefined || world.day % 7 !== 1 || phase === SeasonPhase.OffSeason || phase === SeasonPhase.NationalTeam) return;
+  const pref = inboxPrefsOf(world).assistant;
+  if (club === undefined || pref === 'off' || world.day % (pref === 'fortnightly' ? 14 : 7) !== 1) return;
+  if (phase === SeasonPhase.OffSeason || phase === SeasonPhase.NationalTeam) return;
   const store = world.players;
   const senior = club.players.filter((p) => !store.hasFlag(p, PlayerFlag.Youth));
   const rated = senior.filter((p) => recent(world, p, 3).length >= 2);
@@ -225,6 +231,7 @@ export function assistantReport(world: World): void {
     const why: string[] = [];
     if (store.injuryDaysLeft[p] > 0) why.push(`injured, ${Math.ceil(store.injuryDaysLeft[p] / 7)} wk`);
     else if (store.condition[p] < 72) why.push(`tired (${store.condition[p]}%)`);
+    else if (loadOf(world, p) >= 2.2) why.push('heavy legs: a lot of matches lately');
     if (store.morale[p] < 35) why.push('low morale');
     if (world.transferRequests?.[p]?.status === 'open') why.push('wants to leave');
     if (why.length > 0) worries.push({ p, cells: [store.fullName(p), pos(world, p), why.join(' · ')], tone: 'bad' });
@@ -234,7 +241,15 @@ export function assistantReport(world: World): void {
     .sort((a, b) => a.day - b.day)[0];
   const opp = next !== undefined ? world.clubs[next.home === club.id ? next.away : next.home] : undefined;
   const tired = senior.filter((p) => store.injuryDaysLeft[p] === 0 && store.condition[p] < 72);
+  // A crowded run ahead: rotate, or run out of legs.
+  const ahead = fixturesAhead(world, club.id, 8);
+  const abroad = ahead.filter((f) => tripTo(world, f, club.id) === 'abroad').length;
+  const busy = ahead.length >= 3
+    ? `A busy run: ${ahead.length} matches in the next eight days${abroad > 0 ? `, ${abroad === 1 ? 'one' : abroad} of them abroad` : ''}. ` +
+      'We will have to rotate, or we will run out of legs.'
+    : '';
   const lines = [
+    busy,
     hot.length > 0 ? `${store.shortName(hot[0])} is flying — ${fixed1(avg(recent(world, hot[0], 3)))} on average in his last games.` : 'Nobody has really stood out this week.',
     cold.length > 0 ? `${store.shortName(cold[0])} is struggling; a rest or a word might help.` : '',
     tired.length > 0 && next !== undefined && next.day - world.day <= 3
@@ -285,7 +300,7 @@ function formOf(world: World, clubId: number, n: number): string {
 /** Two days before every competitive match: the scouts on the opposition. */
 export function scoutingReport(world: World): void {
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
-  if (club === undefined) return;
+  if (club === undefined || !inboxPrefsOf(world).scouting) return;
   const f = world.fixtures.find((x) => !x.played && x.day === world.day + 2 && (x.home === club.id || x.away === club.id));
   const comp = f !== undefined ? world.competitions[f.competitionId] : undefined;
   if (f === undefined || comp === undefined || comp.kind === 'friendly') return;
@@ -311,12 +326,17 @@ export function scoutingReport(world: World): void {
       `${form !== '' ? ` — ${form} in their last ${form.split('-').length}` : ''}.`,
     `They play ${OFFENCE_WORDS[t.offense] ?? 'a balanced offence'}, ${TEMPO_WORDS[t.tempo] ?? 'at a normal tempo'}. ${SERVE_WORDS[t.serve] ?? ''}`,
     danger !== undefined ? `The danger man is ${store.fullName(danger.p)} (${pos(world, danger.p)}): ${(danger.points / danger.apps).toFixed(1)} points a match.` : '',
-    `The match is ${f.home === club.id ? 'at home' : 'away'}, in two days.`,
+    `The match is ${f.home === club.id ? 'at home' : 'away'}, in two days.` + (
+      tripTo(world, f, club.id) === 'abroad' ? ' We fly out the day before — expect some heavy legs.'
+        : tripTo(world, f, club.id) === 'long' ? ' It is a long trip, the day before.' : ''),
+    rivalryName(world, f) !== null
+      ? `And it is ${rivalryName(world, f)}: expect a full house, and a board and a city that will remember the result.`
+      : '',
   ].filter((l) => l !== '').join(' ');
   postMessage(world, {
     category: 'task', from: staffName(world, club.id, [StaffRole.HeadScout, StaffRole.Scout, StaffRole.PerformanceAnalyst], 'Chief Scout'),
-    subject: `Scouting report: ${opp.name}`,
-    body, clubId: opp.id, fixtureId: f.id,
+    subject: `Scouting report: ${opp.name}${fixtureRivalry(world, f) === 'derby' ? ' — derby' : fixtureRivalry(world, f) === 'classic' ? ' — the classic' : ''}`,
+    body, clubId: opp.id, fixtureId: f.id, gamePlanFor: opp.id,
     tables: key.length > 0 ? [{
       label: 'Their key players', columns: ['Player', 'Pos', 'Apps', 'Avg', 'Pts/match'],
       rows: key.map((x) => ({ p: x.p, cells: [store.fullName(x.p), pos(world, x.p), x.apps, fixed1(x.avg), (x.points / x.apps).toFixed(1)] })),

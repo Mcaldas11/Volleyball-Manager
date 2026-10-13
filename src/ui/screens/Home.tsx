@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { rivalryName } from '../../engine/world/rivals.ts';
 import { ATTR_LABELS, type AttributeName } from '../../engine/model/attributes.ts';
 import { compareTableRows } from '../../engine/model/club.ts';
 import { Position, POSITION_NAMES } from '../../engine/model/positions.ts';
@@ -109,6 +110,8 @@ function NowManaging(): JSX.Element {
         </div>
         <div className="hm-sub">
           {comp?.name ?? ''} · {today ? 'Today' : days === 1 ? 'Tomorrow' : `In ${days} days`}
+          {rivalryName(world, next) !== null && <span className="hm-derby">{rivalryName(world, next)!.replace(/^the/, 'The')}</span>}
+          {g.transferWindowStatus().open && g.transferWindowStatus().untilDay === world.day && <span className="hm-derby hm-deadline">Deadline day</span>}
         </div>
       </div>
       <div className="hm-banner-side">

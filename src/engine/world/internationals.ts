@@ -47,6 +47,7 @@
  * home — and the world's news reports the tournaments.
  */
 
+import { frameVerdict, framedSquad } from './nationalExtras.ts';
 import { Rng } from '../core/rng.ts';
 import { MatchFormat, simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
 import { matchRating, playedInMatch, TYPICAL_RATING } from '../match/playerRating.ts';
@@ -66,7 +67,7 @@ import {
   dayOfSeason, DAYS_PER_SEASON, type Competition, type Fixture, type GameMessage, type World,
 } from './world.ts';
 
-export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics' | 'qualifier';
+export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics' | 'qualifier' | 'friendly';
 
 export interface IntlMatch {
   id: number;
@@ -188,6 +189,9 @@ export interface Internationals {
   /** The Nations League's eighteen for the next edition, and who has just come up. */
   vnl?: number[];
   vnlPromoted?: number;
+  /** The manager's provisional squad this season, and the players he is going to watch — see nationalExtras.ts. */
+  frame?: { season: number; players: number[] };
+  watching?: Array<{ p: number; since: number }>;
 }
 
 // ---- What the manager is told: the reports behind the messages ----------------------------
@@ -290,6 +294,8 @@ const QUALIFIER_POOL = 4;
 /** How much one result moves the world ranking, by the stage it is played on. */
 const RANKING_K: Readonly<Record<TournamentKind, number>> = {
   nationsLeague: 10, continental: 14, worlds: 18, olympics: 20, qualifier: 8,
+  // A friendly is for the practice: the ranking doesn't count it.
+  friendly: 0,
 };
 
 /** National jobs: always a few open, and how long one waits for the manager. */
@@ -327,6 +333,7 @@ export function championsTitle(t: Pick<Tournament, 'kind' | 'confederation'>): s
   if (t.kind === 'worlds') return 'world champions';
   if (t.kind === 'olympics') return 'Olympic champions';
   if (t.kind === 'nationsLeague') return 'Nations League winners';
+  if (t.kind === 'friendly') return 'winners';
   return CONTINENTAL[t.confederation ?? 'CEV'].champions;
 }
 
@@ -350,6 +357,7 @@ function competitionFor(world: World, kind: TournamentKind, conf: Confederation 
   const found = world.competitions.find((c) => c.key === key);
   if (found !== undefined) return found;
   const name = kind === 'worlds' ? 'World Championship' : kind === 'olympics' ? 'Olympic Games'
+    : kind === 'friendly' ? 'International friendly'
     : kind === 'nationsLeague' ? 'Nations League'
       : kind === 'qualifier' ? `${CONTINENTAL[conf ?? 'CEV'].name} Qualifiers` : CONTINENTAL[conf ?? 'CEV'].name;
   const comp: Competition = {
@@ -363,7 +371,7 @@ function competitionFor(world: World, kind: TournamentKind, conf: Confederation 
     participants: [],
     table: [],
     fixtureIds: [],
-    reputation: kind === 'olympics' ? 10000 : kind === 'worlds' ? 9500 : kind === 'qualifier' ? 5000 : 8000,
+    reputation: kind === 'olympics' ? 10000 : kind === 'worlds' ? 9500 : kind === 'qualifier' ? 5000 : kind === 'friendly' ? 3000 : 8000,
     promotionSlots: 0,
     relegationSlots: 0,
     hasPlayoffs: false,
@@ -591,6 +599,40 @@ function createTournament(
   return t;
 }
 
+/**
+ * A friendly the manager has arranged: one match between two nations on a
+ * day, the squads called three days before. The home side hosts it.
+ */
+export function createFriendly(world: World, home: number, away: number, day: number): Tournament {
+  const I = internationals(world);
+  const comp = competitionFor(world, 'friendly', null);
+  const t: Tournament = {
+    id: I.nextTournamentId++,
+    kind: 'friendly',
+    confederation: null,
+    name: `${nationName(home)} v ${nationName(away)} — friendly`,
+    year: world.year,
+    season: Math.floor(day / DAYS_PER_SEASON),
+    competitionId: comp.id,
+    teams: [home, away],
+    host: home,
+    pools: [{ name: 'Friendly', teams: [home, away] }],
+    advance: 0,
+    matches: [newMatch(I, day, home, away, 'Friendly', -1, 0)],
+    callUpDay: day - 3,
+    startDay: day,
+    knockoutDays: [day],
+    squads: [],
+    status: 'planned',
+    out: [],
+    placings: [],
+    mvp: -1,
+    stats: new Map(),
+  };
+  I.tournaments.push(t);
+  return t;
+}
+
 function newMatch(I: Internationals, day: number, home: number, away: number, stage: string, round: number, slot: number, bronze = false): IntlMatch {
   return {
     id: I.nextMatchId++, day, home, away, stage, round, slot, bronze,
@@ -738,7 +780,7 @@ export interface CalendarEvent {
 }
 
 /** Roughly how long each kind of tournament runs, until it is drawn and its days are known. */
-const RUNS: Readonly<Record<TournamentKind, number>> = { worlds: 12, olympics: 12, continental: 14, qualifier: 4, nationsLeague: 24 };
+const RUNS: Readonly<Record<TournamentKind, number>> = { worlds: 12, olympics: 12, continental: 14, qualifier: 4, nationsLeague: 24, friendly: 1 };
 
 /**
  * What is on the international calendar from today on: the tournaments drawn
@@ -891,8 +933,9 @@ export function pickSquad(world: World, pool: readonly number[]): number[] {
 
 /** The assistant's fourteen for a nation: the best of its fit, eligible players. */
 export function suggestSquad(world: World, nation: number): number[] {
-  return pickSquad(world, eligibleFor(world, nation).filter((p) =>
-    canPlayForCountry(world, p) && !world.players.hasFlag(p, PlayerFlag.OnDuty)));
+  const pool = eligibleFor(world, nation).filter((p) => canPlayForCountry(world, p) && !world.players.hasFlag(p, PlayerFlag.OnDuty));
+  // The manager's nation: his provisional squad first.
+  return nation === userNation(world) ? framedSquad(world, pool) : pickSquad(world, pool);
 }
 
 /** The next tournament the nation plays in that has not finished. */
@@ -955,10 +998,12 @@ function callUp(world: World, t: Tournament): void {
     if (n === mine && I.chosen?.tournamentId === t.id) {
       // The manager's own fourteen — topped up by the assistant if any have since got hurt.
       squad = I.chosen.players.filter((p) => pool.includes(p));
-      if (squad.length < SQUAD_SIZE) squad.push(...pickSquad(world, pool.filter((p) => !squad.includes(p))).slice(0, SQUAD_SIZE - squad.length));
+      if (squad.length < SQUAD_SIZE) squad.push(...framedSquad(world, pool.filter((p) => !squad.includes(p))).slice(0, SQUAD_SIZE - squad.length));
     } else {
-      squad = pickSquad(world, pool);
+      squad = n === mine ? framedSquad(world, pool) : pickSquad(world, pool);
     }
+    // The provisional squad hears how it stands.
+    if (n === mine) frameVerdict(world, squad);
     for (const p of squad) taken.add(p);
     t.squads.push([n, squad]);
     const team = teamOf(world, n);
@@ -1216,6 +1261,15 @@ function nextRound(world: World, t: Tournament): void {
 
 /** Once the day's matches are in: the bracket drawn, the next round, or the end. */
 function progress(world: World, t: Tournament): void {
+  // A friendly is one match: played, and everyone goes home.
+  if (t.kind === 'friendly') {
+    if (t.matches.every((m) => m.played)) {
+      for (const n of t.teams) release(world, t, n);
+      t.placings = t.matches[0].homeSets > t.matches[0].awaySets ? [t.matches[0].home, t.matches[0].away] : [t.matches[0].away, t.matches[0].home];
+      t.status = 'done';
+    }
+    return;
+  }
   if (t.status === 'pools' && t.matches.every((m) => m.played)) {
     if (t.kind === 'qualifier') finishQualifier(world, t);
     else drawKnockout(world, t);

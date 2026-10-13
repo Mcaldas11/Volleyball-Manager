@@ -88,11 +88,13 @@ interface CourtProps {
   /** Short names for the referee's calls: home, away. */
   teamNames: [string, string];
   view: CourtView;
+  /** A spot on the floor to zoom in on, court metres — the video's close-up of where a ball came down. */
+  zoom?: { x: number; y: number } | null;
 }
 
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
-  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null,
+  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null,
 }: {
   scene: Scene;
   /** Someone down hurt, and where the stoppage for him has got to. */
@@ -117,12 +119,14 @@ export function LiveCourt({
   speed?: number;
   teamNames?: [string, string];
   view?: CourtView;
+  /** A spot on the floor to zoom in on — see CourtProps. */
+  zoom?: { x: number; y: number } | null;
 }): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill });
-  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill };
+  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill, zoom });
+  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill, zoom };
   /** The bench side as last handed to the motion. */
   const sidelineKey = useRef('');
   const applySideline = (now: number): void => {
@@ -236,6 +240,25 @@ export function LiveCourt({
       court?.resize(cssW, cssH, dpr);
       paintHall();
     };
+    // The video's close-up: every layer scaled about the spot alike, so the
+    // painted floor, the players and their labels stay together.
+    let zoomed = '';
+    const applyZoom = (): void => {
+      const z = props.current.zoom;
+      let transform = 'none';
+      if (z !== null && z !== undefined) {
+        const scale = 2.6;
+        const at = shownView === '2d'
+          ? (() => { const P = topProjector(cssW, cssH); return { X: P.X(z.x), Y: P.Y(z.y) }; })()
+          : project(z.x, z.y, 0);
+        const tx = Math.min(0, Math.max(cssW - cssW * scale, cssW / 2 - at.X * scale));
+        const ty = Math.min(0, Math.max(cssH - cssH * scale, cssH / 2 - at.Y * scale));
+        transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${scale})`;
+      }
+      if (transform === zoomed) return;
+      zoomed = transform;
+      for (const c of [hallCanvas, glCanvas, topCanvas]) c.style.transform = transform;
+    };
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(wrap);
@@ -270,6 +293,7 @@ export function LiveCourt({
         drawFlat(top, project, m, props.current, now);
       }
       top.restore();
+      applyZoom();
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -412,6 +436,24 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
     ctx.textBaseline = 'middle';
     ctx.fillText('C', P.X(c.x), P.Y(c.y) + 0.5);
   });
+  // The line judges at their corners: the flag up, beside them, when they signal a ball out or touched.
+  for (const j of m.lineJudges) {
+    const X = P.X(j.x);
+    const Y = P.Y(j.y);
+    ctx.beginPath();
+    ctx.arc(X, Y, r * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = '#2a3448';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#e8c547';
+    ctx.stroke();
+    if (j.rig.arms[1].x > 2) {
+      ctx.fillStyle = '#d63a3a';
+      ctx.fillRect(X + r * 0.5, Y - r * 1.6, r * 0.9, r * 0.7);
+      ctx.fillStyle = '#e8c547';
+      ctx.fillRect(X + r * 0.95, Y - r * 1.6, r * 0.45, r * 0.35);
+    }
+  }
   // The physio: white, with a red cross.
   if (m.medic !== null) {
     const md = m.medic;

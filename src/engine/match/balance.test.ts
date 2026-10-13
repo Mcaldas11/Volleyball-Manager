@@ -26,6 +26,8 @@ test('no single tactical choice wins — or loses — most matches between equal
     ['the triple block', (t) => { t.defense = DefensiveSystem.TripleBlockPriority; }],
     ['playing for reception', (t) => { t.defense = DefensiveSystem.ReceptionStability; }],
     ['the back-row attack', (t) => { t.offense = OffensiveSystem.BackRowHeavy; }],
+    ['two passers', (t) => { for (const r of t.rotations) r.receivers = 2; }],
+    ['four passers', (t) => { for (const r of t.rotations) r.receivers = 4; }],
   ];
   let seed = 1;
   for (const [name, change] of variants) {

@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
+import { relapseChance, TREATMENT_NAMES, treatmentWeeks, type Treatment } from '../../engine/world/treatment.ts';
 import { INJURY_NAMES } from '../../engine/model/players.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import { messageNeedsAction, messageSender, injuryDuration, ordinal } from '../../engine/world/inbox.ts';
 import {
-  contractEndSeason, messageCategory, type GameMessage, type MessageCategory, type ReportTable,
+  contractEndSeason, inboxPrefsOf, messageCategory, type GameMessage, type InboxPrefs, type MessageCategory, type ReportTable,
 } from '../../engine/world/world.ts';
 import {
   canRecall, coachTalkBlock, fitMatches, promiseShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport,
   type LoanStats,
 } from '../../engine/world/loans.ts';
 import {
-  ClubCrest, ClubLink, Flag, initials, money, MoneyInput, PlayerFace, PlayerLink, RatingBadge, StarMeter,
+  ClubCrest, ClubLink, Flag, initials, money, MoneyInput, PlayerFace, PlayerLink, RatingBadge, Segmented, StarMeter,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
@@ -23,6 +24,8 @@ import { AwardsNightSheet, TeamOfSeasonSheet } from '../awardsSheet.tsx';
 import { RetirementSheet } from '../retirementSheet.tsx';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { useGame } from '../state.ts';
+import { followsPlan } from '../../engine/world/gamePlan.ts';
+import { BLOCK_OPTIONS, SERVE_OPTIONS, SERVE_TARGET_OPTIONS, SHAPE_OPTIONS } from './Manage.tsx';
 
 /** How each kind of message is filed and badged — the folder it lives in,
  *  its icon and the colour of its stripe down the list. */
@@ -139,6 +142,7 @@ export function InboxScreen(): JSX.Element {
         {FOLDER_ORDER.map((c) => folderButton(c, CATEGORY_META[c].label, CATEGORY_META[c].color))}
         <div className="mail-folders-sep" />
         {folderButton('archive', 'Archive', '#8f9bb0')}
+        <InboxSettings />
       </nav>
 
       <section className="mail-list">
@@ -174,6 +178,8 @@ export function InboxScreen(): JSX.Element {
                   <button
                     key={m.id}
                     className={`mail-row${g.inboxSelected === m.id ? ' active' : ''}${m.read !== true ? ' unread' : ''}`}
+                    data-pronouns={m.staffId !== undefined || m.staffTalksId !== undefined || m.staffApproachId !== undefined ||
+                      messageCategory(m) === 'career' || messageCategory(m) === 'board' ? 'keep' : undefined}
                     style={catStyle(cat)}
                     onClick={() => g.selectMessage(m.id)}
                   >
@@ -243,7 +249,9 @@ function MessageSheet({ message: m }: { message: GameMessage }): JSX.Element {
   const needsAction = messageNeedsAction(world, m);
 
   return (
-    <article className="paper" style={catStyle(cat)}>
+    <article className="paper" style={catStyle(cat)}
+      data-pronouns={m.staffId !== undefined || m.staffTalksId !== undefined || m.staffApproachId !== undefined ||
+        cat === 'career' || cat === 'board' ? 'keep' : undefined}>
       <div className="paper-toolbar">
         <button
           className={`paper-tool${m.starred === true ? ' on' : ''}`}
@@ -349,7 +357,14 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
-  if (m.tables !== undefined && m.tables.length > 0) return <ReportTables tables={m.tables} />;
+  if (m.tables !== undefined && m.tables.length > 0 || m.gamePlanFor !== undefined) {
+    return (
+      <>
+        {m.tables !== undefined && m.tables.length > 0 && <ReportTables tables={m.tables} />}
+        {m.gamePlanFor !== undefined && m.fixtureId !== undefined && <GamePlanSheet oppId={m.gamePlanFor} fixtureId={m.fixtureId} />}
+      </>
+    );
+  }
 
   if (m.award !== undefined) return <AwardSheet award={m.award} />;
 
@@ -385,6 +400,7 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     const out = store.injuryDaysLeft[p];
     return (
       <div className="paper-report">
+        {m.treatmentFor !== undefined && <TreatmentChoice p={m.treatmentFor} />}
         <div className="paper-label">Medical report</div>
         {m.injury !== undefined && (
           <>
@@ -674,6 +690,146 @@ function LoanReportSheet({ report: r }: { report: LoanReport }): JSX.Element {
         <div className="paper-label">Staff verdict</div>
         <p className="paper-verdict">{r.verdict}</p>
       </div>
+    </div>
+  );
+}
+
+/** What the regular post brings, and how often — the manager's call. */
+function InboxSettings(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const [open, setOpen] = useState(false);
+  const prefs = inboxPrefsOf(world);
+  const national = (world.career.nationalTeam ?? -1) >= 0;
+  const club = world.userClubId >= 0;
+  const often = <K extends 'assistant' | 'nationalForm'>(key: K, label: string, auto: boolean): JSX.Element => (
+    <div className="inbox-pref">
+      <span>{label}</span>
+      <Segmented<string>
+        size="sm"
+        options={[...(auto ? [['auto', 'Auto'] as const] : []), ['weekly', 'Weekly'], ['fortnightly', '2 weeks'], ['off', 'Off']]}
+        value={prefs[key]}
+        onChange={(v) => g.setInboxPref(key, v as InboxPrefs[K])}
+      />
+    </div>
+  );
+  const toggle = (key: 'scouting' | 'nationalInjuries' | 'ranking' | 'roundups' | 'statements' | 'milestones', label: string): JSX.Element => (
+    <label className="inbox-pref">
+      <span>{label}</span>
+      <input type="checkbox" checked={prefs[key]} onChange={(e) => g.setInboxPref(key, e.target.checked)} />
+    </label>
+  );
+  return (
+    <div className="inbox-settings">
+      <button className={`mail-folder${open ? ' active' : ''}`} onClick={() => setOpen(true)} title="Which reports come in, and how often">
+        <Icon name="board" size={13} /> <span className="mail-folder-label">Inbox settings</span>
+      </button>
+      {open && (
+        <div className="hol-overlay" onClick={() => setOpen(false)}>
+        <div className="hol-card inbox-settings-card" role="dialog" aria-label="Inbox settings" onClick={(e) => e.stopPropagation()}>
+          <header className="hol-top">
+            <span className="hol-crumbs"><Icon name="inbox" size={13} /> <b>Inbox settings</b></span>
+            <button className="icon-btn" onClick={() => setOpen(false)} title="Close"><Icon name="close" size={16} /></button>
+          </header>
+          <div className="inbox-pref-head">The staff's reports</div>
+          {club && often('assistant', 'Assistant\'s report', false)}
+          {club && toggle('scouting', 'Scouting report before each match')}
+          {club && toggle('roundups', 'Matchday round-ups')}
+          {club && toggle('statements', 'Monthly accounts')}
+          {club && toggle('milestones', 'Players\' milestones')}
+          {national && often('nationalForm', 'National squad\'s club form', true)}
+          {national && toggle('nationalInjuries', 'National squad injuries')}
+          {national && toggle('ranking', 'World ranking each month')}
+          <p className="inbox-pref-note">Offers, contracts, injuries at your club and anything waiting on you always come in.</p>
+        </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** How an injured player is to be treated: the three ways, and what each costs. Once chosen, what was. */
+function TreatmentChoice({ p }: { p: number }): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  const c = g.injuryCase(p);
+  if (c === null || world.players.injuryDaysLeft[p] <= 0) return null;
+  if (c.decided) {
+    return (
+      <div className="treat-done">
+        <Icon name="check" size={13} /> {TREATMENT_NAMES[c.treatment]}
+        <span className="paper-muted"> — back {g.longDateLabel(world.day + world.players.injuryDaysLeft[p])}</span>
+      </div>
+    );
+  }
+  const weeks = treatmentWeeks(world, p);
+  const club = world.clubs[world.players.clubId[p]];
+  const risk = Math.round(relapseChance(world, club, c.days) * 100);
+  const options: Array<[Treatment, string]> = [
+    ['rush', `About ${weeks.rush} wk. Not fully fit, and a ${risk}% chance he breaks down again in each match for five weeks.`],
+    ['normal', `About ${weeks.normal} wk. Back short of match fitness.`],
+    ['rest', `About ${weeks.rest} wk. Back fit, with no risk of it going again.`],
+  ];
+  return (
+    <div className="treat">
+      <div className="paper-label">How do you want him treated?</div>
+      <div className="treat-options">
+        {options.map(([t, what]) => (
+          <button key={t} className={`treat-option ${t}`} onClick={() => g.chooseTreatment(p, t)}>
+            <b>{TREATMENT_NAMES[t]}</b>
+            <span>{what}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The scouts' plan for the match: each instruction as it is and as they would have it, and why — and the button to put it in. */
+function GamePlanSheet({ oppId, fixtureId }: { oppId: number; fixtureId: number }): JSX.Element | null {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club;
+  const plan = g.gamePlanAgainst(oppId);
+  const fixture = world.fixtures[fixtureId];
+  if (club === null || plan === null || fixture === undefined) return null;
+  const t = club.tactics;
+  const name = (opts: ReadonlyArray<readonly [number, string]>, v: number): string => opts.find(([x]) => x === v)?.[1] ?? '—';
+  const now = (what: 'serve' | 'serveTarget' | 'block' | 'shape'): string => {
+    if (what === 'serve') return name(SERVE_OPTIONS, t.serve);
+    const key = what === 'serveTarget' ? 'serveTarget' : what === 'block' ? 'blockAssignment' : 'defensiveShape';
+    const values = new Set(t.rotations.map((r) => r[key]));
+    if (values.size > 1) return 'Varies by rotation';
+    const v = t.rotations[0][key];
+    return name(what === 'serveTarget' ? SERVE_TARGET_OPTIONS : what === 'block' ? BLOCK_OPTIONS : SHAPE_OPTIONS, v);
+  };
+  const LABEL = { serve: 'Serve', serveTarget: 'Serve at', block: 'Block', shape: 'Defence' } as const;
+  const to = (what: 'serve' | 'serveTarget' | 'block' | 'shape', v: number): string =>
+    name(what === 'serve' ? SERVE_OPTIONS : what === 'serveTarget' ? SERVE_TARGET_OPTIONS : what === 'block' ? BLOCK_OPTIONS : SHAPE_OPTIONS, v);
+  const inPlace = followsPlan(t, plan);
+  const canUndo = world.planUndo?.fixtureId === fixtureId && world.planUndo.clubId === club.id;
+  return (
+    <div className="paper-report gameplan">
+      <div className="paper-label">The scouts' plan</div>
+      {plan.parts.map((part) => (
+        <div key={part.what} className="gameplan-row">
+          <b>{LABEL[part.what]}</b>
+          <span className="gameplan-change">
+            {now(part.what) === to(part.what, part.value)
+              ? <><strong>{to(part.what, part.value)}</strong> <span className="gameplan-same">as now</span></>
+              : <>{now(part.what)} → <strong>{to(part.what, part.value)}</strong></>}
+          </span>
+          <span className="gameplan-why">{part.why}</span>
+        </div>
+      ))}
+      {!fixture.played && (
+        <div className="gameplan-actions">
+          {inPlace
+            ? <span className="gameplan-done"><Icon name="check" size={13} /> The plan is in</span>
+            : <button className="paper-btn" onClick={() => g.applyGamePlan(oppId, fixtureId)}><Icon name="tactics" size={14} /> Apply to every rotation</button>}
+          {canUndo && <button className="paper-btn" onClick={() => g.undoGamePlan()}><Icon name="back" size={14} /> Undo</button>}
+        </div>
+      )}
     </div>
   );
 }

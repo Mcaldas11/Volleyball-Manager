@@ -3,6 +3,8 @@
  * the board's money for them, and the affiliate clubs.
  */
 
+import { expansionBlock, expansionOptions, fansOf } from '../../engine/world/supporters.ts';
+import { askBlock, DEMAND_TEXT, demandProgress, OWNER_KIND_NAMES, ownerMeans, ownerOf } from '../../engine/world/owners.ts';
 import type { JSX } from 'react';
 import type { Position } from '../../engine/model/positions.ts';
 import {
@@ -39,6 +41,9 @@ export function CommercialScreen(): JSX.Element {
         <StatTile label="Crowd" value={now.crowd.toLocaleString()} sub={`of ${club.arenaCapacity.toLocaleString()} seats, on an average night`} />
         <StatTile label="Gate a match" value={money(now.gate)} sub={`about ${money(now.gate * homeGames)} a season`} />
         <StatTile label="Sponsor" value={deal !== undefined ? deal.name : '—'} sub={deal !== undefined ? `${money(deal.base)} a season` : 'no deal signed'} />
+        <StatTile label="Supporters" value={fansOf(club).toLocaleString('en-GB')}
+          sub={`${(fansOf(club) / Math.max(1, club.arenaCapacity)).toFixed(1)} for every seat`} />
+        <StatTile label="Merchandise" value={money(club.finances.merchandiseIncome)} sub="a season, as the following stands" />
       </div>
       <div className="biz-grid">
         <Card title="Ticket prices" icon="coin" flush>
@@ -121,6 +126,7 @@ export function FacilitiesScreen(): JSX.Element {
           sub={project === undefined ? 'one at a time' : project.stage === 'asked' ? `the board answers by ${g.dateLabelForDay(project.until)}` : `done ${g.dateLabelForDay(project.until)}`} />
       </div>
       <div className="biz-facilities">
+        <ArenaCard />
         {FACILITY_KINDS.map((kind) => {
           const level = facilityLevel(club, kind);
           const block = g.upgradeBlock(kind);
@@ -149,6 +155,41 @@ export function FacilitiesScreen(): JSX.Element {
       </div>
       <p className="footnote">The board says yes if the club has well over the cost in the bank and they trust you. Upkeep rises a little with each level.</p>
     </>
+  );
+}
+
+/** The arena: how full the following keeps it, and a bigger one to ask for. */
+function ArenaCard(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const project = club.arenaProject;
+  const block = expansionBlock(world, club);
+  const crowd = projectedGate(world, club).crowd;
+  return (
+    <Card title="Arena" icon="club">
+      <div className="biz-level">
+        <b>{club.arenaCapacity.toLocaleString('en-GB')}</b><span className="faint">seats</span>
+        <span className="biz-level-word">{Math.round((crowd / Math.max(1, club.arenaCapacity)) * 100)}% full</span>
+      </div>
+      <Bar value={(crowd / Math.max(1, club.arenaCapacity)) * 100} wide />
+      <p className="biz-note">
+        {fansOf(club).toLocaleString('en-GB')} supporters. A bigger following than the arena fills it; a new stand pays only if they come.
+      </p>
+      {project !== undefined && (
+        <p className="biz-status">{project.stage === 'asked' ? `With the board — answer by ${g.dateLabelForDay(project.until)}` : `${project.seats.toLocaleString('en-GB')} seats being built — open ${g.dateLabelForDay(project.until)}`}</p>
+      )}
+      <div className="biz-foot biz-arena">
+        {expansionOptions(club).map((o) => (
+          <button key={o.seats} className="sm" disabled={block !== null}
+            title={block ?? `${money(o.cost)} · about ${Math.round(o.days / 30)} months' work`}
+            onClick={() => g.requestExpansion(o.seats)}>
+            <Icon name="board" size={13} /> +{o.seats.toLocaleString('en-GB')} · {money(o.cost)}
+          </button>
+        ))}
+        {block !== null && project === undefined && <span className="faint biz-why">{block}</span>}
+      </div>
+    </Card>
   );
 }
 
@@ -220,5 +261,71 @@ export function AffiliatesScreen(): JSX.Element {
         </div>
       </Card>
     </div>
+  );
+}
+
+// ---- The owner -----------------------------------------------------------------------------
+
+/** One to five, as pips. */
+function Pips({ n }: { n: number }): JSX.Element {
+  return <span className="own-pips">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= n ? 'on' : ''} />)}</span>;
+}
+
+export function OwnerScreen(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const o = ownerOf(world, club);
+  const means = ownerMeans(world, club);
+  const d = club.ownerDemand;
+  const progress = demandProgress(world, club);
+  const block = askBlock(world, club);
+  const asks = [Math.round(means * 0.4 / 10_000) * 10_000, Math.round(means * 0.75 / 10_000) * 10_000, means];
+  return (
+    <>
+      <div className="tiles">
+        <StatTile label="Owner" value={o.name} sub={`${OWNER_KIND_NAMES[o.kind]} · since ${world.startYear + o.since}`} />
+        <StatTile label="His goodwill" value={`${Math.round(o.goodwill)}`} tone={o.goodwill < 35 ? 'warn' : o.goodwill >= 70 ? 'good' : undefined}
+          sub={<><Bar value={o.goodwill} wide /></>} />
+        <StatTile label="Board confidence" value={`${Math.round(club.boardConfidence)}%`} tone={club.boardConfidence < 40 ? 'warn' : undefined} sub="he listens to the board" />
+        <StatTile label="Balance" value={money(club.finances.balance)} tone={club.finances.balance < 0 ? 'bad' : undefined} sub="in the bank" />
+      </div>
+      <div className="own-grid">
+        <Card title="The man behind the club" icon="board">
+          <KV k="Means"><Pips n={o.wealth} /></KV>
+          <KV k="Ambition"><Pips n={o.ambition} /></KV>
+          <KV k="Patience"><Pips n={o.patience} /></KV>
+          <p className="biz-note">
+            {o.kind === 'members' ? 'The members own the club: there is little money to call on, but all the patience in the world.'
+              : o.kind === 'local' ? 'A local man who loves the club: some money, and a feeling for its young players.'
+                : o.kind === 'tycoon' ? 'Big money and big ideas — and he wants to see it on the trophy shelf, soon.'
+                  : 'Investors: there is money, and they want it to make money.'}
+            {o.wealth >= 3 ? ' He will not let the club end a season in the red.' : ''}
+          </p>
+        </Card>
+        <Card title="His wish for the season" icon="trophy">
+          {d === undefined ? <Empty>He will tell you soon.</Empty> : (
+            <>
+              <p className="own-wish">{DEMAND_TEXT[d.kind]}</p>
+              <KV k="So far" cls={progress.done ? 'good' : undefined}>{progress.text}</KV>
+              <KV k="If it happens">The board's confidence up, his goodwill up</KV>
+              <KV k="If it doesn't">{o.patience <= 2 ? 'He will not forget it quickly' : 'A mark against you'}</KV>
+            </>
+          )}
+        </Card>
+        <Card title="Ask him for money" icon="coin">
+          <p className="biz-note">For the transfer budget. He gives what his means allow, to a manager he believes in — and every euro costs some of his goodwill.</p>
+          <div className="own-asks">
+            {asks.map((a) => (
+              <button key={a} className="sm" disabled={block !== null} title={block ?? `Ask him for ${money(a)}`} onClick={() => g.askOwner(a)}>
+                <Icon name="coin" size={13} /> {money(a)}
+              </button>
+            ))}
+          </div>
+          {club.ownerAsk !== undefined && <p className="biz-status">Asked for {money(club.ownerAsk.amount)} — he answers by {g.dateLabelForDay(club.ownerAsk.until)}.</p>}
+          {block !== null && club.ownerAsk === undefined && <p className="faint biz-why">{block}</p>}
+        </Card>
+      </div>
+    </>
   );
 }

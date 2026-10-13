@@ -76,6 +76,12 @@ Before submitting a change:
 - [x] Per-rotation instructions (preferred attacker, serve target, block
       assignment, defensive shape, tempo) and a defensive layout against each
       kind of attack
+- [x] A serve-receive line for every rotation: the usual three — the libero
+      and both outsides — or two, hiding the weaker-passing outside so he
+      attacks the first ball fresher while the others cover more court, or
+      four, the opposite passing too: more cover, a weaker passer to aim at,
+      and an opposite who has just passed the ball he must hit. The court
+      shows the line as it is set
 - [x] Liberos as the rules have them: one or two registered for a match, a
       reception and a defensive libero, unlimited libero changes, the libero
       never serves — a middle in zone 1 serves while his side keeps the serve
@@ -107,6 +113,20 @@ Before submitting a change:
 
 ### THE WORLD
 
+- [x] A career's achievements — wins piling up, every kind of trophy, a
+      promotion, the jobs and countries, a name the whole sport knows —
+      unlocked and dated the day they are reached; and coaching courses to go
+      back to school: the Level 2, Level 1 and Pro licences in order, and
+      clinics on each part of the game, each lifting the manager's own
+      coaching attributes
+- [x] The men's game or the women's, chosen with the career: the women's
+      world has its own map of strong nations — Türkiye, the United States,
+      China, Japan, the Dominican Republic and Thailand among the best — its
+      players named and pictured as women, a dozen centimetres shorter with
+      the reach to match, a 2.24 m net and a slower ball; the engine measures
+      them against the women's game, so its matches play out as the men's
+      do, and the screens speak of the players as women (coaches, staff and
+      owners keep their own)
 - [x] Choose any club to manage, from any of 60 nations' league pyramids — or
       take a national team job, alongside a club or on its own
 - [x] Promotion and relegation in which two divisions trade as many clubs as
@@ -128,6 +148,12 @@ Before submitting a change:
       from the club's, and an international calendar: the World Championship,
       the Olympic Games, the continental championships and the Nations League,
       with caps and a world ranking
+- [x] More for a national coach between tournaments: friendlies arranged on
+      free dates in the national team's months — three a season, caps but no
+      ranking points; a provisional squad of up to 25 that the fourteen come
+      from first, its players told how they stand when the squad is named;
+      and a club match to go and watch, to know a player better and have the
+      night's report
 - [x] Manage the team's finances: sponsorship, TV rights, gate receipts,
       wage budgets — and real bankruptcy risk. Set the ticket price, pick each
       summer's shirt sponsor (steady, performance or long-term), ask the board
@@ -136,32 +162,87 @@ Before submitting a change:
       starting six and liberos, respect a 16-player squad cap. Loans carry
       promised playing time, monthly reports, a word with the loan club's
       coach and a recall when the promise isn't kept
+- [x] An owner behind every club — its members, a local businessman, a
+      tycoon or an investment consortium, with their own means, ambition and
+      patience. Each summer he sets a wish of his own — a trophy, a profit,
+      the young players given their chance, a top-three finish — judged at the
+      season's end; he can be asked for money for transfers, a rich one
+      covers a season in the red, and now and then the club changes hands
+- [x] Supporters: every club's following grows with wins, derbies won,
+      trophies and stars signed, shrinks a little with defeats, and drifts
+      towards what its standing draws — filling the arena or leaving it half
+      empty, and selling the shirts that make the merchandise takings. Ask the
+      board for a new stand: paid up front, months in the building, worth it
+      only if the following comes
 - [x] Pre-season friendlies, arranged with any club or by the board
+- [x] Travel and a crowded calendar: a side playing away travels the day
+      before — across town is nothing, across a big country costs some
+      condition, a flight abroad more — and every match adds to a player's
+      load, which ebbs day by day: three matches in a week and he recovers
+      more slowly, so a congested run wears a side down unless it rotates.
+      The assistant warns of a busy run and of heavy legs
 - [x] Weekly training plans, individual training, and players learning new
       positions in training and on court, driven by age, potential, coaching
       quality, facilities and the player's own professionalism
+- [x] Mentoring: pair a young player (23 and under) with a veteran (28 and
+      over) — two at most each — and he comes on quicker, most of all under a
+      mentor of his own position; the mentor's professionalism and
+      determination rub off on him, and now and then one of his traits
 - [x] Youth Academy with an annual intake, including rare "golden generation"
       prospects
+- [x] Injuries treated as the manager decides, on the doctor's advice: rush
+      a player back — a third less time out, but short of fitness and, for
+      five weeks, liable to break down again in any match, less so with good
+      doctors and facilities — let the doctors do it their way, or take it
+      slowly and have him back fit and without the risk
 - [x] Player ageing, injuries with permanent career effects, and procedurally
       generated "regens" that keep the world populated across a fifty-season
       career
+- [x] A livelier market: the papers link your best players with bigger
+      clubs, and an ambitious one's head turns; a rival chasing your target
+      puts in a formal bid the selling club tells you to beat within days, or
+      he goes to them; and deadline day — the morning warning, every answer
+      given on the day, the bids flying in, the other clubs' late business
+      rounded up in the papers that night
 - [x] A player has his say on every bid for him — wants the move, would
       rather stay, or could go either way — and it shows on the offer: turn
       down a move he wanted and he may hand in a transfer request; sell one
       who wanted to stay and he will most likely refuse. A request to leave
       can be taken back, once he has settled
+- [x] Contracts with small print: appearance and title bonuses, paid with
+      the season's wages; a release clause — a player good enough for better
+      asks for one, and any club that pays it can't be refused, his or yours;
+      and a club option on one more season, taken up by 1 May. Every player
+      has an agent, one of a dozen in his country, who wants his fee on the
+      deal: a hard bargainer asks for more, has less patience and pushes his
+      clients towards a move; an easy-going one asks for less
 - [x] Staff reports in the inbox: the assistant's weekly word on the squad,
       the scouts' report on every opponent two days out, a warning before an
       unhappy player asks to leave, club milestones; and for the national
       team, the squad's club form (weekly with only a country to coach),
-      their injuries as they happen, and the world ranking each month
+      their injuries as they happen, and the world ranking each month — how
+      often each comes, or whether it comes at all, set from the inbox
+- [x] A game plan for every opponent from the scouts' report: serve their
+      weakest passer, hard against a side that passes well and safe against
+      one that doesn't, commit the block on a quick-heavy offence or spread
+      it against one that lives on its pins, dig deep or cover the short
+      court as their hitters play — each instruction beside yours, and why;
+      one button puts it into every rotation, another takes it back
 - [x] One-to-one talks with players, held as a conversation in your office:
       praise, criticism, encouragement, a promise of games that is called in
       later — each answered in the player's own words — and players kept
       unhappy asking to leave
-- [x] A dressing room with its leaders, a captain and a cohesion that grows
-      with time together, suffers with new faces and a leader's departure,
-      and is worth a little on court
+- [x] Rivalries: clubs of the same city play a derby — a full house, a
+      board that takes the result to heart, a dressing room that feels it for
+      days, the papers and the fans making the most of it — and each
+      country's two leading clubs play the classic
+- [x] A dressing room with its leaders, a captain and a vice-captain who
+      takes the armband if he goes, and a cohesion that grows with time
+      together, suffers with new faces and a leader's departure, and is worth
+      a little on court. Its groups — each country's players, the young ones,
+      the veterans — pull their members' moods together: a foreign newcomer
+      alone is isolated, an unhappy group drags the room down, a clique from
+      abroad keeps to itself, and a few veterans steady it
 - [x] Retirement case by case: most players stop in their mid-thirties, many
       play past 40, the oldest usually around 43 and a rare few towards 50.
       A player's plans are known mid-season, and he can be persuaded to stay
@@ -185,7 +266,9 @@ Before submitting a change:
 - [x] Database of 100,000+ fictitious players, generated with realistic
       positions, anthropometrics and national distributions
 - [x] Save and load a career, locally in the browser (IndexedDB) — multiple
-      careers side by side, each resumable from the main menu
+      careers side by side, each resumable from the main menu — and export
+      any of them to a file, to keep or move to another computer, and import
+      it back from the main menu
 
 ### INTERFACE
 
@@ -194,7 +277,9 @@ Before submitting a change:
       the rally, substitutes warming up and walking on through the
       substitution zone, the libero swapping in and out, defenders diving
       full length for balls — flat out on the floor, or over sideways — and
-      a medic running on to an injured player
+      a medic running on to an injured player. Two line judges at opposite
+      corners flag every ball near their lines: in, out, or off the block; and
+      the video replay goes in close, low over the spot where it came down
 - [x] A coach's bar during the match: a timeout opens the timeout screen;
       the substitutions panel holds play while it is open; clicking one of
       your players beside the court offers who could come on for him; any
@@ -228,6 +313,15 @@ Before submitting a change:
       and every match already played opens its report: the box score and
       the rotations kept with the save for good, the rally log while it is
       still in memory
+- [x] An analysis room for the season: where our attacks came down and
+      where theirs came down against us, as heat maps of the court, with the
+      balls hit long, wide and off the block counted apart; each attacker's
+      kill rate lane by lane; the side-out and break-point rates of every
+      rotation; and how the attack and the side-out ran match by match
+- [x] Any two players side by side — at a glance and every attribute, the
+      better of each marked — picked from a profile among the squad, his own
+      club and the players looked at lately; and each player's development
+      charted season by season, against his potential for your own
 - [x] Match sounds — the whistle, the ball, the crowd, the timeout hooter —
       made in the browser, with a mute button
 - [x] In-game help, a topic at a time, and a hands-on tutorial for every new
@@ -244,7 +338,9 @@ Before submitting a change:
 
 - [ ] More performance work on simulating a season (around 19 seconds a
       season on the small world from the command line, down from 31)
-- [ ] A women's game
+- [ ] Simulating off the main thread: a Web Worker was measured and set
+      aside for now — copying the world to it and back costs about as much
+      as the season's rollover it would take off the screen
 
 ## LICENSE
 

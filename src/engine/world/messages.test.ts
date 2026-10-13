@@ -125,3 +125,20 @@ test('the staff report in: the assistant every week, the scouts before a match, 
   scoutingReport(world);
   assert.ok(world.messages.length - before <= 1);
 });
+
+test('the manager has his say over the post: a report switched off stops coming, a fortnightly one comes half as often', () => {
+  const { world, club } = managed(85);
+  const ctx = newSeasonContext();
+  const count = (prefix: string): number => world.messages.filter((m) => m.subject.startsWith(prefix)).length;
+  world.inboxPrefs = { assistant: 'fortnightly', scouting: false, roundups: false };
+  for (let d = 0; d < 112; d++) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
+  const fortnightly = count('Assistant\'s report');
+  assert.ok(fortnightly >= 6 && fortnightly <= 8, `${fortnightly} in 16 weeks`);
+  assert.equal(count('Scouting report'), 0);
+  assert.equal(count('Matchday'), 0);
+  world.inboxPrefs = { assistant: 'off' };
+  const before = count('Assistant\'s report');
+  for (let d = 0; d < 28; d++) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
+  assert.equal(count('Assistant\'s report'), before);
+  assert.ok(count('Scouting report') > 0, 'back on by default');
+});

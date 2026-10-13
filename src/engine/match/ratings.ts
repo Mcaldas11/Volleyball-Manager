@@ -18,9 +18,13 @@ import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position, positionalEffectiveness } from '../model/positions.ts';
 import { hasTrait, Trait } from '../model/traits.ts';
 
-/** Reference anthropometrics for a top-flight men's league, used to normalise. */
+/** Reference anthropometrics for a top-flight men's league, used to normalise —
+ *  and how much lower a women's league's are: the net is 19 cm lower too. */
 const REF_SPIKE_REACH = 345;
 const REF_BLOCK_REACH = 330;
+/** A woman's spike reach runs about 29 cm lower, her block reach about 26 — see playerGen.ts. */
+export const WOMEN_SPIKE_GAP = 29;
+export const WOMEN_BLOCK_GAP = 26;
 
 const A = ATTR_INDEX;
 
@@ -111,8 +115,8 @@ export function computeRatings(
   const technique = g(A.spikeTechnique);
   const control = g(A.ballControl);
 
-  const spikeEdge = store.spikeReachCm[idx] - REF_SPIKE_REACH;
-  const blockEdge = store.blockReachCm[idx] - REF_BLOCK_REACH;
+  const spikeEdge = store.spikeReachCm[idx] - (REF_SPIKE_REACH - (store.women ? WOMEN_SPIKE_GAP : 0));
+  const blockEdge = store.blockReachCm[idx] - (REF_BLOCK_REACH - (store.women ? WOMEN_BLOCK_GAP : 0));
 
   // Reach converts to rating points at roughly 0.7 per cm — meaningful but not
   // dominant, since timing and technique decide most contested balls.

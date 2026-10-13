@@ -7,7 +7,7 @@ import type { Position } from '../../engine/model/positions.ts';
 import type { Competition, ManagerProfile } from '../../engine/world/world.ts';
 import { NATIONS, nationsIn, type Confederation } from '../../engine/world/nations.ts';
 import {
-  abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, StarMeter,
+  abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, Segmented, StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame, type CareerMode } from '../state.ts';
@@ -183,10 +183,16 @@ export function LoadGameList(): JSX.Element {
                   <tr key={s.id} className="clickable" onClick={() => { void g.loadGame(s.id); }}>
                     <td className="strong">{s.managerName}</td>
                     <td className="dim"><FlagByCode code={s.nationCode} /> {s.nationCode}</td>
-                    <td>{s.clubNationCode !== '' && <FlagByCode code={s.clubNationCode} />} {s.clubName}</td>
+                    <td>
+                      {s.clubNationCode !== '' && <FlagByCode code={s.clubNationCode} />} {s.clubName}
+                      {s.gender === 'women' && <span className="save-game-tag">Women's</span>}
+                    </td>
                     <td className="num dim">{s.inGameDate}</td>
                     <td className="num dim">{new Date(s.updatedAt).toLocaleString()}</td>
-                    <td className="num">
+                    <td className="num menu-save-actions">
+                      <button className="sm" title="Download this career as a file" onClick={(e) => { e.stopPropagation(); void g.exportSavedCareer(s.id); }}>
+                        Export
+                      </button>
                       <button
                         className="sm danger"
                         onClick={(e) => {
@@ -209,7 +215,14 @@ export function LoadGameList(): JSX.Element {
 
       <div className="wizard-actions">
         <button onClick={() => g.goToMenu('main')}><Icon name="back" size={14} /> Back</button>
+        <span className="flex-spacer" />
+        <label className={`btn-like${g.busy ? ' disabled' : ''}`} title="Bring in a career exported from this game">
+          <Icon name="upload" size={14} /> Import a career file
+          <input type="file" accept=".vmcareer,.json,application/gzip" hidden disabled={g.busy}
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f !== undefined) void g.importCareerFile(f); }} />
+        </label>
       </div>
+      {g.notice !== '' && <p className="menu-notice">{g.notice}</p>}
     </Wizard>
   );
 }
@@ -315,6 +328,11 @@ const CAREER_MODES: ReadonlyArray<{ id: CareerMode; title: string; text: string;
   { id: 'both', icon: 'trophy', title: 'Club & national team', text: 'Both at once: the club through the season, the nation in the summer and the spring.' },
 ];
 
+const GAMES: ReadonlyArray<{ id: 'men' | 'women'; title: string; text: string }> = [
+  { id: 'men', title: "Men's volleyball", text: "The men's game: its leagues, its national teams, a 2.43 m net." },
+  { id: 'women', title: "Women's volleyball", text: "The women's game: its own map of strong nations, its players, a 2.24 m net." },
+];
+
 const WORLD_SCALES: ReadonlyArray<{ id: 'small' | 'standard' | 'large'; title: string; text: string }> = [
   { id: 'small', title: 'Small', text: 'Top divisions only — the fastest to simulate.' },
   { id: 'standard', title: 'Standard', text: 'Full pyramids in the major nations.' },
@@ -324,6 +342,7 @@ const WORLD_SCALES: ReadonlyArray<{ id: 'small' | 'standard' | 'large'; title: s
 export function WorldSetup(): JSX.Element {
   const g = useGame();
   const [scale, setScale] = useState<'small' | 'standard' | 'large'>('standard');
+  const [gender, setGender] = useState<'men' | 'women'>('men');
   const [seed, setSeed] = useState('20260728');
   const [building, setBuilding] = useState(false);
 
@@ -331,14 +350,19 @@ export function WorldSetup(): JSX.Element {
     setBuilding(true);
     // Yield a frame so the button state paints before the world is built.
     setTimeout(() => {
-      g.newGame(scale, Number(seed) || 1);
+      g.newGame(scale, Number(seed) || 1, gender);
       setBuilding(false);
     }, 30);
   };
 
   return (
     <Wizard step={1} title="Set up the world" subtitle="Choose what you will manage and how large a world to generate.">
-      <Card title="Your Career" icon="career">
+      <Card title="Your Career" icon="career"
+        actions={(
+          <span className="game-pick" title={GAMES.find((m) => m.id === gender)?.text}>
+            <Segmented<'men' | 'women'> size="sm" options={GAMES.map((m) => [m.id, m.title] as const)} value={gender} onChange={(v) => { if (!building) setGender(v); }} />
+          </span>
+        )}>
         <div className="scale-options">
           {CAREER_MODES.map((m) => (
             <button

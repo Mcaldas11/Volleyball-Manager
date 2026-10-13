@@ -172,3 +172,33 @@ export function flagImageUrl(nationIndex: number): string | null {
   const n = NATIONS[nationIndex];
   return n !== undefined ? flagImageUrlForCode(n.code) : null;
 }
+
+// ---- The women's game -----------------------------------------------------------------------
+
+/**
+ * Each nation's standing in the women's game, on the same 0-100 scale — its
+ * long-run place in women's volleyball, which is a different map from the
+ * men's: Türkiye, the United States, China, Japan, the Netherlands, the
+ * Dominican Republic and Thailand stronger; Iran and Qatar much weaker.
+ */
+const WOMEN_STRENGTH: Readonly<Record<string, number>> = {
+  POL: 92, ITA: 97, FRA: 82, SLO: 74, SRB: 92, NED: 89, GER: 86, BUL: 80, UKR: 82, TUR: 96, RUS: 90, CZE: 81,
+  GRE: 72, BEL: 84, FIN: 66, POR: 68, ESP: 74, CRO: 80, ROU: 74, SVK: 72, EST: 62, LAT: 60, AUT: 68, SUI: 70,
+  DEN: 56, SWE: 78, NOR: 54, HUN: 72, ISR: 60, MKD: 58, BIH: 66, MNE: 60, BRA: 96, ARG: 80, CHI: 66, COL: 78,
+  VEN: 66, PER: 76, URU: 56, USA: 95, CUB: 76, CAN: 85, MEX: 76, PUR: 80, DOM: 87, JPN: 93, IRI: 62, CHN: 94,
+  KOR: 80, QAT: 40, AUS: 66, IND: 58, THA: 86, KAZ: 74, EGY: 70, TUN: 62, MAR: 58, ALG: 60, CMR: 74, RSA: 46,
+};
+
+/** Which game the world plays: set as a world is made or loaded. */
+let womensGame = false;
+
+export function setNationsGame(gender: 'men' | 'women'): void {
+  womensGame = gender === 'women';
+}
+
+/** A nation's volleyball development in the game being played. */
+export function nationStrength(n: number): number {
+  const def = NATIONS[n];
+  if (def === undefined) return 0;
+  return womensGame ? WOMEN_STRENGTH[def.code] ?? Math.max(30, def.strength - 8) : def.strength;
+}

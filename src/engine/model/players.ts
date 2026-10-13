@@ -123,6 +123,8 @@ export const POSITION_SLOTS = 5;
 export class PlayerStore {
   count = 0;
   private capacity: number;
+  /** The women's game: every player in the store is a woman — names, build and the engine's yardsticks follow. */
+  women = false;
 
   readonly names = new StringTable();
 

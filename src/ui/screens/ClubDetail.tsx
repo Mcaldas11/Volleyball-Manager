@@ -1,4 +1,5 @@
 import { useState, type JSX, type ReactNode } from 'react';
+import { fansOf } from '../../engine/world/supporters.ts';
 import { compareTableRows, type Club } from '../../engine/model/club.ts';
 import { POSITIONS, type Position } from '../../engine/model/positions.ts';
 import { StaffRole } from '../../engine/model/staff.ts';
@@ -11,7 +12,7 @@ import {
   clubTrophies, contractEndSeason, DAYS_PER_SEASON, type Fixture, type World,
 } from '../../engine/world/world.ts';
 import {
-  abilityClass, Bar, Card, ClubCrest, clubThemeStyle, Empty, Flag, FormGuide, initials, KV, managerPhotoUrl, money,
+  abilityClass, Bar, Card, ClubCrest, ClubLink, clubThemeStyle, Empty, Flag, FormGuide, initials, KV, managerPhotoUrl, money,
   PersonFace, PlayerFace, Pos, Segmented, StarMeter,
 } from '../components.tsx';
 import { HonourList, honourOf, type Honour } from '../honours.tsx';
@@ -181,6 +182,16 @@ function AboutCard({ club }: { club: Club }): JSX.Element {
       <KV k="Reputation">{reputationWord(club.reputation)}</KV>
       <KV k="Arena"><span className="ov-ellipsis" title={club.arenaName}>{club.arenaName}</span></KV>
       <KV k="Capacity">{club.arenaCapacity.toLocaleString()}</KV>
+      <KV k="Supporters">{fansOf(club).toLocaleString('en-GB')}</KV>
+      {g.rivalsOf(club.id).length > 0 && (
+        <KV k="Rivals">
+          <span className="ov-rivals">
+            {g.rivalsOf(club.id).slice(0, 3).map((r) => (
+              <span key={r.clubId} title={r.kind === 'derby' ? 'City derby' : 'The classic'}><ClubLink id={r.clubId} short /></span>
+            ))}
+          </span>
+        </KV>
+      )}
     </OvCard>
   );
 }

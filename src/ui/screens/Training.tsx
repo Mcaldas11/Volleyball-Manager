@@ -5,6 +5,7 @@
  * and each player's own programme, set by hand or left to the assistant.
  */
 
+import { MENTEE_MAX_AGE, MENTOR_MIN_AGE } from '../../engine/world/mentoring.ts';
 import { useState, type JSX } from 'react';
 import { familiarityLabel, POSITION_NAMES, POSITIONS, type Position } from '../../engine/model/positions.ts';
 import {
@@ -286,6 +287,41 @@ function PositionLearning({ p }: { p: number }): JSX.Element {
   );
 }
 
+/**
+ * A young player's mentor, picked from the veterans who have room for him; a
+ * veteran's, who he mentors. Nothing for anyone else.
+ */
+function MentorCell({ p }: { p: number }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const age = store.ageOn(p, world.year, 181);
+  const mentees = g.menteesOf(p);
+  if (age > MENTEE_MAX_AGE) {
+    return mentees.length > 0
+      ? <span className="tr-mentoring" title="Mentoring">{mentees.map((m) => store.shortName(m)).join(', ')}</span>
+      : <span className="faint">—</span>;
+  }
+  const mentor = g.mentorOf(p);
+  const options = g.mentorCandidates(p);
+  return (
+    <Dropdown<number>
+      size="sm"
+      className="tr-pick"
+      value={mentor ?? -1}
+      onChange={(v) => g.setMentor(p, v < 0 ? null : v)}
+      options={[
+        { value: -1, label: 'None' },
+        ...options.map((m) => ({
+          value: m,
+          label: store.shortName(m),
+          hint: store.position[m] === store.position[p] ? 'same position' : POSITION_NAMES[store.position[m] as Position],
+        })),
+      ]}
+    />
+  );
+}
+
 function IndividualTraining(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -340,6 +376,7 @@ function IndividualTraining(): JSX.Element {
               <th>Focus</th>
               <th>Load</th>
               <th title="A position he is learning in training — playing there teaches it too">New position</th>
+              <th title={`A veteran (${MENTOR_MIN_AGE}+) taking a young player (${MENTEE_MAX_AGE} and under) under his wing`}>Mentor</th>
               <th>Ability</th>
               <th className="num" title="Ability gained this season">Season</th>
             </tr>
@@ -378,6 +415,7 @@ function IndividualTraining(): JSX.Element {
                     />
                   </td>
                   <td><PositionLearning p={p} /></td>
+                  <td><MentorCell p={p} /></td>
                   <td>
                     <span className="ability-cell">
                       <StarMeter value={ca} size={11} />

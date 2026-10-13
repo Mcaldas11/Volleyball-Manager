@@ -56,6 +56,12 @@ const REFEREE_LOOK: Look = {
   libero: false, trim: '#1b2130', number: 0, skin: '#d9a97c', hair: '#2b1d14', hairStyle: 0, trousers: true,
 };
 
+/** A line judge: dark polo, dark trousers, flag in hand. */
+const LINE_JUDGE_LOOK: Look = {
+  kit: { shirt: '#2a3448', shorts: '#151a24', libero: '#2a3448' },
+  libero: false, trim: '#e8c547', number: 0, skin: '#c99a73', hair: '#1a1410', hairStyle: 1, trousers: true,
+};
+
 /** The physio: a white polo trimmed in red, dark trousers. */
 const MEDIC_LOOK: Look = {
   kit: { shirt: '#f4f6f8', shorts: '#2a3140', libero: '#f4f6f8' },
@@ -81,6 +87,24 @@ export function courtCamera(width: number, height: number, camera = new Perspect
 }
 
 // ---- Shared shapes -----------------------------------------------------------------
+
+/** A line judge's flag: red and yellow quarters, as the FIVB has them. */
+function flagTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 32;
+  c.height = 32;
+  const ctx = c.getContext('2d');
+  if (ctx !== null) {
+    ctx.fillStyle = '#e8c547';
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = '#d63a3a';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillRect(16, 16, 16, 16);
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  return t;
+}
 
 /** A limb from its joint (z = 0) down to z = -length, rounded at both ends and
  *  tapering from radius `r0` to `r1`. */
@@ -270,6 +294,22 @@ class Figure {
       knee.add(ankle);
       part(g.shoe, shoe, ankle, 0, 0.055, -BONES.ankle + 0.038);
     });
+  }
+
+  /** A line judge's flag in the right hand: a short stick on along the forearm, red and yellow at its end. */
+  holdFlag(): void {
+    const hand = this.elbows[1];
+    const flag = new Group();
+    flag.position.set(0, 0.01, -BONES.forearm - BONES.hand + 0.02);
+    const stick = new Mesh(new CylinderGeometry(0.008, 0.008, 0.42, 6).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: '#2b2b2b' }));
+    stick.position.z = -0.16;
+    flag.add(stick);
+    const cloth = new Mesh(new PlaneGeometry(0.2, 0.28), new MeshStandardMaterial({ map: flagTexture(), side: DoubleSide, roughness: 0.8 }));
+    cloth.rotation.y = Math.PI / 2;
+    cloth.position.set(0, 0.1, -0.24);
+    cloth.castShadow = true;
+    flag.add(cloth);
+    hand.add(flag);
   }
 
   restyle(look: Look): void {
@@ -529,6 +569,8 @@ export class Court3D {
   private readonly camera = new PerspectiveCamera();
   private readonly figures = new Map<number, Figure>();
   private readonly referee = new Figure(REFEREE_LOOK);
+  /** The two line judges, flags in hand. */
+  private readonly lineJudges: [Figure, Figure] = [new Figure(LINE_JUDGE_LOOK), new Figure(LINE_JUDGE_LOOK)];
   /** Each side's coach, made the first time the court is drawn. */
   private coaches: [Figure, Figure] | null = null;
   /** The physio, made the first time one is on. */
@@ -587,6 +629,10 @@ export class Court3D {
     this.scene.add(buildNet());
     this.scene.add(buildRefereeStand());
     this.scene.add(this.referee.root);
+    for (const j of this.lineJudges) {
+      j.holdFlag();
+      this.scene.add(j.root);
+    }
 
     this.ball = new Mesh(
       new SphereGeometry(0.13, 28, 18),
@@ -734,6 +780,7 @@ export class Court3D {
     }
 
     this.referee.pose(motion.referee);
+    this.lineJudges.forEach((j, i) => j.pose(motion.lineJudges[i]));
     if (this.crowd !== null) {
       this.crowd.react(motion.cheer);
       this.crowd.update(now);

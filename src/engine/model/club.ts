@@ -9,6 +9,8 @@
  * point and a real constraint.
  */
 
+import type { ArenaProject, FanRef } from '../world/supporters.ts';
+import type { Owner, OwnerAsk, OwnerDemand } from '../world/owners.ts';
 import { defaultTactics, type Formation, type TeamTactics } from '../match/tactics.ts';
 import type { SavedTactic } from './tacticSlots.ts';
 import type { TacticRead } from './tacticRead.ts';
@@ -40,6 +42,8 @@ export interface Finances {
   /** Running season totals, reset at the season rollover. */
   seasonIncome: number;
   seasonExpenditure: number;
+  /** Appearance and title bonuses earned this season, paid with the wages. */
+  bonuses?: number;
 
   /** Consecutive seasons finishing in the red. Three usually means the end. */
   seasonsInDebt: number;
@@ -115,6 +119,18 @@ export interface Club {
   coachSince: number;
   /** The captain the manager picked — absent: the dressing room's first leader. See dressingRoom.ts. */
   captain?: number;
+  /** His vice-captain: wears the armband when the captain goes. */
+  viceCaptain?: number;
+  /** Who owns the club, what he wants this season, and the manager's request for money — see owners.ts. */
+  owner?: Owner;
+  ownerDemand?: OwnerDemand;
+  ownerAsk?: OwnerAsk;
+  ownerRefusedUntil?: number;
+  /** Its following, and what it started at; a new stand being asked for or built — see supporters.ts. */
+  fans?: number;
+  fanRef?: FanRef;
+  arenaProject?: ArenaProject;
+  arenaRefusedUntil?: number;
   /** The manager's ticket price, a multiplier on the normal one — see commercial.ts. Absent: normal. */
   ticketPrice?: number;
   /** The sponsor signed for the season — see commercial.ts. */

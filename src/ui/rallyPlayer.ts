@@ -8,7 +8,7 @@
 
 import type { RallyContact, Shot } from '../engine/match/engine.ts';
 import type { PlayCall } from '../engine/match/tactics.ts';
-import { MONSTER_SPIKE_KMH } from '../engine/match/highlights.ts';
+import { monsterSpikeKmh } from './gameGender.ts';
 import type { Beat, Radar, Scene } from './matchCourt.ts';
 
 /** A callout over the court: what happened, whose good news it is, and the radar's reading. */
@@ -81,7 +81,7 @@ export function bigPlayFor(callout: Beat['callout']): BigPlay | null {
   if (kind === 'kill') {
     const power = shot !== 'tip' && shot !== 'roll';
     const byPlay = play !== undefined ? PLAY_CALLOUTS[play] : undefined;
-    const text = power && speed !== undefined && speed >= MONSTER_SPIKE_KMH ? 'MONSTER SPIKE!'
+    const text = power && speed !== undefined && speed >= monsterSpikeKmh() ? 'MONSTER SPIKE!'
       : pick(power && byPlay !== undefined ? byPlay : byShot ?? options);
     return { text, team, reading: 'strike', speed, height };
   }

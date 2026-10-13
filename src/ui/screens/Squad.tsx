@@ -1,4 +1,6 @@
 import { useState, type JSX } from 'react';
+import { PlayerCompare } from './Compare.tsx';
+import { AbilityChart } from '../abilityChart.tsx';
 import { feeText, youthRound, youthRoundDay, youthTable, type YouthLeague } from '../../engine/world/youth.ts';
 import { Dropdown } from '../dropdown.tsx';
 import {
@@ -6,7 +8,7 @@ import {
   type AttributeName,
 } from '../../engine/model/attributes.ts';
 import {
-  MAX_SQUAD, POSITION_NAMES, POSITIONS, familiarityLabel, Position,
+  MAX_SQUAD, POSITION_NAMES, POSITION_SHORT, POSITIONS, familiarityLabel, Position,
 } from '../../engine/model/positions.ts';
 import { PlayerFlag, type PlayerStore } from '../../engine/model/players.ts';
 import { TRAIT_HINTS, TRAIT_NAMES, traitsOf } from '../../engine/model/traits.ts';
@@ -17,6 +19,7 @@ import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/r
 import { accoladeTitle, playerAccolades } from '../../engine/world/accolades.ts';
 import { STAFF_ROLE_NAMES } from '../../engine/model/staff.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
+import { AGENT_STYLE_NAMES, agentOf, extrasOf, optionBlock } from '../../engine/world/contractTerms.ts';
 import {
   abilityClass, attrClass, Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
   RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useDismiss, useSort,
@@ -440,6 +443,34 @@ export function MarketTags({ p, borrowed }: { p: number; borrowed: boolean }): J
  * Own players are shown exact attributes — a coach knows their own squad.
  * Anyone else goes through the scouting screen, where the numbers are ranges.
  */
+/** Compare him with another: someone looked at lately, one of the squad, one of his own club. */
+function CompareMenu({ p }: { p: number }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const seen = new Set<number>([p]);
+  const option = (q: number, group: string): { value: number; label: string; text: string; hint: string; group: string } => {
+    seen.add(q);
+    return { value: q, label: store.fullName(q), text: store.fullName(q), hint: POSITION_SHORT[store.position[q] as Position], group };
+  };
+  const options = [
+    ...g.recentPlayers.filter((q) => !seen.has(q) && store.isActive(q)).map((q) => option(q, 'Looked at lately')),
+    ...(g.club?.players ?? []).filter((q) => !seen.has(q)).map((q) => option(q, 'Your squad')),
+    ...(store.clubId[p] >= 0 ? world.clubs[store.clubId[p]].players : []).filter((q) => !seen.has(q)).map((q) => option(q, 'His club')),
+  ];
+  return (
+    <Dropdown<number>
+      className="profile-compare"
+      value={null}
+      placeholder="Compare"
+      searchable
+      menuWidth={260}
+      options={options}
+      onChange={(q) => g.compareWith(q)}
+    />
+  );
+}
+
 export function PlayerDetail(): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
@@ -447,6 +478,7 @@ export function PlayerDetail(): JSX.Element | null {
   const p = g.selectedPlayer;
   const [tab, setTab] = useState<ProfileTab>('overview');
   if (p === null) return null;
+  if (g.compareTo !== null && g.compareTo !== p) return <PlayerCompare a={p} b={g.compareTo} />;
 
   const age = store.ageOn(p, world.year, 181);
   const club = store.clubId[p] >= 0 ? world.clubs[store.clubId[p]] : null;
@@ -477,6 +509,11 @@ export function PlayerDetail(): JSX.Element | null {
   const seasonsLeft = contractEnds - world.season + 1;
   const expiring = club !== null && contractEnds <= world.season;
   const renewalTalks = g.talksWith(p, 'renewal');
+  // The small print: the club's own on ours, a release clause on anyone's; and who speaks for him.
+  const extras = club !== null ? extrasOf(world, p) : undefined;
+  const clause = g.releaseClause(p);
+  const agent = agentOf(world, p);
+  const optionNow = isOwn && extras?.option === true ? optionBlock(world, p) : 'none';
   const plan = g.retirementPlan(p);
   const retiring = plan !== undefined && plan.persuaded !== true;
   // The message he came to see the manager about, where the talks are.
@@ -625,6 +662,7 @@ export function PlayerDetail(): JSX.Element | null {
               )}
             </>
           )}
+          <CompareMenu p={p} />
           <button onClick={() => g.select(null)}><Icon name="close" size={14} /> Close</button>
         </div>
       </div>
@@ -641,7 +679,8 @@ export function PlayerDetail(): JSX.Element | null {
         />
         <StatTile label="Condition" value={`${store.condition[p]}%`} sub={<Bar value={store.condition[p]} wide />} />
         <StatTile label="Morale" value={<Morale value={store.morale[p]} />} sub={<Bar value={store.morale[p]} wide />} />
-        <StatTile label="Status" value={<Status store={store} i={p} />} />
+        <StatTile label="Status" value={<Status store={store} i={p} />}
+          sub={g.atRisk(p) ? <span className="warn-text">rushed back — may break down</span> : undefined} />
         <StatTile
           label="Average rating"
           value={<RatingBadge value={averageRating(season)} size="lg" />}
@@ -663,7 +702,14 @@ export function PlayerDetail(): JSX.Element | null {
         ))}
       </div>
 
-      {tab === 'stats' && <SeasonStatsCard world={world} p={p} form={form} />}
+      {tab === 'stats' && (
+        <div className="profile-stats-grid">
+          <SeasonStatsCard world={world} p={p} form={form} />
+          <Card title="Development" icon="stats" className="profile-dev">
+            <AbilityChart p={p} potential={isOwn ? store.potentialAbility[p] : undefined} />
+          </Card>
+        </div>
+      )}
 
       {tab === 'overview' && (
         <div className="profile-grid">
@@ -745,6 +791,34 @@ export function PlayerDetail(): JSX.Element | null {
             )}
             <KV k="Market value">{money(store.value[p])}</KV>
             <KV k="Wage">{money(store.wage[p])}</KV>
+            {clause !== null && <KV k="Release clause">{money(clause)}</KV>}
+            {extras !== undefined && ((extras.appearanceBonus ?? 0) > 0 || (extras.titleBonus ?? 0) > 0) && (
+              <KV k="Bonuses">
+                {[
+                  (extras.appearanceBonus ?? 0) > 0 ? `${money(extras.appearanceBonus!)} a match` : null,
+                  (extras.titleBonus ?? 0) > 0 ? `${money(extras.titleBonus!)} a trophy` : null,
+                ].filter((x) => x !== null).join(' · ')}
+              </KV>
+            )}
+            {extras?.option === true && (
+              <KV k="Club option">
+                <span className="kv-action">
+                  One more season
+                  {isOwn && optionNow === null && (
+                    <button className="sm" onClick={() => g.takeUpOption(p)}>Take it up</button>
+                  )}
+                  {isOwn && optionNow !== null && optionNow !== 'none' && <span className="faint" title={optionNow}>· not yet</span>}
+                </span>
+              </KV>
+            )}
+            {g.mentorOf(p) !== null && <KV k="Mentor"><span className="player-link" onClick={() => g.select(g.mentorOf(p)!)}>{store.fullName(g.mentorOf(p)!)}</span></KV>}
+            {g.menteesOf(p).length > 0 && (
+              <KV k="Mentoring">{g.menteesOf(p).map((m) => store.shortName(m)).join(', ')}</KV>
+            )}
+            <KV k="Agent">
+              <span title={agent.agency}>{agent.name}</span>
+              <span className={agent.style === 'hardball' ? 'warn-text' : 'faint'}> · {AGENT_STYLE_NAMES[agent.style]}</span>
+            </KV>
             <InterestedClubs p={p} />
             <KV k="Nationality"><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</KV>
             {secondNation(world, p) >= 0 && (

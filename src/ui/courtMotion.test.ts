@@ -4,7 +4,7 @@ import { MatchFormat, MatchSimulator } from '../engine/match/engine.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
-import { CourtMotion, REFEREE_STAND, type Body, type Signal } from './courtMotion.ts';
+import { CourtMotion, LINE_JUDGES, lineCall, REFEREE_STAND, type Body, type Signal } from './courtMotion.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
 import { rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
 import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL } from './playerRig.ts';
@@ -285,4 +285,46 @@ test('a dive takes the whole body to the floor: flat out, head and hands low and
   // Sideways: over towards the side he rolls to.
   const sprawl = jointPositions(buildRig({ ...STAND, roll: 1.3 }, STILL));
   assert.ok(sprawl.head[0] > 1.2 && sprawl.head[2] < 0.7);
+});
+
+test('the line judges flag every ball near their lines: down for in, up for out, a hand on top for a touch', () => {
+  assert.equal(lineCall({ x: 4.3, y: -5 }, false), 'in');
+  assert.equal(lineCall({ x: 0, y: -0.5 }, false), null, 'well inside: nothing to signal');
+  assert.equal(lineCall({ x: 5.2, y: 3 }, true), 'out');
+  assert.equal(lineCall({ x: 1, y: 9.6 }, false), 'touch', 'out, but the point to the hitter: off the block');
+  // Through real rallies: a moment after each ball comes down, the judge of that half has his flag where it should be.
+  const { sim, store, teamOf } = liveMatch(31);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  let now = 0;
+  const run = (ms: number): void => {
+    const end = now + ms;
+    while (now < end - 1e-6) {
+      const dt = Math.min(1000 / 60, end - now);
+      now += dt;
+      m.step(dt / 1000, now);
+    }
+  };
+  const seen = new Set<string>();
+  for (let i = 0; i < 60; i++) {
+    const pre = sim.snapshot();
+    m.scene(setupScene(pre, pre.serving, store.position, 0), now);
+    run(900);
+    const entry = sim.step();
+    if (entry === null) break;
+    m.lastLineCall = null;
+    for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner)) {
+      m.scene(beat, now);
+      run(beat.ms);
+    }
+    run(450);
+    // (Set by the motion as the ball comes down — not by this loop.)
+    const call = m.lastLineCall as CourtMotion['lastLineCall'];
+    if (call === null) continue;
+    seen.add(call.call);
+    const hand = m.lineJudges[call.judge].rig.arms[1].x;
+    if (call.call === 'in') assert.ok(hand < 1.4, `flag down for in (${hand.toFixed(2)})`);
+    else assert.ok(hand > 2.2, `flag up for ${call.call} (${hand.toFixed(2)})`);
+  }
+  assert.ok(seen.has('in') && seen.has('out'), `signals seen: ${[...seen].join(', ')}`);
+  assert.equal(LINE_JUDGES.length, 2);
 });

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import { TRAVEL_COST, tripTo, type Trip } from '../../engine/world/fatigue.ts';
+import { fixtureRivalry } from '../../engine/world/rivals.ts';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import { INJURY_NAMES, type PlayerStore } from '../../engine/model/players.ts';
 import {
@@ -19,7 +21,7 @@ import type { Kit } from '../court3d.ts';
 import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import {
-  ATTACKER_OPTIONS, BLOCK_OPTIONS, COMBINATION_OPTIONS, DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS,
+  ATTACKER_OPTIONS, BLOCK_OPTIONS, COMBINATION_OPTIONS, DEFENSE_OPTIONS, OFFENSE_OPTIONS, RECEPTION_OPTIONS, SERVE_OPTIONS,
   SERVE_TARGET_OPTIONS, SHAPE_OPTIONS, SliderField, TEMPO_OPTIONS,
 } from './Manage.tsx';
 import {
@@ -87,7 +89,7 @@ async function animateRally(
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf);
+  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf, entry.passers);
   await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar, (beat) => {
     if (beat.actor !== null) playHit(beat.callout !== null || beat.radar !== undefined);
   });
@@ -95,11 +97,15 @@ async function animateRally(
   playCrowd(entry.winner === 0 ? 0.9 : 0.35);
 }
 
+/** A side's trip to the match, as the team sheet says it. */
+const TRIP_WORDS: Readonly<Record<Trip, string>> = { short: 'Short trip', long: 'Long trip', abroad: 'Flew in' };
+
 /** How full the stand is: a big competition draws a crowd, a big match fills the place. */
-export function crowdFor(world: World, competitionId: number, importance: number): number {
+export function crowdFor(world: World, competitionId: number, importance: number, derby = false): number {
   const comp = world.competitions[competitionId];
   const draw = comp !== undefined ? Math.min(1, comp.reputation / 8000) : 0.7;
-  return Math.min(1, 0.42 + 0.38 * draw + 0.3 * importance);
+  // A derby sells out.
+  return derby ? 1 : Math.min(1, 0.42 + 0.38 * draw + 0.3 * importance);
 }
 
 /** A big moment flashed over the court — with, for a spike put away or an
@@ -187,6 +193,16 @@ function LineupSetup(): JSX.Element {
     ? Math.round(starters.reduce((s, p) => s + store.currentAbility[p], 0) / starters.length)
     : 0;
   const oppAvg = bestSixAverage(opponent.players, store, (p) => g.matchAvailable(p));
+  // How far each side came — a club match only: national sides gather days before.
+  const tripTag = (clubId: number): JSX.Element | null => {
+    const trip = md.national === null ? tripTo(world, md.fixture, clubId) : null;
+    if (trip === null || TRAVEL_COST[trip] === 0) return null;
+    return (
+      <span className="md-banner-trip" title={`Travelled the day before: ${TRAVEL_COST[trip]} condition off every player`}>
+        <Icon name="clock" size={11} /> {TRIP_WORDS[trip]} −{TRAVEL_COST[trip]}
+      </span>
+    );
+  };
 
   return (
     <div className="md-setup">
@@ -196,6 +212,7 @@ function LineupSetup(): JSX.Element {
           <div className="md-banner-team-text">
             <span className="md-banner-name">{home.name}</span>
             <span className="md-banner-tag">Home{md.userIsHome ? ' · Your team' : ''}</span>
+            {tripTag(md.fixture.home)}
           </div>
         </div>
         <div className="md-banner-mid">
@@ -207,6 +224,7 @@ function LineupSetup(): JSX.Element {
           <div className="md-banner-team-text">
             <span className="md-banner-name">{away.name}</span>
             <span className="md-banner-tag">Away{!md.userIsHome ? ' · Your team' : ''}</span>
+            {tripTag(md.fixture.away)}
           </div>
           <SideCrest side={away} size={46} />
         </div>
@@ -1102,6 +1120,7 @@ function LiveRotations({ tactics, current }: { tactics: TeamTactics; current: nu
       </div>
       <div className="grid2 timeout-fields lv-rot-fields">
         <ChoiceField label="Preferred attacker" value={r.preferredAttacker} onChange={(v) => { r.preferredAttacker = v; g.touch(); }} options={ATTACKER_OPTIONS} />
+        <ChoiceField label="Serve receive" value={r.receivers ?? 3} onChange={(v) => { r.receivers = v === 3 ? undefined : v; g.touch(); }} options={RECEPTION_OPTIONS} />
         <ChoiceField label="Serve target" value={r.serveTarget} onChange={(v) => { r.serveTarget = v; g.touch(); }} options={SERVE_TARGET_OPTIONS} />
         <ChoiceField label="Block assignment" value={r.blockAssignment} onChange={(v) => { r.blockAssignment = v; g.touch(); }} options={BLOCK_OPTIONS} />
         <ChoiceField label="Defensive shape" value={r.defensiveShape} onChange={(v) => { r.defensiveShape = v; g.touch(); }} options={SHAPE_OPTIONS} />
@@ -1229,6 +1248,8 @@ function LiveMatchView(): JSX.Element {
   }, [md.timeoutActive, timeoutSecondsLeft]);
 
   const [radar, setRadar] = useState<(Radar & { key: number }) | null>(null);
+  /** The video's close-up on where the ball came down, while it runs. */
+  const [varZoom, setVarZoom] = useState<{ x: number; y: number } | null>(null);
   const radarTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const triggerRadar = (r: Radar): void => {
     setRadar({ ...r, key: Date.now() });
@@ -1431,12 +1452,16 @@ function LiveMatchView(): JSX.Element {
           const beats = rallyBeats(review.log, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceNow);
           const slow = Math.min(2, beats.length);
           if (!stop.current) await playBeats(beats.slice(0, beats.length - slow), 0.85, stop, setScene, () => undefined);
+          // The decisive touch in slow motion — the camera in close on where it comes down.
+          const landing = beats[beats.length - 1]?.ball;
+          if (landing != null && landing.z < 0.6) setVarZoom({ x: landing.x, y: landing.y });
           if (!stop.current) await playBeats(beats.slice(beats.length - slow), 0.28, stop, setScene, () => undefined);
           if (cancelled.current) return;
-          await sleep(700);
+          await sleep(900);
           if (cancelled.current) return;
         }
         playWhistle();
+        setVarZoom(null);
         g.finishVideoReview();
       }
       await sleep(2800);
@@ -1448,6 +1473,7 @@ function LiveMatchView(): JSX.Element {
     return () => {
       cancelled.current = true;
       animatingRef.current = false;
+      setVarZoom(null);
     };
   }, [reviewSeq]);
 
@@ -1508,7 +1534,7 @@ function LiveMatchView(): JSX.Element {
   const last = shownLog[shownLog.length - 1]?.entry;
   const lastText = last !== undefined ? describeRallyHighlight(last, store) : null;
   const points = [...shownLog].reverse().map((l) => l.entry);
-  const crowdFill = crowdFor(world, md.fixture.competitionId, md.fixture.importance);
+  const crowdFill = crowdFor(world, md.fixture.competitionId, md.fixture.importance, fixtureRivalry(world, md.fixture) !== null);
 
   return (
     <div className="lv" style={{ ["--lv-home" as string]: kits[0].shirt, ["--lv-away" as string]: kits[1].shirt } as CSSProperties}>
@@ -1588,6 +1614,7 @@ function LiveMatchView(): JSX.Element {
               speed={md.speed}
               teamNames={[homeClub.shortName, awayClub.shortName]}
               view={g.courtView}
+              zoom={varZoom}
             />
             <div className="lv-court-tools">
               <Segmented<'3d' | '2d'> size="sm" options={[['3d', '3D'], ['2d', '2D']]} value={g.courtView} onChange={(v) => g.setCourtView(v)} />

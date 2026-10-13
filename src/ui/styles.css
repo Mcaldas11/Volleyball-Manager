@@ -888,6 +888,7 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .elite { color: var(--elite); }
 .gold-text { color: var(--gold); font-weight: 700; }
 .warn-text { color: var(--warn); font-weight: 700; }
+.kv-action { display: inline-flex; align-items: center; gap: 8px; }
 .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
 
 /* Ability bands, so a squad list is scannable at a glance. */
@@ -2724,6 +2725,8 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .md-banner-comp { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); }
 .md-banner-vs { font: 800 24px/1 var(--font-display); color: var(--text-faint); }
 .md-banner-date { font-size: 12px; color: var(--text-dim); }
+.md-banner-trip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--warn); }
+.md-banner-team.right .md-banner-trip { align-self: flex-end; }
 .md-banner-sets { color: var(--text); }
 .md-banner-changes {
   display: flex; align-items: center; gap: 4px; min-width: 0; margin-top: 2px;
@@ -2837,7 +2840,11 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   min-height: 0;
   background: radial-gradient(ellipse 80% 70% at 50% 58%, #18222f 0%, #0d1219 70%);
 }
-.live-court-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.live-court-canvas {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%;
+  transform-origin: 0 0; transition: transform 0.9s cubic-bezier(0.3, 0.1, 0.2, 1);
+}
+.live-court { overflow: hidden; }
 
 /* Which side plays which half, and the label switch — laid over the arena. */
 .court-tag {
@@ -3270,6 +3277,35 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .contract-rivals .club-link { color: var(--text); font-weight: 600; }
 .contract-rival-bid { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
 .contract-actions .flex-spacer { flex: 1; }
+/* The steps of the deal, and who else is after him, on one line. */
+.contract-steps-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.contract-steps-row .contract-steps { margin-bottom: 0; }
+.contract-steps-row .contract-rivals { margin: 0; }
+.contract-demands-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.contract-reply { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.contract-reply.close { background: var(--gold-soft); color: #ffe39a; }
+.contract-reply.far { background: var(--bad-soft); color: #ffb3b0; }
+
+/* The small print: bonuses, a release clause, the agent's fee, the club's option. */
+.contract-print {
+  margin-top: 10px;
+  padding: 6px 12px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.contract-print .contract-demands-title { color: var(--text-dim); }
+.contract-print-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; margin-top: 6px; }
+.contract-print-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; color: var(--text-dim); }
+.contract-print-cell > span:first-child { font-weight: 600; }
+.contract-print-cell small { font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contract-print-cell .money-input { width: 100%; }
+.contract-print-cell .money-input input { width: 100%; min-width: 0; }
+.contract-option { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-dim); cursor: pointer; white-space: nowrap; }
+.contract-option.disabled { opacity: 0.45; cursor: default; }
+.contract-agent { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.contract-agent .faint { font-size: 11px; font-weight: 500; }
+.contract-agent .faint.warn { color: var(--warn); }
 
 /* ============================================================
    Club profile
@@ -4245,12 +4281,31 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .contract-title { font-size: 22px; }
   .contract-body { padding: 12px 20px 14px; }
   .contract-steps { margin-bottom: 6px; }
-  .contract-col .contract-row { min-height: 31px; padding: 3px 0; }
+  .contract-steps-row { margin-bottom: 6px; }
+  .contract-col .contract-row { min-height: 28px; padding: 2px 0; }
   .contract-demands { margin-top: 8px; padding: 6px 12px 10px; }
-  .contract-demands .contract-row { min-height: 29px; }
+  .contract-demands .contract-row { min-height: 26px; }
+  .contract-demand-length .faint { display: none; }
+  .contract-agent { flex-direction: row; align-items: baseline; gap: 6px; }
   .contract-patience { margin-top: 8px; }
   .contract-note { margin-top: 8px; padding: 7px 11px; }
   .contract-actions { margin-top: 12px; padding-top: 10px; }
+  .contract-print { margin-top: 8px; padding: 5px 12px 8px; }
+  /* The rotations: eight instructions in one card. */
+  .rot-layout .field { margin-bottom: 5px; }
+  .rot-bar ~ .rot-layout .footnote { margin-top: 6px; }
+  .page-intro:has(+ .rot-bar) { margin-bottom: 8px; }
+  .rot-layout .dd { min-height: 0; }
+  .rot-bar { margin-bottom: 10px; }
+  .rot-receive { margin-bottom: 5px; }
+  .contract-print-grid { gap: 5px 14px; }
+  .contract-print-cell { gap: 2px; }
+  .contract-print-cell small { display: none; }
+  .contract-print-cell .money-input input { height: 28px; }
+  .contract-print > .contract-demands-title { display: none; }
+  .contract-print-grid { margin-top: 0; }
+  /* The portrait is sized inline: a short window shrinks it. */
+  .contract-head .player-face { width: 48px !important; height: 48px !important; }
   .srs { gap: 10px; }
   .srs > .sr-hero { padding: 10px 16px; gap: 12px; }
   .srs .sr-hero-title { font-size: 24px; }
@@ -5040,6 +5095,9 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .tr-individual .table-wrap { flex: 1 1 auto; max-height: none; }
 .tr-table td { vertical-align: middle; }
 .tr-pick { width: 140px; }
+/* Four pickers in a row: narrower where the window is. */
+@media (max-width: 1700px) { .tr-pick { width: 118px; } }
+@media (max-width: 1500px) { .tr-pick { width: 108px; } }
 .tr-table .role-tag { margin-left: 8px; }
 
 /* ============================================================
@@ -5931,19 +5989,35 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .room-card { display: flex; flex-direction: column; min-height: 0; }
 .room-card > .card-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .room-list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 10px; }
+.room-list > .room-row { flex: none; }
 /* Every row the same columns, whether or not it has a button: face, who, influence, morale, armband. */
 .room-row {
-  display: grid; grid-template-columns: 30px minmax(0, 1fr) 64px 82px 28px; align-items: center; gap: 10px;
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) 56px 70px 28px; align-items: center; gap: 9px;
   min-height: 48px; border-bottom: 1px solid var(--line);
 }
 .room-morale { text-align: right; }
 .room-row:last-child { border-bottom: 0; }
 .room-who { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .room-who > span:first-child { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.room-who .faint { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.room-who .faint { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; white-space: nowrap; overflow: hidden; }
 .room-influence { width: 70px; flex: none; }
 .room-captain { padding: 0 6px; border-radius: 4px; background: var(--gold); color: #111; font-size: 10px; font-weight: 800; }
 .room-note { flex: none; margin-top: 10px; }
+.room-captain.vice { background: var(--surface-3); color: var(--gold); border: 1px solid rgba(255, 199, 44, 0.5); }
+.room-armband { display: inline-flex; flex-direction: column; gap: 2px; }
+.room-vc { font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em; padding: 0 3px; }
+/* The groups: a strip under the tiers, the title and the chips on one line. */
+.room-groups.card { flex: none; flex-direction: row; align-items: flex-start; gap: 14px; margin-top: 12px; padding: 10px 14px; }
+.room-groups-title { flex: none; display: inline-flex; align-items: center; gap: 6px; padding-top: 4px; font: 700 11px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+.room-groups-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 6px 16px; min-width: 0; }
+.room-group-list { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.room-group { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); font-size: 12px; }
+.room-group.age { border-color: rgba(76, 125, 255, 0.4); }
+.room-group.isolated { border-style: dashed; border-color: rgba(240, 160, 60, 0.6); }
+.room-effects { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-dim); }
+.room-effect b { font-variant-numeric: tabular-nums; }
+.room-effect.good b { color: var(--good); }
+.room-effect.bad b { color: var(--bad); }
 .content-fill .room-grid { flex: 1 1 0; }
 
 /* The club's business: tickets and sponsor, facilities, affiliates. */
@@ -5959,7 +6033,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .biz-offer b { font-size: 14px; }
 .biz-offer-kind { color: var(--gold); font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .biz-offer button { margin-top: 6px; }
-.biz-facilities { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.biz-facilities { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 /* Every card's button on the same line, however much is written above it. */
 .biz-facilities .card > .card-body { display: flex; flex-direction: column; }
 .biz-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: auto; padding-top: 12px; }
@@ -6218,3 +6292,209 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .report-table { width: 100%; }
 .report-table tr.good td:last-child { color: #2f7d46; font-weight: 700; }
 .report-table tr.bad td:last-child { color: #b03a2e; font-weight: 700; }
+
+/* A file picker dressed as a button: importing a career. */
+.btn-like {
+  display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text);
+  font-weight: 600; font-size: 13.5px;
+}
+.btn-like:hover { border-color: var(--club-bright, var(--gold)); }
+.btn-like.disabled { opacity: 0.5; pointer-events: none; }
+.menu-save-actions { white-space: nowrap; }
+.menu-save-actions button + button { margin-left: 6px; }
+.menu-notice { margin: 12px 0 0; text-align: center; color: var(--text-dim); font-size: 13px; }
+
+/* The inbox's settings: which reports come in, and how often. */
+.inbox-settings { position: relative; margin-top: auto; }
+.inbox-settings-card { width: min(520px, 100%); padding: 6px 22px 18px; }
+.inbox-pref-head { margin-bottom: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.inbox-pref { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; font-size: 13px; color: var(--text); cursor: pointer; }
+.inbox-pref + .inbox-pref { border-top: 1px solid var(--line-soft); }
+.inbox-pref input { width: 16px; height: 16px; accent-color: var(--gold); }
+.inbox-pref-note { margin: 8px 0 0; font-size: 11.5px; color: var(--text-faint); }
+
+/* ============================================================
+   Analysis: the season in numbers
+   ============================================================ */
+.an { --an-series-1: #3987e5; --an-series-2: #d95926; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.content-fill > .view-fade > .an { flex: 1 1 0; }
+.an-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+.an-row { display: grid; gap: 14px; min-height: 0; }
+.an-row-1 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.05fr); flex: 1.3 1 0; }
+.an-row-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); flex: 1 1 0; }
+.an-row > .card { min-height: 0; }
+.an-row > .card > .card-body { min-height: 0; overflow: auto; }
+.an-grid-wrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; min-height: 0; padding-bottom: 20px; }
+.an-grid-box { flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+.an-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr); gap: 2px; box-sizing: border-box;
+  padding: 2px; border: 2px solid rgba(255, 255, 255, 0.75); background: var(--surface-2);
+}
+.an-cell {
+  display: flex; align-items: center; justify-content: center; border-radius: 3px; background: rgba(255, 255, 255, 0.03);
+  color: var(--text); font-size: 11.5px; font-weight: 700; cursor: default;
+}
+.an-cell.on { outline: 2px solid var(--text); outline-offset: -1px; }
+.an-grid-axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.an-grid-axis b { font-weight: 800; color: var(--text-dim); }
+.an-bottom { justify-content: center; }
+.an-grid-note {
+  position: absolute; left: 0; right: 0; bottom: 0; font-size: 11.5px; line-height: 1.3; color: var(--text-dim); text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.an-chart { display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 0; }
+.an-legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); }
+.an-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.an-svg-box { flex: 1 1 0; min-height: 110px; overflow: hidden; }
+.an-svg { display: block; }
+.an-rot td, .an-rot th { padding-top: 5px; padding-bottom: 5px; height: auto; }
+.an-gridline { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; }
+.an-baseline { stroke: rgba(255, 255, 255, 0.25); stroke-width: 1; }
+.an-tick { fill: var(--text-faint); font-size: 10px; }
+.an-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.an-cross { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1; stroke-dasharray: 3 3; }
+.an-dot { stroke: var(--surface); stroke-width: 2; }
+.an-direct { fill: var(--text-dim); font-size: 11px; font-weight: 700; }
+.an-chart-note { min-height: 18px; font-size: 12px; color: var(--text-dim); }
+@media (max-height: 760px) {
+  .an { gap: 10px; }
+  .an .tiles .stat-tile-sub, .an-foot, .an-intro { display: none; }
+  .an-bar { justify-content: flex-end; }
+  .an-row-1 { flex: 1.5 1 0; }
+}
+
+/* The scouts' game plan, on the report. */
+.gameplan-row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 2px 12px; padding: 7px 0; border-bottom: 1px solid rgba(60, 45, 20, 0.08); font-size: 13px; color: var(--paper-text); }
+.gameplan-row b { grid-row: span 2; color: var(--paper-ink); }
+.gameplan-change strong { color: var(--paper-ink); }
+.gameplan-why { font-size: 12px; color: #6f737c; }
+.gameplan-same { font-size: 11px; color: #7a7f88; margin-left: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.gameplan-actions { display: flex; gap: 8px; margin-top: 10px; }
+.gameplan-done { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #2f7d46; font-size: 13px; }
+
+/* Rivalries: a derby or the classic, wherever the fixture is shown. */
+.rival-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 9px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; vertical-align: 1px; }
+.rival-tag.derby { background: rgba(240, 90, 87, 0.16); color: #ff9b97; border: 1px solid rgba(240, 90, 87, 0.45); }
+.rival-tag.classic { background: var(--gold-soft); color: var(--gold); border: 1px solid rgba(255, 199, 44, 0.4); }
+.hm-derby { margin-left: 10px; padding: 1px 8px; border-radius: 9px; background: rgba(240, 90, 87, 0.18); color: #ffb3b0; font-weight: 700; }
+.ov-rivals { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 10px; }
+
+/* Who takes the serve in a rotation, under the receive line chosen. */
+.rot-receive { margin: -2px 0 8px; font-size: 12px; color: var(--text-dim); }
+
+/* A veteran's mentees, in the individual training table. */
+.tr-mentoring { font-size: 12px; color: var(--gold); white-space: nowrap; }
+
+/* An injury's treatment, chosen from the medical report. */
+.treat { margin: 0 0 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(60, 45, 20, 0.12); }
+.treat-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+.treat-option { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 9px 11px; text-align: left; border-radius: 8px; background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(60, 45, 20, 0.18); color: var(--paper-text); font-size: 12px; line-height: 1.35; }
+.treat-option b { color: var(--paper-ink); font-size: 13px; }
+.treat-option > span { white-space: normal; overflow-wrap: anywhere; font-weight: 500; }
+.treat-option { height: auto; min-width: 0; white-space: normal; justify-content: flex-start; }
+.treat-option:hover { border-color: rgba(60, 45, 20, 0.45); background: rgba(255, 255, 255, 0.8); }
+.treat-option.rush b { color: #b4472f; }
+.treat-option.rest b { color: #2f7d46; }
+.treat-done { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; font-weight: 700; color: var(--paper-ink); font-size: 13px; }
+
+/* A player's development, beside his season's statistics. */
+.profile-stats-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 0.55fr); gap: 16px; flex: 1 1 0; min-height: 0; }
+.profile-stats-grid > .card { min-height: 0; }
+.profile-dev > .card-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.ab-chart { --ab-series: #3987e5; display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 6px; padding: 4px 4px 0; }
+.ab-svg-box { flex: 1 1 0; min-height: 120px; overflow: hidden; }
+.ab-dot { fill: var(--ab-series); stroke: var(--surface); stroke-width: 2; }
+.ab-potential { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 4 4; }
+@media (max-width: 1100px) { .profile-stats-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Two players side by side. */
+.pc { display: flex; flex-direction: column; gap: 12px; flex: 1 1 0; min-height: 0; }
+.pc-head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; padding: 12px 48px 12px 16px; flex: none; }
+.pc-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pc-who.right { flex-direction: row-reverse; text-align: right; }
+.pc-who-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pc-who.right .pc-who-text { align-items: flex-end; }
+.pc-name { font: 700 20px/1.1 var(--font-display); }
+.pc-sub { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pc-vs { font: 800 22px/1 var(--font-display); color: var(--gold); }
+.pc-close { position: absolute; top: 10px; right: 10px; }
+.pc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; flex: 1 1 0; min-height: 0; }
+.pc-card { min-height: 0; }
+.pc-card > .card-body { overflow-y: auto; min-height: 0; padding-top: 2px; }
+.pc-row { display: grid; grid-template-columns: 26px minmax(18px, 1fr) auto minmax(18px, 1fr) 26px; align-items: center; gap: 6px; min-height: 24px; font-size: 12px; }
+.pc-row.facts { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); min-height: 27px; border-bottom: 1px solid var(--line-soft); }
+.pc-row.facts .pc-val:first-child { text-align: left; }
+.pc-row.facts .pc-val:last-child { text-align: right; }
+.pc-label { color: var(--text-dim); text-align: center; white-space: nowrap; }
+.pc-val { font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; color: var(--text-dim); }
+.pc-val.better { color: var(--good); }
+.pc-bar { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; display: flex; }
+.pc-bar.left { justify-content: flex-end; }
+.pc-bar i { display: block; height: 100%; background: var(--text-faint); border-radius: 3px; }
+.pc-bar i.better { background: var(--good); }
+.profile-compare { min-width: 120px; }
+@media (max-width: 1300px) { .pc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* The owner. */
+.own-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.own-pips { display: inline-flex; gap: 4px; }
+.own-pips i { width: 14px; height: 7px; border-radius: 3px; background: var(--surface-3); }
+.own-pips i.on { background: var(--gold); }
+.own-wish { margin: 2px 0 10px; font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.35; }
+.own-asks { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+@media (max-width: 1100px) { .own-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* The arena's two expansion plans. */
+.biz-arena { flex-wrap: wrap; gap: 6px; }
+
+/* The manager's achievements. */
+.ach-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; flex: 1 1 0; min-height: 0; }
+.ach-card { min-height: 0; }
+.ach-card > .card-body { min-height: 0; overflow-y: auto; }
+.ach-list { display: flex; flex-direction: column; }
+.ach { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); opacity: 0.55; }
+.ach:last-child { border-bottom: 0; }
+.ach.got { opacity: 1; }
+.ach-badge { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-3); color: var(--text-faint); }
+.ach.got .ach-badge { background: var(--gold-soft); color: var(--gold); border: 1px solid rgba(255, 199, 44, 0.5); }
+.ach-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; }
+.ach-text b { font-size: 13.5px; color: var(--text); }
+/* Coaching courses. */
+.crs-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; }
+.crs-card > .card-body { display: flex; flex-direction: column; gap: 6px; }
+.crs-card.licence { border-color: rgba(255, 199, 44, 0.35); }
+.crs-attrs { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-dim); }
+.crs-attr { display: flex; justify-content: space-between; gap: 8px; }
+.crs-terms { font-size: 12px; }
+.crs-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.crs-why { font-size: 11.5px; }
+@media (max-width: 1300px) { .crs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .ach-grid, .crs-grid { grid-template-columns: minmax(0, 1fr); } }
+.content-fill .ach-grid, .content-fill .crs-grid { flex: 1 1 0; min-height: 0; }
+
+.hm-deadline { background: var(--gold-soft); color: var(--gold); }
+
+/* The national coach's extras. */
+.nat-frame.on { color: var(--gold); }
+.nat-watch.on { color: var(--accent-bright); }
+.nat-friendly { width: min(460px, 92vw); display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; }
+.nat-act { white-space: nowrap; }
+.nat-friendly h3 { margin: 0; font: 700 20px/1.1 var(--font-display); }
+.nat-friendly .field-row .dd { min-width: 220px; }
+.nat-friendly-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+.save-game-tag { margin-left: 8px; padding: 1px 7px; border-radius: 9px; font-size: 10.5px; font-weight: 700; background: rgba(217, 89, 38, 0.18); color: #f0a07d; }
+
+/* A short window: the new-career wizard tightens so it fits. */
+@media (max-height: 760px) {
+  .wizard-page { padding: 14px 24px; }
+  .wizard-top { margin-bottom: 14px; }
+  .wizard-title { font-size: 26px; }
+  .wizard-sub { margin-bottom: 12px; }
+  .scale-option { padding: 9px 12px; }
+  .wizard .card + .card { margin-top: 10px !important; }
+  .wizard-actions { margin-top: 12px; }
+  .wizard .footnote { margin-top: 6px; font-size: 11.5px; }
+  .wizard .form-field { margin-top: 10px !important; }
+}

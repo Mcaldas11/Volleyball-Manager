@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import { AchievementsScreen, CoursesScreen } from './screens/Milestones.tsx';
 import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
@@ -22,6 +23,7 @@ import { CalendarScreen } from './screens/Calendar.tsx';
 import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
 import { CoachTalkScreen } from './screens/CoachTalk.tsx';
 import { PlayerTalkScreen } from './screens/PlayerTalk.tsx';
+import { AnalysisScreen } from './screens/Analysis.tsx';
 import { ClubDetail } from './screens/ClubDetail.tsx';
 import { CoachProfile } from './screens/CoachProfile.tsx';
 import { TrainingScreen } from './screens/Training.tsx';
@@ -39,7 +41,7 @@ import { StaffNegotiationScreen } from './screens/StaffNegotiation.tsx';
 import { DressingRoomScreen } from './screens/DressingRoom.tsx';
 import { HelpDialog } from './help.tsx';
 import { TutorialOverlay } from './tutorial.tsx';
-import { AffiliatesScreen, CommercialScreen, FacilitiesScreen } from './screens/ClubBusiness.tsx';
+import { AffiliatesScreen, OwnerScreen, CommercialScreen, FacilitiesScreen } from './screens/ClubBusiness.tsx';
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
@@ -84,7 +86,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
     sections: [
       { id: 'home', label: 'Home', icon: 'home', tabs: [['home', 'Home']] },
       { id: 'inbox', label: 'Inbox', icon: 'inbox', tabs: [['inbox', 'Inbox']] },
-      { id: 'career', label: 'Career', icon: 'career', tabs: [['career', 'Profile'], ['jobs', 'Job Centre']] },
+      { id: 'career', label: 'Career', icon: 'career', tabs: [['career', 'Profile'], ['achievements', 'Achievements'], ['courses', 'Courses'], ['jobs', 'Job Centre']] },
     ],
   },
   {
@@ -98,6 +100,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
       },
       { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Training']] },
+      { id: 'analysis', label: 'Analysis', icon: 'stats', tabs: [['analysis', 'Analysis']] },
       { id: 'academy', label: 'Academy', icon: 'youth', tabs: [['youth', 'Youth Academy']] },
     ],
   },
@@ -116,7 +119,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         id: 'finances',
         label: 'Finances',
         icon: 'finances',
-        tabs: [['finances', 'Finances'], ['commercial', 'Tickets & Sponsors'], ['facilities', 'Facilities'], ['affiliates', 'Affiliates']],
+        tabs: [['finances', 'Finances'], ['commercial', 'Tickets & Sponsors'], ['facilities', 'Facilities'], ['affiliates', 'Affiliates'], ['owner', 'Owner']],
       },
     ],
   },
@@ -203,13 +206,19 @@ function GameShell(): JSX.Element {
   // until the match is over anyway.
   const live = g.matchday !== null;
   const contentClass = live ? ' content-live' : ' content-fill';
+  // In the women's game the screens speak of the players as women — not of the
+  // coaches, the staff, the owner or the manager's own career: those keep theirs.
+  const onAProfile = g.selectedPlayer !== null || g.selectedClub !== null || g.selectedReview !== null || g.selectedCompetition !== null ||
+    g.selectedNation !== null || g.negotiation !== null || g.incomingOffer !== null || g.playerTalk !== null;
+  const keepPronouns = g.selectedCoach !== null || g.staffNegotiation !== null || g.coachTalk !== null ||
+    (!onAProfile && ['staff', 'career', 'jobs', 'owner', 'achievements', 'courses'].includes(g.screen));
 
   return (
     <div className={`app${collapsed || live ? ' sidebar-collapsed' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
       <Sidebar collapsed={collapsed || live} locked={live} onToggle={toggleCollapsed} />
       <div className="main-col">
         <Header />
-        <main className={`content${contentClass}`}>
+        <main className={`content${contentClass}`} data-pronouns={keepPronouns ? 'keep' : undefined}>
           <div key={key} className="view-fade">
             {g.matchday !== null
               ? <MatchdayScreen />
@@ -294,9 +303,13 @@ function Screen(): JSX.Element {
     case 'staff': return <StaffScreen />;
     case 'finances': return <FinancesScreen />;
     case 'dressing': return <DressingRoomScreen />;
+    case 'analysis': return <AnalysisScreen />;
     case 'commercial': return <CommercialScreen />;
     case 'facilities': return <FacilitiesScreen />;
     case 'affiliates': return <AffiliatesScreen />;
+    case 'owner': return <OwnerScreen />;
+    case 'achievements': return <AchievementsScreen />;
+    case 'courses': return <CoursesScreen />;
     case 'rankings': return <RankingsScreen />;
     case 'halloffame': return <HallOfFameScreen />;
     default: return <HomeScreen />;
@@ -443,6 +456,10 @@ function ManagerMenu({ name, photo }: { name: string; photo: string }): JSX.Elem
           </button>
           <button disabled={g.busy} onClick={() => { void g.saveCurrentGame(); setOpen(false); }}>
             <Icon name="save" size={16} /> {g.busy ? 'Saving…' : 'Save game'}
+          </button>
+          <button disabled={g.busy} onClick={() => { void g.exportCurrentCareer(); setOpen(false); }}
+            title="Download the career as a file — a copy outside the browser">
+            <Icon name="download" size={16} /> Export career file
           </button>
           <button disabled={g.busy} onClick={() => { setOpen(false); void g.exitToMenu(); }}>
             <Icon name="exit" size={16} /> Save &amp; exit to menu

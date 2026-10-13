@@ -14,9 +14,16 @@
 
 const PORTRAIT_COUNT = 100;
 
+/** The players' faces: the men's, or the women's in the women's game. */
+let faceSet: 'men' | 'women' = 'men';
+
+export function setFaceSet(set: 'men' | 'women'): void {
+  faceSet = set;
+}
+
 export function playerFaceUrl(playerId: number): string {
   const index = ((playerId % PORTRAIT_COUNT) + PORTRAIT_COUNT) % PORTRAIT_COUNT;
-  return `https://randomuser.me/api/portraits/men/${index}.jpg`;
+  return `https://randomuser.me/api/portraits/${faceSet}/${index}.jpg`;
 }
 
 /** Same portrait set as {@link playerFaceUrl}, but for off-pitch faces —

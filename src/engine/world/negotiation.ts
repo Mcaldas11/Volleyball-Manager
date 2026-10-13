@@ -16,6 +16,7 @@
  * mechanic — it exists purely to shape whether the player accepts.
  */
 
+import { fansSigning } from './supporters.ts';
 import type { Club } from '../model/club.ts';
 import { bidTurnedDown, stanceLine, type OfferStance } from './offerStance.ts';
 import { PlayerFlag } from '../model/players.ts';
@@ -23,6 +24,7 @@ import { endLoan, loanOf, MAX_SQUAD, type LoanPlayingTime } from './loans.ts';
 import { pendingMoveOf } from './moves.ts';
 import { newsTransfer } from './news.ts';
 import { noteDeparture } from './dressingRoom.ts';
+import { agentFeeRate, agentOf, agentWageFactor, releaseClauseOf, titleOdds } from './contractTerms.ts';
 import {
   contractEndSeason, dayOfYear, euros, logTransfer, seasonEndDay, windowCloseDay, type World,
 } from './world.ts';
@@ -70,6 +72,11 @@ export function evaluateFeeOffer(
   // losing an overperformer is harder to replace than a like-for-like sale.
   const premium = 1 + Math.max(0, playerLevel - clubLevel) * 1.6;
   const valuation = Math.round(store.value[playerIdx] * premium * discount);
+  // A bid that meets his release clause can't be refused.
+  const clause = releaseClauseOf(world, playerIdx);
+  if (clause !== null && offer >= clause) {
+    return { accepted: true, reason: 'The bid meets the release clause in his contract: they cannot refuse it.', valuation };
+  }
   const ratio = offer / valuation;
 
   if (ratio < 0.7) {
@@ -163,6 +170,8 @@ export function completeTransfer(
   store.wage[playerIdx] = wage;
   store.contractUntil[playerIdx] = contractEnd;
   newsTransfer(world, playerIdx, oldClubId, buyingClub.id, fee);
+  // A star signed brings supporters in.
+  fansSigning(world, buyingClub, playerIdx);
 }
 
 // ---- Contract terms --------------------------------------------------------
@@ -177,6 +186,12 @@ export interface ContractDemands {
   maxYears: number;
   /** The least he will come down to, however long the talks go on. */
   floorWage: number;
+  /** His agent's fee for the deal, paid when it is signed (absent in talks opened before agents had their say). */
+  agentFee?: number;
+  /** The highest release clause he will sign; null when he doesn't ask for one. */
+  clauseMax?: number | null;
+  /** The club's chance of a trophy in a season, as he weighs a title bonus. */
+  titleOdds?: number;
 }
 
 export interface ContractOffer {
@@ -184,6 +199,31 @@ export interface ContractOffer {
   role: SquadRole;
   /** Seasons the contract runs, counting this one — it ends on 30 June. */
   years: number;
+  /** The small print — see contractTerms.ts. 0 or absent: none. */
+  appearanceBonus?: number;
+  titleBonus?: number;
+  releaseClause?: number;
+  /** The club may add a season on the same terms. */
+  option?: boolean;
+  /** Paid to his agent on signing. */
+  agentFee?: number;
+}
+
+/** Competitive matches a season a player expects to play in each role, as he weighs an appearance bonus. */
+export const EXPECTED_APPS: Readonly<Record<SquadRole, number>> = {
+  [SquadRole.Star]: 30,
+  [SquadRole.Regular]: 26,
+  [SquadRole.Rotation]: 16,
+  [SquadRole.Backup]: 6,
+};
+
+/** An offer that gives him everything he asks for, over `years` seasons. */
+export function offerMatching(d: ContractDemands, years: number): ContractOffer {
+  return {
+    wage: d.wage, role: d.role, years,
+    agentFee: d.agentFee ?? 0,
+    releaseClause: d.clauseMax ?? 0,
+  };
 }
 
 /** Rounds of rejected offers a player sits through before he walks out. */
@@ -240,7 +280,8 @@ export function contractDemands(world: World, club: Club, playerIdx: number, ren
     // A move to a smaller club needs a real pay rise; a bigger one buys goodwill.
     wage = Math.max(marketWage, current) * (1 - Math.max(-0.4, Math.min(0.4, stepUp)) * 0.5) * (1.04 + ambition * 0.08);
   }
-  wage = Math.max(4000, Math.round((wage * world.rng.range(0.96, 1.06)) / 1000) * 1000);
+  const agent = agentOf(world, playerIdx);
+  wage = Math.max(4000, Math.round((wage * world.rng.range(0.96, 1.06) * agentWageFactor(agent.style)) / 1000) * 1000);
 
   // Veterans want security; an ambitious youngster at a club beneath him —
   // or anyone unhappy — won't be tied down for long.
@@ -251,13 +292,43 @@ export function contractDemands(world: World, club: Club, playerIdx: number, ren
   if (renewal) minYears = Math.max(minYears, yearsLeft(world, playerIdx) + 1);
   maxYears = Math.max(minYears, maxYears);
 
+  // An ambitious player good enough for better, or a young one, wants a way
+  // out written in — the more ambitious, the lower he wants it.
+  const wantsClause = ambition >= 0.6 && (playerLevel >= clubLevel - 0.05 || age <= 24);
+  const clauseMax = wantsClause
+    ? Math.max(50_000, Math.round((store.value[playerIdx] * (1.4 + (1 - ambition) * 1.2)) / 10_000) * 10_000)
+    : null;
+
   return {
     wage,
     role: expectedRole(world, club, playerIdx),
     minYears,
     maxYears,
     floorWage: Math.round((wage * 0.9) / 1000) * 1000,
+    agentFee: Math.round((wage * agentFeeRate(agent.style, renewal)) / 1000) * 1000,
+    clauseMax,
+    titleOdds: titleOdds(world, club),
   };
+}
+
+/**
+ * What the small print is worth to him, against his demands, in the same
+ * units as a wage gap: bonuses at what he expects them to pay — discounted,
+ * as money he can't count on, and never more than a sixth of the deal; his
+ * agent's fee; a release clause he asked for, or one he didn't; and the
+ * club's option, which ties him for a season he hasn't agreed to.
+ */
+export function smallPrintValue(d: ContractDemands, offer: ContractOffer): number {
+  const expected = (offer.appearanceBonus ?? 0) * EXPECTED_APPS[offer.role] + (offer.titleBonus ?? 0) * (d.titleOdds ?? 0.1);
+  const bonuses = Math.min(0.16, (expected * 0.8) / d.wage);
+  const asked = d.agentFee ?? 0;
+  const paid = offer.agentFee ?? 0;
+  const agent = paid >= asked ? Math.min(0.03, ((paid - asked) / d.wage) * 0.5) : -(asked - paid) / d.wage;
+  const clause = offer.releaseClause ?? 0;
+  const max = d.clauseMax ?? null;
+  const clauseTerm = max !== null ? (clause <= 0 ? -0.1 : clause > max ? -0.05 : 0) : clause > 0 ? 0.02 : 0;
+  const option = offer.option === true ? -0.04 : 0;
+  return bonuses + agent + clauseTerm + option;
 }
 
 /** Whether a player will even discuss a new deal — an ambitious one who has
@@ -289,7 +360,7 @@ export function respondToOffer(demands: ContractDemands, offer: ContractOffer, p
   const yearsGap = offer.years < demands.minYears
     ? demands.minYears - offer.years
     : offer.years > demands.maxYears ? offer.years - demands.maxYears : 0;
-  const score = wageGap + roleTerm - yearsGap * 0.12;
+  const score = wageGap + roleTerm - yearsGap * 0.12 + smallPrintValue(demands, offer);
   if (score >= -0.015) return { outcome: 'accepted', gap: null, demands, patience };
 
   const far = score < -0.2;
@@ -331,6 +402,8 @@ export interface IncomingOffer {
   /** How the player takes the bid, and how hard he pulls towards the move — see offerStance.ts. */
   stance?: OfferStance;
   pull?: number;
+  /** The bid paid the release clause in his contract: there was nothing to answer, only the player to decide. */
+  clause?: true;
 }
 
 export const MAX_PENDING_OFFERS = 2;

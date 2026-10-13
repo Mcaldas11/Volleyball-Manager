@@ -7,6 +7,10 @@
  * same shape as one on day one — only larger.
  */
 
+import type { ContractExtras } from './contractTerms.ts';
+import type { Mentorship } from './mentoring.ts';
+import type { InjuryCase, RelapseRisk } from './treatment.ts';
+import type { AbilityHistory } from './abilityHistory.ts';
 import { Rng } from '../core/rng.ts';
 import type { Club, LeagueTableRow } from '../model/club.ts';
 import { PlayerStore } from '../model/players.ts';
@@ -28,6 +32,7 @@ import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
 import type { StaffTalks } from './staffDeals.ts';
 import type { MatchReport } from './matchReports.ts';
+import type { SeasonAnalysis } from './analysis.ts';
 import type { PlayerPromise, TransferRequest } from './playerTalks.ts';
 import type { SponsorOffer } from './commercial.ts';
 import type { RetirementPlan } from './retirement.ts';
@@ -374,6 +379,8 @@ export interface GameMessage {
   archived?: boolean;
   /** An injury: its type and expected length, for the medical report. */
   injury?: { type: number; days: number };
+  /** The player whose treatment the manager is asked to choose — see treatment.ts. */
+  treatmentFor?: number;
   /** A month-end finance statement. */
   statement?: FinanceStatement;
   /** A league matchday round-up: which round, and the table it left behind. */
@@ -420,6 +427,8 @@ export interface GameMessage {
   loanReport?: LoanReport;
   /** A staff report's tables — see reports.ts. */
   tables?: ReportTable[];
+  /** A scouting report: the opponent the scouts' game plan is for. */
+  gamePlanFor?: number;
   /** International news of the user's players — call-ups, match days with
    *  each player's numbers, the way home — drawn as a report in the inbox. */
   intl?: IntlReport;
@@ -711,6 +720,52 @@ export interface World {
   scoutedFixtures?: number[];
   /** National squad players the manager has been told are injured, and since when. */
   intlInjuries?: Record<number, number>;
+  /** Which of the staff's regular reports the manager wants, and how often — see inboxPrefsOf. */
+  inboxPrefs?: Partial<InboxPrefs>;
+  /** The analyst's season data for the manager's club — see analysis.ts. */
+  analysis?: SeasonAnalysis[];
+  /** The instructions as they were before the last game plan went in — see gamePlan.ts. */
+  planUndo?: { clubId: number; fixtureId: number; before: string };
+  /** The small print the club wrote into its players' contracts — see contractTerms.ts. */
+  contractExtras?: Map<number, ContractExtras>;
+  /** Each country's classic rivalry, between its two leading clubs — see rivals.ts. */
+  classics?: Array<[number, number]>;
+  /** The matches in each player's legs, ebbing day by day — see fatigue.ts. */
+  matchLoad?: Map<number, number>;
+  /** Veterans mentoring young players — see mentoring.ts. */
+  mentorships?: Mentorship[];
+  /** The manager's injured players and how each is treated; those rushed back still at risk — see treatment.ts. */
+  injuryCases?: Record<number, InjuryCase>;
+  relapse?: Record<number, RelapseRisk>;
+  /** Every player's ability as each of the last seasons closed — see abilityHistory.ts. */
+  abilityHistory?: AbilityHistory;
+  /** The women's game, when it is the one played. Absent: the men's. */
+  gender?: 'women';
+}
+
+/** How often a regular report comes: `auto` lets the report choose. */
+export type ReportFrequency = 'weekly' | 'fortnightly' | 'off';
+
+/** The manager's say over the regular post. */
+export interface InboxPrefs {
+  assistant: ReportFrequency;
+  scouting: boolean;
+  nationalForm: ReportFrequency | 'auto';
+  nationalInjuries: boolean;
+  ranking: boolean;
+  roundups: boolean;
+  statements: boolean;
+  milestones: boolean;
+}
+
+export const DEFAULT_INBOX_PREFS: Readonly<InboxPrefs> = {
+  assistant: 'weekly', scouting: true, nationalForm: 'auto', nationalInjuries: true, ranking: true,
+  roundups: true, statements: true, milestones: true,
+};
+
+/** The manager's preferences for the post, defaults filled in. */
+export function inboxPrefsOf(world: World): InboxPrefs {
+  return { ...DEFAULT_INBOX_PREFS, ...(world.inboxPrefs ?? {}) };
 }
 
 /** A table in a report: a heading, its columns, and its rows — the first cell

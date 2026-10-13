@@ -603,6 +603,12 @@ export function ContractRow({
   );
 }
 
+/** "Derby" or "Classic" beside a fixture played under a rivalry. */
+export function RivalTag({ kind }: { kind: 'derby' | 'classic' | null }): JSX.Element | null {
+  if (kind === null) return null;
+  return <span className={`rival-tag ${kind}`} title={kind === 'derby' ? 'City derby' : 'The classic rivalry'}>{kind === 'derby' ? 'Derby' : 'Classic'}</span>;
+}
+
 /** A club name that opens that club's detail page when clicked. `crest` can be
  *  turned off where a large crest already sits right beside the name. */
 export function ClubLink({

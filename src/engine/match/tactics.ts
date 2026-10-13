@@ -291,7 +291,16 @@ export interface RotationTactics {
   transitionBackRow: number;
   /** 0-100: setter's bias toward the fastest available tempo. */
   setterTempoBias: number;
+  /**
+   * How many take the serve: three — the libero and both outsides — as
+   * usual; two, hiding the weaker-passing outside to free him for the attack;
+   * or four, the opposite passing too. Absent: three.
+   */
+  receivers?: ReceptionFormation;
 }
+
+/** Players in the serve-receive line. */
+export type ReceptionFormation = 2 | 3 | 4;
 
 export interface TeamTactics {
   /** 5-1 or 4-2; absent on saves from before the choice, which play 5-1. */

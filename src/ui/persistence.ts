@@ -16,6 +16,7 @@
  * touches the other two stores.
  */
 
+import { setNationsGame } from '../engine/world/nations.ts';
 import { Rng } from '../engine/core/rng.ts';
 import { PLAYING_TIME_UNKNOWN, PlayerStore, POSITION_SLOTS, StringTable } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
@@ -47,6 +48,8 @@ export interface SaveMeta {
   createdAt: number;
   updatedAt: number;
   schemaVersion: number;
+  /** The women's game. Absent: the men's. */
+  gender?: 'women';
 }
 
 /**
@@ -183,6 +186,9 @@ export function reviveWorld(raw: World): World {
   Object.setPrototypeOf(raw.rng, Rng.prototype);
   Object.setPrototypeOf(raw.players, PlayerStore.prototype);
   Object.setPrototypeOf(raw.players.names, StringTable.prototype);
+  // The game this world plays: the women's, or the men's.
+  raw.players.women = raw.gender === 'women';
+  setNationsGame(raw.gender ?? 'men');
   // Saves from before positions could be learnt: a trained secondary is known in full, the rest not at all.
   if (raw.players.familiarity === undefined) {
     raw.players.familiarity = new Uint8Array(raw.players.id.length * POSITION_SLOTS);

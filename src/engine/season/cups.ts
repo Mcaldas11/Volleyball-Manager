@@ -14,10 +14,13 @@
  * and the whole thing is over before the league playoffs begin.
  */
 
+import { fansTrophy } from '../world/supporters.ts';
+import { payTitleBonuses } from '../world/contractTerms.ts';
+import { noteTrophy } from '../world/owners.ts';
 import { awardLeaguePoints, compareTableRows, newTableRow, type LeagueTableRow } from '../model/club.ts';
 import { MatchFormat } from '../match/engine.ts';
 import { formatDay, ordinal, postMessage } from '../world/inbox.ts';
-import { NATIONS, type Confederation } from '../world/nations.ts';
+import { NATIONS, nationStrength, type Confederation } from '../world/nations.ts';
 import {
   addFixture, DAYS_PER_SEASON, euros,
   type Competition, type CompetitionKind, type CupGroup, type CupState, type Fixture, type PlayoffGroup,
@@ -330,7 +333,7 @@ function continentalEntrants(
   const slots = SLOTS[conf === 'CEV' ? `CEV:${level}` : 'other'];
   const nations = NATIONS.map((_, i) => i)
     .filter((i) => NATIONS[i].confederation === conf)
-    .sort((a, b) => NATIONS[b].strength - NATIONS[a].strength);
+    .sort((a, b) => nationStrength(b) - nationStrength(a));
 
   const out: number[] = [];
   nations.forEach((n, rank) => {
@@ -666,6 +669,9 @@ function crownWinner(world: World, comp: Competition, bracket: PlayoffGroup): vo
   bracket.finalOrder = computeFinalOrder(bracket);
   const winner = bracket.finalOrder[0];
   comp.champion = winner;
+  payTitleBonuses(world, winner, comp.name);
+  noteTrophy(world, winner);
+  fansTrophy(world, winner);
 
   // Prize money down the bracket: the final pays best, each earlier exit less.
   const format = formatFor(comp, bracket.seeds.length);

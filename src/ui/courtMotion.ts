@@ -213,6 +213,35 @@ const TIME_OUT = shape(REF_REST, {
 /** Ball out: both forearms raised, palms towards the body. */
 const BALL_OUT = shape(REF_REST, { ...arms(0.93, 0.23, 2.4, -0.09) });
 
+// ---- The line judges' flags -------------------------------------------------------------
+
+/** At the corner, the flag held down by the side. */
+const LJ_REST = shape(STAND, { nod: 0.12, stance: 0.14, stride: 0, hFlex: 0.08, hAbd: 0.12, hElbow: 0.08, oFlex: 0.05, oAbd: 0.12, oElbow: 0.25 });
+/** Ball in: the flag pointed down at the court. */
+const LJ_IN = shape(LJ_REST, { lean: 0.12, nod: 0.3, hFlex: 0.75, hAbd: -0.1, hElbow: 0.05 });
+/** Ball out: the flag straight up. */
+const LJ_OUT = shape(LJ_REST, { nod: -0.1, hFlex: 3.05, hAbd: 0.12, hElbow: 0.05 });
+/** Ball touched: the flag up, the other hand flat on top of it. */
+const LJ_TOUCH = shape(LJ_REST, { nod: -0.1, hFlex: 2.85, hAbd: 0.1, hElbow: 0.1, oFlex: 2.75, oAbd: -0.35, oElbow: 0.55 });
+
+/**
+ * Where the two line judges stand, as the FIVB places two: diagonally, at the
+ * corners nearest each referee's right hand — the first referee's on the far
+ * side by the near team's end, the second's on the near side by the far
+ * team's — just off the corner, clear of the warm-up area. Each watches the
+ * lines of his own half.
+ */
+export const LINE_JUDGES: ReadonlyArray<{ x: number; y: number }> = [{ x: -4.72, y: -9.55 }, { x: 5.3, y: 10.0 }];
+
+/** What a line judge signals about where a ball came down — or nothing, well inside the court. */
+export function lineCall(to: { x: number; y: number }, out: boolean): 'in' | 'out' | 'touch' | null {
+  const inside = Math.abs(to.x) <= 4.5 && Math.abs(to.y) <= 9;
+  if (!inside) return out ? 'out' : 'touch';
+  // Near a line: the flag down for a ball in.
+  const toLine = Math.min(4.5 - Math.abs(to.x), 9 - Math.abs(to.y));
+  return toLine < 1.1 ? 'in' : null;
+}
+
 /** The posture each pose settles into between contacts. */
 function postureOf(pose: Pose): Shape {
   switch (pose) {
@@ -566,6 +595,8 @@ export class CourtMotion {
   readonly referee: Body;
   /** Each side's coach, at the front of its bench. */
   readonly coaches: [Body, Body];
+  /** The two line judges, flags in hand. */
+  readonly lineJudges: [Body, Body];
   /** The physio, on for someone hurt — null when nobody is. */
   medic: Body | null = null;
   /** Someone down hurt, and where the stoppage for him has got to. */
@@ -601,7 +632,34 @@ export class CourtMotion {
       rig: buildRig(REF_REST, STILL), side: null, via: null, home: null,
     };
     this.coaches = [this.coachBody(0, -1), this.coachBody(1, 1)];
+    this.lineJudges = [this.lineJudgeBody(0), this.lineJudgeBody(1)];
   }
+
+  /** A line judge at his corner, facing the court. */
+  private lineJudgeBody(i: 0 | 1): Body {
+    const at = LINE_JUDGES[i];
+    return {
+      x: at.x, y: at.y, tx: at.x, ty: at.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: yawTo(-at.x, -at.y * 0.4), lift: 0, vz: 0,
+      pose: 'stand', posture: LJ_REST, shape: LJ_REST, gait: 0, running: 0, action: null, reaction: null,
+      fade: null, alpha: 1, leaving: false, scale: 1.8 / REF_HEIGHT, hand: 1, seed: 21 + i,
+      rig: buildRig(LJ_REST, STILL), side: null, via: null, home: null,
+    };
+  }
+
+  /** The line judge of the half a ball came down in signals it: in, out, or off a touch. */
+  private flagLanding(now: number, to: { x: number; y: number }, out: boolean): void {
+    const call = lineCall(to, out);
+    if (call === null) return;
+    const judge = this.lineJudges[to.y < 0 ? 0 : 1];
+    const flag = call === 'in' ? LJ_IN : call === 'out' ? LJ_OUT : LJ_TOUCH;
+    const k = 1 / this.pace;
+    const keys = timeline(0, [[0, judge.shape], [180 * k, flag], [1300 * k, flag], [1650 * k, LJ_REST]]);
+    judge.reaction = { kind: 'stand', t0: now, tc: now, keys, jump: null, yaw: null, path: null, end: keys[keys.length - 1].t + 60 };
+    this.lastLineCall = { call, judge: to.y < 0 ? 0 : 1, at: now };
+  }
+
+  /** The last flag shown, for anyone drawing it. */
+  lastLineCall: { call: 'in' | 'out' | 'touch'; judge: 0 | 1; at: number } | null = null;
 
   /** A coach, standing at the front of his bench and facing the court. */
   private coachBody(team: 0 | 1, side: number): Body {
@@ -1150,6 +1208,9 @@ export class CourtMotion {
   /** Move everyone on by `dt` seconds, to the moment `now`. */
   step(dt: number, now: number): void {
     if (this.point !== null && now >= this.point.at) {
+      // Where it came down, and the line judge's flag for it.
+      const landing = this.flight?.to;
+      if (landing !== undefined && landing.z < 0.6) this.flagLanding(now, landing, this.point.out);
       this.react(now, this.point.team);
       this.cheer = { team: this.point.team, t0: now, big: this.point.big };
       // The ball is down: whistle, and the point to the side that won it.
@@ -1172,6 +1233,7 @@ export class CourtMotion {
     const ball = this.ballAt(now);
     this.stepReferee(now, ball);
     for (const c of this.coaches) this.stepStill(c, now, ball);
+    for (const j of this.lineJudges) this.stepStill(j, now, ball);
     this.stepMedic(dt, now);
     for (const [p, b] of this.bodies) {
       if (b.side === 'bench' && b.home !== null && b.via === null) this.warmUp(p, b, now);

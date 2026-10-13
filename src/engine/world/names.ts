@@ -157,6 +157,94 @@ export const NAME_BANKS: Readonly<Record<string, NameBank>> = {
 
 export const DEFAULT_NAME_GROUP = 'american';
 
-export function bankFor(group: string): NameBank {
-  return NAME_BANKS[group] ?? NAME_BANKS[DEFAULT_NAME_GROUP];
+/** The women's game: first names by the same groups. */
+const WOMEN_FIRST: Readonly<Record<string, readonly string[]>> = {
+  polish: ['Agnieszka', 'Katarzyna', 'Magdalena', 'Joanna', 'Natalia', 'Malwina', 'Zuzanna', 'Martyna', 'Aleksandra', 'Kamila', 'Klaudia', 'Monika', 'Paulina', 'Weronika', 'Julia', 'Anna', 'Maria', 'Karolina', 'Justyna', 'Oliwia'],
+  italian: ['Paola', 'Alessia', 'Miriam', 'Giulia', 'Francesca', 'Sofia', 'Chiara', 'Elena', 'Martina', 'Sara', 'Federica', 'Valentina', 'Anna', 'Ilaria', 'Beatrice', 'Caterina', 'Monica', 'Cristina', 'Gaia', 'Silvia'],
+  french: ['Lucille', 'Héléna', 'Juliette', 'Camille', 'Léa', 'Chloé', 'Manon', 'Emma', 'Inès', 'Clara', 'Pauline', 'Marine', 'Laura', 'Julie', 'Océane', 'Margot', 'Lisa', 'Anaïs', 'Mathilde', 'Amandine'],
+  slovene: ['Eva', 'Maja', 'Nika', 'Ana', 'Lara', 'Tjaša', 'Katja', 'Urška', 'Sara', 'Mojca', 'Tina', 'Špela', 'Neža', 'Pia', 'Zala', 'Lea', 'Jana', 'Petra', 'Anja', 'Saša'],
+  serbian: ['Tijana', 'Maja', 'Jovana', 'Bojana', 'Milena', 'Brankica', 'Stefana', 'Bianka', 'Mina', 'Ana', 'Teodora', 'Jelena', 'Katarina', 'Sara', 'Marija', 'Ivana', 'Nataša', 'Sanja', 'Vesna', 'Dragana'],
+  dutch: ['Lonneke', 'Celeste', 'Nika', 'Marrit', 'Laura', 'Britt', 'Anne', 'Femke', 'Sanne', 'Eline', 'Kirsten', 'Myrthe', 'Iris', 'Esther', 'Floor', 'Demi', 'Lotte', 'Fleur', 'Maret', 'Juliët'],
+  german: ['Lina', 'Hanna', 'Camilla', 'Pia', 'Lena', 'Laura', 'Anna', 'Marie', 'Jana', 'Kimberly', 'Sarah', 'Luisa', 'Leonie', 'Jennifer', 'Saskia', 'Kathrin', 'Lisa', 'Antonia', 'Svenja', 'Mareike'],
+  bulgarian: ['Maria', 'Elitsa', 'Hristina', 'Mira', 'Gergana', 'Nasya', 'Lora', 'Petya', 'Zhana', 'Desislava', 'Radostina', 'Silvana', 'Viktoria', 'Iveta', 'Dobriana', 'Emiliya', 'Nadezhda', 'Yoana', 'Kristina', 'Elena'],
+  ukrainian: ['Olena', 'Yulia', 'Kateryna', 'Anastasiia', 'Diana', 'Tetiana', 'Oksana', 'Iryna', 'Mariia', 'Viktoriia', 'Alina', 'Yana', 'Khrystyna', 'Natalia', 'Daria', 'Sofiia', 'Olha', 'Valeriia', 'Polina', 'Yevheniia'],
+  turkish: ['Zehra', 'Ebrar', 'Eda', 'Meliha', 'Hande', 'Melissa', 'Cansu', 'İlkin', 'Derya', 'Aslı', 'Elif', 'Simge', 'Gizem', 'Saliha', 'Kübra', 'Naz', 'Yasemin', 'Ayça', 'Tuğba', 'Buse'],
+  russian: ['Ekaterina', 'Irina', 'Natalia', 'Anastasia', 'Tatiana', 'Yulia', 'Ksenia', 'Arina', 'Daria', 'Maria', 'Elena', 'Olga', 'Svetlana', 'Anna', 'Polina', 'Valeria', 'Vera', 'Alexandra', 'Yana', 'Kristina'],
+  czech: ['Michaela', 'Kateřina', 'Tereza', 'Barbora', 'Veronika', 'Lucie', 'Eliška', 'Adéla', 'Kristýna', 'Nikola', 'Petra', 'Martina', 'Klára', 'Simona', 'Anna', 'Andrea', 'Monika', 'Hana', 'Pavla', 'Natálie'],
+  greek: ['Maria', 'Eleni', 'Aikaterini', 'Georgia', 'Dimitra', 'Sofia', 'Anastasia', 'Vasiliki', 'Ioanna', 'Christina', 'Konstantina', 'Despoina', 'Evangelia', 'Paraskevi', 'Athina', 'Angeliki', 'Kyriaki', 'Panagiota', 'Stavroula', 'Efthymia'],
+  finnish: ['Aino', 'Emilia', 'Iida', 'Veera', 'Ella', 'Noora', 'Laura', 'Jenni', 'Sanni', 'Saara', 'Anni', 'Elina', 'Johanna', 'Venla', 'Katri', 'Milla', 'Heidi', 'Minna', 'Riikka', 'Suvi'],
+  portuguese: ['Inês', 'Beatriz', 'Mariana', 'Ana', 'Sofia', 'Leonor', 'Carolina', 'Joana', 'Rita', 'Marta', 'Catarina', 'Matilde', 'Francisca', 'Teresa', 'Raquel', 'Diana', 'Filipa', 'Vera', 'Sara', 'Margarida'],
+  spanish: ['María', 'Lucía', 'Paula', 'Laura', 'Marta', 'Andrea', 'Sara', 'Carla', 'Elena', 'Claudia', 'Alba', 'Irene', 'Nerea', 'Ainhoa', 'Patricia', 'Cristina', 'Raquel', 'Noelia', 'Ana', 'Julia'],
+  croatian: ['Samanta', 'Beta', 'Božana', 'Mia', 'Ana', 'Ivana', 'Lucija', 'Petra', 'Marija', 'Katarina', 'Ema', 'Lea', 'Nika', 'Iva', 'Dora', 'Klara', 'Matea', 'Tena', 'Martina', 'Sara'],
+  romanian: ['Andreea', 'Alexandra', 'Ioana', 'Maria', 'Elena', 'Cristina', 'Diana', 'Bianca', 'Roxana', 'Adelina', 'Raluca', 'Mihaela', 'Gabriela', 'Daniela', 'Larisa', 'Alina', 'Oana', 'Teodora', 'Ana', 'Irina'],
+  estonian: ['Kertu', 'Liis', 'Kadri', 'Mari', 'Kristiina', 'Eliise', 'Laura', 'Anna', 'Helen', 'Marleen', 'Grete', 'Kätlin', 'Triin', 'Kaisa', 'Maria', 'Hanna', 'Merili', 'Sandra', 'Gerli', 'Karmen'],
+  latvian: ['Anna', 'Laura', 'Elīza', 'Marta', 'Sofija', 'Katrīna', 'Kristīne', 'Ieva', 'Līga', 'Agnese', 'Dace', 'Inese', 'Zane', 'Sanita', 'Madara', 'Evija', 'Linda', 'Santa', 'Baiba', 'Rūta'],
+  nordic: ['Ida', 'Emma', 'Sara', 'Elin', 'Maja', 'Frida', 'Julia', 'Linnea', 'Hanna', 'Alva', 'Ingrid', 'Nora', 'Sofie', 'Astrid', 'Freja', 'Thea', 'Karin', 'Anna', 'Mathilde', 'Signe'],
+  hungarian: ['Anna', 'Réka', 'Dóra', 'Eszter', 'Zsófia', 'Petra', 'Nóra', 'Lilla', 'Kitti', 'Fanni', 'Viktória', 'Bianka', 'Orsolya', 'Kinga', 'Edina', 'Krisztina', 'Henrietta', 'Laura', 'Boglárka', 'Zita'],
+  hebrew: ['Noa', 'Tamar', 'Shira', 'Maya', 'Yael', 'Michal', 'Adi', 'Noga', 'Hila', 'Liron', 'Gal', 'Rotem', 'Inbar', 'Shani', 'Tal', 'Dana', 'Lior', 'Ayelet', 'Roni', 'Neta'],
+  brazilian: ['Gabriela', 'Natália', 'Thaísa', 'Carolina', 'Macris', 'Rosamaria', 'Juliana', 'Fernanda', 'Tainara', 'Priscila', 'Camila', 'Adenízia', 'Roberta', 'Lorena', 'Kisy', 'Júlia', 'Tifanny', 'Mayany', 'Diana', 'Ana Cristina'],
+  argentine: ['Lucía', 'Agustina', 'Bianca', 'Victoria', 'Candelaria', 'Antonela', 'Morena', 'Julieta', 'Sofía', 'Camila', 'Florencia', 'Micaela', 'Valentina', 'Daniela', 'Tatiana', 'Elina', 'Martina', 'Erika', 'Lourdes', 'Brenda'],
+  american: ['Jordan', 'Kathryn', 'Annie', 'Kelsey', 'Haleigh', 'Chiaka', 'Justine', 'Avery', 'Khalia', 'Andrea', 'Jordyn', 'Megan', 'Lauren', 'Taylor', 'Madison', 'Sarah', 'Emily', 'Kara', 'Danielle', 'Alexis'],
+  cuban: ['Melissa', 'Gyselle', 'Ailama', 'Diaris', 'Heidy', 'Yamila', 'Wilma', 'Laritza', 'Yaneisy', 'Lianny', 'Mariela', 'Yadismary', 'Ana', 'Daymara', 'Yoana', 'Dayana', 'Liannes', 'Rachel', 'Kenia', 'Sulian'],
+  japanese: ['Sarina', 'Mayu', 'Arisa', 'Nichika', 'Miwako', 'Yukiko', 'Kotona', 'Haruyo', 'Mizuki', 'Ai', 'Aki', 'Erika', 'Saori', 'Yuka', 'Nanami', 'Shiori', 'Rena', 'Kanami', 'Hikari', 'Misaki'],
+  iranian: ['Mahsa', 'Zahra', 'Fatemeh', 'Maryam', 'Sara', 'Neda', 'Shiva', 'Parisa', 'Elham', 'Mina', 'Narges', 'Leila', 'Nazanin', 'Somayeh', 'Shirin', 'Yasaman', 'Mona', 'Pegah', 'Ladan', 'Negar'],
+  chinese: ['Ting', 'Xinyue', 'Yingying', 'Ruoqi', 'Yuanyuan', 'Ni', 'Yanan', 'Wenhui', 'Mengjie', 'Xiaotong', 'Yunlu', 'Shuting', 'Ruixue', 'Danni', 'Jia', 'Yifan', 'Meng', 'Xue', 'Hongying', 'Lin'],
+  korean: ['Yeon-koung', 'Hee-jin', 'Su-ji', 'So-young', 'Ji-yun', 'Hye-jin', 'Jeong-ah', 'Da-young', 'Jae-young', 'Ha-eun', 'Seo-yeon', 'Min-ji', 'Ji-woo', 'Eun-ji', 'Yu-na', 'Ye-rin', 'Hyun-ju', 'Bo-ram', 'Na-yeon', 'Yeon-kyung'],
+  arabic: ['Nour', 'Mariam', 'Fatima', 'Aya', 'Salma', 'Yasmin', 'Hana', 'Layla', 'Rania', 'Dina', 'Farah', 'Sara', 'Amira', 'Hiba', 'Lina', 'Rim', 'Mona', 'Nada', 'Reem', 'Huda'],
+  indian: ['Priya', 'Anjali', 'Pooja', 'Kavya', 'Divya', 'Sneha', 'Aishwarya', 'Meera', 'Nisha', 'Deepika', 'Shruti', 'Lakshmi', 'Ananya', 'Riya', 'Swati', 'Jyoti', 'Neha', 'Asha', 'Rekha', 'Sonia'],
+  thai: ['Pleumjit', 'Wilavan', 'Onuma', 'Hattaya', 'Ajcharaporn', 'Pimpichaya', 'Chatchu-on', 'Thatdao', 'Malika', 'Nootsara', 'Kannika', 'Sasipaporn', 'Tichaya', 'Piyanut', 'Wipawee', 'Kuttika', 'Chitaporn', 'Supattra', 'Natthanicha', 'Pornpun'],
+  african: ['Mercy', 'Grace', 'Esther', 'Faith', 'Joy', 'Christine', 'Edith', 'Sharon', 'Violet', 'Brackcides', 'Emmaculate', 'Leonida', 'Noel', 'Agripina', 'Gaëlle', 'Laetitia', 'Odile', 'Raïssa', 'Christelle', 'Mireille'],
+};
+
+/**
+ * A surname as a woman carries it, where the language marks it: Polish
+ * -ski becomes -ska; Czech takes -ová or -á; Russian, Ukrainian and
+ * Bulgarian -ov, -ev and -in take an -a; Greek -os, -is and -as become -ou,
+ * -i and -a; Latvian endings turn feminine.
+ */
+export function feminineSurname(group: string, last: string): string {
+  switch (group) {
+    case 'polish':
+      return last.replace(/(sk|ck|dzk)i$/, '$1a');
+    case 'czech':
+      if (/ý$/.test(last)) return last.replace(/ý$/, 'á');
+      if (/ěk$/.test(last)) return last.replace(/ěk$/, 'ňková');
+      if (/ek$/.test(last)) return last.replace(/ek$/, 'ková');
+      if (/ec$/.test(last)) return last.replace(/ec$/, 'cová');
+      if (/a$/.test(last)) return last.replace(/a$/, 'ová');
+      return `${last}ová`;
+    case 'russian':
+    case 'bulgarian':
+    case 'ukrainian':
+      if (/(ov|ev|in)$/.test(last)) return `${last}a`;
+      if (/skyi$/.test(last)) return last.replace(/skyi$/, 'ska');
+      return last;
+    case 'greek':
+      if (/os$/.test(last)) return last.replace(/os$/, 'ou');
+      if (/is$/.test(last)) return last.replace(/is$/, 'i');
+      if (/as$/.test(last)) return last.replace(/as$/, 'a');
+      return last;
+    case 'latvian':
+      if (/š$/.test(last)) return last.replace(/š$/, 'a');
+      if (/is$/.test(last)) return last.replace(/is$/, 'e');
+      if (/s$/.test(last)) return last.replace(/s$/, 'a');
+      return last;
+    default:
+      return last;
+  }
+}
+
+const WOMEN_BANKS = new Map<string, NameBank>();
+
+/** The name bank of a group — the women's, in the women's game. */
+export function bankFor(group: string, women = false): NameBank {
+  const key = NAME_BANKS[group] !== undefined ? group : DEFAULT_NAME_GROUP;
+  const men = NAME_BANKS[key];
+  if (!women) return men;
+  let bank = WOMEN_BANKS.get(key);
+  if (bank === undefined) {
+    bank = { first: WOMEN_FIRST[key] ?? WOMEN_FIRST[DEFAULT_NAME_GROUP], last: men.last.map((l) => feminineSurname(key, l)) };
+    WOMEN_BANKS.set(key, bank);
+  }
+  return bank;
 }

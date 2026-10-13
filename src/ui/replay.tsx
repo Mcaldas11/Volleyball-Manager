@@ -83,7 +83,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
       if (cancelled.current) return;
       const seed = h.set * 1000 + h.scoreBefore[0] * 31 + h.scoreBefore[1];
       const beats = rallyBeats(court, h.serveTeam, h.contacts, roles, seed, nearTeam, h.winner,
-        (team) => defenceLayoutsOf((team === 0 ? home : away)?.tactics));
+        (team) => defenceLayoutsOf((team === 0 ? home : away)?.tactics), h.passers);
       await playBeats(beats, pace, cancelled, setScene, (play) => {
         setBigPlay({ ...play, key: Date.now() });
         clearTimeout(timer.current);

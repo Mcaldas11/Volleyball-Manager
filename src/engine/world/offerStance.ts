@@ -14,6 +14,7 @@
  * — and resent being shown the door; one who wanted to go agrees terms.
  */
 
+import { agentPush } from './contractTerms.ts';
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import type { IncomingOffer } from './negotiation.ts';
@@ -65,7 +66,7 @@ export function movePull(world: World, buyer: Club, p: number): number {
   // Already asked to go, or listed: he is ready to.
   const unsettled = world.transferRequests?.[p] !== undefined || store.hasFlag(p, PlayerFlag.Transferable) ? 0.35 : 0;
   return 1.6 * step * (1 + 0.6 * ambition) - 0.32 * morale - 0.28 * playing - 0.22 * loyalty - 0.22 * tenure +
-    (age <= 24 ? 0.08 : age >= 31 ? -0.1 : 0) + unsettled + (hash01(p, buyer.id) - 0.5) * 0.2;
+    (age <= 24 ? 0.08 : age >= 31 ? -0.1 : 0) + unsettled + agentPush(world, p) + (hash01(p, buyer.id) - 0.5) * 0.2;
 }
 
 /** The player's stance on a bid — worked out once, when it is first asked for, and kept. */

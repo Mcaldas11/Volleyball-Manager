@@ -213,3 +213,36 @@ test('the defence stands behind the block where its coach has put it', () => {
   }
   assert.ok(checked > 0);
 });
+
+test('a two- or four-man receive line shows on the court: the passers back, nobody else in the line', () => {
+  for (const receivers of [2, 4] as const) {
+    const world = generateWorld({ seed: 75, startYear: 2026, scale: 'small', manager: stubManager() });
+    const store = world.players;
+    const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
+    a.tactics = { ...a.tactics, rotations: a.tactics.rotations.map((r) => ({ ...r, receivers })) };
+    const sim = new MatchSimulator(store, {
+      home: toTeamSetup(store, a), away: toTeamSetup(store, b), format: MatchFormat.BestOf5,
+      importance: 0.5, neutralVenue: false, collectLog: true, seed: 11,
+    });
+    let checked = 0;
+    for (let i = 0; i < 300 && checked < 20; i++) {
+      const pre = sim.snapshot();
+      if (pre.matchOver) break;
+      const entry = sim.step();
+      if (entry === null) break;
+      if (entry.serveTeam !== 1 || entry.passers === undefined) continue;
+      assert.equal(entry.passers.length, receivers);
+      const [first] = rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner, undefined, entry.passers);
+      // Home is the near side: its passers stand deep, everyone found.
+      const deep = [...first.positions].filter(([p, at]) => pre.homeCourt.concat(pre.homeLibero).includes(p) && depth(at.y) > 0.5 && depth(at.y) < 0.75);
+      for (const p of entry.passers) {
+        const at = first.positions.get(p)!;
+        assert.ok(Number.isFinite(at.x) && Number.isFinite(at.y), 'every passer has a spot');
+        assert.ok(depth(at.y) > 0.5, `passer ${p} back in the line (${depth(at.y).toFixed(2)})`);
+      }
+      assert.equal(deep.length, receivers, 'nobody else in the line');
+      checked++;
+    }
+    assert.ok(checked > 5, `${receivers}: rallies checked ${checked}`);
+  }
+});

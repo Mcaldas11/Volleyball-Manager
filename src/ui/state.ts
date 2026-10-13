@@ -8,7 +8,18 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import { setUiGame } from './gameGender.ts';
+import { arrangeFriendly, toggleFrame, toggleWatch } from '../engine/world/nationalExtras.ts';
+import { startCourse } from '../engine/world/courses.ts';
+import { requestExpansion } from '../engine/world/supporters.ts';
+import { askOwner } from '../engine/world/owners.ts';
+import { atRisk, chooseTreatment, type InjuryCase, type Treatment } from '../engine/world/treatment.ts';
+import { menteesOf, mentorBlock, mentorOf, setMentor } from '../engine/world/mentoring.ts';
+import { rivalryName, rivalsOf, type Rivalry } from '../engine/world/rivals.ts';
 import { useSyncExternalStore } from 'react';
+import { applyPlan, suggestPlan, undoPlan, type GamePlan } from '../engine/world/gamePlan.ts';
+import type { InboxPrefs } from '../engine/world/world.ts';
+import { careerFileName, exportCareer, importCareer } from './saveFile.ts';
 import { bidTurnedDown } from '../engine/world/offerStance.ts';
 import { bareResult, reportResult } from '../engine/world/matchReports.ts';
 import {
@@ -28,7 +39,7 @@ import {
   answerStaffApproach, counterStaffApproach, openStaffTalks, setStaffListed, staffTalksBlock, staffTalksOf, staffTalksWith,
   submitStaffOffer, withdrawStaffTalks, type StaffTalks,
 } from '../engine/world/staffDeals.ts';
-import { cohesionEdge, cohesionOf, dressingRoom, setCaptain, type DressingRoom } from '../engine/world/dressingRoom.ts';
+import { cohesionEdge, cohesionOf, dressingRoom, setCaptain, setViceCaptain, type DressingRoom } from '../engine/world/dressingRoom.ts';
 import { applyTalkMorale, favouriteness, giveTalk, type TalkMoment, type TalkResult, type TalkTone } from '../engine/world/teamTalk.ts';
 import { answerTransferRequest, CHAT_LINES, chatBlock, chatOpening, talkToPlayer, type ChatTopic } from '../engine/world/playerTalks.ts';
 import { requestUpgrade, upgradeBlock, type FacilityKind } from '../engine/world/facilities.ts';
@@ -51,7 +62,8 @@ import {
   transferWindowOn,
   type Fixture, type GameMessage, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
-import { refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
+import { MAX_CONTRACT_YEARS, refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
+import { releaseClauseOf, takeUpOption } from '../engine/world/contractTerms.ts';
 import { defaultTactics, FORMATION_NAMES, formationOf, type Formation, type TeamTactics } from '../engine/match/tactics.ts';
 import {
   activeTactic, deleteTactic as deleteTacticSlot, loadTactic as loadTacticSlot, MAX_TACTICS,
@@ -147,12 +159,13 @@ export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals'
-  | 'dressing' | 'commercial' | 'facilities' | 'affiliates';
+  | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
   'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news', 'internationals',
+  'achievements', 'courses',
 ]);
 
 /** The team screens a national team has as well as a club: its squad, its team sheet, its instructions, its rotations. */
@@ -228,9 +241,18 @@ export interface Negotiation {
   loanShare: number;
   /** Loan talks: the playing time you promise him. */
   loanPlayingTime: LoanPlayingTime;
+  /** Terms: the small print — see contractTerms.ts. 0 is none. */
+  termsAppearance: number;
+  termsTitleBonus: number;
+  termsClause: number;
+  termsOption: boolean;
+  termsAgentFee: number;
   /** A problem with the offer itself (budget, window) before it is sent. */
   message: string | null;
 }
+
+/** The small print of an offer being put together. */
+export type SmallPrint = Pick<Negotiation, 'termsAppearance' | 'termsTitleBonus' | 'termsClause' | 'termsOption' | 'termsAgentFee'>;
 
 /** Where the browser remembers that the welcome tour has been seen. */
 const WELCOME_KEY = 'vm.welcome';
@@ -547,6 +569,10 @@ class Game {
   /** Player the Scouting screen should jump to next time it opens; consumed once. */
   scoutingFocus: number | null = null;
   negotiation: Negotiation | null = null;
+  /** The player the open profile is being compared with — see Compare.tsx. */
+  compareTo: number | null = null;
+  /** Players whose profiles were opened lately, the latest first. */
+  recentPlayers: number[] = [];
   staffNegotiation: StaffNegotiation | null = null;
   /** The help, open over whatever is on screen. */
   helpOpen = false;
@@ -613,12 +639,13 @@ class Game {
 
   // ---- Lifecycle --------------------------------------------------------
 
-  newGame(scale: WorldScale, seed: number): void {
+  newGame(scale: WorldScale, seed: number, gender: 'men' | 'women' = 'men'): void {
     const manager = this.pendingManager;
     if (manager === null) return;
     // Every new career offers the tutorial — its first card has the way out for those who know the game.
     this.welcomeOpen = true;
-    const world = generateWorld({ seed, startYear: 2026, scale, manager });
+    const world = generateWorld({ seed, startYear: 2026, scale, manager, gender });
+    setUiGame(gender);
     this.ctx = newSeasonContext();
     startSeason(world, this.ctx);
     this.world = world;
@@ -681,6 +708,7 @@ class Game {
     try {
       const { world, season } = await readSaveWorld(id);
       this.world = world;
+      setUiGame(world.gender ?? 'men');
       this.teamView = 'club';
       this.ctx = season;
       this.watched = null;
@@ -717,27 +745,99 @@ class Game {
     this.emit();
   }
 
+  /** The summary a save of the career as it stands is listed by. */
+  private currentMeta(world: World, id: string): SaveMeta {
+    const nationalTeam = world.career.nationalTeam ?? -1;
+    return {
+      id,
+      managerName: `${world.manager.firstName} ${world.manager.lastName}`,
+      nationCode: NATIONS[world.manager.nation]?.code ?? '???',
+      clubName: this.club?.name ?? (nationalTeam >= 0 ? `${NATIONS[nationalTeam].name} national team` : 'Unemployed'),
+      clubNationCode: this.club ? NATIONS[this.club.nation].code : nationalTeam >= 0 ? NATIONS[nationalTeam].code : '',
+      scale: this.currentScale ?? 'standard',
+      inGameDate: this.dateLabel(),
+      season: world.season,
+      createdAt: this.saveCreatedAt ?? Date.now(),
+      updatedAt: Date.now(),
+      schemaVersion: 1,
+      ...(world.gender === 'women' ? { gender: 'women' as const } : {}),
+    };
+  }
+
+  /** Hand the browser a file to save. */
+  private download(blob: Blob, name: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  /** The career as it stands, as a file to keep — a copy outside the browser. */
+  async exportCurrentCareer(): Promise<void> {
+    const world = this.world;
+    if (world === null) return;
+    this.busy = true;
+    this.emit();
+    try {
+      const meta = this.currentMeta(world, this.currentSaveId ?? newSaveId());
+      this.download(await exportCareer(meta, world, this.ctx), careerFileName(meta));
+      this.notice = 'Career exported — keep the file somewhere safe.';
+    } catch {
+      this.notice = 'Could not export this career.';
+    }
+    this.busy = false;
+    this.emit();
+  }
+
+  /** A saved career, straight from the list, as a file. */
+  async exportSavedCareer(id: string): Promise<void> {
+    const meta = this.saves.find((s) => s.id === id);
+    if (meta === undefined) return;
+    this.busy = true;
+    this.emit();
+    try {
+      const { world, season } = await readSaveWorld(id);
+      this.download(await exportCareer(meta, world, season), careerFileName(meta));
+      this.notice = 'Career exported.';
+    } catch {
+      this.notice = 'Could not export that save.';
+    }
+    // Reading a save sets its game up: back to the one in play.
+    if (this.world !== null) setUiGame(this.world.gender ?? 'men');
+    this.busy = false;
+    this.emit();
+  }
+
+  /** A career file brought in: saved as a career of its own, and listed. */
+  async importCareerFile(file: File): Promise<void> {
+    this.busy = true;
+    this.emit();
+    try {
+      const { meta, world, season } = await importCareer(file);
+      const id = newSaveId();
+      await writeSaveWorld(id, { ...meta, id, updatedAt: Date.now() }, world, season);
+      this.notice = `Imported ${meta.managerName}'s career — ${meta.clubName}, ${meta.inGameDate}.`;
+      await this.refreshSaves();
+    } catch (err) {
+      this.notice = err instanceof Error ? err.message : 'Could not import that file.';
+    }
+    if (this.world !== null) setUiGame(this.world.gender ?? 'men');
+    this.busy = false;
+    this.emit();
+  }
+
   async saveCurrentGame(): Promise<void> {
     const world = this.world;
     if (world === null) return;
     if (this.currentSaveId === null) this.currentSaveId = newSaveId();
-    const nationalTeam = world.career.nationalTeam ?? -1;
     this.busy = true;
     this.emit();
     try {
-      const meta: SaveMeta = {
-        id: this.currentSaveId,
-        managerName: `${world.manager.firstName} ${world.manager.lastName}`,
-        nationCode: NATIONS[world.manager.nation]?.code ?? '???',
-        clubName: this.club?.name ?? (nationalTeam >= 0 ? `${NATIONS[nationalTeam].name} national team` : 'Unemployed'),
-        clubNationCode: this.club ? NATIONS[this.club.nation].code : nationalTeam >= 0 ? NATIONS[nationalTeam].code : '',
-        scale: this.currentScale ?? 'standard',
-        inGameDate: this.dateLabel(),
-        season: world.season,
-        createdAt: this.saveCreatedAt ?? Date.now(),
-        updatedAt: Date.now(),
-        schemaVersion: 1,
-      };
+      const meta = this.currentMeta(world, this.currentSaveId);
       await writeSaveWorld(this.currentSaveId, meta, world, this.ctx);
       this.notice = 'Game saved.';
     } catch (err) {
@@ -1005,8 +1105,11 @@ class Game {
   select(playerIdx: number | null): void {
     if (playerIdx !== null) {
       this.pushHistory({ screen: this.screen, selectedPlayer: playerIdx, selectedClub: null, selectedReview: null, selectedCompetition: null });
+      // Remembered, to compare him with later.
+      this.recentPlayers = [playerIdx, ...this.recentPlayers.filter((p) => p !== playerIdx)].slice(0, 12);
     }
     this.selectedPlayer = playerIdx;
+    this.compareTo = null;
     if (playerIdx !== null) {
       this.selectedClub = null;
       this.selectedCoach = null;
@@ -1890,6 +1993,42 @@ class Game {
     this.emit();
   }
 
+  /** The scouts' plan against a club. */
+  gamePlanAgainst(oppId: number): GamePlan | null {
+    const world = this.world;
+    const club = this.club;
+    const opp = world?.clubs[oppId];
+    return world === null || club === null || opp === undefined ? null : suggestPlan(world, club, opp);
+  }
+
+  /** Put the scouts' plan into every rotation's instructions. */
+  applyGamePlan(oppId: number, fixtureId: number): void {
+    const world = this.world;
+    const club = this.club;
+    const plan = this.gamePlanAgainst(oppId);
+    if (world === null || club === null || plan === null) return;
+    applyPlan(world, club, plan, fixtureId);
+    this.notice = `The plan for ${world.clubs[oppId]?.name ?? 'the match'} is in — every rotation.`;
+    this.emit();
+  }
+
+  /** Take the plan back out. */
+  undoGamePlan(): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = undoPlan(world, club) ? 'Your instructions are back as they were.' : 'Nothing to undo.';
+    this.emit();
+  }
+
+  /** Change one of the manager's preferences for the post. */
+  setInboxPref<K extends keyof InboxPrefs>(key: K, value: InboxPrefs[K]): void {
+    const world = this.world;
+    if (world === null) return;
+    world.inboxPrefs = { ...(world.inboxPrefs ?? {}), [key]: value };
+    this.emit();
+  }
+
   /** Close the match report beside the fixtures. */
   closeMatchReport(): void {
     this.watched = null;
@@ -1924,7 +2063,7 @@ class Game {
     this.matchday = {
       fixture: next,
       sides: [side(next.home), side(next.away)],
-      title: world.competitions[next.competitionId]?.name ?? 'Match',
+      title: (world.competitions[next.competitionId]?.name ?? 'Match') + (rivalryName(world, next) !== null ? ` · ${rivalryName(world, next)}` : ''),
       national: null,
       stage: 'lineup',
       setBreakPending: false,
@@ -2669,6 +2808,61 @@ class Game {
     this.emit();
   }
 
+  /** How one of the manager's injured players is being treated, if he was asked. */
+  injuryCase(p: number): InjuryCase | null {
+    return this.world?.injuryCases?.[p] ?? null;
+  }
+
+  /** The manager's call on an injured player's treatment. */
+  chooseTreatment(p: number, treatment: Treatment): void {
+    if (this.world === null) return;
+    this.notice = chooseTreatment(this.world, p, treatment).text;
+    this.emit();
+  }
+
+  /** Whether a player rushed back from an injury may still break down. */
+  atRisk(p: number): boolean {
+    return this.world !== null && atRisk(this.world, p);
+  }
+
+  /** The open profile's player, side by side with this one. */
+  compareWith(p: number | null): void {
+    this.compareTo = p;
+    this.emit();
+  }
+
+  /** A young player's mentor, and who a veteran mentors. */
+  mentorOf(p: number): number | null {
+    return this.world === null ? null : mentorOf(this.world, p);
+  }
+
+  menteesOf(p: number): number[] {
+    return this.world === null ? [] : menteesOf(this.world, p);
+  }
+
+  /** The veterans who could take a young player under their wing. */
+  mentorCandidates(mentee: number): number[] {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return [];
+    return club.players.filter((p) => mentorBlock(world, p, mentee) === null);
+  }
+
+  setMentor(mentee: number, mentor: number | null): void {
+    if (this.world === null) return;
+    this.notice = setMentor(this.world, mentee, mentor);
+    this.emit();
+  }
+
+  makeViceCaptain(p: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    setViceCaptain(club, p);
+    this.notice = `${world.players.fullName(p)} is the vice-captain: the armband is his if the captain goes.`;
+    this.emit();
+  }
+
   // ---- One-to-one talks -------------------------------------------------------------------
 
   /** Why the manager can't have this talk with a player now, or null if he can. */
@@ -2733,6 +2927,52 @@ class Game {
   }
 
   /** Ask the board for a better facility. */
+  /** The national coach's extras: a friendly, the provisional squad, a club match to watch. */
+  arrangeFriendly(opp: number, day: number, home: boolean): boolean {
+    if (this.world === null) return false;
+    const r = arrangeFriendly(this.world, opp, day, home);
+    this.notice = r.text;
+    this.emit();
+    return r.ok;
+  }
+
+  toggleFrame(p: number): void {
+    if (this.world === null) return;
+    this.notice = toggleFrame(this.world, p);
+    this.emit();
+  }
+
+  toggleWatch(p: number): void {
+    if (this.world === null) return;
+    this.notice = toggleWatch(this.world, p);
+    this.emit();
+  }
+
+  /** Enrol on a coaching course. */
+  startCourse(id: string): void {
+    if (this.world === null) return;
+    this.notice = startCourse(this.world, id).text;
+    this.emit();
+  }
+
+  /** Ask the board for a new stand. */
+  requestExpansion(seats: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = requestExpansion(world, club, seats);
+    this.emit();
+  }
+
+  /** Go to the owner for money for transfers. */
+  askOwner(amount: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = askOwner(world, club, amount);
+    this.emit();
+  }
+
   requestUpgrade(kind: FacilityKind): void {
     const world = this.world;
     const club = this.club;
@@ -4071,6 +4311,11 @@ class Game {
       termsYears: t.lastOffer.years,
       loanShare: t.lastOffer.wageShare ?? 0.5,
       loanPlayingTime: t.lastOffer.playingTime ?? 'rotation',
+      termsAppearance: t.lastOffer.appearanceBonus ?? 0,
+      termsTitleBonus: t.lastOffer.titleBonus ?? 0,
+      termsClause: t.lastOffer.releaseClause ?? 0,
+      termsOption: t.lastOffer.option ?? false,
+      termsAgentFee: t.lastOffer.agentFee ?? 0,
       message: null,
     };
     this.staffNegotiation = null;
@@ -4319,6 +4564,44 @@ class Game {
   setTermsYears(years: number): void {
     if (this.negotiation === null) return;
     this.negotiation.termsYears = years;
+    // An option can't take a contract past the longest anyone signs.
+    if (years >= MAX_CONTRACT_YEARS) this.negotiation.termsOption = false;
+    this.emit();
+  }
+
+  /** Change the small print of the offer being put together. */
+  setSmallPrint(patch: Partial<SmallPrint>): void {
+    if (this.negotiation === null) return;
+    Object.assign(this.negotiation, patch);
+    this.negotiation.message = null;
+    this.emit();
+  }
+
+  /** A club's rivals: its city's other clubs, and its classic rival. */
+  rivalsOf(clubId: number): Array<{ clubId: number; kind: Rivalry }> {
+    return this.world === null ? [] : rivalsOf(this.world, clubId);
+  }
+
+  /** The release clause in a player's contract, if he has one. */
+  releaseClause(playerIdx: number): number | null {
+    return this.world === null ? null : releaseClauseOf(this.world, playerIdx);
+  }
+
+  /** Bid exactly his release clause — his club can't refuse it. */
+  payReleaseClause(): void {
+    const n = this.negotiation;
+    const t = this.currentTalks();
+    if (n === null || t === null || this.world === null) return;
+    const clause = releaseClauseOf(this.world, t.playerIdx);
+    if (clause === null) return;
+    n.feeOffer = clause;
+    this.submitFeeOffer();
+  }
+
+  /** Take up the club's option on one more season of a player's contract. */
+  takeUpOption(playerIdx: number): void {
+    if (this.world === null) return;
+    this.notice = takeUpOption(this.world, playerIdx).text;
     this.emit();
   }
 
@@ -4330,6 +4613,12 @@ class Game {
     n.termsWage = t.demands.wage;
     n.termsRole = t.demands.role;
     n.termsYears = Math.min(t.demands.maxYears, Math.max(t.demands.minYears, n.termsYears));
+    // His agent's fee, and the way out he asks for — a lower clause than he asks is fine by him.
+    n.termsAgentFee = t.demands.agentFee ?? 0;
+    const max = t.demands.clauseMax ?? null;
+    if (max !== null && (n.termsClause <= 0 || n.termsClause > max)) n.termsClause = max;
+    n.termsOption = false;
+    n.message = null;
     this.emit();
   }
 
@@ -4373,8 +4662,15 @@ class Game {
       this.emit();
       return;
     }
+    if (n.termsAgentFee > club.finances.balance - (t.kind === 'transfer' ? t.agreedFee : 0)) {
+      n.message = 'The club can\'t afford that agent\'s fee.';
+      this.emit();
+      return;
+    }
     const due = submitOffer(world, t, {
       fee: t.agreedFee, wage: n.termsWage, role: n.termsRole, years: n.termsYears,
+      appearanceBonus: n.termsAppearance, titleBonus: n.termsTitleBonus, releaseClause: n.termsClause,
+      option: n.termsOption && n.termsYears < MAX_CONTRACT_YEARS, agentFee: n.termsAgentFee,
     });
     const name = store.fullName(p);
     this.notice = t.kind === 'renewal'

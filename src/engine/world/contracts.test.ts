@@ -6,7 +6,7 @@ import {
   windowCloseDay,
 } from './world.ts';
 import {
-  contractDemands, generateIncomingOffers, respondToOffer, SquadRole, TALKS_PATIENCE, yearsLeft,
+  contractDemands, generateIncomingOffers, offerMatching, respondToOffer, SquadRole, TALKS_PATIENCE, yearsLeft,
 } from './negotiation.ts';
 import { contractNotices } from './contracts.ts';
 import { endSeason } from '../season/rollover.ts';
@@ -51,11 +51,11 @@ test('a player answers offers: accepts his demands, counters a near miss, walks 
   assert.ok(d.minYears >= 1 && d.maxYears >= d.minYears);
 
   const years = d.minYears;
-  const yes = respondToOffer(d, { wage: d.wage, role: d.role, years }, TALKS_PATIENCE);
+  const yes = respondToOffer(d, offerMatching(d, years), TALKS_PATIENCE);
   assert.equal(yes.outcome, 'accepted');
 
   // Just under: he counters and comes down a little, but never below his floor.
-  const close = respondToOffer(d, { wage: Math.round(d.wage * 0.92), role: d.role, years }, TALKS_PATIENCE);
+  const close = respondToOffer(d, { ...offerMatching(d, years), wage: Math.round(d.wage * 0.92) }, TALKS_PATIENCE);
   assert.equal(close.outcome, 'counter');
   assert.equal(close.gap, 'close');
   assert.equal(close.patience, TALKS_PATIENCE - 1);
@@ -63,7 +63,7 @@ test('a player answers offers: accepts his demands, counters a near miss, walks 
 
   // A contract outside the length he will sign is refused even at his wage.
   if (d.maxYears < 5) {
-    const tooLong = respondToOffer(d, { wage: d.wage, role: d.role, years: d.maxYears + 3 }, TALKS_PATIENCE);
+    const tooLong = respondToOffer(d, offerMatching(d, d.maxYears + 3), TALKS_PATIENCE);
     assert.notEqual(tooLong.outcome, 'accepted');
   }
 

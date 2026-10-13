@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { MAX_SQUAD } from '../model/positions.ts';
 import { generateWorld } from './worldGen.ts';
 import { seasonEndDay, stubManager, type World } from './world.ts';
-import { evaluateFeeOffer } from './negotiation.ts';
+import { evaluateFeeOffer, offerMatching } from './negotiation.ts';
 import {
   acceptIncomingOffer, counterIncomingOffer, openTalks, processDeals, REPLY_DAYS, submitOffer, type Talks,
 } from './deals.ts';
@@ -31,7 +31,7 @@ test('a renewal is never answered in under two days', () => {
   const p = club.players[0];
   world.players.contractUntil[p] = seasonEndDay(world.season);
   const t = openTalks(world, club, p, 'renewal');
-  const offer = { fee: 0, wage: t.demands.wage, role: t.demands.role, years: t.demands.minYears };
+  const offer = { fee: 0, ...offerMatching(t.demands, t.demands.minYears) };
   const due = submitOffer(world, t, offer);
   assert.ok(due - world.day >= REPLY_DAYS.renewal[0] && REPLY_DAYS.renewal[0] >= 2);
 
@@ -60,7 +60,7 @@ test('a bid takes days to answer; once accepted, terms follow — and the player
   assert.equal(t.stage, 'terms');
   assert.ok(world.messages.some((m) => m.talksId === t.id && m.subject.startsWith('Bid accepted')));
 
-  submitOffer(world, t, { fee: t.agreedFee, wage: t.demands.wage, role: t.demands.role, years: t.demands.minYears });
+  submitOffer(world, t, { fee: t.agreedFee, ...offerMatching(t.demands, t.demands.minYears) });
   runDays(world, 10, () => !world.talks.some((x) => x.id === t.id));
   assert.equal(world.players.clubId[p], club.id);
   assert.ok(club.players.includes(p));
@@ -76,7 +76,7 @@ test('a rival offering him more can take the player from under you', () => {
   const rival = world.clubs.find((c) => c.id !== club.id && c.reputation >= club.reputation)!;
   t.rivals = [{ clubId: rival.id, wage: Math.round(t.demands.wage * 1.6) }];
 
-  submitOffer(world, t, { fee: 0, wage: t.demands.wage, role: t.demands.role, years: t.demands.minYears });
+  submitOffer(world, t, { fee: 0, ...offerMatching(t.demands, t.demands.minYears) });
   runDays(world, 10, () => !world.talks.some((x) => x.id === t.id));
   assert.equal(world.players.clubId[free], rival.id, 'he took the better offer');
   assert.ok(world.messages.some((m) => m.subject === `${world.players.fullName(free)} joins ${rival.name}`));

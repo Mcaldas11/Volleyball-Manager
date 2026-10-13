@@ -20,6 +20,7 @@
  * the season's end, and the coach leaves with it.
  */
 
+import { fixtureRivalry } from './rivals.ts';
 import { newsCoachAppointed, newsCoachSacked, newsManagerAppointed } from './news.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
@@ -130,6 +131,14 @@ export interface ManagerCareer {
   contractTalks?: number;
   /** What he is like as a coach, on the staff's 1-20 scale — see ensureManagerAttributes. */
   attributes?: StaffAttributes;
+  /** His milestones, each with the day reached; a promotion won; the club and division he was last seen in — see achievements.ts. */
+  achievements?: Record<string, number>;
+  promoted?: boolean;
+  lastTier?: { clubId: number; tier: number };
+  /** The course he is on, the licence he holds, the clinics he has taken — see courses.ts. */
+  course?: { id: string; started: number; until: number };
+  licence?: 'L2' | 'L1' | 'Pro';
+  clinics?: Array<{ id: string; season: number }>;
 }
 
 /** Where a new coach's board starts: the benefit of the doubt. */
@@ -941,7 +950,8 @@ export function boardResults(world: World, fixtureIds: readonly number[]): void 
     const away = world.clubs[f.away];
     if (home === undefined || away === undefined) continue;
     const homeWon = f.homeSets > f.awaySets;
-    const weight = 2 + 3 * f.importance;
+    // A derby counts for more than its place in the table.
+    const weight = (2 + 3 * f.importance) * (fixtureRivalry(world, f) !== null ? 1.6 : 1);
     judgeResult(home, away, homeWon, weight);
     judgeResult(away, home, !homeWon, weight);
     // On each bench's record.

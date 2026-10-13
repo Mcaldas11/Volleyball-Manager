@@ -102,3 +102,18 @@ test('a save from before seasons were kept loads with fresh leaderboards and a b
   const [p] = revived.seasonStartAbility.keys();
   assert.equal(revived.seasonStartAbility.get(p), world.players.currentAbility[p]);
 });
+
+test('a women\'s world comes back from a save as the women\'s game — and a men\'s as the men\'s', async () => {
+  const { NATIONS, nationStrength } = await import('../engine/world/nations.ts');
+  const iran = NATIONS.findIndex((n) => n.code === 'IRI');
+  const women = generateWorld({ seed: 2, startYear: 2026, scale: 'small', manager: stubManager(3), gender: 'women' });
+  const men = generateWorld({ seed: 2, startYear: 2026, scale: 'small', manager: stubManager(3) });
+  const menIran = nationStrength(iran);
+  const back = reviveWorld(structuredClone(women));
+  assert.equal(back.gender, 'women');
+  assert.equal(back.players.women, true);
+  assert.ok(nationStrength(iran) < menIran, 'the women\'s map');
+  const menBack = reviveWorld(structuredClone(men));
+  assert.equal(menBack.players.women, false);
+  assert.equal(nationStrength(iran), menIran);
+});

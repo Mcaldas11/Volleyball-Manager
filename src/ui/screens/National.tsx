@@ -5,6 +5,7 @@
  * page of a career spent at a national team alone.
  */
 
+import { FRAME_MAX, frameOf, friendliesThisSeason, friendlyDays, friendlyOpponents, MAX_FRIENDLIES, watchingList } from '../../engine/world/nationalExtras.ts';
 import { useMemo, useState, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import { Formation, FORMATION_NAMES } from '../../engine/match/tactics.ts';
@@ -19,6 +20,7 @@ import {
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { Dropdown } from '../dropdown.tsx';
 import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
 
 function nationName(n: number): string {
@@ -261,6 +263,7 @@ export function PlayerTable({ players, t }: { players: number[]; t?: Tournament 
  */
 export function NationalHome(): JSX.Element {
   const g = useGame();
+  const [friendly, setFriendly] = useState(false);
   const world = g.world!;
   const nation = userNation(world);
   const m = world.manager;
@@ -319,8 +322,10 @@ export function NationalHome(): JSX.Element {
           ) : t !== undefined ? (
             <button className="primary" onClick={() => g.openTournament(t.id)}><Icon name="trophy" size={14} /> {t.name}</button>
           ) : null}
+          <button className="hm-ghost" onClick={() => setFriendly(true)}><Icon name="calendar" size={14} /> Arrange a friendly</button>
         </div>
       </section>
+      {friendly && <FriendlyDialog onClose={() => setFriendly(false)} />}
 
       <div className="home-row career-home-row">
         <section className="hm-card">
@@ -416,6 +421,7 @@ export function NationalHome(): JSX.Element {
  */
 export function NationalSquadScreen(): JSX.Element {
   const g = useGame();
+  const [friendly, setFriendly] = useState(false);
   const world = g.world!;
   const store = world.players;
   const nation = userNation(world);
@@ -424,6 +430,8 @@ export function NationalSquadScreen(): JSX.Element {
   const players = g.nationalPlayers();
   const named = t !== undefined && (t.status !== 'planned' || world.internationals?.chosen?.tournamentId === t.id);
   const running = t !== undefined && t.status !== 'planned' ? t : undefined;
+  const frame = frameOf(world);
+  const watching = watchingList(world);
   const pool = useMemo(
     () => eligibleFor(world, nation).filter((p) => !players.includes(p))
       .sort((a, b) => selectionScore(world, b) - selectionScore(world, a)).slice(0, 40),
@@ -444,10 +452,12 @@ export function NationalSquadScreen(): JSX.Element {
           <strong>{nationName(nation)} national team</strong>
           <span className="dim">{status}</span>
         </div>
+        <button onClick={() => setFriendly(true)}><Icon name="calendar" size={14} /> Arrange a friendly</button>
         {t !== undefined && (
           <button onClick={() => g.openTournament(t.id)}><Icon name="trophy" size={14} /> {t.name}</button>
         )}
       </div>
+      {friendly && <FriendlyDialog onClose={() => setFriendly(false)} />}
       {squadOpen && t !== undefined ? (
         <SquadPicker key={t.id} t={t} nation={nation} />
       ) : (
@@ -457,12 +467,14 @@ export function NationalSquadScreen(): JSX.Element {
             <div className="nat-scroll"><PlayerTable players={players} t={running} /></div>
           </section>
           <section className="nat-card">
-            <h3 className="nat-h">In contention</h3>
+            <h3 className="nat-h">In contention <span className="faint">· provisional squad {frame.length}/{FRAME_MAX}{watching.length > 0 ? ` · watching ${watching.length}` : ''}</span></h3>
             <div className="nat-scroll">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Player</th><th>Pos</th><th>Club</th><th className="num">Ability</th>
+                    <th>Player</th>
+                    <th className="nat-act" title={`Your provisional squad — up to ${FRAME_MAX} — and the club matches you will go and watch`}>Frame · Watch</th>
+                    <th>Pos</th><th>Club</th><th className="num">Ability</th>
                     <th className="num" title="Average rating over his last matches">Form</th><th className="num">Caps</th>
                     <th className="num" title="How the assistant rates him for a place">Rating</th>
                   </tr>
@@ -471,6 +483,13 @@ export function NationalSquadScreen(): JSX.Element {
                   {pool.map((p) => (
                     <tr key={p}>
                       <td><PlayerLink idx={p} /></td>
+                      <td className="nat-act">
+                        <button className={`sm icon-btn nat-frame${frame.includes(p) ? ' on' : ''}`} title={frame.includes(p) ? 'In the provisional squad — take him out' : 'Put him in the provisional squad'}
+                          onClick={() => g.toggleFrame(p)}><Icon name="star" size={13} /></button>
+                        <button className={`sm icon-btn nat-watch${watching.includes(p) ? ' on' : ''}`} disabled={store.clubId[p] < 0}
+                          title={watching.includes(p) ? 'Going to his next match — call it off' : 'Go and watch his next club match'}
+                          onClick={() => g.toggleWatch(p)}><Icon name="user" size={13} /></button>
+                      </td>
                       <td><Pos pos={store.position[p] as Position} /></td>
                       <td>{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
                       <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
@@ -485,6 +504,42 @@ export function NationalSquadScreen(): JSX.Element {
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Arrange a friendly: the opponent, a free date for both, home or away. */
+function FriendlyDialog({ onClose }: { onClose: () => void }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const opponents = friendlyOpponents(world);
+  const [opp, setOpp] = useState(opponents[0] ?? -1);
+  const days = friendlyDays(world, opp);
+  const [day, setDay] = useState<number>(days[0] ?? -1);
+  const [home, setHome] = useState(true);
+  const dayOk = days.includes(day) ? day : days[0] ?? -1;
+  const left = MAX_FRIENDLIES - friendliesThisSeason(world);
+  return (
+    <div className="hol-overlay" onClick={onClose}>
+      <div className="hol-card nat-friendly" onClick={(e) => e.stopPropagation()}>
+        <h3>Arrange a friendly</h3>
+        <p className="faint">For the practice: it counts for caps, not for the ranking. {left > 0 ? `${left} more this season.` : 'No more this season.'}</p>
+        <div className="field-row"><span className="field-label">Against</span>
+          <Dropdown<number> value={opp} searchable onChange={(v) => { setOpp(v); setDay(friendlyDays(world, v)[0] ?? -1); }}
+            options={opponents.map((n) => ({ value: n, label: nationName(n), text: nationName(n), icon: <Flag nation={n} />, hint: `#${worldRanking(world).indexOf(n) + 1}` }))} />
+        </div>
+        <div className="field-row"><span className="field-label">On</span>
+          <Dropdown<number> value={dayOk} onChange={setDay} placeholder="No free date"
+            options={days.map((d) => ({ value: d, label: g.dateLabelForDay(d) }))} />
+        </div>
+        <div className="field-row"><span className="field-label">Where</span>
+          <Segmented<'home' | 'away'> size="sm" options={[['home', 'At home'], ['away', 'Away']]} value={home ? 'home' : 'away'} onChange={(v) => setHome(v === 'home')} />
+        </div>
+        <div className="nat-friendly-actions">
+          <button onClick={onClose}>Cancel</button>
+          <button className="primary" disabled={dayOk < 0 || left <= 0} onClick={() => { if (g.arrangeFriendly(opp, dayOk, home)) onClose(); }}>Arrange it</button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -14,7 +14,7 @@ export type IconName =
   | 'press' | 'whistle' | 'clock' | 'star' | 'ball' | 'alert' | 'collapse'
   | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check'
   | 'inbox' | 'archive' | 'medical' | 'coin' | 'contract' | 'board' | 'playOutline' | 'chevronLeft' | 'arrowRight'
-  | 'career' | 'sound' | 'mute' | 'help';
+  | 'career' | 'sound' | 'mute' | 'help' | 'download' | 'upload' | 'lock';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   home: <><path d="M3.5 10.5 12 4l8.5 6.5" /><path d="M5.5 9v10.5h13V9" /><path d="M10 19.5v-5h4v5" /></>,
@@ -43,6 +43,9 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   pause: <path d="M8 5v14M16 5v14" />,
   save: <><path d="M5 4h11l3 3v13H5V4Z" /><path d="M8 4v5h7V4" /><path d="M8 20v-6h8v6" /></>,
   exit: <><path d="M14 4h5v16h-5" /><path d="M10 8l-4 4 4 4" /><path d="M6 12h10" /></>,
+  download: <><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /><path d="M4.5 16.5v3h15v-3" /></>,
+  upload: <><path d="M12 15V4" /><path d="m7.5 8.5 4.5-4.5 4.5 4.5" /><path d="M4.5 16.5v3h15v-3" /></>,
+  lock: <><rect x="5.5" y="10.5" width="13" height="9.5" rx="2" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" /></>,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   news: <><path d="M4.5 5.5h12v14h-10a2 2 0 0 1-2-2v-12Z" /><path d="M16.5 9h3v8.5a2 2 0 0 1-2 2" /><path d="M7.5 9h6M7.5 12.5h6M7.5 16h4" /></>,
   task: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m8 12.3 2.7 2.7L16.5 9" /></>,

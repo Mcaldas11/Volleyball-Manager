@@ -11,6 +11,7 @@
  * too generous, the world will have visibly drifted by season twenty.
  */
 
+import { fansTrophy } from '../world/supporters.ts';
 import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
 import { seasonAwards } from '../world/accolades.ts';
@@ -35,6 +36,9 @@ import {
 } from '../world/world.ts';
 import { startSeason, type SeasonContext } from './seasonEngine.ts';
 import { pruneCompetitionRecords } from '../world/records.ts';
+import { payTitleBonuses, pruneExtras } from '../world/contractTerms.ts';
+import { recordAbilities } from '../world/abilityHistory.ts';
+import { noteTrophy, ownerSeasonEnd } from '../world/owners.ts';
 import { returnLoans, wageBill } from '../world/loans.ts';
 import { completeDueMoves } from '../world/deals.ts';
 import { clubBooks } from './books.ts';
@@ -82,6 +86,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
     dissolved: [],
   };
 
+  // Everyone's ability as the season closes, for the charts.
+  recordAbilities(world);
   awardTitles(world, report, record);
   // The season's individual awards — the leagues' and the world's — while
   // everyone is still where he played it.
@@ -92,6 +98,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   // Next season's continental places and super cups go on this season's results.
   qualifyForCups(world);
   settleFinances(world, report, record);
+  // The owner's verdict on his wish — and his money, if the club ended in the red.
+  ownerSeasonEnd(world);
   const finishes = captureFinishes(world);
   applyPromotionRelegation(world, report);
   // Every board judges its coach's season — before the summer's contracts
@@ -118,6 +126,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   // chance to be picked up by someone else rather than simply vanishing.
   trimSquads(world);
   report.transfers = runTransferWindow(world);
+  // Small print on contracts that ran out, or on players who moved, goes.
+  pruneExtras(world);
   // The backrooms too: contracts up, the old retiring, places filled.
   staffSeasonEnd(world);
   revalueSquads(world);
@@ -158,6 +168,9 @@ function awardTitles(world: World, report: RolloverReport, record: SeasonRecord)
     const club = world.clubs[winner];
     if (club !== undefined) {
       club.titlesWon++;
+      payTitleBonuses(world, club.id, comp.name);
+      noteTrophy(world, club.id);
+      fansTrophy(world, club.id);
       // Winning raises a club's standing, which raises the players it can sign.
       club.reputation = Math.min(10000, Math.round(club.reputation * 1.035 + 60));
       if (comp.tier === 1) {
@@ -237,6 +250,7 @@ function settleFinances(world: World, report: RolloverReport, record: SeasonReco
     f.seasonIncome = 0;
     f.seasonExpenditure = 0;
     f.prizeMoney = 0;
+    f.bonuses = 0;
 
     // Sponsorship follows reputation, so success compounds and decline bites —
     // unless the club has a deal that runs on.

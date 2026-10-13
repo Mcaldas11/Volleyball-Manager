@@ -9,13 +9,14 @@
  * its own schedule.
  */
 
+import { openInjuryCase, TREATMENT_MIN_DAYS } from './treatment.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { bestKnown, readLevel, READ_WARN_STARTING, READ_WARN_WORKED_OUT } from '../model/tacticRead.ts';
 import { INJURY_NAMES } from '../model/players.ts';
 import { compileLoanReport, diffLoanStats, newLoanStats, wageBill } from './loans.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
 import {
-  contractEndSeason, DAYS_PER_SEASON, euros, messageCategory,
+  contractEndSeason, DAYS_PER_SEASON, euros, inboxPrefsOf, messageCategory,
   type FinanceStatement, type GameMessage, type MessageCategory, type RoundupTableRow, type World,
 } from './world.ts';
 
@@ -87,6 +88,11 @@ export function messageNeedsAction(world: World, m: GameMessage): boolean {
     if (talks !== undefined && talks.pending === null) return true;
   }
   if (m.transferRequestOf !== undefined && world.transferRequests?.[m.transferRequestOf]?.status === 'open') return true;
+  // An injury whose treatment the manager hasn't chosen, while he is still out.
+  if (m.treatmentFor !== undefined) {
+    const c = world.injuryCases?.[m.treatmentFor];
+    if (c !== undefined && !c.decided && world.players.injuryDaysLeft[m.treatmentFor] > 0) return true;
+  }
   if (m.staffTalksId !== undefined) {
     const talks = world.staffNegotiations?.find((t) => t.id === m.staffTalksId);
     if (talks !== undefined && talks.pending === null) return true;
@@ -153,7 +159,7 @@ function userClub(world: World): Club | undefined {
  */
 export function monthlyStatement(world: World): void {
   const club = userClub(world);
-  if (club === undefined) return;
+  if (club === undefined || !inboxPrefsOf(world).statements) return;
   const d = world.day % DAYS_PER_SEASON;
   if (!MONTH_STARTS.includes(d) || world.day === 0) return;
 
@@ -191,7 +197,7 @@ export function monthlyStatement(world: World): void {
  */
 export function roundupNotices(world: World, playedToday: readonly number[]): void {
   const club = userClub(world);
-  if (club === undefined) return;
+  if (club === undefined || !inboxPrefsOf(world).roundups) return;
   const comp = world.competitions[club.leagueId];
   if (comp === undefined) return;
 
@@ -294,13 +300,17 @@ export function injuryDuration(days: number): string {
 export function injuryNotice(world: World, playerIdx: number, type: number, days: number, onLoanAt?: Club): void {
   const name = world.players.fullName(playerIdx);
   const injury = (INJURY_NAMES[type] ?? 'injury').toLowerCase();
+  // Anything longer than a knock, here: the manager decides how it is treated.
+  const choice = onLoanAt === undefined && days >= TREATMENT_MIN_DAYS;
+  if (choice) openInjuryCase(world, playerIdx, type, days);
   postMessage(world, {
     subject: onLoanAt !== undefined ? `${name} injured on loan at ${onLoanAt.name}` : `${name} ruled out through injury`,
     body: `${name} has suffered ${/^[aeiou]/.test(injury) ? 'an' : 'a'} ${injury}` +
       `${onLoanAt !== undefined ? ` while on loan at ${onLoanAt.name}` : ''} and is expected to be out for ` +
-      `${injuryDuration(days)}.`,
+      `${injuryDuration(days)}.` + (choice ? ' How do you want him treated?' : ''),
     playerIdx,
     injury: { type, days },
+    treatmentFor: choice ? playerIdx : undefined,
     clubId: onLoanAt?.id,
     loanOut: onLoanAt !== undefined ? true : undefined,
     category: 'medical',

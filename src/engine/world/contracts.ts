@@ -6,6 +6,7 @@
  */
 
 import { loanOf, loansOutOf } from './loans.ts';
+import { extrasOf } from './contractTerms.ts';
 import {
   contractEndSeason, DAYS_PER_SEASON, nextTransferWindow, seasonEndYear, TRANSFER_WINDOWS,
   type GameMessage, type TransferWindow, type World,
@@ -63,10 +64,13 @@ export function contractNotices(world: World): void {
 
   if (d === FIRST_WARNING_DAY) {
     for (const p of expiring) {
+      const option = extrasOf(world, p)?.option === true;
       push({
         subject: `Contract expiring: ${store.fullName(p)}`,
         body: `${store.fullName(p)}'s contract runs out on ${ends}. If it isn't renewed he will leave on a free ` +
-          'transfer at the end of the season. Open contract talks to offer him a new deal.',
+          'transfer at the end of the season. ' + (option
+          ? 'The club holds an option on one more season, on the same terms: take it up from his profile by 1 May — or open talks on a new deal.'
+          : 'Open contract talks to offer him a new deal.'),
         playerIdx: p,
         category: 'contract',
       });

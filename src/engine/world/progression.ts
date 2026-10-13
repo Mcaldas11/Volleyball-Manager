@@ -31,7 +31,7 @@ import { InjuryType, PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import { coachingRating, StaffRole, staffRating } from '../model/staff.ts';
 import type { SeasonStats } from '../season/seasonEngine.ts';
-import { NATIONS } from './nations.ts';
+import { nationStrength } from './nations.ts';
 import { estimateValue, generatePlayer, rollPotential } from './playerGen.ts';
 import { injuryNotice } from './inbox.ts';
 import { loanOf } from './loans.ts';
@@ -272,6 +272,18 @@ export function weeklyTraining(world: World): void {
   }
 }
 
+/**
+ * One step of development beyond the week's training — a mentor's doing — for
+ * a player with room left to grow at his age. Returns whether he took it.
+ */
+export function extraDevelopment(world: World, i: number): boolean {
+  const store = world.players;
+  const age = store.ageOn(i, world.year, 181);
+  if (store.potentialAbility[i] * abilityFractionAtAge(age) <= store.currentAbility[i]) return false;
+  applyAbilityDelta(store, i, 8, age, world.rng);
+  return true;
+}
+
 function coachingQualityByClub(world: World): Float64Array {
   const out = new Float64Array(world.clubs.length);
   for (const club of world.clubs) {
@@ -486,7 +498,6 @@ export function generateYouthIntake(world: World, rng: Rng = world.rng): number[
   const created: number[] = [];
 
   for (const club of world.clubs) {
-    const nation = NATIONS[club.nation];
     const count = 1 + Math.round((club.youthRecruitment / 20) * 3 * rng.range(0.6, 1.4));
 
     for (let n = 0; n < count; n++) {
@@ -499,7 +510,7 @@ export function generateYouthIntake(world: World, rng: Rng = world.rng): number[
       const golden = rng.chance(0.006 * (0.4 + reach));
       const potential = rollPotential(
         rng,
-        nation.strength,
+        nationStrength(club.nation),
         golden ? eliteBias * 1.55 : eliteBias,
       );
 

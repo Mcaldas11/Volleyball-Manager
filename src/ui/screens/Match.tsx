@@ -1,8 +1,10 @@
 import { useState, type JSX } from 'react';
+import { RivalTag } from '../components.tsx';
+import { fixtureRivalry, rivalryName } from '../../engine/world/rivals.ts';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import type { RallyContact, RallyLogEntry, Shot } from '../../engine/match/engine.ts';
 import { PLAY_NAMES } from '../../engine/match/tactics.ts';
-import { MONSTER_SPIKE_KMH } from '../../engine/match/highlights.ts';
+import { monsterSpikeKmh } from '../gameGender.ts';
 import { matchRating } from '../../engine/match/playerRating.ts';
 import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
@@ -104,7 +106,10 @@ export function FixturesScreen(): JSX.Element {
                       <td className={comp?.kind === 'league' ? 'faint' : 'strong'}>{comp?.name ?? ''}</td>
                       <td className="faint fx-stage">{stageLabel(world, f)}</td>
                       <td><span className={`venue-tag ${isHome ? 'home' : 'away'}`}>{isHome ? 'Home' : 'Away'}</span></td>
-                      <td>{opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}</td>
+                      <td>
+                        {opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}
+                        <RivalTag kind={fixtureRivalry(world, f)} />
+                      </td>
                       <td>
                         {f.played
                           ? (
@@ -175,7 +180,7 @@ export function MatchScreen({ onClose }: { onClose?: () => void } = {}): JSX.Ele
       )}
     >
       <div className="report-when faint">
-        {comp?.name ?? ''} · {stageLabel(world, watched.fixture)} · {g.weekdayLabelForDay(watched.fixture.day)} {g.dateLabelForDay(watched.fixture.day)}
+        {comp?.name ?? ''} · {stageLabel(world, watched.fixture)}{rivalryName(world, watched.fixture) !== null && <> · {rivalryName(world, watched.fixture)}</>} · {g.weekdayLabelForDay(watched.fixture.day)} {g.dateLabelForDay(watched.fixture.day)}
       </div>
       <div className="report-score">
         <div className={`report-team${homeWon ? ' won' : ''}`}>
@@ -368,7 +373,7 @@ export function describeRallyHighlight(
     [speed !== undefined ? `${speed} km/h` : '', height !== undefined ? `${height.toFixed(2)} m` : ''].filter((x) => x !== '').join(', ');
   if (last?.kind === 'kill' && last.speed !== undefined) {
     const shot = last.shot;
-    const monster = last.speed >= MONSTER_SPIKE_KMH && shot !== 'tip' && shot !== 'roll';
+    const monster = last.speed >= monsterSpikeKmh() && shot !== 'tip' && shot !== 'roll';
     const play = last.play !== undefined && last.play !== 'quick' && last.play !== 'fastSet' ? last.play : undefined;
     const title = monster ? 'Monster spike' : play !== undefined ? PLAY_NAMES[play] : shot !== undefined ? SHOT_TITLES[shot] ?? 'Kill' : 'Kill';
     const how = shot !== undefined ? SHOT_VERBS[shot] : monster ? 'hammers it down' : 'finishes it off';

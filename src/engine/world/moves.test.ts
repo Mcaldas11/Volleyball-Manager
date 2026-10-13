@@ -5,7 +5,7 @@ import { newSeasonContext, startSeason } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
 import { generateWorld } from './worldGen.ts';
 import { seasonEndDay, stubManager, type World } from './world.ts';
-import { evaluateFeeOffer } from './negotiation.ts';
+import { evaluateFeeOffer, offerMatching } from './negotiation.ts';
 import { acceptIncomingOffer, openTalks, processDeals, submitOffer, type Talks } from './deals.ts';
 import { loanOf } from './loans.ts';
 import { pendingMoveOf } from './moves.ts';
@@ -54,7 +54,7 @@ function buy(world: World, t: Talks): void {
   runDays(world, 5, () => t.pending === null);
   assert.equal(t.stage, 'terms', 'a bid half as much again over his valuation should be accepted');
   const years = Math.min(t.demands.maxYears, Math.max(t.demands.minYears, 2));
-  submitOffer(world, t, { fee: t.agreedFee, wage: t.demands.wage, role: t.demands.role, years });
+  submitOffer(world, t, { fee: t.agreedFee, ...offerMatching(t.demands, years) });
   runDays(world, 7, () => !world.talks.includes(t));
   assert.ok(!world.talks.includes(t), 'terms matching his demands should be accepted');
 }
@@ -71,7 +71,7 @@ test('a signing agreed with the window shut is paid for now, and he joins when i
   assert.ok(move !== undefined && move.toClubId === club.id);
   assert.equal(move.movesOn, WINTER_OPENS);
   assert.equal(world.players.clubId[p], seller.id, 'he stays where he is until the window opens');
-  assert.equal(club.finances.balance, balance - t.agreedFee, 'the fee is paid when the deal is done');
+  assert.equal(club.finances.balance, balance - t.agreedFee - (t.demands.agentFee ?? 0), 'the fee — and the agent\'s — is paid when the deal is done');
   assert.ok(world.messages.some((m) => m.subject === `${world.players.fullName(p)} signs` && m.body.includes('window is shut')));
 
   runDays(world, WINTER_OPENS - world.day - 1);
@@ -80,7 +80,7 @@ test('a signing agreed with the window shut is paid for now, and he joins when i
   assert.equal(world.players.clubId[p], club.id);
   assert.ok(club.players.includes(p) && !seller.players.includes(p));
   assert.equal(pendingMoveOf(world, p), undefined);
-  assert.equal(club.finances.balance, balance - t.agreedFee, 'and the fee is not paid twice');
+  assert.equal(club.finances.balance, balance - t.agreedFee - (t.demands.agentFee ?? 0), 'and the fee is not paid twice');
 });
 
 test('a deal done after the January window waits for the summer one, contract counted from then', () => {

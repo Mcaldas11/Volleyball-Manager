@@ -12,6 +12,7 @@
  * picks one. Leave it, and the commercial department signs the steady one.
  */
 
+import { fanFactor } from './supporters.ts';
 import type { Club } from '../model/club.ts';
 import { sponsorshipFor } from '../model/club.ts';
 import { postMessage } from './inbox.ts';
@@ -39,7 +40,7 @@ export function crowdAt(normalCrowd: number, price: number): number {
 export function projectedGate(world: World, club: Club, price = ticketPriceOf(club)): { crowd: number; gate: number } {
   const comp = world.competitions[club.leagueId];
   const draw = comp !== undefined ? Math.min(1, comp.reputation / 8000) : 0.5;
-  const normal = club.arenaCapacity * (0.42 + 0.5 * draw) * 0.93;
+  const normal = club.arenaCapacity * (0.42 + 0.5 * draw) * 0.93 * fanFactor(club);
   const crowd = Math.min(club.arenaCapacity, crowdAt(normal, price));
   const perHead = club.finances.ticketIncomePerMatch / Math.max(1, club.arenaCapacity);
   return { crowd, gate: Math.round(crowd * perHead * price) };

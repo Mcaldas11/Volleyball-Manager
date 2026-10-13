@@ -65,6 +65,7 @@ function qualificationRule(t: Tournament): string {
       : 'Every nation of the confederation plays.',
     nationsLeague: 'The same eighteen every year, bar one: the last-placed nation goes down, and the best-ranked nation outside the league comes up.',
     qualifier: `Pools of four: the winners, the runners-up and the best third-placed teams take the ${t.places ?? 0} places at the championship.`,
+    friendly: 'Arranged between the two federations: one match, for the practice — it counts for caps, not for the ranking.',
   };
   return rules[t.kind];
 }
@@ -72,6 +73,7 @@ function qualificationRule(t: Tournament): string {
 /** The colour a kind of tournament is marked with. */
 const KIND_CLASS: Readonly<Record<TournamentKind, string>> = {
   olympics: 'k-olympics', worlds: 'k-worlds', continental: 'k-continental', qualifier: 'k-qualifier', nationsLeague: 'k-vnl',
+  friendly: 'k-qualifier',
 };
 
 /** The nation the manager follows: the one he coaches, or his own. */

@@ -96,7 +96,7 @@ export function traitsOf(store: PlayerStore, i: number): Trait[] {
 }
 
 /** How far a player's attributes carry him towards a trait, 0-1: nothing at 11 on average, all at 17. */
-function claim(store: PlayerStore, i: number, t: Trait): number {
+export function traitClaim(store: PlayerStore, i: number, t: Trait): number {
   const need = NEEDS[t];
   if (need.positions !== undefined && !need.positions.includes(store.position[i] as Position)) return 0;
   const base = i * ATTR_COUNT;
@@ -119,7 +119,7 @@ export function rollTraits(store: PlayerStore, i: number): void {
     // Every throw is made, kept or not, so each trait's stays the same.
     const bar = 0.35 + own.float() * 0.6;
     if (count >= MAX_TRAITS || hasTrait(mask, t)) continue;
-    if (claim(store, i, t) >= bar) {
+    if (traitClaim(store, i, t) >= bar) {
       mask |= 1 << t;
       count++;
     }

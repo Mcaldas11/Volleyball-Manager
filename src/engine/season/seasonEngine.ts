@@ -13,8 +13,19 @@
  * a match took.
  */
 
+import { watchedInMatch } from '../world/nationalExtras.ts';
+import { deadlineDay, deadlineMorning, rumoursAboutUs } from '../world/market.ts';
+import { achievementsDay } from '../world/achievements.ts';
+import { coursesDay } from '../world/courses.ts';
+import { arenaDay, fanFactor, fansAfterMatch, supportersWeek } from '../world/supporters.ts';
+import { ownerDay, ownerSeasonStart } from '../world/owners.ts';
+import { closeInjuryCase, relapseAfterMatch } from '../world/treatment.ts';
+import { mentoringWeek } from '../world/mentoring.ts';
+import { ebbLoads, noteMatchLoad, recoveryFactor, travelEve } from '../world/fatigue.ts';
+import { fixtureRivalry } from '../world/rivals.ts';
 import { internationalDay } from '../world/internationals.ts';
 import { keepMatchReport } from '../world/matchReports.ts';
+import { noteAnalysis } from '../world/analysis.ts';
 import { newsDay } from '../world/news.ts';
 import type { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
@@ -39,7 +50,8 @@ import { processScoutingQueue } from '../world/scouting.ts';
 import { generateIncomingOffers, generateListedBids } from '../world/negotiation.ts';
 import { generateLoanOffers, loanOf, loanStarters, reviewLoanPromises } from '../world/loans.ts';
 import { contractNotices } from '../world/contracts.ts';
-import { processDeals } from '../world/deals.ts';
+import { generateClauseBids, processDeals } from '../world/deals.ts';
+import { payAppearanceBonuses } from '../world/contractTerms.ts';
 import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
 import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices, tacticReadNotice } from '../world/inbox.ts';
 import { readLevel, studyTactic } from '../model/tacticRead.ts';
@@ -337,6 +349,7 @@ export function playFixture(
 
   updateTable(world, fixture);
   applyMatchFinances(world, home, away, fixture);
+  aftermath(world, fixture, result.homeStats, result.awayStats, true);
   opponentsStudy(world, fixture);
 }
 
@@ -358,8 +371,9 @@ export function applyMatchResult(
   fixture.setScores = result.setScores;
   fixture.mvp = result.mvp;
   collectHighlights(world, fixture, result);
-  // The manager's own matches: the box score is kept, to be read again.
+  // The manager's own matches: the box score is kept, to be read again — and the analyst takes his notes.
   keepMatchReport(world, fixture, result);
+  noteAnalysis(world, fixture, result);
 
   const homeStats = result.stats.home.players;
   const awayStats = result.stats.away.players;
@@ -373,6 +387,7 @@ export function applyMatchResult(
   // A friendly is for the practice: it tires the legs and fills the stands,
   // and goes on no table, no record and nobody's statistics.
   if (isFriendly(world, fixture)) {
+    aftermath(world, fixture, homeStats, awayStats, false);
     applyMatchLoad(world.players, homeStats, world.rng);
     applyMatchLoad(world.players, awayStats, world.rng);
     const home = world.clubs[fixture.home];
@@ -392,7 +407,38 @@ export function applyMatchResult(
   const home = world.clubs[fixture.home];
   const away = world.clubs[fixture.away];
   if (home !== undefined && away !== undefined) applyMatchFinances(world, home, away, fixture);
+  aftermath(world, fixture, homeStats, awayStats, true);
   opponentsStudy(world, fixture);
+}
+
+/**
+ * What a match leaves behind besides the result, however it was played: the
+ * match in the legs of everyone who took part — and, for a competitive one,
+ * the appearance bonuses earned and a derby's mood in both dressing rooms.
+ */
+function aftermath(
+  world: World, fixture: Fixture,
+  homeStats: Map<number, PlayerMatchStats>, awayStats: Map<number, PlayerMatchStats>, competitive: boolean,
+): void {
+  // Anyone the national coach came to watch.
+  watchedInMatch(world, fixture, homeStats, awayStats);
+  const took = (m: Map<number, PlayerMatchStats>): number[] => [...m].filter(([, s]) => s.ralliesPlayed > 0).map(([p]) => p);
+  const home = took(homeStats);
+  const away = took(awayStats);
+  noteMatchLoad(world, [...home, ...away]);
+  // A player rushed back from an injury may break down again.
+  relapseAfterMatch(world, fixture.id, [...home, ...away]);
+  if (!competitive) return;
+  fansAfterMatch(world, fixture);
+  payAppearanceBonuses(world, fixture.home, home);
+  payAppearanceBonuses(world, fixture.away, away);
+  // A derby won lifts a dressing room for days; one lost hurts as long.
+  if (fixtureRivalry(world, fixture) !== null) {
+    const homeWon = fixture.homeSets > fixture.awaySets;
+    for (const [side, won] of [[home, homeWon], [away, !homeWon]] as const) {
+      for (const p of side) world.players.morale[p] = Math.max(0, Math.min(100, world.players.morale[p] + (won ? 5 : -5)));
+    }
+  }
 }
 
 function accumulate(
@@ -463,7 +509,10 @@ function applyMatchFinances(world: World, home: Club, away: Club, fixture: Fixtu
   const draw = comp !== undefined ? Math.min(1, comp.reputation / 8000) : 0.5;
   // The price brings the crowd, or keeps it away — and each pays it.
   const price = ticketPriceOf(home);
-  const attendance = crowdAt(home.arenaCapacity * (0.42 + 0.5 * draw) * world.rng.range(0.78, 1.08), price);
+  // A derby fills the place.
+  const derby = fixtureRivalry(world, fixture) !== null ? 1.35 : 1;
+  // A following bigger than the arena fills it; a dwindled one leaves seats empty.
+  const attendance = crowdAt(home.arenaCapacity * (0.42 + 0.5 * draw) * derby * fanFactor(home) * world.rng.range(0.78, 1.08), price);
   const gate = Math.round(
     Math.min(attendance, home.arenaCapacity) * (home.finances.ticketIncomePerMatch / Math.max(1, home.arenaCapacity)) * price,
   );
@@ -496,10 +545,16 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   // job market: applications answered, coaches appointed, boards meeting.
   monthlyStatement(world);
   facilitiesDay(world);
+  arenaDay(world);
+  coursesDay(world);
+  achievementsDay(world);
+  ownerDay(world);
   sponsorDay(world);
   affiliatesDay(world);
   monthlyLoanReports(world);
   contractNotices(world);
+  // Deadline day: the bids fly in and the other clubs do their late business, before the day's answers.
+  deadlineDay(world);
   processDeals(world);
   careerDay(world);
   staffDay(world);
@@ -549,12 +604,16 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     const phase = currentPhase(world);
     if (phase !== SeasonPhase.OffSeason) {
       weeklyTraining(world);
+      mentoringWeek(world);
+      supportersWeek(world);
       dressingRoomWeek(world);
       playerHappinessWeek(world);
       changesOfMind(world);
       trainPositions(world);
       rollInjuries(world);
       generateIncomingOffers(world);
+      rumoursAboutUs(world);
+      generateClauseBids(world);
       generateListedBids(world);
       generateLoanOffers(world);
       reviewLoanPromises(world);
@@ -563,6 +622,10 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
 
   world.day++;
   if (world.day % DAYS_PER_SEASON === 0) world.year++;
+  // Sides playing away tomorrow travel today.
+  travelEve(world);
+  // The morning of deadline day.
+  deadlineMorning(world);
 
   processScoutingQueue(world);
 }
@@ -578,6 +641,8 @@ function dailyRecovery(world: World, store: PlayerStore): void {
   const medical = new Float64Array(world.clubs.length);
   // The facilities and the physios and doctor who work in them.
   for (const c of world.clubs) medical[c.id] = 0.8 + medicalQuality(world, c) * 0.5;
+  // The matches in everyone's legs ebb away a little.
+  ebbLoads(world);
 
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i)) continue;
@@ -587,8 +652,8 @@ function dailyRecovery(world: World, store: PlayerStore): void {
       if (store.injuryDaysLeft[i] === 0) {
         store.injuryType[i] = 0;
         store.setFlag(i, PlayerFlag.Injured, false);
-        // Players come back short of match fitness.
-        store.condition[i] = Math.min(store.condition[i], 65);
+        // Players come back short of match fitness — how short, as the manager had him treated.
+        store.condition[i] = world.injuryCases?.[i] !== undefined ? closeInjuryCase(world, i) : Math.min(store.condition[i], 65);
         if (store.clubId[i] === world.userClubId && world.userClubId >= 0) {
           recoveryNotice(world, i);
         } else if (world.loans.length > 0 && loanOf(world, i)?.parentClubId === world.userClubId && world.userClubId >= 0) {
@@ -603,7 +668,8 @@ function dailyRecovery(world: World, store: PlayerStore): void {
       const club = store.clubId[i];
       const rate = club >= 0 ? medical[club] : 1;
       const recovery = 2.2 + (store.getAttr(i, 'recovery') / 20) * 3.4;
-      store.condition[i] = Math.min(100, store.condition[i] + recovery * rate);
+      // A crowded run of matches slows it.
+      store.condition[i] = Math.min(100, store.condition[i] + recovery * rate * recoveryFactor(world, i));
     }
   }
 }
@@ -627,6 +693,8 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
   topUpStaffPool(world);
   // Where each squad should finish, for the Coach of the Year to be judged against.
   noteExpectations(world);
+  // The manager's club may change hands; its owner sets his wish for the season.
+  ownerSeasonStart(world);
 
   if (ctx !== undefined) recordSeasonStartAbility(world, ctx);
 }

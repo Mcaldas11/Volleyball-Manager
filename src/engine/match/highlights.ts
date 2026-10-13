@@ -48,6 +48,8 @@ export interface Highlight {
   /** Attacks and digs in the rally. */
   attacks: number;
   digs: number;
+  /** The receiving side's passers, when it lined up other than the usual three. */
+  passers?: number[];
   /** Filled in once the match goes on the record. */
   fixtureId?: number;
   competitionId?: number;

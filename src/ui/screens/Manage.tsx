@@ -1,4 +1,6 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
+import { receiveLineOf } from '../../engine/match/receiveLine.ts';
+import type { ReceptionFormation } from '../../engine/match/tactics.ts';
 import {
   BlockAssignment, Combinations, DefensiveShape, DefensiveSystem, Formation, OffensiveSystem,
   ServeStrategy, ServeTarget, Tempo,
@@ -74,6 +76,12 @@ export const SERVE_TARGET_OPTIONS: Array<[ServeTarget, string]> = [
   [ServeTarget.BestAttacker, 'Their best attacker'],
   [ServeTarget.DeepCorner, 'Deep corner'],
   [ServeTarget.ShortZone, 'Short zone'],
+];
+
+export const RECEPTION_OPTIONS: Array<[ReceptionFormation, string]> = [
+  [3, 'Three passers'],
+  [2, 'Two — hide an outside'],
+  [4, 'Four — the opposite too'],
 ];
 
 export const BLOCK_OPTIONS: Array<[BlockAssignment, string]> = [
@@ -212,6 +220,16 @@ export function RotationsScreen(): JSX.Element {
             options={ATTACKER_OPTIONS}
           />
           <ChoiceField
+            label="Serve receive"
+            value={r.receivers ?? 3}
+            onChange={(v) => { r.receivers = v === 3 ? undefined : v; g.touch(); }}
+            options={RECEPTION_OPTIONS}
+          />
+          <p className="rot-receive">
+            <span className="faint">Taking the serve:</span>{' '}
+            {receiveLineOf(store, zones, selection.libero, r.receivers ?? 3).map((p) => store.shortName(p)).join(', ')}
+          </p>
+          <ChoiceField
             label="Serve target"
             value={r.serveTarget}
             onChange={(v) => { r.serveTarget = v; g.touch(); }}
@@ -285,7 +303,8 @@ export function FinancesScreen(): JSX.Element {
   // Mirrors settleFinances() in rollover.ts exactly, so this is a true preview
   // of what rollover will do if the season ended today.
   const totalIncome = f.sponsorshipIncome + f.tvRightsIncome + f.merchandiseIncome + f.seasonIncome;
-  const totalCosts = wages + youthWages + staffWages +
+  const bonuses = f.bonuses ?? 0;
+  const totalCosts = wages + bonuses + youthWages + staffWages +
     f.arenaMaintenance + f.medicalCosts + f.youthAcademyCosts + f.seasonExpenditure;
   const result = totalIncome - totalCosts;
   const envelope = f.wageBudget + f.transferBudget;
@@ -299,6 +318,7 @@ export function FinancesScreen(): JSX.Element {
   ];
   const costLines: Array<[string, number]> = [
     ['Player wages', wages],
+    ...(bonuses > 0 ? [['Bonuses so far', bonuses] as [string, number]] : []),
     ['Youth wages', youthWages],
     ['Staff wages', staffWages],
     ['Arena maintenance', f.arenaMaintenance],
@@ -761,9 +781,9 @@ export function TransfersScreen(): JSX.Element {
         <StatTile label="Offers received" value={offers.length} tone={offers.length > 0 ? 'gold' : undefined} sub="awaiting a decision" />
         <StatTile
           label="Transfer window"
-          value={txWindow.open ? 'Open' : 'Closed'}
+          value={txWindow.open ? (txWindow.untilDay === g.world!.day ? 'Deadline day' : 'Open') : 'Closed'}
           sub={txWindow.open
-            ? `${txWindow.label} · until ${g.dateLabelForDay(txWindow.untilDay)}`
+            ? txWindow.untilDay === g.world!.day ? `${txWindow.label} shuts tonight` : `${txWindow.label} · until ${g.dateLabelForDay(txWindow.untilDay)}`
             : `${txWindow.label} opens ${g.dateLabelForDay(txWindow.untilDay)}`}
           tone={txWindow.open ? 'good' : 'bad'}
         />

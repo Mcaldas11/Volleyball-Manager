@@ -127,6 +127,7 @@ export function NewsScreen(): JSX.Element {
               key={n.id}
               className={`news-item${open?.id === n.id ? ' on' : ''}`}
               style={kindStyle(n.kind)}
+              data-pronouns={n.kind === 'coach' ? 'keep' : undefined}
               onClick={() => setOpenId(n.id)}
             >
               <span className="news-thumb"><NewsVisual item={n} size={38} /></span>
@@ -158,7 +159,7 @@ function Story({ item: n }: { item: NewsItem }): JSX.Element {
   const player = n.playerIdx !== undefined && store.isActive(n.playerIdx) ? n.playerIdx : undefined;
   const coach = n.staffId !== undefined ? world.staff[n.staffId] : undefined;
   return (
-    <div className="news-story" style={kindStyle(n.kind)} key={n.id}>
+    <div className="news-story" style={kindStyle(n.kind)} key={n.id} data-pronouns={n.kind === 'coach' ? 'keep' : undefined}>
       <span className="news-kicker"><Icon name={NEWS_KIND[n.kind].icon} size={14} /> {NEWS_KIND[n.kind].label}</span>
       <h1 className="news-headline">{n.headline}</h1>
       <span className="news-meta">
