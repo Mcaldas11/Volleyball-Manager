@@ -427,8 +427,11 @@ export interface GameMessage {
   loanReport?: LoanReport;
   /** A staff report's tables — see reports.ts. */
   tables?: ReportTable[];
-  /** A scouting report: the opponent the scouts' game plan is for. */
+  /** A scouting report: the opponent the scouts' game plan is for — a club, or, where
+   *  `fixtureId` is a national team's match (below zero), a nation. */
   gamePlanFor?: number;
+  /** A nation the message is about: its flag stands for it in the inbox. */
+  aboutNation?: number;
   /** International news of the user's players — call-ups, match days with
    *  each player's numbers, the way home — drawn as a report in the inbox. */
   intl?: IntlReport;

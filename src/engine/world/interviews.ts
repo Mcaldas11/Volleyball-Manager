@@ -28,6 +28,7 @@ import { isCupCompetition, isCupFinal, stageLabel } from '../season/cups.ts';
 import { playoffTieOf, tieHasFixture } from '../season/playoffs.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
 import { cityBankFor } from './cities.ts';
+import { nationName, squadOf, userNation, type IntlMatch, type Tournament } from './internationals.ts';
 import { NATIONS } from './nations.ts';
 import { dayOfSeason, type Competition, type Fixture, type World } from './world.ts';
 
@@ -86,6 +87,9 @@ export interface InterviewSession {
   crowd: number;
   /** After a match: the last day the press still want it. */
   expiresDay?: number;
+  /** A national team's match: its tournament, the match, and the manager's nation.
+   *  `fixtureId` is then -1 - the match's id, as the matchday screens have it. */
+  national?: { tournamentId: number; matchId: number; nation: number };
 }
 
 export interface AnswerResult {
@@ -134,13 +138,22 @@ type Tag =
   | 'winningRun' | 'losingRun' | 'oppForm' | 'pressure' | 'injuredStar' | 'oppStar' | 'ownStar'
   // How it went.
   | 'won' | 'lost' | 'trophy' | 'finalLost' | 'eliminated' | 'whitewash' | 'comeback' | 'collapse' | 'tiebreak'
-  | 'upset' | 'shock' | 'top' | 'ownMvp' | 'oppMvp';
+  | 'upset' | 'shock' | 'top' | 'ownMvp' | 'oppMvp'
+  // A national team's match: the hosts, a tournament's first match, the bronze.
+  | 'national' | 'hosts' | 'tournamentOpener' | 'bronze';
+
+/** One side of a conference's match, as the questions name it: a club, or a nation. */
+interface Side {
+  id: number;
+  name: string;
+  arenaName: string;
+}
 
 /** What a press conference knows about a match. */
 interface Ctx {
   world: World;
-  club: Club;
-  opp: Club;
+  club: Side;
+  opp: Side;
   comp: Competition | undefined;
   compName: string;
   tags: Set<Tag>;
@@ -160,6 +173,11 @@ interface Ctx {
 
 function name(c: Ctx, p: number): string {
   return c.world.players.shortName(p);
+}
+
+/** Said one way of a club, another of a nation. */
+function nat(c: Ctx, club: string, nation: string): string {
+  return c.tags.has('national') ? nation : club;
 }
 
 function ordinal(n: number): string {
@@ -204,7 +222,7 @@ function runOf(list: readonly boolean[]): number {
 }
 
 /** The best player fit to play, and one of the best three who isn't. */
-function stars(world: World, club: Club): { star: number; injured: number } {
+function stars(world: World, club: { players: readonly number[] }): { star: number; injured: number } {
   const store = world.players;
   const best = [...club.players].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 3);
   return {
@@ -404,18 +422,19 @@ interface Archetype {
   about?: (c: Ctx) => number;
 }
 
-const facing = (c: Ctx): string => (c.tags.has('home') ? `hosting ${c.opp.name}` : `the trip to ${c.opp.name}`);
+const facing = (c: Ctx): string => (c.tags.has('home') || c.tags.has('hosts') ? `hosting ${c.opp.name}`
+  : c.tags.has('national') ? `the match against ${c.opp.name}` : `the trip to ${c.opp.name}`);
 
 const PRE: readonly Archetype[] = [
   // Every match.
   {
     kind: 'pre', needs: [], weight: 1,
     prompt: (c) => `How confident are you heading into ${facing(c)}?`,
-    answers: () => [
+    answers: (c) => [
       "We respect the opponent and we're focused on our own performance.",
       "It's not about confidence, it's about preparation, and we've prepared well.",
       'We like our chances, but nothing is decided on paper.',
-      'Every match in this league is difficult, and this one will be no different.',
+      nat(c, 'Every match in this league is difficult, and this one will be no different.', 'Every match at this level is difficult, and this one will be no different.'),
       'Frankly, I expect us to win this one comfortably.',
       "We're the better team, and I want the players to believe that too.",
     ],
@@ -435,11 +454,11 @@ const PRE: readonly Archetype[] = [
   {
     kind: 'pre', needs: [], weight: 1,
     prompt: (c) => `Any concerns going into the match against ${c.opp.name}?`,
-    answers: () => [
+    answers: (c) => [
       'A few fitness niggles, nothing that worries me.',
       'Just the usual — travel, recovery, small things.',
       'No more than any other week.',
-      "It's a long season, there's always something to manage.",
+      nat(c, "It's a long season, there's always something to manage.", "A tournament is short — there's always something to manage."),
       'None at all — we are ready.',
       'The only concern is whether they can handle us.',
     ],
@@ -501,7 +520,7 @@ const PRE: readonly Archetype[] = [
       "He's a big part of what we do, and he knows how much we trust him.",
       "He's doing his job, like everyone else.",
       "One player doesn't win a match — six do.",
-      `He's the best in the league in his position, simple as that.`,
+      nat(c, `He's the best in the league in his position, simple as that.`, `He's among the best in the world in his position, simple as that.`),
       'If they want to stop us, they have to stop him first. Good luck.',
     ],
   },
@@ -606,7 +625,7 @@ const PRE: readonly Archetype[] = [
     kind: 'pre', needs: ['underdog'], weight: 2,
     prompt: (c) => `Nobody gives you a chance against ${c.opp.name}. Do you believe you can win?`,
     answers: (c) => [
-      `${c.opp.name} are a great club. It's a privilege to test ourselves against them.`,
+      `${c.opp.name} are a great ${nat(c, 'club', 'side')}. It's a privilege to test ourselves against them.`,
       'We have nothing to lose. We will enjoy it.',
       'On paper they are stronger. Matches are not played on paper.',
       "We'll give it everything and see where that takes us.",
@@ -618,9 +637,9 @@ const PRE: readonly Archetype[] = [
   {
     kind: 'pre', needs: ['final'], weight: 8,
     prompt: (c) => `It's the ${c.compName} final. What would it mean to lift the trophy?`,
-    answers: () => [
+    answers: (c) => [
       "Everything. For the players, for the fans, for the city.",
-      "It would be a reward for a whole season of work.",
+      nat(c, 'It would be a reward for a whole season of work.', 'It would be a reward for everything this group has put in.'),
       "We'll talk about meaning afterwards. First we have to play it.",
       'A final is a match like any other — just with a trophy at the end.',
       "We didn't come this far to finish second.",
@@ -666,8 +685,8 @@ const PRE: readonly Archetype[] = [
   {
     kind: 'pre', needs: ['semi'], weight: 7,
     prompt: (c) => `One step from the ${c.compName} final. How much does this one matter?`,
-    answers: () => [
-      "It matters to everyone at the club. We want to give the fans a final.",
+    answers: (c) => [
+      nat(c, 'It matters to everyone at the club. We want to give the fans a final.', 'It matters to everyone back home. We want to give the country a final.'),
       "We've earned this place. Now we want to enjoy it.",
       'It matters exactly as much as the next point.',
       "We'll think about the final if we get there.",
@@ -773,6 +792,55 @@ const PRE: readonly Archetype[] = [
       'Whoever plays, we go through.',
     ],
   },
+  // A national team's.
+  {
+    kind: 'pre', needs: ['national'], weight: 2,
+    prompt: () => 'How have the players settled in since they reported for duty?',
+    answers: () => [
+      'Brilliantly. There is a real hunger in this group.',
+      'They know each other well — that helps us from the first day.',
+      'There is always a little time needed. We are getting there.',
+      'Club form and country form are different things. We are working on it.',
+      'We have no time to settle. We play to win from the first ball.',
+      'Anyone not ready will not play. Simple as that.',
+    ],
+  },
+  {
+    kind: 'pre', needs: ['hosts'], weight: 4,
+    prompt: (c) => `A home ${c.compName}: the whole country is watching. Can the crowd carry you?`,
+    answers: () => [
+      'Our fans will be our seventh player. We feel them already.',
+      'Playing in front of our own people is a privilege.',
+      'The crowd helps, but the match is won on the court.',
+      'We cannot let the occasion become pressure. We stay calm.',
+      'At home, in front of our people, we do not lose.',
+      'The pressure is on everyone else in this tournament, not us.',
+    ],
+  },
+  {
+    kind: 'pre', needs: ['tournamentOpener'], weight: 4,
+    prompt: (c) => `The ${c.compName} starts for you tomorrow. What are your targets?`,
+    answers: () => [
+      'To make the country proud, match by match.',
+      'The preparation went well. We feel ready.',
+      'First the pool. Targets are for later.',
+      'We know what is expected. We will judge ourselves at the end.',
+      'A medal. Nothing less.',
+      'We are here to win it.',
+    ],
+  },
+  {
+    kind: 'pre', needs: ['bronze'], weight: 7,
+    prompt: () => 'A medal on the line, but not the one you came for. How do you lift the players?',
+    answers: () => [
+      'A medal for your country is never a consolation. They know that.',
+      'The disappointment is gone. Tomorrow is a final for us.',
+      'It is hard, but we will be ready. It is still a medal.',
+      'We have one more match in us. That is all I ask.',
+      'Anyone not up for this one can watch from the stand.',
+      'We go home with a medal. There is no other option.',
+    ],
+  },
 ];
 
 const POST: readonly Archetype[] = [
@@ -816,10 +884,10 @@ const POST: readonly Archetype[] = [
   {
     kind: 'post', needs: [], weight: 1,
     prompt: () => 'Where does this result leave you?',
-    answers: () => [
+    answers: (c) => [
       'In a good place. The group is strong.',
       "We're building something here. Results like this are part of it.",
-      "It's one match. The table will tell the story in May.",
+      nat(c, "It's one match. The table will tell the story in May.", "It's one match. The tournament will tell the story."),
       'Exactly where we were this morning: working.',
       'Where we expect to be. Nothing has changed.',
       'With a lot to prove — and we will prove it.',
@@ -866,7 +934,7 @@ const POST: readonly Archetype[] = [
   },
   {
     kind: 'post', needs: ['lost', 'whitewash'], weight: 4,
-    prompt: (c) => `Not a single set. Is that embarrassing for a club like ${c.club.name}?`,
+    prompt: (c) => `Not a single set. Is that embarrassing for ${nat(c, 'a club', 'a country')} like ${c.club.name}?`,
     answers: () => [
       'It hurts, but I will stand by these players.',
       'Nights like this happen. We will respond.',
@@ -923,11 +991,11 @@ const POST: readonly Archetype[] = [
   },
   {
     kind: 'post', needs: ['upset'], weight: 4,
-    prompt: (c) => `Few expected you to beat ${c.opp.name}. Is this the result of the season?`,
-    answers: () => [
+    prompt: (c) => `Few expected you to beat ${c.opp.name}. Is this the result of the ${nat(c, 'season', 'tournament')}?`,
+    answers: (c) => [
       'For these players, maybe. They earned every point.',
       "It's a night the fans will remember.",
-      "It's three points. A big three points.",
+      nat(c, "It's three points. A big three points.", "It's a big win. Nothing is decided yet."),
       'We believed. That is all.',
       "We aren't surprised. We knew we could do it.",
       'People should stop underestimating us.',
@@ -938,7 +1006,7 @@ const POST: readonly Archetype[] = [
     prompt: (c) => `Losing to ${c.opp.name}, a side you were expected to beat — how do you explain it?`,
     answers: (c) => [
       `${c.opp.name} were better tonight. We have to accept it.`,
-      'It is one bad night in a long season.',
+      nat(c, 'It is one bad night in a long season.', 'It is one bad night. We have to answer straight away.'),
       "There's no excuse. We'll find out why.",
       'Every team is dangerous on its day.',
       'We were arrogant, and we paid for it.',
@@ -961,13 +1029,13 @@ const POST: readonly Archetype[] = [
   {
     kind: 'post', needs: ['trophy'], weight: 6,
     prompt: () => 'Who do you dedicate this trophy to?',
-    answers: () => [
+    answers: (c) => [
       'To the fans. They never stopped believing.',
       'To my players and my staff — and to my family.',
-      'To everyone at the club, from the office to the kit room.',
+      nat(c, 'To everyone at the club, from the office to the kit room.', 'To everyone at the federation, from the staff to the kit room.'),
       "To the people who made this possible. They know who they are.",
       'To everyone who doubted us.',
-      'To the club. And there will be more.',
+      nat(c, 'To the club. And there will be more.', 'To the whole country. And there will be more.'),
     ],
   },
   {
@@ -1063,6 +1131,55 @@ const POST: readonly Archetype[] = [
         'Some players did not understand what this match meant.',
       ]),
   },
+  // A national team's.
+  {
+    kind: 'post', needs: ['national', 'won'], weight: 2,
+    prompt: () => 'What does a result like this mean back home?',
+    answers: () => [
+      'I hope the whole country enjoyed it. This is for them.',
+      'Playing for the shirt means everything to these players.',
+      'It is a good result. The tournament goes on.',
+      'We will enjoy tonight and get ready for the next one.',
+      'This team can beat anyone. Tonight proved it.',
+      'People back home should get used to it.',
+    ],
+  },
+  {
+    kind: 'post', needs: ['national', 'lost'], weight: 2,
+    prompt: () => 'The country expected more tonight. What do you say to the fans back home?',
+    answers: () => [
+      'That these players gave everything for the shirt.',
+      'That we will learn from it and come back stronger.',
+      'That we are disappointed too. Nobody hides from it.',
+      'That we will analyse it calmly. One match does not make a team.',
+      'That it was not good enough, and the players know it.',
+      'That some of them will have to show me more.',
+    ],
+  },
+  {
+    kind: 'post', needs: ['bronze', 'won'], weight: 8,
+    prompt: () => 'A medal to take home. How proud are you of this group?',
+    answers: () => [
+      'Very proud. They came back from a hard night and won a medal.',
+      'A medal for your country is never small. They earned it.',
+      'Proud, yes. But we came for more.',
+      'It is a good way to finish. We will build on it.',
+      'Bronze this time. Next time, gold.',
+      'We showed the character we have. Remember it.',
+    ],
+  },
+  {
+    kind: 'post', needs: ['bronze', 'lost'], weight: 8,
+    prompt: () => 'Fourth place — so close to a medal. How does that feel?',
+    answers: () => [
+      'Painful. But I am proud of what these players gave.',
+      'We will look back on a good tournament, in time.',
+      'It hurts. Fourth is the hardest place to finish.',
+      'We have to accept it. The others were better on the day.',
+      'It is not good enough. We came here for a medal.',
+      'Some players did not show up when it mattered.',
+    ],
+  },
 ];
 
 /** `n` distinct items from `pool`, order randomised — a partial Fisher-Yates. */
@@ -1137,7 +1254,13 @@ function reactionFor(bias: AnswerCategory, chosen: AnswerCategory): BodyLanguage
 /** A conference for a match, its questions drawn for the occasion. */
 function buildSession(world: World, f: Fixture, kind: InterviewKind): { session: InterviewSession; ctx: Ctx } | null {
   const made = contextFor(world, f, kind);
-  if (made === null) return null;
+  return made === null ? null : sessionFrom(world, made, f.id, kind);
+}
+
+/** The conference for an occasion as the press see it. */
+function sessionFrom(
+  world: World, made: { ctx: Ctx; stakes: Stakes; occasion: string }, fixtureId: number, kind: InterviewKind,
+): { session: InterviewSession; ctx: Ctx } {
   const { ctx, stakes, occasion } = made;
   const room = ROOM[stakes];
   const rng = world.rng;
@@ -1147,7 +1270,7 @@ function buildSession(world: World, f: Fixture, kind: InterviewKind): { session:
   const session: InterviewSession = {
     id: world.nextInterviewId++,
     kind,
-    fixtureId: f.id,
+    fixtureId,
     questions: archetypes.map((a, i) => buildQuestion(a, journalists[i], ctx, kind, room.weight)),
     currentIndex: 0,
     finished: false,
@@ -1247,8 +1370,13 @@ function adjustSquadMorale(world: World, clubId: number, delta: number): void {
   if (delta === 0 || clubId === NO_CLUB) return;
   const club = world.clubs[clubId];
   if (club === undefined) return;
+  adjustPlayersMorale(world, club.players, delta);
+}
+
+function adjustPlayersMorale(world: World, players: readonly number[], delta: number): void {
+  if (delta === 0) return;
   const store = world.players;
-  for (const p of club.players) {
+  for (const p of players) {
     store.morale[p] = Math.max(0, Math.min(100, store.morale[p] + delta));
   }
 }
@@ -1274,16 +1402,23 @@ export function answerInterviewQuestion(
   q.answeredIndex = optionIndex;
   q.bodyLanguage = bodyLanguage;
 
-  const f = world.fixtures[session.fixtureId];
-  const isHome = f.home === world.userClubId;
-  const opponentId = isHome ? f.away : f.home;
   // A question that clearly landed (or badly misjudged the room) nudges the
   // outcome a little further than the flat category effect alone.
   let ownDelta = option.ownMorale;
   if (bodyLanguage === 'encouraged') ownDelta += 1;
   else if (bodyLanguage === 'skeptical') ownDelta -= 1;
-  adjustSquadMorale(world, world.userClubId, ownDelta);
-  adjustSquadMorale(world, opponentId, option.opponentMorale);
+  const national = nationalMatchOf(world, session);
+  if (national !== null) {
+    // A nation's conference: its fourteen, and the other side's.
+    const { t, m, nation } = national;
+    adjustPlayersMorale(world, squadOf(t, nation), ownDelta);
+    adjustPlayersMorale(world, squadOf(t, m.home === nation ? m.away : m.home), option.opponentMorale);
+  } else if (session.national === undefined) {
+    const f = world.fixtures[session.fixtureId];
+    const isHome = f.home === world.userClubId;
+    adjustSquadMorale(world, world.userClubId, ownDelta);
+    adjustSquadMorale(world, isHome ? f.away : f.home, option.opponentMorale);
+  }
   if (option.playerIdx !== undefined && option.playerMorale !== undefined && world.players.isActive(option.playerIdx)) {
     const store = world.players;
     store.morale[option.playerIdx] = Math.max(0, Math.min(100, store.morale[option.playerIdx] + option.playerMorale));
@@ -1328,7 +1463,9 @@ export function expireStaleInterviews(world: World): void {
   for (const s of world.pendingInterviews) {
     const stale = s.kind === 'post'
       ? world.day > (s.expiresDay ?? world.day)
-      : world.fixtures[s.fixtureId]?.played ?? true;
+      : s.national !== undefined
+        ? nationalMatchOf(world, s)?.m.played ?? true
+        : world.fixtures[s.fixtureId]?.played ?? true;
     if (!stale) { live.push(s); continue; }
     if (!s.finished) {
       const msg = interviewMessage(world, s);
@@ -1340,4 +1477,252 @@ export function expireStaleInterviews(world: World): void {
     }
   }
   world.pendingInterviews = live;
+}
+
+// ---- The national team -------------------------------------------------------------------
+
+/** Ranking points between two nations that make one a clear favourite. */
+const FAVOURITE_POINTS = 100;
+
+/** The tournament and match a national team's conference is about — and the manager's nation. */
+function nationalMatchOf(world: World, s: InterviewSession): { t: Tournament; m: IntlMatch; nation: number } | null {
+  const ref = s.national;
+  if (ref === undefined) return null;
+  const t = world.internationals?.tournaments.find((x) => x.id === ref.tournamentId);
+  const m = t?.matches.find((x) => x.id === ref.matchId);
+  return t !== undefined && m !== undefined ? { t, m, nation: ref.nation } : null;
+}
+
+/** A nation's results in competitive matches up to `day`, the latest first. */
+function nationResults(world: World, nation: number, day: number): boolean[] {
+  const out: Array<[number, boolean]> = [];
+  for (const t of world.internationals?.tournaments ?? []) {
+    if (t.kind === 'friendly') continue;
+    for (const m of t.matches) {
+      if (!m.played || m.day > day || (m.home !== nation && m.away !== nation)) continue;
+      out.push([m.day, (m.home === nation) === (m.homeSets > m.awaySets)]);
+    }
+  }
+  return out.sort((a, b) => b[0] - a[0]).map(([, won]) => won);
+}
+
+/** A national team's match as the press see it: the tournament, the stage, the story. */
+function nationalContextFor(
+  world: World, t: Tournament, m: IntlMatch, nation: number, kind: InterviewKind,
+): { ctx: Ctx; stakes: Stakes; occasion: string } | null {
+  if (m.home !== nation && m.away !== nation) return null;
+  const oppNation = m.home === nation ? m.away : m.home;
+  if (NATIONS[oppNation] === undefined) return null;
+  const side = (n: number): Side => ({ id: n, name: nationName(n), arenaName: '' });
+  const tags = new Set<Tag>(['national']);
+  if (t.host === nation) tags.add('hosts');
+  const occasions: string[] = [];
+
+  // What kind of match.
+  if (m.stage === 'Final') {
+    tags.add('final');
+    occasions.push(`${t.name} final`);
+  } else if (m.bronze) {
+    tags.add('knockout').add('bronze');
+    occasions.push(`${t.name} bronze medal match`);
+  } else if (m.stage === 'Semi-final') {
+    tags.add('semi');
+    occasions.push(`${t.name} semi-final`);
+  } else if (m.round >= 0) {
+    tags.add('knockout');
+    occasions.push(`${t.name} ${m.stage.toLowerCase()}`);
+  }
+
+  // The story so far.
+  const ownSquad = squadOf(t, nation);
+  const oppSquad = squadOf(t, oppNation);
+  const before = kind === 'pre' ? m.day : m.day - 1;
+  if (kind === 'pre') {
+    const started = t.matches.some((x) => x.played && (x.home === nation || x.away === nation));
+    if (!started && occasions.length === 0) {
+      tags.add('tournamentOpener');
+      occasions.push(`${t.name} opener`);
+    }
+    const job = world.career.nationalJobs?.find((j) => j.nation === nation && j.endDay < 0);
+    const sinceAppointed = job === undefined || (world.internationals?.tournaments ?? []).some((x) => x.kind !== 'friendly' &&
+      x.matches.some((y) => y.played && y.day >= job.startDay && (y.home === nation || y.away === nation)));
+    if (!sinceAppointed) tags.add('newBoss');
+  }
+  const past = nationResults(world, nation, before);
+  const after = kind === 'post' ? [(m.home === nation) === (m.homeSets > m.awaySets), ...past] : past;
+  const run = runOf(after);
+  const oppRun = runOf(nationResults(world, oppNation, before));
+  if (run >= 3) tags.add('winningRun');
+  if (run <= -3) tags.add('losingRun');
+  if (oppRun >= 3) tags.add('oppForm');
+  const ranking = (n: number): number => world.nationalTeams.find((x) => x.nation === n)?.rankingPoints ?? 0;
+  if (ranking(nation) - ranking(oppNation) > FAVOURITE_POINTS) tags.add('favourite');
+  if (ranking(oppNation) - ranking(nation) > FAVOURITE_POINTS) tags.add('underdog');
+  const own = stars(world, { players: ownSquad });
+  const theirs = stars(world, { players: oppSquad });
+  if (own.injured >= 0) tags.add('injuredStar');
+  if (theirs.star >= 0) tags.add('oppStar');
+  if (own.star >= 0) tags.add('ownStar');
+
+  // How it went.
+  let score = '';
+  if (kind === 'post') {
+    const home = m.home === nation;
+    const ownSets = home ? m.homeSets : m.awaySets;
+    const oppSets = home ? m.awaySets : m.homeSets;
+    const won = ownSets > oppSets;
+    score = `${ownSets}-${oppSets}`;
+    tags.add(won ? 'won' : 'lost');
+    if (Math.min(ownSets, oppSets) === 0) tags.add('whitewash');
+    if (ownSets + oppSets === 5) tags.add('tiebreak');
+    const firstTwo = m.setScores.slice(0, 2).map(([h, a]) => (home ? h > a : a > h));
+    if (firstTwo.length === 2 && firstTwo[0] === firstTwo[1] && firstTwo[0] !== won) tags.add(won ? 'comeback' : 'collapse');
+    if (tags.has('final')) tags.add(won ? 'trophy' : 'finalLost');
+    else if ((tags.has('semi') || tags.has('knockout')) && !won && !tags.has('bronze')) tags.add('eliminated');
+    if (won && tags.has('underdog')) tags.add('upset');
+    if (!won && tags.has('favourite')) tags.add('shock');
+    if (m.mvp >= 0) tags.add(ownSquad.includes(m.mvp) ? 'ownMvp' : 'oppMvp');
+  }
+
+  // The world's biggest stages are big from the first match.
+  const grand = t.kind === 'olympics' || t.kind === 'worlds';
+  const stakes: Stakes = tags.has('final')
+    ? 'huge'
+    : tags.has('semi') || tags.has('knockout') || grand || tags.has('hosts') ? 'big' : 'routine';
+  const occasion = occasions[0] ?? `${t.name} · ${m.stage}`;
+  return {
+    ctx: {
+      world, club: side(nation), opp: side(oppNation), comp: undefined, compName: t.name, tags, run, oppRun,
+      ownPos: 0, oppPos: 0, city: '', injured: own.injured, oppStar: theirs.star, ownStar: own.star, mvp: m.mvp, score,
+    },
+    stakes,
+    occasion,
+  };
+}
+
+/** The key a nation's match is known by among fixtures: -1 - its id, as the matchday screens have it. */
+export function nationalFixtureId(m: IntlMatch): number {
+  return -1 - m.id;
+}
+
+/**
+ * Line up the press conference before the manager's national team's match on
+ * `day` — the day after the one being played out, as for a club. Friendlies
+ * get none, as a club's do not.
+ */
+export function generateNationalInterviewSessions(world: World, day: number): void {
+  const nation = userNation(world);
+  if (nation < 0 || world.internationals === undefined) return;
+  for (const t of world.internationals.tournaments) {
+    if (t.kind === 'friendly' || t.status === 'planned' || t.status === 'done') continue;
+    for (const m of t.matches) {
+      if (m.played || m.day !== day || (m.home !== nation && m.away !== nation)) continue;
+      const key = nationalFixtureId(m);
+      if (world.interviewedFixtures.has(key)) continue;
+      const made = nationalContextFor(world, t, m, nation, 'pre');
+      if (made === null) continue;
+      const { session, ctx } = sessionFrom(world, made, key, 'pre');
+      session.national = { tournamentId: t.id, matchId: m.id, nation };
+      world.interviewedFixtures.add(key);
+      world.pendingInterviews.push(session);
+      const ahead = `${ctx.club.name}'s match against ${ctx.opp.name}`;
+      world.messages.push({
+        id: world.messages.length,
+        day: world.day,
+        year: world.year,
+        subject: session.stakes === 'routine' ? 'Pre-match press conference' : `Press conference: ${session.occasion}`,
+        body: session.stakes === 'huge'
+          ? `The press room is packed: ${session.crowd} journalists want to hear from you ahead of the ${session.occasion.toLowerCase()}.`
+          : session.stakes === 'big'
+            ? `A big crowd of journalists want your thoughts ahead of ${ahead} — ${session.occasion.toLowerCase()}.`
+            : `The press want time with you ahead of ${ahead}.`,
+        from: `${ctx.club.name} Volleyball Federation`,
+        category: 'interview',
+        fixtureId: key,
+        interviewId: session.id,
+      });
+    }
+  }
+}
+
+/**
+ * The press want the manager's reaction to his national team's match, just
+ * played — offered from the result screen, kept in the inbox for a day or
+ * two. Returns the conference, or null if there is none to give.
+ */
+export function generateNationalPostMatchInterview(world: World, t: Tournament, m: IntlMatch): InterviewSession | null {
+  const nation = userNation(world);
+  if (nation < 0 || t.kind === 'friendly' || !m.played || (m.home !== nation && m.away !== nation)) return null;
+  const key = nationalFixtureId(m);
+  const open = world.pendingInterviews.find((s) => s.kind === 'post' && s.fixtureId === key);
+  if (open !== undefined) return open;
+  const made = nationalContextFor(world, t, m, nation, 'post');
+  if (made === null) return null;
+  const { session, ctx } = sessionFrom(world, made, key, 'post');
+  session.national = { tournamentId: t.id, matchId: m.id, nation };
+  session.expiresDay = world.day + POST_MATCH_DAYS;
+  world.pendingInterviews.push(session);
+  const won = ctx.tags.has('won');
+  world.messages.push({
+    id: world.messages.length,
+    day: world.day,
+    year: world.year,
+    subject: ctx.tags.has('trophy') ? `Press conference: ${ctx.compName} winners` : 'Post-match press conference',
+    body: `The press want your reaction to ${ctx.club.name}'s ${ctx.score} ${won ? 'win over' : 'defeat to'} ${ctx.opp.name}` +
+      `${session.stakes === 'routine' ? '' : ` — ${session.crowd} journalists are waiting`}.`,
+    from: `${ctx.club.name} Volleyball Federation`,
+    category: 'interview',
+    fixtureId: key,
+    interviewId: session.id,
+  });
+  return session;
+}
+
+/** The match a conference is about, as the screens show it: from the manager's side, a club's or a nation's. */
+export interface ConferenceMatch {
+  day: number;
+  played: boolean;
+  /** The manager's side at home — never so on neutral ground. */
+  home: boolean;
+  /** Neither side at home. */
+  neutral: boolean;
+  ownSets: number;
+  oppSets: number;
+  /** The other side: a club (its id, else -1) or a nation (its index, else -1). */
+  oppClub: number;
+  oppNation: number;
+  oppName: string;
+}
+
+export function conferenceMatch(world: World, s: InterviewSession): ConferenceMatch | null {
+  return conferenceMatchFor(world, s.fixtureId, s.national?.nation);
+}
+
+/** The same, from the fixture id a conference's message keeps — after the conference itself has gone. */
+export function conferenceMatchFor(world: World, fixtureId: number, nation = userNation(world)): ConferenceMatch | null {
+  if (fixtureId < 0) {
+    const id = -1 - fixtureId;
+    for (const t of world.internationals?.tournaments ?? []) {
+      const m = t.matches.find((x) => x.id === id);
+      if (m === undefined) continue;
+      if (m.home !== nation && m.away !== nation) return null;
+      const home = m.home === nation;
+      const opp = home ? m.away : m.home;
+      return {
+        day: m.day, played: m.played, home: t.host === nation, neutral: t.host !== nation && t.host !== opp,
+        ownSets: home ? m.homeSets : m.awaySets, oppSets: home ? m.awaySets : m.homeSets,
+        oppClub: -1, oppNation: opp, oppName: nationName(opp),
+      };
+    }
+    return null;
+  }
+  const f = world.fixtures[fixtureId];
+  if (f === undefined) return null;
+  const home = f.home === world.userClubId;
+  const opp = world.clubs[home ? f.away : f.home];
+  return {
+    day: f.day, played: f.played, home: home && !f.neutralVenue, neutral: f.neutralVenue,
+    ownSets: home ? f.homeSets : f.awaySets, oppSets: home ? f.awaySets : f.homeSets,
+    oppClub: opp?.id ?? -1, oppNation: -1, oppName: opp?.name ?? '?',
+  };
 }

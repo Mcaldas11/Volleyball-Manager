@@ -695,7 +695,8 @@ function leaveClub(world: World, exit: JobExit): Club | undefined {
 
   world.talks = [];
   world.incomingOffers = [];
-  world.pendingInterviews = [];
+  // The club's press have nobody to ask now; the national team's still wait.
+  world.pendingInterviews = world.pendingInterviews.filter((s) => s.national !== undefined);
   world.scoutingQueue = [];
   for (const p of club.players) {
     world.players.setFlag(p, PlayerFlag.Transferable, false);

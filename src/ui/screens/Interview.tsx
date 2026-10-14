@@ -1,11 +1,10 @@
 import { useEffect, type JSX } from 'react';
-import type { Club } from '../../engine/model/club.ts';
 import type { ManagerProfile } from '../../engine/world/world.ts';
-import type {
-  AnswerCategory, BodyLanguage, InterviewKind, InterviewQuestion, InterviewSession,
+import {
+  conferenceMatch,
+  type AnswerCategory, type BodyLanguage, type ConferenceMatch, type InterviewKind, type InterviewQuestion, type InterviewSession,
 } from '../../engine/world/interviews.ts';
-import type { Fixture } from '../../engine/world/world.ts';
-import { Card, ClubLink, managerPhotoUrl, PersonFace, PlayerFace } from '../components.tsx';
+import { Card, ClubLink, Flag, managerPhotoUrl, PersonFace, PlayerFace } from '../components.tsx';
 import { portraitUrl } from '../faces.ts';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -17,12 +16,18 @@ const CATEGORY_LABEL: Readonly<Record<InterviewKind, Record<AnswerCategory, stri
 };
 
 /** "after the 3-1 win over Skra" / "ahead of hosting Skra". */
-function matchLine(session: InterviewSession, f: Fixture, userClubId: number): { lead: string; result: string } {
-  const home = f.home === userClubId;
-  if (session.kind === 'pre') return { lead: home ? 'Ahead of hosting' : 'Ahead of facing', result: '' };
-  const own = home ? f.homeSets : f.awaySets;
-  const opp = home ? f.awaySets : f.homeSets;
+function matchLine(session: InterviewSession, cm: ConferenceMatch): { lead: string; result: string } {
+  if (session.kind === 'pre') return { lead: cm.home ? 'Ahead of hosting' : 'Ahead of facing', result: '' };
+  const own = cm.ownSets;
+  const opp = cm.oppSets;
   return { lead: own > opp ? `After the ${own}-${opp} win over` : `After the ${own}-${opp} defeat to`, result: own > opp ? 'won' : 'lost' };
+}
+
+/** The other side: a club, linked — or a nation, by its flag. */
+function Opponent({ cm }: { cm: ConferenceMatch }): JSX.Element {
+  return cm.oppClub >= 0
+    ? <ClubLink id={cm.oppClub} short />
+    : <span className="interview-nation"><Flag nation={cm.oppNation} /> {cm.oppName}</span>;
 }
 
 const CATEGORY_ORDER: readonly AnswerCategory[] = ['positive', 'neutral', 'convince'];
@@ -143,13 +148,13 @@ function SummaryView({
 }: {
   g: ReturnType<typeof useGame>;
   session: InterviewSession;
-  opponent: Club | undefined;
+  opponent: ConferenceMatch | null;
   lead: string;
 }): JSX.Element {
   return (
     <>
       <p className="page-intro">
-        Conference complete{opponent !== undefined ? <> — {lead.toLowerCase()} <ClubLink id={opponent.id} short /></> : null}.
+        Conference complete{opponent !== null ? <> — {lead.toLowerCase()} <Opponent cm={opponent} /></> : null}.
       </p>
       <Card title="What You Told Them" icon="press" style={{ maxWidth: 720 }}>
         {session.questions.map((q, i) => (
@@ -194,10 +199,8 @@ export function InterviewScreen(): JSX.Element | null {
 
   if (sessionId === null || session === undefined) return null;
 
-  const f = world.fixtures[session.fixtureId];
-  const isHome = f.home === world.userClubId;
-  const opponent = world.clubs[isHome ? f.away : f.home];
-  const { lead, result } = matchLine(session, f, world.userClubId);
+  const opponent = conferenceMatch(world, session);
+  const { lead, result } = opponent !== null ? matchLine(session, opponent) : { lead: '', result: '' };
 
   return (
     <div className="interview-screen">
@@ -207,8 +210,8 @@ export function InterviewScreen(): JSX.Element | null {
             <Icon name={session.stakes === 'huge' ? 'trophy' : 'press'} size={13} /> {session.occasion}
           </span>
           <span className={`interview-context${result !== '' ? ` ${result}` : ''}`}>
-            {opponent !== undefined
-              ? <>{lead} <ClubLink id={opponent.id} short /></>
+            {opponent !== null
+              ? <>{lead} <Opponent cm={opponent} /></>
               : session.kind === 'pre' ? 'Pre-match' : 'Post-match'}
           </span>
           <span className="interview-progress">

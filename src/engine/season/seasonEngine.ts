@@ -52,7 +52,7 @@ import { generateLoanOffers, loanOf, loanStarters, reviewLoanPromises } from '..
 import { contractNotices } from '../world/contracts.ts';
 import { generateClauseBids, processDeals } from '../world/deals.ts';
 import { payAppearanceBonuses } from '../world/contractTerms.ts';
-import { expireStaleInterviews, generateInterviewSessions } from '../world/interviews.ts';
+import { expireStaleInterviews, generateInterviewSessions, generateNationalInterviewSessions } from '../world/interviews.ts';
 import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices, tacticReadNotice } from '../world/inbox.ts';
 import { readLevel, studyTactic } from '../model/tacticRead.ts';
 import { recordFixture } from '../world/records.ts';
@@ -586,9 +586,10 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   newsDay(world, (todays ?? []).map((id) => world.fixtures[id]));
 
   // Any press conference for a match just played goes stale unfinished; line
-  // up tomorrow's, if the user's club has one, before the day rolls over.
+  // up tomorrow's, if the user's club or national team has one, before the day rolls over.
   expireStaleInterviews(world);
   generateInterviewSessions(world, world.day + 1);
+  generateNationalInterviewSessions(world, world.day + 1);
 
   dailyRecovery(world, store);
   progressPlayoffs(world);

@@ -68,8 +68,8 @@ export function MatchResultScreen(): JSX.Element | null {
   const homeSide = fixture.home === me ? 'mine' : 'theirs';
   const awaySide = fixture.away === me ? 'mine' : 'theirs';
   const heading = watched.national?.title ?? `${comp?.name ?? 'Match'} · ${stageLabel(world, fixture)}`;
-  // The press want a word — the conference after the match, while it is open.
-  const press = national ? null : g.postMatchInterview(fixture.id);
+  // The press want a word — the conference after the match, while it is open: a club's or a nation's.
+  const press = g.postMatchInterview(fixture.id);
 
   const teamRow = (clubId: number, sets: number, won: boolean, side: 0 | 1): JSX.Element => {
     const c = national ? undefined : world.clubs[clubId];

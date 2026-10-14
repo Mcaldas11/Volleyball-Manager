@@ -22,8 +22,9 @@ import { PlayerFlag } from '../model/players.ts';
 import { POSITION_SHORT, type Position } from '../model/positions.ts';
 import { StaffRole } from '../model/staff.ts';
 import { OffensiveSystem, ServeStrategy, Tempo } from '../match/tactics.ts';
-import { MONTH_STARTS, postMessage } from './inbox.ts';
-import { worldRanking } from './internationals.ts';
+import { MONTH_STARTS, ordinal, postMessage } from './inbox.ts';
+import { nationName, poolTable, squadOf, userNation, worldRanking, type IntlMatch, type Tournament } from './internationals.ts';
+import { defaultTactics } from '../match/tactics.ts';
 import { NATIONS } from './nations.ts';
 import { currentPhase, dayOfSeason, inboxPrefsOf, SeasonPhase, type ReportTable, type World } from './world.ts';
 
@@ -344,6 +345,80 @@ export function scoutingReport(world: World): void {
   });
 }
 
+/**
+ * Before every competitive match of the national team — two days out, or the
+ * day before when the draw only names the opponent then: the scouts on the
+ * other nation, as a club's scouts report on the next club.
+ */
+export function nationalScoutingReport(world: World): void {
+  const nation = userNation(world);
+  if (nation < 0 || !inboxPrefsOf(world).scouting || world.internationals === undefined) return;
+  for (const t of world.internationals.tournaments) {
+    if (t.kind === 'friendly' || t.status === 'planned' || t.status === 'done') continue;
+    for (const m of t.matches) {
+      const days = m.day - world.day;
+      if (m.played || days < 1 || days > 2 || (m.home !== nation && m.away !== nation)) continue;
+      const key = -1 - m.id;
+      const done = (world.scoutedFixtures ??= []);
+      if (done.includes(key)) continue;
+      done.push(key);
+      if (done.length > 40) done.splice(0, done.length - 40);
+      postNationalScouting(world, t, m, nation, days);
+    }
+  }
+}
+
+function postNationalScouting(world: World, t: Tournament, m: IntlMatch, nation: number, days: number): void {
+  const store = world.players;
+  const opp = m.home === nation ? m.away : m.home;
+  const oppName = nationName(opp);
+  const rank = worldRanking(world).indexOf(opp) + 1;
+  // Their tournament so far, and their place in the pool.
+  const form = t.matches.filter((x) => x.played && (x.home === opp || x.away === opp)).sort((a, b) => a.day - b.day)
+    .map((x) => ((x.home === opp) === (x.homeSets > x.awaySets) ? 'W' : 'L')).join('-');
+  const pool = m.round < 0 ? t.pools.find((p) => p.teams.includes(opp)) : undefined;
+  const place = pool !== undefined ? poolTable(t, pool).findIndex((r) => r.clubId === opp) + 1 : 0;
+  // Each of their fourteen: at this tournament if he has played in it, else for his club this season.
+  const squad = squadOf(t, opp).filter((p) => store.isActive(p));
+  const lines = squad.map((p) => {
+    const here = t.stats.get(p);
+    if (here !== undefined && here[0] > 0) return { p, apps: here[0], ppm: here[1] / here[0], here: true };
+    const club = clubSeason(world, p);
+    return { p, apps: club.apps, ppm: club.apps > 0 ? club.points / club.apps : 0, here: false };
+  });
+  const key = [...lines].sort((a, b) => store.currentAbility[b.p] - store.currentAbility[a.p]).slice(0, 5);
+  const danger = [...lines].filter((x) => x.apps > 0).sort((a, b) => b.ppm - a.ppm)[0];
+  const tactics = world.nationalTeams.find((x) => x.nation === opp)?.tactics ?? defaultTactics();
+  const where = t.host === nation ? 'at home — the hall will be ours'
+    : t.host === opp ? 'in their own hall, in front of their own crowd' : 'on neutral ground';
+  const body = [
+    `${oppName}${rank > 0 ? `, ${ordinal(rank)} in the world ranking` : ''}` +
+      `${place > 0 && pool !== undefined ? `, ${ordinal(place)} in ${pool.name}` : ''}` +
+      `${form !== '' ? ` — ${form} at the ${t.name} so far` : ''}.`,
+    `They play ${OFFENCE_WORDS[tactics.offense] ?? 'a balanced offence'}, ${TEMPO_WORDS[tactics.tempo] ?? 'at a normal tempo'}. ${SERVE_WORDS[tactics.serve] ?? ''}`,
+    danger !== undefined
+      ? `The danger man is ${store.fullName(danger.p)} (${pos(world, danger.p)}): ${danger.ppm.toFixed(1)} points a match ${danger.here ? 'at this tournament' : 'for his club this season'}.`
+      // Before anyone has played: the best of them, by the scouts' own eyes.
+      : key[0] !== undefined ? `Their best player is ${store.fullName(key[0].p)} (${pos(world, key[0].p)}), of ${shortClub(world, store.clubId[key[0].p])}.` : '',
+    `The ${m.stage === 'Final' ? 'final' : m.stage.startsWith('Pool') ? 'pool match' : m.stage.toLowerCase()} is ${days === 1 ? 'tomorrow' : 'in two days'}, ${where}.`,
+  ].filter((l) => l !== '').join(' ');
+  postMessage(world, {
+    category: 'task', from: `${nationName(nation)} national team scouts`,
+    subject: `Scouting report: ${oppName}${m.stage === 'Final' ? ' — the final' : ''}`,
+    body, fixtureId: -1 - m.id, gamePlanFor: opp, aboutNation: opp,
+    tables: key.length > 0 ? [{
+      label: 'Their key players', columns: ['Player', 'Pos', 'Club', 'Age', 'Caps', 'Pts/match'],
+      rows: key.map((x) => ({
+        p: x.p,
+        cells: [
+          store.fullName(x.p), pos(world, x.p), shortClub(world, store.clubId[x.p]), store.ageOn(x.p, world.year, 181),
+          store.nationalCaps[x.p], x.ppm > 0 ? x.ppm.toFixed(1) : '—',
+        ],
+      })),
+    }] : undefined,
+  });
+}
+
 /** Every day: whichever reports fall due. */
 export function reportsDay(world: World): void {
   nationalFormReport(world);
@@ -351,4 +426,5 @@ export function reportsDay(world: World): void {
   rankingReport(world);
   assistantReport(world);
   scoutingReport(world);
+  nationalScoutingReport(world);
 }

@@ -992,6 +992,9 @@ function TrophyOverlay(): JSX.Element | null {
         {club !== undefined && (
           <div className="trophy-club"><ClubCrest club={club} size={32} /> {club.name}</div>
         )}
+        {cel.nation !== undefined && NATIONS[cel.nation] !== undefined && (
+          <div className="trophy-club"><Flag nation={cel.nation} /> {NATIONS[cel.nation].name}</div>
+        )}
         <div className="trophy-competition">{cel.competitionName}</div>
         <button className="primary" onClick={() => g.dismissTrophyCelebration()}>Continue</button>
       </div>

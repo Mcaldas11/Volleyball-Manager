@@ -293,6 +293,11 @@ Before submitting a change:
       the moments that deserve one — "MONSTER SPIKE!", "HUGE BLOCK!", "ACE!"
 - [x] Pre-match interviews, post-match press conferences, and a world news
       feed with the fans' comments under each story
+- [x] The national team gets what a club gets around its matches: the press
+      the day before and after (questions of the tournament, the hosts, a
+      medal — answers that move the fourteen's morale, not the club's), the
+      scouts' report on the other nation two days out with their plan to put
+      into the national team's instructions, and the trophy when a final is won
 - [x] Country flags throughout — clubs, players, staff, nations — resolved
       from FIVB confederation codes to real flag images
 - [x] Player photos, deterministic per player so the same face keeps showing

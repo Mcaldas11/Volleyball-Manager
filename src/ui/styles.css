@@ -6350,6 +6350,10 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .menu-save-actions button + button { margin-left: 6px; }
 .menu-notice { margin: 12px 0 0; text-align: center; color: var(--text-dim); font-size: 13px; }
 
+/* A message about a nation: its flag, filling the round. */
+.mail-avatar-flag { overflow: hidden; background: var(--surface-3); }
+.mail-avatar-flag .flag-img { width: 100%; height: 100%; border-radius: 0; vertical-align: 0; }
+
 /* The inbox's settings: which reports come in, and how often. */
 .inbox-settings { position: relative; margin-top: auto; }
 .inbox-settings-card { width: min(520px, 100%); padding: 6px 22px 18px; }

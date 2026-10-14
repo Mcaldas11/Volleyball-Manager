@@ -16,7 +16,8 @@ import {
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
 import { IntlReportSheet } from '../intlReport.tsx';
-import { nextTournamentFor, worldRanking } from '../../engine/world/internationals.ts';
+import { nextTournamentFor, userNation, worldRanking } from '../../engine/world/internationals.ts';
+import { conferenceMatch, conferenceMatchFor } from '../../engine/world/interviews.ts';
 import { contractEndYear, currentJob } from '../../engine/world/career.ts';
 import { describeHighlight, type MonthAward } from '../../engine/world/monthAwards.ts';
 import { CompetitionReviewSheet } from '../competitionReviewSheet.tsx';
@@ -229,6 +230,9 @@ export function MessageAvatar({ message: m, size }: { message: GameMessage; size
   const club = m.clubId !== undefined ? world.clubs[m.clubId] : undefined;
   if (club !== undefined) {
     return <span className="mail-avatar mail-avatar-crest" style={{ width: size, height: size }}><ClubCrest club={club} size={size * 0.72} /></span>;
+  }
+  if (m.aboutNation !== undefined && NATIONS[m.aboutNation] !== undefined) {
+    return <span className="mail-avatar mail-avatar-flag" style={{ width: size, height: size }}><Flag nation={m.aboutNation} /></span>;
   }
   if (m.playerIdx !== undefined && store.isActive(m.playerIdx)) {
     return <PlayerFace playerId={store.id[m.playerIdx]} name={store.fullName(m.playerIdx)} size={size} />;
@@ -577,17 +581,17 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   }
 
   if (cat === 'interview' && m.fixtureId !== undefined) {
-    const f = world.fixtures[m.fixtureId];
     const session = m.interviewId !== undefined ? world.pendingInterviews.find((s) => s.id === m.interviewId) : undefined;
-    const opp = f !== undefined ? world.clubs[f.home === world.userClubId ? f.away : f.home] : undefined;
-    const after = session?.kind === 'post' || (f?.played === true && m.day >= f.day);
+    // A club's match or a nation's — from the conference while it is open, from the message's fixture after.
+    const cm = session !== undefined ? conferenceMatch(world, session) : conferenceMatchFor(world, m.fixtureId);
+    const after = session?.kind === 'post' || (cm?.played === true && m.day >= cm.day);
     return (
       <div className="paper-report">
         <div className="paper-label">{after ? 'Post-match press conference' : 'Press conference'}</div>
-        {opp !== undefined && f !== undefined && (
+        {cm !== null && (
           <ReportRow k={after ? 'After' : 'Ahead of'}>
-            {after ? `${f.home === world.userClubId ? f.homeSets : f.awaySets}-${f.home === world.userClubId ? f.awaySets : f.homeSets} ` : ''}
-            {f.home === world.userClubId ? 'vs' : 'at'} {opp.name} · {g.longDateLabel(f.day)}
+            {after ? `${cm.ownSets}-${cm.oppSets} ` : ''}
+            {cm.home || cm.neutral ? 'vs' : 'at'} {cm.oppName} · {g.longDateLabel(cm.day)}
           </ReportRow>
         )}
         {session !== undefined && <ReportRow k="Occasion">{session.occasion}</ReportRow>}
@@ -790,10 +794,14 @@ function GamePlanSheet({ oppId, fixtureId }: { oppId: number; fixtureId: number 
   const g = useGame();
   const world = g.world!;
   const club = g.club;
-  const plan = g.gamePlanAgainst(oppId);
-  const fixture = world.fixtures[fixtureId];
-  if (club === null || plan === null || fixture === undefined) return null;
-  const t = club.tactics;
+  // A national team's match is filed below zero: the plan is then the national team's, against a nation.
+  const national = fixtureId < 0;
+  const plan = national ? g.nationalGamePlan(oppId, fixtureId) : g.gamePlanAgainst(oppId);
+  const played = national ? conferenceMatchFor(world, fixtureId)?.played : world.fixtures[fixtureId]?.played;
+  const tactics = national ? g.nationalTactics() : club?.tactics;
+  const ownerId = national ? -1 - userNation(world) : club?.id;
+  if (tactics == null || plan === null || played === undefined) return null;
+  const t = tactics;
   const name = (opts: ReadonlyArray<readonly [number, string]>, v: number): string => opts.find(([x]) => x === v)?.[1] ?? '—';
   const now = (what: 'serve' | 'serveTarget' | 'block' | 'shape'): string => {
     if (what === 'serve') return name(SERVE_OPTIONS, t.serve);
@@ -807,7 +815,7 @@ function GamePlanSheet({ oppId, fixtureId }: { oppId: number; fixtureId: number 
   const to = (what: 'serve' | 'serveTarget' | 'block' | 'shape', v: number): string =>
     name(what === 'serve' ? SERVE_OPTIONS : what === 'serveTarget' ? SERVE_TARGET_OPTIONS : what === 'block' ? BLOCK_OPTIONS : SHAPE_OPTIONS, v);
   const inPlace = followsPlan(t, plan);
-  const canUndo = world.planUndo?.fixtureId === fixtureId && world.planUndo.clubId === club.id;
+  const canUndo = world.planUndo?.fixtureId === fixtureId && world.planUndo.clubId === ownerId;
   return (
     <div className="paper-report gameplan">
       <div className="paper-label">The scouts' plan</div>
@@ -822,12 +830,14 @@ function GamePlanSheet({ oppId, fixtureId }: { oppId: number; fixtureId: number 
           <span className="gameplan-why">{part.why}</span>
         </div>
       ))}
-      {!fixture.played && (
+      {!played && (
         <div className="gameplan-actions">
           {inPlace
             ? <span className="gameplan-done"><Icon name="check" size={13} /> The plan is in</span>
-            : <button className="paper-btn" onClick={() => g.applyGamePlan(oppId, fixtureId)}><Icon name="tactics" size={14} /> Apply to every rotation</button>}
-          {canUndo && <button className="paper-btn" onClick={() => g.undoGamePlan()}><Icon name="back" size={14} /> Undo</button>}
+            : <button className="paper-btn" onClick={() => (national ? g.applyNationalGamePlan(oppId, fixtureId) : g.applyGamePlan(oppId, fixtureId))}>
+              <Icon name="tactics" size={14} /> Apply to every rotation
+            </button>}
+          {canUndo && <button className="paper-btn" onClick={() => (national ? g.undoNationalGamePlan() : g.undoGamePlan())}><Icon name="back" size={14} /> Undo</button>}
         </div>
       )}
     </div>

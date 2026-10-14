@@ -11,7 +11,6 @@
  * back.
  */
 
-import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import { computeRatings } from '../match/ratings.ts';
@@ -30,8 +29,19 @@ export interface GamePlan {
   parts: PlanPart[];
 }
 
-/** Who a club fields: its team sheet, or its best players by position. */
-function likelySix(world: World, club: Club): number[] {
+/** A side a plan is made for, or against: a club — or a nation's team, its fourteen and its sheet. */
+export interface PlanSide {
+  id: number;
+  players: readonly number[];
+  preferredLineup: readonly number[];
+  tactics: TeamTactics;
+}
+
+/** Whose instructions a plan goes into: a club's, or a national team's (its id then below zero). */
+type PlanOwner = Pick<PlanSide, 'id' | 'tactics'>;
+
+/** Who a side fields: its team sheet, or its best players by position. */
+function likelySix(world: World, club: PlanSide): number[] {
   const store = world.players;
   const sheet = club.preferredLineup.filter((p) => club.players.includes(p) && store.isActive(p));
   if (sheet.length >= 6) return sheet;
@@ -42,7 +52,7 @@ function likelySix(world: World, club: Club): number[] {
 const mean = (xs: readonly number[]): number => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
 /** The scouts' plan for a match against `opp`. */
-export function suggestPlan(world: World, club: Club, opp: Club): GamePlan {
+export function suggestPlan(world: World, club: PlanSide, opp: PlanSide): GamePlan {
   const store = world.players;
   const theirs = likelySix(world, opp);
   const ours = likelySix(world, club);
@@ -107,7 +117,7 @@ export function followsPlan(t: TeamTactics, plan: GamePlan): boolean {
 }
 
 /** Put a plan into a club's instructions — every rotation — keeping what was there to put back. */
-export function applyPlan(world: World, club: Club, plan: GamePlan, fixtureId: number): void {
+export function applyPlan(world: World, club: PlanOwner, plan: GamePlan, fixtureId: number): void {
   world.planUndo = { clubId: club.id, fixtureId, before: JSON.stringify(club.tactics) };
   const t = club.tactics;
   for (const part of plan.parts) {
@@ -121,7 +131,7 @@ export function applyPlan(world: World, club: Club, plan: GamePlan, fixtureId: n
 }
 
 /** Take a plan back: the instructions as they were before it. */
-export function undoPlan(world: World, club: Club): boolean {
+export function undoPlan(world: World, club: PlanOwner): boolean {
   const u = world.planUndo;
   if (u === undefined || u.clubId !== club.id) return false;
   // Back into the same object: a saved tactic slot may be holding it.

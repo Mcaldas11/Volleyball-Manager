@@ -17,7 +17,7 @@ import { atRisk, chooseTreatment, type InjuryCase, type Treatment } from '../eng
 import { menteesOf, mentorBlock, mentorOf, setMentor } from '../engine/world/mentoring.ts';
 import { rivalryName, rivalsOf, type Rivalry } from '../engine/world/rivals.ts';
 import { useSyncExternalStore } from 'react';
-import { applyPlan, suggestPlan, undoPlan, type GamePlan } from '../engine/world/gamePlan.ts';
+import { applyPlan, suggestPlan, undoPlan, type GamePlan, type PlanSide } from '../engine/world/gamePlan.ts';
 import type { InboxPrefs } from '../engine/world/world.ts';
 import { careerFileName, careerFileStream, exportCareer, importCareer } from './saveFile.ts';
 import { bidTurnedDown } from '../engine/world/offerStance.ts';
@@ -111,7 +111,9 @@ import {
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
+  conferenceMatch,
   declineInterview as declineInterviewSession,
+  generateNationalPostMatchInterview,
   generatePostMatchInterview,
   interviewMessage,
   type AnswerResult,
@@ -238,6 +240,8 @@ export interface MatchSide {
  *  triggers the trophy-lift celebration overlay. */
 export interface TrophyCelebration {
   clubId: number;
+  /** A national team's title: the nation, and no club. */
+  nation?: number;
   competitionName: string;
 }
 
@@ -1599,7 +1603,7 @@ class Game {
     if (world === null) return null;
     for (const s of world.pendingInterviews) {
       // Only a conference before a match holds the day up; the one after it can wait.
-      if (s.finished || s.kind !== 'pre' || world.fixtures[s.fixtureId]?.played !== false) continue;
+      if (s.finished || s.kind !== 'pre' || conferenceMatch(world, s)?.played !== false) continue;
       const msg = interviewMessage(world, s);
       return {
         kind: 'interview', label: 'Press conference', interviewId: s.id, offerId: null, messageId: msg?.id ?? null,
@@ -2122,6 +2126,51 @@ class Game {
     if (world === null || club === null || plan === null) return;
     applyPlan(world, club, plan, fixtureId);
     this.notice = `The plan for ${world.clubs[oppId]?.name ?? 'the match'} is in — every rotation.`;
+    this.emit();
+  }
+
+  /** A national team as the scouts' plan sees it: the fourteen for the match, its sheet, its instructions.
+   *  Its id is -1 - the nation, so it is never taken for a club's. */
+  private nationPlanSide(nation: number, fixtureId: number): PlanSide | null {
+    const world = this.world;
+    if (world === null) return null;
+    const own = nation === userNation(world);
+    const team = own ? this.nationalSheet() : world.nationalTeams.find((x) => x.nation === nation);
+    if (team === null || team === undefined) return null;
+    const matchId = -1 - fixtureId;
+    const t = world.internationals?.tournaments.find((x) => x.matches.some((m) => m.id === matchId));
+    const named = t !== undefined ? squadOf(t, nation) : [];
+    const players = named.length > 0 ? named : own ? this.nationalPlayers() : suggestSquad(world, nation);
+    return { id: -1 - nation, players, preferredLineup: team.preferredLineup ?? [], tactics: team.tactics ?? defaultTactics() };
+  }
+
+  /** The national team scouts' plan against a nation, for the match `fixtureId` (-1 - its id). */
+  nationalGamePlan(oppNation: number, fixtureId: number): GamePlan | null {
+    const world = this.world;
+    if (world === null || userNation(world) < 0) return null;
+    const own = this.nationPlanSide(userNation(world), fixtureId);
+    const opp = this.nationPlanSide(oppNation, fixtureId);
+    return own === null || opp === null ? null : suggestPlan(world, own, opp);
+  }
+
+  /** Put the national team scouts' plan into every rotation of its instructions. */
+  applyNationalGamePlan(oppNation: number, fixtureId: number): void {
+    const world = this.world;
+    const sheet = this.nationalSheet();
+    const plan = this.nationalGamePlan(oppNation, fixtureId);
+    if (world === null || sheet === null || plan === null) return;
+    applyPlan(world, { id: -1 - userNation(world), tactics: sheet.tactics }, plan, fixtureId);
+    this.notice = `The plan for ${nationName(oppNation)} is in — every rotation of the national team.`;
+    this.emit();
+  }
+
+  /** Take the national team's plan back out. */
+  undoNationalGamePlan(): void {
+    const world = this.world;
+    const sheet = this.nationalSheet();
+    if (world === null || sheet === null) return;
+    this.notice = undoPlan(world, { id: -1 - userNation(world), tactics: sheet.tactics })
+      ? 'The national team\'s instructions are back as they were.' : 'Nothing to undo.';
     this.emit();
   }
 
@@ -3968,6 +4017,13 @@ class Game {
     this.lastNational = {
       fixture, result, homeName: nationName(m.home), awayName: nationName(m.away), national: ref,
     };
+    // The press want the manager's reaction, as after a club's match.
+    generateNationalPostMatchInterview(world, t, m);
+    // A final won: the nation's title, celebrated as a club's is.
+    const winner = m.homeSets > m.awaySets ? m.home : m.away;
+    if (m.stage === 'Final' && t.kind !== 'friendly' && winner === ref.nation) {
+      this.trophyCelebration = { clubId: -1, nation: ref.nation, competitionName: t.name };
+    }
     this.showPostMatch(fixture);
   }
 

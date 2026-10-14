@@ -1548,6 +1548,8 @@ export function leaveNationalJob(world: World, sacked: boolean, why = ''): void 
     spell.exit = sacked ? 'sacked' : 'resigned';
   }
   I.chosen = null;
+  // The national team's press have nobody to ask now; the club's still wait.
+  world.pendingInterviews = world.pendingInterviews.filter((s) => s.national === undefined);
   I.vacancies.push({ nation, since: world.day, fillsOn: world.day + VACANCY_DAYS });
   if (sacked) {
     world.career.reputation = Math.round(world.career.reputation * 0.95);
