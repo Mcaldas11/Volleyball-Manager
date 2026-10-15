@@ -14,6 +14,7 @@
  * knows him better for it, and has the night's report in his inbox.
  */
 
+import { calendarOn } from './calendar.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import { matchRating } from '../match/playerRating.ts';
 import type { Position } from '../model/positions.ts';
@@ -38,9 +39,10 @@ function busy(tournaments: readonly Tournament[], nation: number, day: number): 
 }
 
 /** The national team's months: the end of spring, and the summer before the clubs start again. */
-function nationalWindow(day: number): boolean {
+function nationalWindow(world: World, day: number): boolean {
   const d = ((day % DAYS_PER_SEASON) + DAYS_PER_SEASON) % DAYS_PER_SEASON;
-  return phaseOfSeason(d) === SeasonPhase.NationalTeam || d < 45;
+  const cal = calendarOn(world, day);
+  return phaseOfSeason(d, cal) === SeasonPhase.NationalTeam || d < cal.summerFriendliesUntil;
 }
 
 /** The days a friendly could be played against `opp` — or against anyone, without one. */
@@ -50,7 +52,7 @@ export function friendlyDays(world: World, opp = -1): number[] {
   const I = internationals(world);
   const out: number[] = [];
   for (let day = world.day + NOTICE; day <= world.day + HORIZON; day++) {
-    if (!nationalWindow(day) || busy(I.tournaments, mine, day)) continue;
+    if (!nationalWindow(world, day) || busy(I.tournaments, mine, day)) continue;
     if (opp >= 0 && busy(I.tournaments, opp, day)) continue;
     out.push(day);
   }

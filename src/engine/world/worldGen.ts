@@ -83,6 +83,7 @@ export function generateWorld(opts: WorldGenOptions): World {
   const gender = opts.gender ?? 'men';
   if (gender === 'women') world.gender = 'women';
   world.gateBooked = true;
+  world.fivbCalendarFrom = 0;
   world.players.women = gender === 'women';
   setNationsGame(gender);
   const rng = world.rng;

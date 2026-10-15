@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PlayerFlag } from '../model/players.ts';
-import { advanceDay, newSeasonContext, startSeason, type SeasonContext } from '../season/seasonEngine.ts';
+import { advanceDay, isSeasonOver, newSeasonContext, startSeason, type SeasonContext } from '../season/seasonEngine.ts';
+import { calendarOf } from './calendar.ts';
 import { endSeason } from '../season/rollover.ts';
 import { appointManager, lastJobEnded } from './career.ts';
 import { messageNeedsAction } from './inbox.ts';
@@ -30,13 +31,14 @@ function start(seed: number): { world: World; ctx: SeasonContext } {
 /** Run the days, the season turning over as the game turns it. */
 function runTo(world: World, ctx: SeasonContext, day: number): void {
   while (world.day < day) {
-    if (world.day % 365 >= 350) {
+    if (isSeasonOver(world)) {
+      // Closed on its calendar's day (the 30 June); the new season starts itself.
+      const closes = calendarOf(world).rollover;
       endSeason(world, ctx);
-      while (world.day % 365 >= 350) {
+      while (world.day % 365 >= closes) {
         world.day++;
         if (world.day % 365 === 0) world.year++;
       }
-      startSeason(world, ctx);
       continue;
     }
     advanceDay(world, ctx, { detailedClubs: new Set([world.userClubId]) });
@@ -122,8 +124,9 @@ test('the FIVB cycle: a World Championship in 2027, then in 2028 the Olympic Gam
   const I = internationals(world);
   const edition = (kind: Tournament['kind'], conf: string | null, year: number) =>
     I.history.find((h) => h.kind === kind && h.confederation === conf && h.year === year)!;
-  // The Nations League turns over: the last-placed down, the best-ranked outside up.
-  runTo(world, ctx, 365 + 1);
+  // The Nations League turns over: the last-placed down, the best-ranked outside up. Its finals are on 1 August.
+  const vnl2027 = I.tournaments.find((t) => t.kind === 'nationsLeague' && t.year === 2027)!;
+  runTo(world, ctx, Math.max(...vnl2027.knockoutDays) + 1);
   const vnl = edition('nationsLeague', null, 2027);
   const down = vnl.placings![vnl.placings!.length - 1];
   assert.equal(I.vnl?.length, 18);
@@ -143,11 +146,12 @@ test('the FIVB cycle: a World Championship in 2027, then in 2028 the Olympic Gam
   assert.ok(worlds.entry?.some(([, why]) => why === 'World ranking'), 'the rest by ranking');
   assert.equal(byKind(world, 'continental').filter((t) => t.year === 2027).length, 0, 'no continental championships in a World Championship year');
 
-  // After it, the EuroVolley 2028 qualifiers: pools of four for the places the hosts and the top eight leave.
+  // In August, the EuroVolley 2028 qualifiers: pools of four for the places the hosts and the top eight leave.
   const qualifiers = byKind(world, 'qualifier').find((t) => t.year === 2028)!;
   assert.ok(qualifiers !== undefined, 'EuroVolley 2028 qualifiers');
   assert.equal(qualifiers.name, 'EuroVolley 2028 Qualifiers');
-  assert.ok(qualifiers.startDay > Math.max(...worlds.knockoutDays), 'after the World Championship');
+  assert.ok(qualifiers.startDay > Math.max(...vnl2027.knockoutDays) && Math.max(...qualifiers.knockoutDays) < worlds.startDay,
+    'between the Nations League and the World Championship');
   assert.ok(qualifiers.pools.every((p) => p.teams.length <= 4));
   const top8 = edition('continental', 'CEV', 2026).placings!.slice(0, 8);
   assert.ok(top8.every((n) => !qualifiers.teams.includes(n)), 'the top eight go straight through');

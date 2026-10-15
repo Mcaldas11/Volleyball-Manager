@@ -135,3 +135,12 @@ test('a save from before the gate was booked once has its gates brought up — o
   const fresh = reviveWorld(structuredClone(world));
   assert.deepEqual(fresh.clubs.map((c) => c.finances.ticketIncomePerMatch), world.clubs.map((c) => c.finances.ticketIncomePerMatch));
 });
+
+test("a save from before the FIVB's calendar keeps the old one for the season it is in", () => {
+  const world = generateWorld({ seed: 3, startYear: 2026, scale: 'small', manager: stubManager() });
+  assert.equal(world.fivbCalendarFrom, 0, 'a new world is the FIVB\'s from its first season');
+  const old = structuredClone(world);
+  delete old.fivbCalendarFrom;
+  old.season = 4;
+  assert.equal(reviveWorld(old).fivbCalendarFrom, 5);
+});

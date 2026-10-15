@@ -2,7 +2,7 @@ import { useState, type JSX } from 'react';
 import { internationalNotes } from '../../engine/world/internationals.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
 import {
-  FRIENDLY_LAST_DAY, FRIENDLY_NOTICE_DAYS, friendliesOf, friendlyRequests,
+  FRIENDLY_NOTICE_DAYS, friendliesOf, friendlyRequests, friendlyWindow,
 } from '../../engine/season/friendlies.ts';
 import { DAYS_PER_SEASON, TRANSFER_WINDOWS, type Competition, type Fixture } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
@@ -77,7 +77,7 @@ export function CalendarScreen(): JSX.Element {
   const monthTitle = monthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   // The pre-season, while there is still time to fix up a friendly.
-  const preSeason = today % DAYS_PER_SEASON <= FRIENDLY_LAST_DAY - FRIENDLY_NOTICE_DAYS;
+  const preSeason = today % DAYS_PER_SEASON <= friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS;
   const friendlies = friendliesOf(world, club.id);
   const invitations = friendlyRequests(world);
 

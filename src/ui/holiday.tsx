@@ -8,6 +8,7 @@
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { DAYS_PER_SEASON, TRANSFER_WINDOWS } from '../engine/world/world.ts';
+import { calendarOf } from '../engine/world/calendar.ts';
 import {
   DEFAULT_HOLIDAY, holidayDays, JOB_TARGETS, type HolidayPlan, type HolidayReturn, type JobTarget, type OfferPolicy,
 } from '../engine/world/holiday.ts';
@@ -81,8 +82,8 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
     });
     break;
   }
-  // The season rolls over on its 350th day: the last day before is its end.
-  const seasonEnd = today - (today % DAYS_PER_SEASON) + 349;
+  // The season rolls over on its calendar's last day (30 June): the day before is its end.
+  const seasonEnd = today - (today % DAYS_PER_SEASON) + calendarOf(world).rollover - 1;
   if (seasonEnd > today) {
     presets.push({ key: 'season', label: `End of the season (${g.dateLabelForDay(seasonEnd)})`, day: seasonEnd });
   }

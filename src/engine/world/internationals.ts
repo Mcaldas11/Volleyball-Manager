@@ -47,6 +47,7 @@
  * home — and the world's news reports the tournaments.
  */
 
+import { intlEventDays, plannedEventDays, type IntlKind } from './calendar.ts';
 import { frameVerdict, framedSquad } from './nationalExtras.ts';
 import { Rng } from '../core/rng.ts';
 import { MatchFormat, simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
@@ -64,7 +65,7 @@ import { postNews } from './news.ts';
 import { applyMatchInjuries, matchInjuryRng } from './progression.ts';
 import { recordFixture } from './records.ts';
 import {
-  dayOfSeason, DAYS_PER_SEASON, type Competition, type Fixture, type GameMessage, type World,
+  DAYS_PER_SEASON, type Competition, type Fixture, type GameMessage, type World,
 } from './world.ts';
 
 export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics' | 'qualifier' | 'friendly';
@@ -253,15 +254,7 @@ export interface IntlReport {
 
 // ---- The calendar ------------------------------------------------------------------------
 
-/** The summer major: squads named, first match (days of the season). July. */
-const SUMMER_CALL_UP = 8;
-const SUMMER_START = 15;
-/** An Olympic summer's continental championships, after the Games: August. */
-const AFTER_GAMES_CALL_UP = 31;
-const AFTER_GAMES_START = 38;
-/** The Nations League, once the club playoffs are over. May and June. */
-const VNL_CALL_UP = 304;
-const VNL_START = 311;
+// When each tournament is played — the FIVB's calendar, the women's and the men's — is calendar.ts's.
 
 export const SQUAD_SIZE = 14;
 export const SQUAD_SHAPE: Readonly<Record<number, number>> = {
@@ -543,8 +536,9 @@ function orient(t: Pick<Tournament, 'host'>, a: number, b: number): [number, num
 /** Draw a tournament: snake-seeded pools, every pool match on its day. */
 function createTournament(
   world: World, kind: TournamentKind, conf: Confederation | null, teams: number[], host: number, year: number,
-  callUp: number, start: number, gap: number,
+  when: TournamentWindow,
 ): Tournament | null {
+  const { callUp, start } = when;
   if (teams.length < 2) return null;
   const I = internationals(world);
   const comp = competitionFor(world, kind, conf);
@@ -581,23 +575,44 @@ function createTournament(
     mvp: -1,
     stats: new Map(),
   };
+  // The knockout rounds count back from the final on the last day: the semi-finals the day
+  // before, the quarter-finals three days before it, each round earlier a few days more.
+  const qualifiers = t.advance * pools.length;
+  const rounds = kind === 'qualifier' ? 0 : Math.max(1, Math.round(Math.log2(qualifiers)));
+  const knockout = Array.from({ length: rounds }, (_, r) => when.end - (KNOCKOUT_BACK[rounds - 1 - r] ?? 3 * (rounds - 1 - r)));
+  // The pool rounds: on the tournament's own match days where it has them (the Nations League's
+  // three weeks), else spread from its first day to two days before the knockout rounds.
+  const poolEnd = rounds === 0 ? when.end : Math.max(start, knockout[0] - 2);
+  const slots = when.poolDays ?? Array.from({ length: poolEnd - start + 1 }, (_, i) => start + i);
+  const poolRounds = pools.map((pool) => roundRobin(pool.teams));
+  const most = Math.max(1, ...poolRounds.map((r) => r.length));
+  const dayOfRound = (r: number): number => slots[most === 1 ? 0 : Math.round((r * (slots.length - 1)) / (most - 1))] ?? start;
   let lastPoolDay = start;
-  for (const pool of pools) {
-    roundRobin(pool.teams).forEach((round, r) => {
-      const day = start + r * gap;
+  pools.forEach((pool, p) => {
+    poolRounds[p].forEach((round, r) => {
+      const day = dayOfRound(r);
       lastPoolDay = Math.max(lastPoolDay, day);
       for (const [a, b] of round) {
         const [home, away] = orient(t, a, b);
         t.matches.push(newMatch(I, day, home, away, pool.name, -1, 0));
       }
     });
-  }
-  const qualifiers = t.advance * pools.length;
-  const rounds = kind === 'qualifier' ? 0 : Math.max(1, Math.round(Math.log2(qualifiers)));
-  t.knockoutDays = rounds === 0 ? [lastPoolDay] : Array.from({ length: rounds }, (_, r) => lastPoolDay + 3 + r * 2);
+  });
+  t.knockoutDays = rounds === 0 ? [lastPoolDay] : knockout;
   I.tournaments.push(t);
   return t;
 }
+
+/** When a tournament is played: squads named, first match, final, and any match days of its own. */
+interface TournamentWindow {
+  callUp: number;
+  start: number;
+  end: number;
+  poolDays?: number[];
+}
+
+/** Days before the final of each knockout round, the final first: semi-finals, quarter-finals, last sixteen, last thirty-two. */
+const KNOCKOUT_BACK = [0, 1, 3, 6, 9, 12];
 
 /**
  * A friendly the manager has arranged: one match between two nations on a
@@ -656,54 +671,54 @@ export function planInternationals(world: World): void {
   I.plannedSeason = world.season;
   I.tournaments = I.tournaments.filter((t) => t.season >= world.season - 1);
   assignDualNationals(world);
-  const d = dayOfSeason(world);
-  const base = world.season * DAYS_PER_SEASON;
   const year = world.startYear + world.season;
   const ranked = rankedNations(world);
   // Hosts and jobs on a generator of their own: the world's own draws stay as they were.
   const rng = new Rng(`intl:${world.seed}:${world.season}`);
+  // Each on its dates — unless it is already too late to name a squad for it.
+  const when = (kind: IntlKind, conf: Confederation | null, y: number): TournamentWindow | null => {
+    const w = plannedEventDays(world, kind, conf, y);
+    return world.day <= w.callUp ? w : null;
+  };
   // The summer's major: the World Championship in an odd year, the Olympic
   // Games every fourth one.
-  if (d <= SUMMER_CALL_UP) {
-    if (year % 4 === 0) {
+  if (year % 4 === 0) {
+    const w = when('olympics', null, year);
+    if (w !== null) {
       const host = pickHost(rng, ranked);
-      const f = olympicField(world, ranked, host, year);
-      drawField(world, 'olympics', null, f, host, year, base + SUMMER_CALL_UP, base + SUMMER_START, 1);
-    } else if (year % 2 === 1) {
+      drawField(world, 'olympics', null, olympicField(world, ranked, host, year), host, year, w);
+    }
+  } else if (year % 2 === 1) {
+    const w = when('worlds', null, year);
+    if (w !== null) {
       const host = pickHost(rng, ranked);
-      const f = worldsField(world, ranked, host, year);
-      drawField(world, 'worlds', null, f, host, year, base + SUMMER_CALL_UP, base + SUMMER_START, 1);
+      drawField(world, 'worlds', null, worldsField(world, ranked, host, year), host, year, w);
     }
   }
-  // The continental championships every even year — straight after the Games in an Olympic one.
+  // The continental championships every even year — after the Games in an Olympic one.
   if (year % 2 === 0) {
-    const olympic = year % 4 === 0;
-    const callUp = olympic ? AFTER_GAMES_CALL_UP : SUMMER_CALL_UP;
-    const start = olympic ? AFTER_GAMES_START : SUMMER_START;
-    if (d <= callUp) {
-      for (const conf of CONFEDERATIONS) {
-        const own = ranked.filter((n) => NATIONS[n].confederation === conf);
-        if (own.length < 4) continue;
-        const host = I.hosts?.[fieldKey('continental', conf, year)] ?? pickHost(rng, own);
-        const f = continentalField(world, ranked, conf, host, year);
-        drawField(world, 'continental', conf, f, host, year, base + callUp, base + start, 1);
-      }
+    for (const conf of CONFEDERATIONS) {
+      const w = when('continental', conf, year);
+      const own = ranked.filter((n) => NATIONS[n].confederation === conf);
+      if (w === null || own.length < 4) continue;
+      const host = I.hosts?.[fieldKey('continental', conf, year)] ?? pickHost(rng, own);
+      const f = continentalField(world, ranked, conf, host, year);
+      drawField(world, 'continental', conf, f, host, year, w);
     }
   }
-  // And in an odd year, after the World Championship, the qualifiers for next summer's.
-  if (year % 2 === 1 && d <= AFTER_GAMES_CALL_UP) planQualifiers(world, ranked, rng, year + 1, base);
-  if (d <= VNL_CALL_UP) {
-    drawField(world, 'nationsLeague', null, nationsLeagueField(world, ranked), -1, year + 1, base + VNL_CALL_UP, base + VNL_START, 2);
-  }
+  // And in an odd year, in August, the qualifiers for next summer's.
+  if (year % 2 === 1) planQualifiers(world, ranked, rng, year + 1);
+  // Next June's Nations League — its finals in the summer after this season.
+  const vnl = when('nationsLeague', null, year + 1);
+  if (vnl !== null) drawField(world, 'nationsLeague', null, nationsLeagueField(world, ranked), -1, year + 1, vnl);
   ensureVacancies(world, ranked, rng);
 }
 
 /** Draw a tournament from its field — seeded by ranking, each nation's route in kept — and tell the manager how his nation fared. */
 function drawField(
-  world: World, kind: TournamentKind, conf: Confederation | null, f: Field, host: number, year: number,
-  callUp: number, start: number, gap: number,
+  world: World, kind: TournamentKind, conf: Confederation | null, f: Field, host: number, year: number, when: TournamentWindow,
 ): Tournament | null {
-  const t = createTournament(world, kind, conf, f.seeded(), host, year, callUp, start, gap);
+  const t = createTournament(world, kind, conf, f.seeded(), host, year, when);
   if (t === null) return null;
   t.entry = f.entries;
   fieldNotice(world, t);
@@ -717,7 +732,7 @@ function drawField(
  * top two and the best thirds through. Where everyone fits, no qualifiers:
  * they are all in.
  */
-function planQualifiers(world: World, ranked: number[], rng: Rng, target: number, base: number): void {
+function planQualifiers(world: World, ranked: number[], rng: Rng, target: number): void {
   const I = internationals(world);
   I.hosts ??= {};
   I.qualified ??= {};
@@ -736,7 +751,10 @@ function planQualifiers(world: World, ranked: number[], rng: Rng, target: number
       I.qualified[key] = field.map((n) => [n, 'Entered']);
       continue;
     }
-    const t = createTournament(world, 'qualifier', conf, field, -1, target, base + AFTER_GAMES_CALL_UP, base + AFTER_GAMES_START, 1);
+    // Played in August of the year before, between the Nations League and the World Championship.
+    const when = plannedEventDays(world, 'qualifier', conf, target - 1);
+    if (world.day > when.callUp) continue;
+    const t = createTournament(world, 'qualifier', conf, field, -1, target, when);
     if (t === null) continue;
     t.places = places;
     t.entry = field.map((n) => [n, `Not in the top ${CONTINENTAL_DIRECT} of ${CONTINENTAL[conf].name} ${target - 2}`]);
@@ -779,8 +797,6 @@ export interface CalendarEvent {
   drawDay: number;
 }
 
-/** Roughly how long each kind of tournament runs, until it is drawn and its days are known. */
-const RUNS: Readonly<Record<TournamentKind, number>> = { worlds: 12, olympics: 12, continental: 14, qualifier: 4, nationsLeague: 24, friendly: 1 };
 
 /**
  * What is on the international calendar from today on: the tournaments drawn
@@ -794,27 +810,27 @@ export function internationalCalendar(world: World, home: Confederation, seasons
   for (let s = world.season; s <= world.season + seasons; s++) {
     const year = world.startYear + s;
     const base = s * DAYS_PER_SEASON;
-    const add = (kind: TournamentKind, conf: Confederation | null, name: string, eventYear: number, callUp: number, start: number): void => {
+    // `on` is the year whose dates it is played on — a qualifier's, the summer before the championship it is for.
+    const add = (kind: IntlKind, conf: Confederation | null, name: string, eventYear: number, on = eventYear): void => {
       const t = I.tournaments.find((x) => x.kind === kind && x.year === eventYear && (conf === null || x.confederation === conf));
+      const w = intlEventDays(world, kind, conf, on);
       out.push({
         kind, confederation: conf, name: t?.name ?? name, year: eventYear,
-        callUpDay: t?.callUpDay ?? base + callUp,
-        startDay: t?.startDay ?? base + start,
-        endDay: t !== undefined ? Math.max(t.startDay, ...t.knockoutDays) : base + start + RUNS[kind],
+        callUpDay: t?.callUpDay ?? w.callUp,
+        startDay: t?.startDay ?? w.start,
+        endDay: t !== undefined ? Math.max(t.startDay, ...t.knockoutDays) : w.end,
         tournament: t,
         drawDay: base,
       });
     };
-    if (year % 4 === 0) add('olympics', null, `Olympic Games ${year}`, year, SUMMER_CALL_UP, SUMMER_START);
-    else if (year % 2 === 1) add('worlds', null, `World Championship ${year}`, year, SUMMER_CALL_UP, SUMMER_START);
+    if (year % 4 === 0) add('olympics', null, `Olympic Games ${year}`, year);
+    else if (year % 2 === 1) add('worlds', null, `World Championship ${year}`, year);
     if (year % 2 === 0) {
-      const olympic = year % 4 === 0;
-      add('continental', home, `${CONTINENTAL[home].name} ${year}`, year,
-        olympic ? AFTER_GAMES_CALL_UP : SUMMER_CALL_UP, olympic ? AFTER_GAMES_START : SUMMER_START);
+      add('continental', home, `${CONTINENTAL[home].name} ${year}`, year);
     } else if (NATIONS.filter((n) => n.confederation === home).length > CONTINENTAL_SIZE[home]) {
-      add('qualifier', home, `${CONTINENTAL[home].name} ${year + 1} Qualifiers`, year + 1, AFTER_GAMES_CALL_UP, AFTER_GAMES_START);
+      add('qualifier', home, `${CONTINENTAL[home].name} ${year + 1} Qualifiers`, year + 1, year);
     }
-    add('nationsLeague', null, `Nations League ${year + 1}`, year + 1, VNL_CALL_UP, VNL_START);
+    add('nationsLeague', null, `Nations League ${year + 1}`, year + 1);
   }
   return out.filter((e) => e.endDay >= world.day).sort((a, b) => a.startDay - b.startDay);
 }
@@ -1986,7 +2002,8 @@ export function internationalDay(world: World): void {
   const I = internationals(world);
   askForSquad(world);
   for (const t of I.tournaments) {
-    if (t.status === 'done' || t.season !== world.season) continue;
+    // Last season's, if it is under way: the Nations League's finals are in the summer after the season it was drawn in.
+    if (t.status === 'done' || (t.season !== world.season && (t.status === 'planned' || t.season < world.season - 1))) continue;
     if (t.status === 'planned') {
       if (world.day >= t.callUpDay) callUp(world, t);
       else continue;

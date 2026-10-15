@@ -7,6 +7,7 @@
  * same shape as one on day one — only larger.
  */
 
+import { calendarOf, type ClubCalendar } from './calendar.ts';
 import type { ContractExtras } from './contractTerms.ts';
 import type { Mentorship } from './mentoring.ts';
 import type { InjuryCase, RelapseRisk } from './treatment.ts';
@@ -555,11 +556,11 @@ export enum SeasonPhase {
  * team window is the summer, which is when the Nations League, continental
  * championships, World Championship and Olympic tournament are played.
  */
-export function phaseOfSeason(dayOfSeason: number): SeasonPhase {
-  if (dayOfSeason < 55) return SeasonPhase.PreSeason;
-  if (dayOfSeason < 275) return SeasonPhase.RegularSeason;
-  if (dayOfSeason < 310) return SeasonPhase.Playoffs;
-  if (dayOfSeason < 350) return SeasonPhase.NationalTeam;
+export function phaseOfSeason(dayOfSeason: number, cal: ClubCalendar): SeasonPhase {
+  if (dayOfSeason < cal.regularFrom) return SeasonPhase.PreSeason;
+  if (dayOfSeason < cal.playoffsFrom) return SeasonPhase.RegularSeason;
+  if (dayOfSeason < cal.nationalFrom) return SeasonPhase.Playoffs;
+  if (dayOfSeason < cal.rollover) return SeasonPhase.NationalTeam;
   return SeasonPhase.OffSeason;
 }
 
@@ -746,6 +747,9 @@ export interface World {
   gender?: 'women';
   /** Gate receipts are booked once, and the gates pay accordingly (see GATE_RESCALE). Absent: an older save. */
   gateBooked?: true;
+  /** The first season played to the FIVB's calendar (see calendar.ts): a save from before it keeps the
+   *  old one for the season it was in. Absent: an older save, set when it is loaded. */
+  fivbCalendarFrom?: number;
 }
 
 /** How often a regular report comes: `auto` lets the report choose. */
@@ -786,7 +790,7 @@ export function dayOfSeason(world: World): number {
 }
 
 export function currentPhase(world: World): SeasonPhase {
-  return phaseOfSeason(dayOfSeason(world));
+  return phaseOfSeason(dayOfSeason(world), calendarOf(world));
 }
 
 /** Day of the calendar year, for birthdays and age calculations. */

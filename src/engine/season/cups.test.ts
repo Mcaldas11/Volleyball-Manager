@@ -1,3 +1,4 @@
+import { calendarOf } from '../world/calendar.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld } from '../world/worldGen.ts';
@@ -47,9 +48,10 @@ test('the Champions League is European, the world championship is open to anyone
   }
 });
 
-test('a season of cups: every one finished, no club ever plays twice in a day, all before the playoffs', () => {
+test('a season of cups: every one finished, no club ever plays twice in a day, the national cups before the playoffs and the rest by May', () => {
   const { world } = season;
   const start = world.season * DAYS_PER_SEASON;
+  const cal = calendarOf(world);
   const perDay = new Map<string, number>();
   for (const f of world.fixtures) {
     if (f.day < start || f.day >= start + DAYS_PER_SEASON) continue;
@@ -62,7 +64,11 @@ test('a season of cups: every one finished, no club ever plays twice in a day, a
     assert.ok(comp.participants.includes(comp.champion));
     for (const id of comp.fixtureIds) {
       assert.ok(world.fixtures[id].played, `${comp.name}: every match played`);
-      assert.ok(world.fixtures[id].day - start < 272, `${comp.name}: done before the playoffs`);
+      // The FIVB's calendar: a national cup and the CEV Cup are over before the league playoffs; the
+      // Champions League's Final Four and the other confederations' club championships come in April and May.
+      const d = world.fixtures[id].day - start;
+      const early = comp.kind === 'cup' || comp.key === 'cont:CEV:2';
+      assert.ok(early ? d < cal.playoffStart : d <= cal.clubSeasonEnd, `${comp.name}: done in its window`);
     }
   }
 });

@@ -1,3 +1,4 @@
+import { calendarOf } from './calendar.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
@@ -12,7 +13,8 @@ test('the analyst keeps a season of the club: where the attacks came down, both 
   startSeason(world, ctx);
   const club = world.clubs.filter((c) => c.tier === 1)[0];
   appointManager(world, club.id);
-  for (let d = 0; d < 110; d++) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
+  // Well into the league season — it starts in October.
+  while (world.day < calendarOf(world).leagueStart + 50) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
 
   const a = analysisFor(world, club.id, world.season)!;
   assert.ok(a !== undefined && a.matches > 3, 'matches noted');

@@ -14,6 +14,7 @@
  * no board judging it, no opposition analyst taking notes.
  */
 
+import { calendarOf } from '../world/calendar.ts';
 import { MatchFormat } from '../match/engine.ts';
 import type { Club } from '../model/club.ts';
 import { currentJob } from '../world/career.ts';
@@ -23,9 +24,15 @@ import {
   type Competition, type Fixture, type FriendlyRequest, type World,
 } from '../world/world.ts';
 
-/** The pre-season's window for friendlies, in days of the season: 8 July to 22 August. */
+/** The old calendar's pre-season window for friendlies, in days of the season: 8 July to 22 August.
+ *  The FIVB's is the five weeks before the league starts — see calendar.ts. */
 export const FRIENDLY_FIRST_DAY = 7;
 export const FRIENDLY_LAST_DAY = 52;
+
+/** The pre-season's window for friendlies this season, in days of the season. */
+export function friendlyWindow(world: World): { first: number; last: number } {
+  return calendarOf(world).friendlies;
+}
 /** As many as a pre-season has room for. */
 export const MAX_FRIENDLIES = 6;
 /** A date at least this far ahead — time for the answer, and the travel. */
@@ -117,7 +124,8 @@ export function friendlyDates(world: World): number[] {
   if (club === undefined) return [];
   const start = seasonStart(world);
   const out: number[] = [];
-  for (let d = Math.max(start + FRIENDLY_FIRST_DAY, world.day + FRIENDLY_NOTICE_DAYS); d <= start + FRIENDLY_LAST_DAY; d++) {
+  const window = friendlyWindow(world);
+  for (let d = Math.max(start + window.first, world.day + FRIENDLY_NOTICE_DAYS); d <= start + window.last; d++) {
     if (clubFree(world, club.id, d)) out.push(d);
   }
   return out;
@@ -133,7 +141,7 @@ export function friendlyBlock(world: World, clubId: number, day: number): string
   const club = userClub(world);
   const them = world.clubs[clubId];
   if (club === undefined) return 'You have no club.';
-  if (dayOfSeason(world) > FRIENDLY_LAST_DAY - FRIENDLY_NOTICE_DAYS) return 'The pre-season is over — friendlies wait for the next.';
+  if (dayOfSeason(world) > friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS) return 'The pre-season is over — friendlies wait for the next.';
   if (arranged(world, club.id) >= MAX_FRIENDLIES) {
     return `You have ${MAX_FRIENDLIES} friendlies arranged — as many as the pre-season has room for.`;
   }
@@ -209,7 +217,7 @@ function book(world: World, opponent: number, day: number, home: boolean): Fixtu
  */
 export function boardArrangeFriendly(world: World): Fixture | null {
   const club = userClub(world);
-  if (club === undefined || dayOfSeason(world) > FRIENDLY_LAST_DAY - FRIENDLY_NOTICE_DAYS) return null;
+  if (club === undefined || dayOfSeason(world) > friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS) return null;
   if (arranged(world, club.id) >= MAX_FRIENDLIES) return null;
   const booked = friendliesOf(world, club.id);
   const dates = friendlyDates(world);
@@ -281,12 +289,14 @@ export function friendliesDay(world: World): void {
   const job = currentJob(world);
   if (club === undefined || job === undefined || state(world).boardArranged === world.season) return;
   const d = dayOfSeason(world);
-  if (d > FRIENDLY_LAST_DAY) return;
+  const window = friendlyWindow(world);
+  if (d > window.last) return;
   if (arranged(world, club.id) > 0) {
     state(world).boardArranged = world.season;
     return;
   }
-  if (d < BOARD_STEPS_IN || world.day - job.startDay < 7) return;
+  // The board waits until three weeks before the friendlies' weeks — two into July in the old calendar.
+  if (d < (calendarOf(world).fivb ? window.first - 21 : BOARD_STEPS_IN) || world.day - job.startDay < 7) return;
   state(world).boardArranged = world.season;
   const booked: Fixture[] = [];
   for (let i = 0; i < BOARD_BOOKS; i++) {

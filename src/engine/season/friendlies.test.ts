@@ -4,8 +4,8 @@ import { generateWorld } from '../world/worldGen.ts';
 import { DAYS_PER_SEASON, stubManager, type World } from '../world/world.ts';
 import { appointManager, currentJob } from '../world/career.ts';
 import {
-  boardArrangeFriendly, FRIENDLY_FIRST_DAY, FRIENDLY_LAST_DAY, FRIENDLY_NOTICE_DAYS, friendliesOf, friendlyBlock,
-  friendlyDates, friendlyInterest, friendlyRequests, MAX_FRIENDLIES, requestFriendly, withdrawFriendlyRequest,
+  boardArrangeFriendly, FRIENDLY_NOTICE_DAYS, friendliesOf, friendlyBlock,
+  friendlyDates, friendlyInterest, friendlyRequests, friendlyWindow, MAX_FRIENDLIES, requestFriendly, withdrawFriendlyRequest,
 } from './friendlies.ts';
 import { advanceDay, newSeasonContext, startSeason, toTeamSetup, type SeasonContext } from './seasonEngine.ts';
 import { MatchFormat, simulateMatch } from '../match/engine.ts';
@@ -35,8 +35,11 @@ test('friendlies go on free pre-season dates, a few days ahead, one per club and
   const { world } = career(301);
   const dates = friendlyDates(world);
   assert.ok(dates.length > 0);
+  // The five weeks before the league starts in October.
+  const window = friendlyWindow(world);
+  assert.ok(window.first > 62 && window.last < 107, 'September and early October');
   for (const d of dates) {
-    assert.ok(d >= FRIENDLY_FIRST_DAY && d <= FRIENDLY_LAST_DAY && d >= world.day + FRIENDLY_NOTICE_DAYS);
+    assert.ok(d >= window.first && d <= window.last && d >= world.day + FRIENDLY_NOTICE_DAYS);
   }
   const [a, b] = smallClubs(world);
   assert.equal(friendlyBlock(world, world.userClubId, dates[0]), 'Choose another club to play.');
@@ -81,9 +84,9 @@ test('an invitation is answered within a few days — and an accepted one is on 
   for (const f of booked) assert.equal(f.home, world.userClubId, 'at home, as asked');
 });
 
-test('with nothing arranged, the board books a couple a fortnight in — and does so whenever asked', () => {
+test('with nothing arranged, the board books a couple three weeks before the friendlies — and does so whenever asked', () => {
   const { world, ctx } = career(304);
-  advanceTo(world, ctx, 16);
+  advanceTo(world, ctx, friendlyWindow(world).first - 21 + 2);
   const booked = friendliesOf(world, world.userClubId);
   assert.equal(booked.length, 2);
   assert.ok(world.messages.some((m) => m.subject === 'Pre-season friendlies arranged'));
@@ -98,7 +101,7 @@ test('with nothing arranged, the board books a couple a fortnight in — and doe
 test('a friendly is played in full and counts for nothing but the practice', () => {
   const { world, ctx } = career(305);
   const me = world.userClubId;
-  advanceTo(world, ctx, FRIENDLY_LAST_DAY + 1);
+  advanceTo(world, ctx, friendlyWindow(world).last + 1);
 
   const played = friendliesOf(world, me).filter((f) => f.played);
   assert.ok(played.length >= 2, 'the board\'s friendlies were played');

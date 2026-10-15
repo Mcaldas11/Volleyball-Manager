@@ -14,6 +14,7 @@
  * and the whole thing is over before the league playoffs begin.
  */
 
+import { calendarOf, LEGACY_CALENDAR, type ClubCalendar } from '../world/calendar.ts';
 import { fansTrophy } from '../world/supporters.ts';
 import { payTitleBonuses } from '../world/contractTerms.ts';
 import { noteTrophy } from '../world/owners.ts';
@@ -45,14 +46,9 @@ interface CupFormat {
   neutral: CupState['neutral'];
   prizePool: number;
   reputation: number;
+  /** A week at one venue: each day's matches on the day, not spread out. */
+  compact?: boolean;
 }
-
-/** A national cup's rounds, latest last: a smaller draw starts later. */
-const NATIONAL_CUP_DAYS = [78, 118, 158, 200, 240];
-
-/** Nothing of any cup is played after this day of the season — the league
- *  playoffs start at 272 and are scheduled without looking for gaps. */
-const LAST_CUP_DAY = 266;
 
 const CONFEDERATIONS: readonly Confederation[] = ['CEV', 'CSV', 'NORCECA', 'AVC', 'CAVB'];
 
@@ -74,40 +70,44 @@ const SLOTS: Readonly<Record<string, readonly number[]>> = {
   other: [2, 2, 1, 1, 1, 1],
 };
 
-function formatFor(comp: Competition, entrants: number): CupFormat {
+/** A cup's format and days, on the season's calendar (see calendar.ts). */
+function formatFor(comp: Competition, entrants: number, cal: ClubCalendar = LEGACY_CALENDAR): CupFormat {
   const key = comp.key ?? '';
   if (key === 'cont:CEV:1') {
     return {
       size: 16, groups: 4, doubleRoundRobin: true,
-      groupDays: [88, 102, 116, 130, 144, 158], knockoutDays: [205, 230, 255],
+      groupDays: cal.championsLeague.groupDays, knockoutDays: cal.championsLeague.knockoutDays,
       neutral: 'final', prizePool: 2_500_000, reputation: 9500,
     };
   }
   if (key === 'cont:CEV:2') {
     return {
       size: 16, groups: 0, doubleRoundRobin: false,
-      groupDays: [], knockoutDays: [95, 137, 186, 236],
+      groupDays: [], knockoutDays: cal.cevCup,
       neutral: 'final', prizePool: 700_000, reputation: 7500,
     };
   }
   if (comp.kind === 'continental') {
+    // The other confederations' championships: in the FIVB's calendar, a week at one venue.
+    const conf = (key.split(':')[1] ?? 'CSV') as Exclude<Confederation, 'CEV'>;
+    const days = cal.continental[conf] ?? cal.continental.CSV;
     return {
       size: 8, groups: 2, doubleRoundRobin: false,
-      groupDays: [110, 140, 196], knockoutDays: [222, 250],
-      neutral: 'final', prizePool: 450_000, reputation: 7000,
+      groupDays: days.groupDays, knockoutDays: days.knockoutDays,
+      neutral: cal.fivb ? 'all' : 'final', prizePool: 450_000, reputation: 7000, compact: cal.fivb,
     };
   }
   if (comp.kind === 'clubworld') {
     return {
       size: 8, groups: 2, doubleRoundRobin: false,
-      groupDays: [163, 167, 171], knockoutDays: [176, 181],
-      neutral: 'all', prizePool: 1_500_000, reputation: 10000,
+      groupDays: cal.clubWorld.groupDays, knockoutDays: cal.clubWorld.knockoutDays,
+      neutral: 'all', prizePool: 1_500_000, reputation: 10000, compact: cal.fivb,
     };
   }
   if (comp.kind === 'supercup') {
     return {
       size: 2, groups: 0, doubleRoundRobin: false,
-      groupDays: [], knockoutDays: [48],
+      groupDays: [], knockoutDays: [cal.supercup],
       neutral: 'all', prizePool: comp.prizePool, reputation: comp.reputation,
     };
   }
@@ -115,9 +115,17 @@ function formatFor(comp: Competition, entrants: number): CupFormat {
   const rounds = knockoutRounds(entrants);
   return {
     size: 32, groups: 0, doubleRoundRobin: false,
-    groupDays: [], knockoutDays: NATIONAL_CUP_DAYS.slice(-Math.max(1, rounds)),
+    groupDays: [], knockoutDays: cal.nationalCup.slice(-Math.max(1, rounds)),
     neutral: 'final', prizePool: comp.prizePool, reputation: comp.reputation,
   };
+}
+
+/** The last day a cup's match may go on: a national cup, the CEV Cup and the Champions League's
+ *  rounds before its Final Four finish before the league playoffs; the rest by the end of the club season. */
+function cupLimit(cal: ClubCalendar, comp: Competition, roundDay?: number): number {
+  const early = comp.kind === 'cup' || comp.key === 'cont:CEV:2' ||
+    (comp.key === 'cont:CEV:1' && (roundDay === undefined || roundDay <= cal.lastCupDay));
+  return early ? cal.lastCupDay : Math.max(cal.lastCupDay, cal.clubSeasonEnd);
 }
 
 /** Rounds a knockout of `entrants` clubs needs. */
@@ -433,14 +441,20 @@ function markBusy(days: Map<number, Set<number>>, club: number, day: number): vo
 
 /** The first day from `from` on which none of `clubs` plays the day before,
  *  the day itself or the day after — or, failing that, just not that day. */
-function findFreeDay(world: World, clubs: readonly number[], from: number, to: number): number {
+function findFreeDay(world: World, clubs: readonly number[], from: number, to: number, compact = false): number {
   const busy = busyDays(world);
+  // The matches known at the season's start, and any put in since — a league playoff's.
+  const playsOn = (c: number, x: number): boolean => busy.get(c)?.has(x) === true ||
+    (world.fixturesByDay.get(x) ?? []).some((id) => world.fixtures[id].home === c || world.fixtures[id].away === c);
   const free = (d: number, buffer: number): boolean => clubs.every((c) => {
-    const set = busy.get(c);
-    if (set === undefined) return true;
-    for (let x = d - buffer; x <= d + buffer; x++) if (set.has(x)) return false;
+    for (let x = d - buffer; x <= d + buffer; x++) if (playsOn(c, x)) return false;
     return true;
   });
+  // A week's tournament plays on its days, back to back: only a clash on the day itself moves a match, and not far.
+  if (compact) {
+    for (let d = from; d <= Math.min(to, from + 3); d++) if (free(d, 0)) return d;
+    return from;
+  }
   for (const buffer of [1, 0]) {
     for (let d = from; d <= Math.max(from, to); d++) if (free(d, buffer)) return d;
   }
@@ -502,7 +516,7 @@ export function scheduleCupSeason(world: World): void {
     comp.participants = entrants;
     if (entrants.length < 2) continue;
 
-    const format = formatFor(comp, entrants.length);
+    const format = formatFor(comp, entrants.length, calendarOf(world));
     const useGroups = format.groups > 0 && entrants.length >= format.groups * 3;
     const cup: CupState = {
       season: world.season,
@@ -556,7 +570,8 @@ function drawGroupStage(world: World, comp: Competition, cup: CupState, format: 
       : first;
     rounds.forEach((pairs, md) => {
       const target = seasonStart + (format.groupDays[md] ?? format.groupDays[format.groupDays.length - 1] + md * 7);
-      const day = findFreeDay(world, group.clubIds, target, Math.min(target + 12, seasonStart + LAST_CUP_DAY));
+      const limit = seasonStart + cupLimit(calendarOf(world), comp, target - seasonStart);
+      const day = findFreeDay(world, group.clubIds, target, Math.min(target + 12, limit), format.compact);
       for (const [home, away] of pairs) {
         group.fixtureIds.push(addCupFixture(world, comp, day, home, away, md, neutral, 0.55));
       }
@@ -571,8 +586,14 @@ function scheduleKnockoutRound(world: World, comp: Competition, roundIdx: number
   const total = knockoutRounds(bracket.seeds.length);
   const isFinal = roundIdx === total - 1;
   const seasonStart = world.season * DAYS_PER_SEASON;
-  const limit = seasonStart + LAST_CUP_DAY;
-  const target = Math.min(limit, Math.max(cup.roundDays[roundIdx] ?? world.day + 7, world.day + 3));
+  const cal = calendarOf(world);
+  const planned = cup.roundDays[roundIdx];
+  const limit = seasonStart + cupLimit(cal, comp, planned === undefined ? undefined : planned - seasonStart);
+  // A week at one venue — or the Champions League's Final Four — plays its rounds on its days, a day apart.
+  const compact = cal.fivb && (
+    ((comp.kind === 'continental' || comp.kind === 'clubworld') && comp.key !== 'cont:CEV:1' && comp.key !== 'cont:CEV:2') ||
+    (comp.key === 'cont:CEV:1' && planned !== undefined && planned - seasonStart > cal.lastCupDay));
+  const target = Math.min(limit, Math.max(planned ?? world.day + 7, world.day + (compact ? 1 : 3)));
   const neutral = cup.neutral === 'all' || (cup.neutral === 'final' && isFinal);
   const importance = total <= 1 ? 0.8 : 0.6 + 0.35 * (roundIdx / (total - 1));
 
@@ -580,7 +601,7 @@ function scheduleKnockoutRound(world: World, comp: Competition, roundIdx: number
     if (tie.winnerSeed !== -1 || tie.homeSeed < 0 || tie.awaySeed < 0) continue;
     const home = bracket.seeds[tie.homeSeed];
     const away = bracket.seeds[tie.awaySeed];
-    const day = findFreeDay(world, [home, away], target, limit);
+    const day = findFreeDay(world, [home, away], target, limit, compact);
     tie.fixtureId = addCupFixture(world, comp, day, home, away, PLAYOFF_ROUND_BASE + roundIdx, neutral, importance);
   }
 }

@@ -55,7 +55,8 @@ import {
   type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
-import { startSeason } from '../engine/season/seasonEngine.ts';
+import { isSeasonOver, startSeason } from '../engine/season/seasonEngine.ts';
+import { calendarOf } from '../engine/world/calendar.ts';
 import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
   currentPhase, dayOfSeason, DAYS_PER_SEASON, euros, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
@@ -1872,7 +1873,7 @@ class Game {
     const world = this.world;
     if (world === null) return;
     const clubId = world.userClubId;
-    if (dayOfSeason(world) >= 350) {
+    if (isSeasonOver(world)) {
       this.rollover();
     } else {
       // The user's own matches always run through the full rally engine.
@@ -1965,6 +1966,8 @@ class Game {
   private rollover(): void {
     const world = this.world;
     if (world === null) return;
+    // The day this season closes on — the new one's calendar may differ.
+    const closesOn = calendarOf(world).rollover;
     this.lastRollover = endSeason(world, this.ctx);
     this.notice = `Season ${world.year} complete.`;
 
@@ -1993,7 +1996,7 @@ class Game {
     }
 
     // Step into the new season.
-    while (dayOfSeason(world) >= 350) {
+    while (dayOfSeason(world) >= closesOn) {
       world.day++;
       if (world.day % DAYS_PER_SEASON === 0) world.year++;
     }

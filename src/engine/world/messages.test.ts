@@ -1,3 +1,4 @@
+import { calendarOf } from './calendar.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
@@ -100,8 +101,8 @@ test('a player who asked to leave can change his mind once he has settled', () =
 test('the staff report in: the assistant every week, the scouts before a match, and the national squad\'s club form', () => {
   const { world, club } = managed(84);
   const ctx = newSeasonContext();
-  // A couple of months in, with matches played.
-  for (let d = 0; d < 90; d++) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
+  // A couple of months into the league season, with matches played.
+  while (world.day < calendarOf(world).leagueStart + 30) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
   const assistant = world.messages.filter((m) => m.subject.startsWith('Assistant\'s report'));
   assert.ok(assistant.length >= 8, `${assistant.length} weekly reports`);
   const scouting = world.messages.filter((m) => m.subject.startsWith('Scouting report'));

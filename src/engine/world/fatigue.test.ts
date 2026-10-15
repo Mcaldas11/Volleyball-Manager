@@ -1,3 +1,4 @@
+import { calendarOf } from './calendar.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
@@ -57,6 +58,6 @@ test('a crowded run of matches slows recovery; a rest lets the load ebb away', (
   // Over a stretch of the season, everyone who plays carries his matches.
   const ctx = newSeasonContext();
   startSeason(world, ctx);
-  for (let d = 0; d < 80; d++) advanceDay(world, ctx);
+  while (world.day < calendarOf(world).leagueStart + 30) advanceDay(world, ctx);
   assert.ok((world.matchLoad?.size ?? 0) > 100);
 });

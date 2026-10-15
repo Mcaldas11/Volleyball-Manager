@@ -148,6 +148,16 @@ Before submitting a change:
       from the club's, and an international calendar: the World Championship,
       the Olympic Games, the continental championships and the Nations League,
       with caps and a world ranking
+- [x] The FIVB's calendar (2025–2028, updated December 2025), the women's and
+      the men's: the Nations League from early June to the start of August
+      (May and June in an Olympic year), the World Championship in
+      August/September of odd years, the continental championships in even
+      ones on each confederation's real dates, Los Angeles 2028 on 15–30
+      July; the clubs from October (the women a fortnight earlier) to May,
+      the Champions League's Final Four in mid-May, the other confederations'
+      club championships a week at one venue in their real windows, the Club
+      World Championship in mid-December. The season runs to 30 June; a save
+      from before keeps the old calendar for the season it is in
 - [x] More for a national coach between tournaments: friendlies arranged on
       free dates in the national team's months — three a season, caps but no
       ranking points; a provisional squad of up to 25 that the fourteen come
@@ -356,6 +366,73 @@ Before submitting a change:
 - [ ] Simulating off the main thread: a Web Worker was measured and set
       aside for now — copying the world to it and back costs about as much
       as the season's rollover it would take off the screen
+
+## CALENDAR
+
+Every season follows the FIVB's 2025–2028 calendar, the women's and the men's.
+A save from before this calendar keeps the old dates for the season it is in
+and switches to these from the next one. The season closes on 30 June.
+
+### National teams
+
+| Event | Men | Women |
+|---|---|---|
+| Nations League | 10 Jun – 2 Aug | 3 Jun – 26 Jul |
+| Nations League, Olympic year | 24 May – 25 Jun | 10 May – 11 Jun |
+| World Championship (odd years) | 10–26 Sep (12–28 Sep in 2025, 2029…) | 20 Aug – 5 Sep (22 Aug – 7 Sep in 2025, 2029…) |
+| Olympic Games (Los Angeles 2028) | 15–29 Jul | 15–30 Jul |
+| EuroVolley (even years) | 9–26 Sep | 21 Aug – 6 Sep |
+| Asian Championship | 4–13 Sep | 21–30 Aug |
+| NORCECA Championship | 11–19 Sep | 21–29 Aug |
+| African Championship | 13–26 Sep | 23 Aug – 5 Sep |
+| South American Championship | 15–20 Sep | 10–16 Sep |
+| Continental qualifiers (odd years) | 11–22 Aug | 4–15 Aug |
+
+Squads are named 7 days before the first match.
+
+### Clubs
+
+| Event | Men | Women |
+|---|---|---|
+| Pre-season friendlies | 11 Sep – 12 Oct | 28 Aug – 28 Sep |
+| Super cup | 11 Oct | 27 Sep |
+| League, regular season | 16 Oct – ~23 Mar | 2 Oct – ~9 Mar |
+| League playoffs | 30 Mar – end of April | 16 Mar – ~10 Apr |
+| National cup | 29 Oct, 26 Nov, 7 Jan, 28 Jan, final 25 Feb | 15 Oct, 12 Nov, 24 Dec, 14 Jan, final 11 Feb |
+| Champions League | groups 9 Dec – 3 Mar, quarter-finals 17 Mar, Final Four 15–16 May | groups 25 Nov – 17 Feb, quarter-finals 3 Mar, Final Four 1–2 May |
+| CEV Cup | 12 Nov – final 11 Mar | 29 Oct – final 25 Feb |
+| Club World Championship (every 4 years) | 14–20 Dec | 7–13 Dec |
+| South American Club Championship | 25 Feb – 1 Mar | 18–22 Feb |
+| Asian Club Championship | 13–17 May | 26–30 Apr |
+| African Club Championship | 25 Apr – 3 May | 9–13 Apr |
+| NORCECA Club Championship | 13–17 Mar | 27 Feb – 3 Mar |
+
+The club season ends on 17 May for the men and on 3 May for the women. In the
+season before an Olympic Games it ends 9 days earlier.
+
+These dates are estimates, because no official ones were published: the
+women's South American Championship, the men's South American and women's
+African club championships, and the NORCECA Club Championship (which has no
+real counterpart). Years after 2028 repeat the 2025–2028 cycle.
+
+### Sources
+
+- [FIVB volleyball calendar 2025–2028 (PDF)](https://www.fivb.com/wp-content/uploads/2024/03/VB_CALENDAR_2025-2028_17.12.25.pdf)
+- [2026 Men's Volleyball Nations League](https://en.wikipedia.org/wiki/2026_FIVB_Men%27s_Volleyball_Nations_League)
+- [2026 Women's Volleyball Nations League](https://en.wikipedia.org/wiki/2026_FIVB_Women's_Volleyball_Nations_League)
+- [2026 VNL finals in Macau (Macao government)](https://www.gov.mo/en/news/402976/)
+- [2027 Men's World Championship](https://en.wikipedia.org/wiki/2027_FIVB_Men%27s_Volleyball_World_Championship)
+- [2027 Women's World Cup](https://en.wikipedia.org/wiki/2027_FIVB_Women%27s_Volleyball_World_Cup)
+- [Volleyball at the 2028 Summer Olympics](https://en.wikipedia.org/wiki/Volleyball_at_the_2028_Summer_Olympics)
+- [CEV EuroVolley 2026 schedule](https://www.cev.eu/articles/volleyball/cev-eurovolley-2026-full-competition-schedule-now-released/)
+- [AVC 2026 Continental Championships](https://asianvolleyball.net/new/?p=146848)
+- [2026 NORCECA Men's Continental Championship](https://volleyball.ca/en/competitions/2026-norceca-men-s-continental-championship)
+- [2026 NORCECA Women's Continental Championship](https://norceca.info/2026-norceca-womens-continental-championship-presented-in-santo-domingo/)
+- [Africa's volleyball events in 2026](https://allafrica.com/stories/202601090060.html)
+- [2026 South American Men's Championship](https://www.mixvale.com.br/2026/08/14/south-american-mens-volleyball-championship-2026-check-dates-format-en/)
+- [CEV Champions League 2026/27 (Lega Volley)](https://www.legavolley.it/2026/approaching-champions-league-draw/?lang=en)
+- [2026 AVC Men's Champions League](https://en.wikipedia.org/wiki/2026_AVC_Men%27s_Volleyball_Champions_League)
+- [2026 South American Women's Club Championship](https://www.futbolperuano.com/liga-voley/sudamericano-de-clubes-de-voley-2026-en-peru-se-confirmaron-las-fechas-y-los-nueve-equipos-que-lucharan-por-el-titulo-continental-558372)
 
 ## LICENSE
 

@@ -7,6 +7,7 @@
  * plays exactly once per round and no club is idle.
  */
 
+import { calendarOn } from '../world/calendar.ts';
 import type { Rng } from '../core/rng.ts';
 import { MatchFormat } from '../match/engine.ts';
 import { newTableRow } from '../model/club.ts';
@@ -67,11 +68,15 @@ export function scheduleLeagueSeason(
 
   // Matches run weekly, with the whole schedule fitting inside the regular
   // season window. Dense lower divisions compress to fit.
-  const availableDays = 265 - 60;
-  const spacing = Math.max(3, Math.floor(availableDays / allRounds.length));
+  const cal = calendarOn(world, seasonStartDay);
+  const availableDays = cal.leagueEnd - cal.leagueStart;
+  // The FIVB's calendar spreads the rounds over the whole window, the last on its last week; the old one's ran weekly from its start.
+  const spacing = cal.fivb
+    ? Math.max(3, availableDays / Math.max(1, allRounds.length - 1))
+    : Math.max(3, Math.floor(availableDays / allRounds.length));
 
   allRounds.forEach((round, roundIdx) => {
-    const day = seasonStartDay + 60 + roundIdx * spacing;
+    const day = seasonStartDay + cal.leagueStart + Math.round(roundIdx * spacing);
     for (const [home, away] of round) {
       const f: Fixture = {
         id: world.fixtures.length,
@@ -100,7 +105,7 @@ export function scheduleLeagueSeason(
  *  never confused with a regular-season round index. */
 export const PLAYOFF_ROUND_BASE = 1000;
 
-/** The day the regular season's own fixtures are guaranteed finished by. */
+/** The day the playoffs begin in the old calendar — the FIVB's is the same for the men (30 March); see calendar.ts. */
 export const PLAYOFF_START_OFFSET = 272;
 /** Days of rest between one playoff round and the next. */
 export const PLAYOFF_ROUND_GAP = 5;
@@ -117,6 +122,12 @@ export function schedulePlayoffFixture(
   home: number,
   away: number,
 ): number {
+  // Never on a day either club already plays: a cup's match, or a continental club championship's.
+  const plays = (d: number): boolean => (world.fixturesByDay.get(d) ?? []).some((id) => {
+    const f = world.fixtures[id];
+    return f.home === home || f.away === home || f.home === away || f.away === away;
+  });
+  for (let tries = 0; tries < 10 && plays(day); tries++) day++;
   const f: Fixture = {
     id: world.fixtures.length,
     competitionId: comp.id,

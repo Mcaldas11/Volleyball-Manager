@@ -20,6 +20,7 @@
  * the season's end, and the coach leaves with it.
  */
 
+import { calendarOf } from './calendar.ts';
 import { fixtureRivalry } from './rivals.ts';
 import { newsCoachAppointed, newsCoachSacked, newsManagerAppointed } from './news.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
@@ -155,9 +156,9 @@ const FINAL_WARNING = 22;
 const RECOVERED = 45;
 /** Nobody is sacked in his first weeks in the job. */
 const GRACE_DAYS = 45;
-/** Boards judge results from the start of the league season to the end of the playoffs. */
-const SEASON_OPENS = 55;
-const SEASON_CLOSES = 310;
+/** Boards judge results from the start of the league season to the end of the playoffs — see calendar.ts. */
+const seasonOpens = (world: World): number => calendarOf(world).regularFrom;
+const seasonCloses = (world: World): number => calendarOf(world).nationalFrom;
 /** The user is sacked in the season only once a final warning has had this long to work. */
 const WARNING_NOTICE_DAYS = 10;
 /** How long a job offer stands. */
@@ -580,7 +581,7 @@ function contractDay(world: World): void {
   if (club === undefined || job === undefined || contract === undefined || career.contractOffer != null) return;
   if (career.contractTalks === world.season || world.day - job.startDay < CONTRACT_SETTLE_DAYS) return;
   const d = dayOfSeason(world);
-  if (d < 60 || d >= SEASON_CLOSES || world.day % 7 !== 3) return;
+  if (d < calendarOf(world).leagueStart || d >= seasonCloses(world) || world.day % 7 !== 3) return;
 
   const left = seasonsLeft(world, contract);
   const conf = club.boardConfidence;
@@ -674,7 +675,7 @@ export function appointManager(world: World, clubId: number, contract?: ManagerC
   welcomeMessages(world);
   newsManagerAppointed(world, club);
   // The cup draws only mean something before the season is under way.
-  if (dayOfSeason(world) < SEASON_OPENS) entryNotices(world);
+  if (dayOfSeason(world) < seasonOpens(world)) entryNotices(world);
 }
 
 /**
@@ -979,7 +980,7 @@ function judgeResult(club: Club, opponent: Club, won: boolean, weight: number): 
 /** On the first of every month in the season, every board looks at the league table against its target. */
 function monthlyReview(world: World): void {
   const d = dayOfSeason(world);
-  if (d <= 62 || d > SEASON_CLOSES) return;
+  if (d <= calendarOf(world).leagueStart + 2 || d > seasonCloses(world)) return;
   for (const comp of world.competitions) {
     if (comp.kind !== 'league' || comp.table.length === 0) continue;
     [...comp.table].sort(compareTableRows).forEach((row, i) => {
@@ -1009,7 +1010,7 @@ function judgeUser(world: World): void {
     career.warnedOn = -1;
   }
   const d = dayOfSeason(world);
-  if (d < SEASON_OPENS || d >= SEASON_CLOSES || world.day - job.startDay < GRACE_DAYS) return;
+  if (d < seasonOpens(world) || d >= seasonCloses(world) || world.day - job.startDay < GRACE_DAYS) return;
 
   if (c < SACK_IN_SEASON && career.warning >= 2 && world.day - career.warnedOn >= WARNING_NOTICE_DAYS) {
     sackUser(world, 'Results have fallen far short of what the club expects, and the board no longer believes they will improve.');
@@ -1040,7 +1041,7 @@ function judgeUser(world: World): void {
 /** Every AI board sits down once a week in the season; those at the end of their tether may act. */
 function boardsAct(world: World): void {
   const d = dayOfSeason(world);
-  if (d < SEASON_OPENS || d >= SEASON_CLOSES) return;
+  if (d < seasonOpens(world) || d >= seasonCloses(world)) return;
   for (const club of world.clubs) {
     if (club.id === world.userClubId || club.boardConfidence >= SACK_IN_SEASON) continue;
     if (world.day - club.coachSince < GRACE_DAYS || vacancyAt(world, club.id) !== undefined) continue;

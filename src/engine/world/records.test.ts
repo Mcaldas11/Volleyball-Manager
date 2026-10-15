@@ -82,7 +82,9 @@ test('a played season files a rated line per player per competition, and rollove
   simulateRestOfSeason(world, ctx);
 
   const club = world.clubs.find((c) => c.players.length >= 10)!;
-  const starter = pickLineup(world.players, club).lineup[0];
+  // The regular starter: of the six on the sheet, the one who played most.
+  const apps = (p: number): number => seasonRecords(world, p, world.season).reduce((s, l) => s + l.apps, 0);
+  const starter = [...pickLineup(world.players, club).lineup].sort((a, b) => apps(b) - apps(a))[0];
   const lines = seasonRecords(world, starter, world.season);
   assert.ok(lines.length >= 1, 'a regular starter should have a league line');
   const league = lines.find((l) => l.competitionId === club.leagueId);

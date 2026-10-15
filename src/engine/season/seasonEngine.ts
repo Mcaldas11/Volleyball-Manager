@@ -13,6 +13,7 @@
  * a match took.
  */
 
+import { calendarOf } from '../world/calendar.ts';
 import { watchedInMatch } from '../world/nationalExtras.ts';
 import { deadlineDay, deadlineMorning, rumoursAboutUs } from '../world/market.ts';
 import { achievementsDay } from '../world/achievements.ts';
@@ -727,7 +728,7 @@ export function simulateRestOfSeason(
   opts: AdvanceOptions = {},
 ): void {
   const seasonEnd = (world.season + 1) * DAYS_PER_SEASON;
-  while (world.day < seasonEnd && currentPhase(world) !== SeasonPhase.OffSeason) {
+  while (world.day < seasonEnd && !isSeasonOver(world)) {
     advanceDay(world, ctx, opts);
   }
   while (world.day < seasonEnd) {
@@ -736,6 +737,7 @@ export function simulateRestOfSeason(
   }
 }
 
+/** Whether the season is to be closed today: on the 30 June, or for an old save's season the 16 June. */
 export function isSeasonOver(world: World): boolean {
-  return dayOfSeason(world) >= 350;
+  return dayOfSeason(world) >= calendarOf(world).rollover;
 }

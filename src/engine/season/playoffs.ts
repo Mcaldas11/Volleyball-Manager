@@ -25,9 +25,10 @@
  * resolves the band's finishing order.
  */
 
+import { calendarOf } from '../world/calendar.ts';
 import { compareTableRows } from '../model/club.ts';
 import {
-  PLAYOFF_ROUND_BASE, PLAYOFF_ROUND_GAP, PLAYOFF_START_OFFSET, schedulePlayoffFixture, SERIES_GAME_GAP,
+  PLAYOFF_ROUND_BASE, PLAYOFF_ROUND_GAP, schedulePlayoffFixture, SERIES_GAME_GAP,
 } from './schedule.ts';
 import {
   dayOfSeason, type Competition, type PlayoffGroup, type PlayoffGroupId, type PlayoffTie, type World,
@@ -44,7 +45,7 @@ export function progressPlayoffs(world: World): void {
   for (const comp of world.competitions) {
     if (comp.kind !== 'league' || !comp.hasPlayoffs || comp.table.length === 0) continue;
 
-    if (dos === PLAYOFF_START_OFFSET && comp.playoffGroups.length === 0) {
+    if (dos === calendarOf(world).playoffStart && comp.playoffGroups.length === 0) {
       createPlayoffGroups(world, comp);
     }
     for (const group of comp.playoffGroups) {

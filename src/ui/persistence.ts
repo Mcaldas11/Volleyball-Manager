@@ -220,6 +220,8 @@ export function reviveWorld(raw: World): World {
     for (const club of raw.clubs) club.finances.ticketIncomePerMatch = Math.round(club.finances.ticketIncomePerMatch * GATE_RESCALE);
     raw.gateBooked = true;
   }
+  // Saves from before the FIVB's calendar: the season in play keeps the one its fixtures were drawn to.
+  raw.fivbCalendarFrom ??= raw.season + 1;
   // Saves from before the playoff system existed have no bracket state at all.
   for (const comp of raw.competitions) {
     comp.playoffGroups ??= [];
