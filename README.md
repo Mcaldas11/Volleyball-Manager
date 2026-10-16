@@ -295,6 +295,16 @@ Before submitting a change:
       a medic running on to an injured player. Two line judges at opposite
       corners flag every ball near their lines: in, out, or off the block; and
       the video replay goes in close, low over the spot where it came down
+- [x] Players drawn as bodies, not mannequins: smooth limbs shaped by their
+      muscles, a ball in every joint so bends stay one surface, a face (jaw,
+      nose, ears, eyes, brows) under hair with strands in it, hands with a
+      thumb; the kit as cloth with a satin sheen — collar, short sleeves cuffed
+      in the role's colour, the number outlined on the back, side panels —
+      shorts cut at the thigh, knee pads with their cushion, crew socks, court
+      shoes on a sole. Lit as an arena is: the hall's light from every side,
+      a cool edge from the far stand, film-like tone mapping that keeps the
+      kits' colours. In the women's game, women's bodies and hair (a ponytail,
+      a bun or a bob)
 - [x] A coach's bar during the match: a timeout opens the timeout screen;
       the substitutions panel holds play while it is open; clicking one of
       your players beside the court offers who could come on for him; any

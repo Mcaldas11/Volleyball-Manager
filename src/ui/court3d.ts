@@ -15,40 +15,20 @@
  * bottles on the floor in front of it, and its coach.
  */
 
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
-  BoxGeometry, BufferGeometry, CanvasTexture, CapsuleGeometry, Color, CylinderGeometry, DirectionalLight,
-  DoubleSide, Group, HemisphereLight, LatheGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry, RepeatWrapping, RingGeometry, Scene, ShadowMaterial,
-  SphereGeometry, SRGBColorSpace, Vector2, Vector3, WebGLRenderer, type Material,
+  BoxGeometry, CanvasTexture, CylinderGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, Mesh,
+  MeshBasicMaterial, MeshStandardMaterial, NeutralToneMapping, PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry,
+  PMREMGenerator, RepeatWrapping, RingGeometry, Scene, ShadowMaterial, SphereGeometry, SRGBColorSpace, Vector3,
+  WebGLRenderer, type Material,
 } from 'three';
 import { fitCamera } from './courtCamera.ts';
 import { Crowd } from './crowd3d.ts';
-import { REFEREE_STAND, SIDELINE, type Body, type CourtMotion } from './courtMotion.ts';
+import { REFEREE_STAND, SIDELINE, type CourtMotion } from './courtMotion.ts';
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
-import { BONES } from './playerRig.ts';
+import { Figure, type Kit, type Look } from './figure3d.ts';
 
-/** A side's playing colours. */
-export interface Kit {
-  shirt: string;
-  shorts: string;
-  /** Liberos wear a contrasting shirt, as the rules require. */
-  libero: string;
-}
-
-/** How one player looks. */
-export interface Look {
-  kit: Kit;
-  libero: boolean;
-  /** Colour across the shoulders that tells the role at a glance. */
-  trim: string;
-  number: number;
-  skin: string;
-  hair: string;
-  /** 0 cropped, 1 short, 2 shaved. */
-  hairStyle: number;
-  /** Long trousers and dark shoes, for the referee. */
-  trousers?: boolean;
-}
+export type { Kit, Look } from './figure3d.ts';
 
 /** The first referee: light polo, dark collar and trousers, no number. */
 const REFEREE_LOOK: Look = {
@@ -84,285 +64,6 @@ export function courtCamera(width: number, height: number, camera = new Perspect
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
   return camera;
-}
-
-// ---- Shared shapes -----------------------------------------------------------------
-
-/** A line judge's flag: red and yellow quarters, as the FIVB has them. */
-function flagTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 32;
-  c.height = 32;
-  const ctx = c.getContext('2d');
-  if (ctx !== null) {
-    ctx.fillStyle = '#e8c547';
-    ctx.fillRect(0, 0, 32, 32);
-    ctx.fillStyle = '#d63a3a';
-    ctx.fillRect(0, 0, 16, 16);
-    ctx.fillRect(16, 16, 16, 16);
-  }
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  return t;
-}
-
-/** A limb from its joint (z = 0) down to z = -length, rounded at both ends and
- *  tapering from radius `r0` to `r1`. */
-function limb(r0: number, r1: number, length: number, mid?: number): BufferGeometry {
-  const pts: Vector2[] = [];
-  const n = 5;
-  for (let i = 0; i <= n; i++) {
-    const a = -Math.PI / 2 + (i / n) * (Math.PI / 2);
-    pts.push(new Vector2(r1 * Math.cos(a), -length + r1 * Math.sin(a)));
-  }
-  if (mid !== undefined) pts.push(new Vector2(mid, -length * 0.55));
-  for (let i = 0; i <= n; i++) {
-    const a = (i / n) * (Math.PI / 2);
-    pts.push(new Vector2(r0 * Math.cos(a), r0 * Math.sin(a)));
-  }
-  const g = new LatheGeometry(pts, 12);
-  g.rotateX(Math.PI / 2);
-  return g;
-}
-
-/** A body of revolution through (radius, height) points, flattened front to back. */
-function trunk(profile: Array<[number, number]>, depth: number): BufferGeometry {
-  const g = new LatheGeometry(profile.map(([r, z]) => new Vector2(r, z)), 24);
-  g.rotateX(Math.PI / 2);
-  g.scale(1, depth, 1);
-  return g;
-}
-
-let shared: ReturnType<typeof buildShapes> | null = null;
-
-function buildShapes() {
-  const head = new SphereGeometry(0.105, 18, 14);
-  head.scale(0.9, 1, 1.1);
-  const hair = (cover: number): BufferGeometry => {
-    const g = new SphereGeometry(0.112, 18, 10, 0, Math.PI * 2, 0, Math.PI * cover);
-    g.rotateX(Math.PI / 2);
-    g.rotateX(0.45);
-    g.scale(0.92, 1.02, 1.1);
-    return g;
-  };
-  const shoe = new CapsuleGeometry(0.045, 0.19, 4, 10);
-  shoe.scale(1.15, 1, 0.85);
-  const hand = new SphereGeometry(0.045, 10, 8);
-  hand.scale(0.78, 0.5, 1.25);
-  return {
-    torso: trunk([
-      [0, -0.13], [0.15, -0.12], [0.152, 0.02], [0.163, 0.18], [0.185, 0.34], [0.192, 0.44], [0.172, 0.53],
-      [0.1, 0.585], [0.06, 0.6],
-    ], 0.62),
-    shorts: trunk([[0, -0.15], [0.15, -0.14], [0.176, -0.04], [0.168, 0.08], [0.153, 0.15], [0, 0.16]], 0.7),
-    shortsLeg: limb(0.098, 0.09, 0.2),
-    thigh: limb(0.084, 0.058, BONES.thigh),
-    shin: limb(0.058, 0.041, BONES.shin, 0.064),
-    pad: new CylinderGeometry(0.068, 0.066, 0.13, 14).rotateX(Math.PI / 2),
-    sock: limb(0.05, 0.046, 0.15),
-    shoe,
-    sleeve: limb(0.07, 0.063, 0.12),
-    upperArm: limb(0.053, 0.042, BONES.upperArm),
-    forearm: limb(0.043, 0.033, BONES.forearm),
-    hand,
-    neck: new CylinderGeometry(0.052, 0.058, 0.13, 12).rotateX(Math.PI / 2),
-    head,
-    eye: new SphereGeometry(0.012, 6, 5),
-    hair: [hair(0.52), hair(0.45), hair(0.38)],
-  };
-}
-
-// ---- A player ------------------------------------------------------------------------
-
-/** The shirt, as a texture wrapped round the torso: the number big on the
- *  back and small on the front, the role's colour across the shoulders. */
-function shirtTexture(look: Look): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 256;
-  const ctx = c.getContext('2d')!;
-  const colour = look.libero ? look.kit.libero : look.kit.shirt;
-  ctx.fillStyle = colour;
-  ctx.fillRect(0, 0, 256, 256);
-  // Across the top, the yoke over the shoulders, in the role's colour.
-  ctx.fillStyle = look.trim;
-  ctx.fillRect(0, 0, 256, 60);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-  ctx.fillRect(0, 60, 256, 5);
-  const light = new Color(colour).getHSL({ h: 0, s: 0, l: 0 }).l > 0.62;
-  ctx.fillStyle = light ? '#10151d' : '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '800 80px "Segoe UI", system-ui, sans-serif';
-  if (look.number > 0) {
-    // The back is where the wrap starts and ends, so it is drawn at both edges.
-    for (const x of [0, 256]) ctx.fillText(String(look.number), x, 128);
-    ctx.font = '800 36px "Segoe UI", system-ui, sans-serif';
-    ctx.fillText(String(look.number), 128, 100);
-  }
-  const tex = new CanvasTexture(c);
-  tex.colorSpace = SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
-
-class Figure {
-  readonly root = new Group();
-  /** The whole body tipped about the feet: a dive, a sprawl, flat out on the floor. */
-  private readonly tip = new Group();
-  private readonly pelvis = new Group();
-  private readonly spine = new Group();
-  readonly head = new Group();
-  private readonly shoulders: [Group, Group] = [new Group(), new Group()];
-  private readonly elbows: [Group, Group] = [new Group(), new Group()];
-  private readonly hips: [Group, Group] = [new Group(), new Group()];
-  private readonly knees: [Group, Group] = [new Group(), new Group()];
-  private readonly ankles: [Group, Group] = [new Group(), new Group()];
-  private readonly shirt: MeshStandardMaterial;
-  private readonly shorts: MeshStandardMaterial;
-  private readonly materials: MeshStandardMaterial[];
-  private alpha = 1;
-  private kitKey: string;
-
-  constructor(private look: Look) {
-    const g = shared ?? (shared = buildShapes());
-    const mat = (color: string, roughness = 0.72): MeshStandardMaterial =>
-      new MeshStandardMaterial({ color: new Color(color), roughness, metalness: 0 });
-    this.shirt = new MeshStandardMaterial({ map: shirtTexture(look), roughness: 0.68, metalness: 0 });
-    this.shorts = mat(look.kit.shorts, 0.7);
-    const skin = mat(look.skin, 0.6);
-    const hair = mat(look.hair, 0.85);
-    const pad = mat(look.number % 2 === 0 ? '#1b1f27' : '#e9ecf1', 0.8);
-    const sock = mat('#f2f4f7', 0.8);
-    const shoe = mat(look.trousers === true ? '#15181e' : '#f5f6f8', 0.45);
-    // Bare legs, or trousers down to the shoes.
-    const legs = look.trousers === true ? this.shorts : skin;
-    const eye = mat('#1a1410', 0.4);
-    this.materials = [this.shirt, this.shorts, skin, hair, pad, sock, shoe, eye];
-    this.kitKey = JSON.stringify(look.kit);
-
-    // Only the big parts throw a shadow: eyes, hands, socks and shoes are lost
-    // in it anyway, and every caster is drawn a second time for the shadow map.
-    const SMALL = new Set<BufferGeometry>([g.neck, g.eye, g.sleeve, g.hand, g.shortsLeg, g.pad, g.sock, g.shoe, ...g.hair]);
-    const part = (geo: BufferGeometry, m: Material, parent: Group, x = 0, y = 0, z = 0): Mesh => {
-      const mesh = new Mesh(geo, m);
-      mesh.position.set(x, y, z);
-      mesh.castShadow = !SMALL.has(geo);
-      parent.add(mesh);
-      return mesh;
-    };
-
-    this.root.add(this.tip);
-    this.tip.add(this.pelvis);
-    part(g.shorts, this.shorts, this.pelvis, 0, 0, 0.03);
-    this.pelvis.add(this.spine);
-    this.spine.position.z = BONES.spine;
-    part(g.torso, this.shirt, this.spine);
-    part(g.neck, skin, this.spine, 0, 0.005, BONES.neck - 0.05);
-    this.spine.add(this.head);
-    this.head.position.z = BONES.neck;
-    part(g.head, skin, this.head, 0, 0.005, BONES.head);
-    if (look.hairStyle !== 2) part(g.hair[look.hairStyle], hair, this.head, 0, -0.008, BONES.head + 0.004);
-    for (const side of [-1, 1]) part(g.eye, eye, this.head, side * 0.034, 0.096, BONES.head + 0.018);
-
-    ([-1, 1] as const).forEach((side, i) => {
-      const shoulder = this.shoulders[i];
-      shoulder.position.set(side * BONES.shoulderOut, 0, BONES.shoulderUp);
-      this.spine.add(shoulder);
-      part(g.sleeve, this.shirt, shoulder, 0, 0, 0.01);
-      part(g.upperArm, skin, shoulder);
-      const elbow = this.elbows[i];
-      elbow.position.z = -BONES.upperArm;
-      shoulder.add(elbow);
-      part(g.forearm, skin, elbow);
-      part(g.hand, skin, elbow, 0, 0.004, -BONES.forearm - BONES.hand + 0.02);
-
-      const hip = this.hips[i];
-      hip.rotation.order = 'YXZ';
-      hip.position.x = side * BONES.hipOut;
-      this.pelvis.add(hip);
-      part(g.shortsLeg, this.shorts, hip, 0, 0, 0.03);
-      part(g.thigh, legs, hip);
-      const knee = this.knees[i];
-      knee.position.z = -BONES.thigh;
-      hip.add(knee);
-      if (look.trousers !== true) part(g.pad, pad, knee, 0, 0.012, -0.03);
-      part(g.shin, legs, knee);
-      part(g.sock, look.trousers === true ? legs : sock, knee, 0, 0, -BONES.shin + 0.17);
-      const ankle = this.ankles[i];
-      ankle.position.z = -BONES.shin;
-      knee.add(ankle);
-      part(g.shoe, shoe, ankle, 0, 0.055, -BONES.ankle + 0.038);
-    });
-  }
-
-  /** A line judge's flag in the right hand: a short stick on along the forearm, red and yellow at its end. */
-  holdFlag(): void {
-    const hand = this.elbows[1];
-    const flag = new Group();
-    flag.position.set(0, 0.01, -BONES.forearm - BONES.hand + 0.02);
-    const stick = new Mesh(new CylinderGeometry(0.008, 0.008, 0.42, 6).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: '#2b2b2b' }));
-    stick.position.z = -0.16;
-    flag.add(stick);
-    const cloth = new Mesh(new PlaneGeometry(0.2, 0.28), new MeshStandardMaterial({ map: flagTexture(), side: DoubleSide, roughness: 0.8 }));
-    cloth.rotation.y = Math.PI / 2;
-    cloth.position.set(0, 0.1, -0.24);
-    cloth.castShadow = true;
-    flag.add(cloth);
-    hand.add(flag);
-  }
-
-  restyle(look: Look): void {
-    if (look === this.look) return;
-    const key = JSON.stringify(look.kit);
-    if (key === this.kitKey && look.trim === this.look.trim) return;
-    this.look = look;
-    this.kitKey = key;
-    this.shirt.map?.dispose();
-    this.shirt.map = shirtTexture(look);
-    this.shirt.needsUpdate = true;
-    this.shorts.color.set(look.kit.shorts);
-  }
-
-  /** Put the body where the motion has it, every joint at its angle. */
-  pose(b: Body): void {
-    const r = b.rig;
-    this.root.position.set(b.x, b.y, b.lift);
-    this.root.rotation.set(0, 0, b.yaw);
-    this.root.scale.setScalar(b.scale);
-    this.tip.position.z = r.root.rise;
-    this.tip.rotation.set(r.root.pitch, r.root.roll, 0);
-    this.pelvis.position.set(0, r.pelvis.y, r.pelvis.z);
-    this.pelvis.rotation.set(r.pelvis.pitch, 0, 0);
-    this.spine.rotation.set(r.spine.x, r.spine.y, r.spine.z);
-    this.head.rotation.set(r.head.x, 0, r.head.z);
-    for (let i = 0; i < 2; i++) {
-      const arm = r.arms[i];
-      this.shoulders[i].position.z = BONES.shoulderUp + r.shoulderLift[i];
-      this.shoulders[i].rotation.set(arm.x, arm.y, arm.z);
-      this.elbows[i].rotation.set(arm.bend, 0, 0);
-      const leg = r.legs[i];
-      this.hips[i].rotation.set(leg.x, leg.y, 0);
-      this.knees[i].rotation.set(-leg.bend, 0, 0);
-      this.ankles[i].rotation.set(leg.end, 0, 0);
-    }
-    if (Math.abs(b.alpha - this.alpha) > 0.01 || (b.alpha >= 0.99 && this.alpha < 1)) {
-      this.alpha = b.alpha >= 0.99 ? 1 : b.alpha;
-      for (const m of this.materials) {
-        const see = this.alpha < 1;
-        if (m.transparent !== see) {
-          m.transparent = see;
-          m.needsUpdate = true;
-        }
-        m.opacity = this.alpha;
-      }
-    }
-  }
-
-  dispose(): void {
-    this.shirt.map?.dispose();
-    for (const m of this.materials) m.dispose();
-  }
 }
 
 // ---- The net, posts and ball -------------------------------------------------------
@@ -596,12 +297,29 @@ export class Court3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer.outputColorSpace = SRGBColorSpace;
+    // Film-like highlights that keep the kits' colours true.
+    this.renderer.toneMapping = NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+
+    // The hall itself lights everything softly from every side — and shines in skin and cloth.
+    const pmrem = new PMREMGenerator(this.renderer);
+    const room = new RoomEnvironment();
+    this.scene.environment = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+    // The room is built y-up; the court is z-up.
+    this.scene.environmentRotation.set(Math.PI / 2, 0, 0);
+    this.scene.environmentIntensity = 0.45;
 
     // Arena lighting: bright from above, a warm bounce off the court.
-    const sky = new HemisphereLight('#e8eeff', '#9a6a4c', 1.35);
+    const sky = new HemisphereLight('#e8eeff', '#9a6a4c', 0.8);
     sky.position.set(0, 0, 1);
     this.scene.add(sky);
-    const key = new DirectionalLight('#ffffff', 1.9);
+    // The far side's lights, behind the players as the camera sees them: a cool edge round each one.
+    const rim = new DirectionalLight('#d8e6ff', 1.25);
+    rim.position.set(-12, 4, 9);
+    this.scene.add(rim);
+    const key = new DirectionalLight('#ffffff', 2.0);
     key.position.set(3.5, -2.5, 16);
     key.target.position.set(0, 0, 0);
     key.castShadow = true;
@@ -617,7 +335,7 @@ export class Court3D {
     key.shadow.normalBias = 0.02;
     key.shadow.radius = 3;
     this.scene.add(key, key.target);
-    const fill = new DirectionalLight('#dfe6f5', 0.55);
+    const fill = new DirectionalLight('#dfe6f5', 0.4);
     fill.position.set(14, -3, 6);
     this.scene.add(fill);
 
