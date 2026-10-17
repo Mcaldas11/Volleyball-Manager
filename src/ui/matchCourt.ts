@@ -91,6 +91,11 @@ export interface Scene {
   blockReach?: number;
   /** Changes with every beat, so a renderer can tell repeat scenes apart. */
   seq?: number;
+  /** How the actor means to play an attack: a tip or a roll shot is no full swing. */
+  shot?: Shot;
+  /** How the rally was won, on its last beat — and who won it: the hitter, the blocker, the server. */
+  how?: 'kill' | 'block' | 'ace' | 'error';
+  hero?: number;
 }
 
 /** One step of a scripted rally. */
@@ -854,6 +859,7 @@ export function rallyBeats(
         const from = air(t, hit, heightOr(c.height, backRow ? 3.0 : 3.15, 2.6, 3.75));
         // A high ball to the pin hangs long enough for a full run-up; a quick is on the hitter at once.
         push(from, c.player, Math.round(380 + setArc * 380), setArc, [...cover, [c.player, 'spike'], ...blockPoses]);
+        beats[beats.length - 1].shot = c.shot;
         // The block goes up to meet it as high as the blocker's hands got.
         if (c.kind === 'blocked' && c.blockHeight !== undefined) beats[beats.length - 1].blockReach = c.blockHeight;
         // The ball flies as fast as it was hit — off a block, near enough as fast back.
@@ -977,6 +983,10 @@ export function rallyBeats(
     last.out = end === 'attackError' && contacts[contacts.length - 1]?.shot !== 'net';
     const attacks = contacts.filter((c) => c.kind === 'attack' || c.kind === 'kill' || c.kind === 'blocked').length;
     last.big = end === 'kill' || end === 'blocked' || end === 'ace' || attacks >= 3;
+    const final = contacts[contacts.length - 1];
+    last.how = end === 'kill' ? 'kill' : end === 'blocked' ? 'block' : end === 'ace' ? 'ace' : 'error';
+    const hero = end === 'blocked' ? final?.by : end === 'kill' || end === 'ace' ? final?.player : undefined;
+    if (hero !== undefined && hero >= 0) last.hero = hero;
   }
   return beats;
 }

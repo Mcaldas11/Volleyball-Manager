@@ -39,6 +39,7 @@ import type { SponsorOffer } from './commercial.ts';
 import type { RetirementPlan } from './retirement.ts';
 import type { TeamLine } from './teamAwards.ts';
 import type { InterviewSession } from './interviews.ts';
+import type { PressMemory } from './pressRoom.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
 
@@ -714,6 +715,8 @@ export interface World {
   clubSpells?: Map<number, number[]>;
   /** The box score of every match of the manager's club, by fixture id — see matchReports.ts. */
   matchReports?: Map<number, MatchReport>;
+  /** What the press remember: the questions asked lately, and what the manager said — see pressRoom.ts. */
+  press?: PressMemory;
   /** The tutorial's step while it runs (see the UI's tutorial.tsx); absent otherwise. */
   tutorial?: number;
   /** The day the staff last warned the manager a player was unhappy, by player. */

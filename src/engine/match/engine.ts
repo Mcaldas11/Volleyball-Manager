@@ -448,15 +448,23 @@ const BAD_BALL_LIBERO = 0.55;
  * both multipliers on its players' confidence, and the weaker side plays with
  * nothing to lose. Big enough that a lesser team can beat a better one on its
  * night — one clearly weaker, its best seven 100-150 below in ability, about
- * one match in four; one far weaker, 250 below, one in ten — and never so big
+ * one match in three; one far weaker, 250 below, one in ten — and never so big
  * that ability stops deciding most matches. The curve — how often the
  * favourite wins at each gap — is pinned by engine.test.ts, and the background
  * quick sim gives the same one.
+ *
+ * Most of it is the underdog's lift, which narrows the gap rather than adding
+ * chance: confidence multiplies every skill at once, so a few percent of it
+ * either way runs away with whole sets. With more of the upsets left to the
+ * dice, sets came out 25-12 and 10-25 one after the other, a fifth of them
+ * lost with 12 points or fewer; as they are, the loser of a set takes about 20
+ * and a set lost with 15 or fewer is one in ten — as in the top flights (see
+ * the set-margin targets in cli/calibrate.ts).
  */
-const DAY_FORM_SD = 0.065;
-const SET_FORM_SD = 0.075;
+const DAY_FORM_SD = 0.02;
+const SET_FORM_SD = 0.01;
 /** The underdog's lift per 100 of squad-strength gap, and its ceiling. */
-const UNDERDOG_LIFT = 0.06;
+const UNDERDOG_LIFT = 0.075;
 const UNDERDOG_LIFT_MAX = 0.3;
 /** The best a side can be on its night — a lift the underdog can reach. */
 const FORM_CAP = 1.35;

@@ -24,7 +24,8 @@ import type { World } from './world.ts';
 export type FanStory =
   | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top' | 'retiring' | 'retired'
   | 'playerAward' | 'coachAward' | 'title' | 'match' | 'derby'
-  | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified';
+  | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified'
+  | 'press' | 'pressBold';
 
 /** What a story's comments turn on. */
 export interface FanBrief {
@@ -68,6 +69,44 @@ type Line = readonly [FanMood, string];
  * nations, {coach}, {score}, {fee}, {weeks}, {comp}.
  */
 const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>> = {
+  press: {
+    club: [
+      ['happy', 'Calm and sensible from {coach}. Like it.'],
+      ['neutral', 'Classic press conference. Said a lot without saying much.'],
+      ['happy', 'Good to hear the coach backing the players.'],
+      ['neutral', 'Less talking, more winning please.'],
+      ['happy', '{coach} gets this club. You can tell.'],
+    ],
+    other: [
+      ['neutral', 'Polite words from {c}. Means nothing on the court.'],
+      ['neutral', 'Nice speech. See you on the court.'],
+    ],
+    neutral: [
+      ['neutral', 'Nothing to see here.'],
+    ],
+  },
+  pressBold: {
+    club: [
+      ['delighted', 'THIS is the attitude we needed. Love {coach}!'],
+      ['worried', 'Big words, {coach}. Now back them up.'],
+      ['happy', 'Finally a coach with some fire in him.'],
+      ['worried', 'Not sure that was clever. {o} will have it pinned on their wall.'],
+      ['delighted', 'Say it louder for the people at the back!'],
+    ],
+    other: [
+      ['angry', 'Who does {coach} think he is? We will see on the court.'],
+      ['angry', 'Disrespectful. Our lads will make him eat those words.'],
+      ['neutral', 'Printed and pinned on the dressing room wall. Thanks, {coach}.'],
+    ],
+    rival: [
+      ['happy', 'Love to see {c} getting cocky. Pride before a fall.'],
+      ['neutral', 'Bold from {coach}. Grabbing the popcorn.'],
+    ],
+    neutral: [
+      ['neutral', 'Now THAT is a press conference.'],
+      ['happy', 'Volleyball needs more coaches who say what they think.'],
+    ],
+  },
   rumour: {
     club: [
       ['delighted', 'Get {p} signed! Exactly the {pos} we need.'],
@@ -390,6 +429,7 @@ const COMMENTS: Readonly<Record<FanStory, number>> = {
   rumour: 4, signing: 5, extension: 3, sacked: 4, appointed: 4, injury: 3, shock: 5, top: 4, retiring: 4, retired: 4,
   playerAward: 3, coachAward: 3, title: 6, match: 5, derby: 6,
   nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4, qualified: 4,
+  press: 3, pressBold: 5,
 };
 
 /** Words in a club's name that say nothing about it. */

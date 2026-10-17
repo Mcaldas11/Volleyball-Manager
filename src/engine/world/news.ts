@@ -30,7 +30,8 @@ import {
   contractEndSeason, dayOfSeason, seasonEndDay, seasonEndYear, type Competition, type Fixture, type World,
 } from './world.ts';
 
-export type NewsKind = 'rumour' | 'transfer' | 'coach' | 'award' | 'result' | 'injury' | 'contract' | 'title' | 'retirement';
+export type NewsKind =
+  | 'rumour' | 'transfer' | 'coach' | 'award' | 'result' | 'injury' | 'contract' | 'title' | 'retirement' | 'press';
 
 export interface NewsItem {
   id: number;

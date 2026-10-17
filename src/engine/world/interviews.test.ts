@@ -98,12 +98,14 @@ test('answerInterviewQuestion nudges morale, updates body language, and advances
   assert.equal(world.players.morale[ownPlayer], Math.min(100, ownBefore + option.ownMorale + 1));
   assert.equal(world.players.morale[oppPlayer], Math.min(100, oppBefore + option.opponentMorale));
 
-  // Work through the rest of the conference.
-  for (let i = 1; i < questionCount; i++) {
+  // Work through the rest of the conference — a follow-up or two may be put on the way.
+  for (let i = 1; i < questionCount + 4 && !session.finished; i++) {
     const r = answerInterviewQuestion(world, session.id, 0);
     assert.notEqual(r, null);
   }
   assert.equal(session.finished, true);
+  assert.ok(session.questions.length >= questionCount);
+  assert.ok(session.questions.every((q) => q.reaction !== undefined && q.reaction.length > 0), 'the room reacts to every answer');
   assert.match(world.messages[0].body, /fielded \d+ questions/);
 
   // Once finished, no further answers are accepted.
@@ -237,4 +239,100 @@ test('a post-match conference waits a day or two, then the press move on', () =>
   expireStaleInterviews(world);
   assert.equal(world.pendingInterviews.length, 0);
   assert.match(world.messages.at(-1)!.body, /moved on/);
+});
+
+/** A box score for a played match, packed as matchReports.ts keeps it: [player, side, ...the line]. */
+function keepReport(world: World, f: Fixture, lines: Array<[number, 0 | 1, Partial<Record<string, number>>]>): void {
+  const fields = [
+    'servesTotal', 'serveAces', 'serveErrors', 'receptionsTotal', 'receptionPerfect', 'receptionPositive', 'receptionPoor',
+    'receptionErrors', 'attacksTotal', 'attackKills', 'attackErrors', 'attackBlocked', 'blockPoints', 'blockTouches',
+    'blockErrors', 'digsTotal', 'digErrors', 'setsMade', 'setAssists', 'setErrors', 'ralliesPlayed', 'plusMinus',
+  ];
+  (world.matchReports ??= new Map()).set(f.id, {
+    lines: lines.map(([p, side, s]) => [p, side, ...fields.map((k) => s[k] ?? 0)]),
+    rotations: [[], []],
+    opponentErrors: [0, 0],
+    longestRun: [8, 3],
+    totalRallies: 200,
+  });
+}
+
+test('after the match the press have the box score: the big scorer, the errors, the set that would not end', () => {
+  const { world, opponentId } = managed(10);
+  const club = world.clubs[world.userClubId];
+  const [star, other] = club.players;
+  const theirs = world.clubs[opponentId].players[0];
+  const prompts: string[] = [];
+  for (let k = 0; k < 8; k++) {
+    const f = addTestFixture(world, world.userClubId, opponentId, world.day, club.leagueId);
+    Object.assign(f, { played: true, homeSets: 3, awaySets: 1, setScores: [[25, 21], [32, 30], [18, 25], [25, 23]], mvp: -1 });
+    keepReport(world, f, [
+      [star, 0, { attacksTotal: 40, attackKills: 21, attackErrors: 5, serveAces: 2, blockPoints: 2, serveErrors: 9, servesTotal: 20 }],
+      [other, 0, { attacksTotal: 30, attackKills: 10, attackErrors: 6, attackBlocked: 5, serveErrors: 6, receptionsTotal: 40, receptionPositive: 10, receptionErrors: 4 }],
+      [theirs, 1, { attacksTotal: 45, attackKills: 19, serveAces: 1, blockPoints: 2 }],
+    ]);
+    const session = generatePostMatchInterview(world, f)!;
+    prompts.push(...session.questions.map((q) => q.prompt));
+    world.day += 3;
+    expireStaleInterviews(world);
+  }
+  const all = prompts.join('\n');
+  assert.match(all, /25 points/, 'the top scorer\'s night');
+  assert.match(all, /32-30/, 'the set that went on and on');
+  assert.match(all, /errors|missed serves/, 'the points given away');
+  assert.ok(new Set(prompts).size >= prompts.length * 0.8, `${new Set(prompts).size} different questions of ${prompts.length}`);
+});
+
+test("a season's conferences don't go round the same few questions", () => {
+  const { world, opponentId } = managed(11);
+  const prompts: string[] = [];
+  const topics: string[] = [];
+  for (let k = 0; k < 12; k++) {
+    const day = world.day + 1;
+    addTestFixture(world, world.userClubId, opponentId, day, world.clubs[world.userClubId].leagueId);
+    generateInterviewSessions(world, day);
+    const s = world.pendingInterviews.at(-1)!;
+    prompts.push(...s.questions.map((q) => q.prompt));
+    topics.push(...s.questions.map((q) => q.topic ?? ''));
+    world.pendingInterviews = [];
+    world.day += 4;
+  }
+  const distinct = new Set(prompts).size;
+  assert.ok(distinct >= prompts.length * 0.75, `${distinct} different questions of ${prompts.length}`);
+  // No topic three conferences running.
+  for (let i = 0; i + 8 < topics.length; i++) {
+    const t = topics[i];
+    assert.ok(!(topics.slice(i + 3, i + 6).includes(t) && topics.slice(i + 6, i + 9).includes(t)), `${t} keeps coming back`);
+  }
+});
+
+test('a bold promise before the match is put to him after it — and the boldest line makes the paper', () => {
+  const { world, opponentId } = managed(12);
+  const club = world.clubs[world.userClubId];
+  let quoted = false;
+  let followed = false;
+  for (let k = 0; k < 6 && !quoted; k++) {
+    const day = world.day + 1;
+    const f = addTestFixture(world, world.userClubId, opponentId, day, club.leagueId);
+    generateInterviewSessions(world, day);
+    const pre = world.pendingInterviews.at(-1)!;
+    for (let i = 0; i < 12 && !pre.finished; i++) {
+      answerInterviewQuestion(world, pre.id, pre.questions[pre.currentIndex].options.findIndex((o) => o.category === 'convince'));
+    }
+    assert.equal(pre.finished, true);
+    followed ||= pre.questions.some((q) => q.followUp === true);
+    assert.ok(pre.headline !== undefined && pre.headline.startsWith(`${club.name} coach:`), pre.headline);
+    assert.equal(world.news.at(-1)?.kind, 'press');
+    assert.equal(world.news.at(-1)?.fans?.story, 'pressBold');
+    world.pendingInterviews = [];
+    world.day = day;
+    Object.assign(f, { played: true, homeSets: 1, awaySets: 3, setScores: [[20, 25], [25, 23], [19, 25], [22, 25]], mvp: -1 });
+    const post = generatePostMatchInterview(world, f)!;
+    const said = pre.questions.map((q) => q.options[q.answeredIndex!].text);
+    quoted = post.questions.some((q) => said.some((t) => q.prompt.includes(t)));
+    world.pendingInterviews = [];
+    world.day += 3;
+  }
+  assert.ok(quoted, 'what he said before is quoted back at him');
+  assert.ok(followed, 'a bold answer draws a follow-up');
 });

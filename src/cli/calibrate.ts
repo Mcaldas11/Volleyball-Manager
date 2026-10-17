@@ -105,6 +105,8 @@ export function runCalibration(matches = 400, seed = 20260728): CalibrationRepor
   // is not dominated by one particular pair of rosters.
   let totalRallies = 0;
   let fiveSetters = 0;
+  // The losing side's points in each of the first four sets: how close sets are.
+  const losers: number[] = [];
   const setScores = new Map<string, number>();
 
   const acc = {
@@ -146,6 +148,7 @@ export function runCalibration(matches = 400, seed = 20260728): CalibrationRepor
     if (result.setScores.length === 5) fiveSetters++;
     acc.sets += result.setScores.length;
 
+    for (const [h, a] of result.setScores.slice(0, 4)) losers.push(Math.min(h, a));
     for (const [h, a] of result.setScores) {
       const hi = Math.max(h, a);
       const lo = Math.min(h, a);
@@ -236,6 +239,18 @@ export function runCalibration(matches = 400, seed = 20260728): CalibrationRepor
       name: 'Points per set (winner)',
       actual: acc.attacks / acc.sets / 2,
       min: 20, max: 34, format: (v) => v.toFixed(1),
+    },
+    {
+      // Top-flight sets are close: the side that loses one takes about 20-21 points.
+      name: "Set loser's points (avg)",
+      actual: losers.reduce((s, x) => s + x, 0) / Math.max(1, losers.length),
+      min: 19, max: 23, format: (v) => v.toFixed(1),
+    },
+    {
+      // A set lost with 15 points or fewer is one in ten or so; one with 12 or fewer is rare.
+      name: 'Sets lost with 15 or fewer',
+      actual: losers.filter((x) => x <= 15).length / Math.max(1, losers.length),
+      min: 0.04, max: 0.16, format: pct,
     },
   ];
 

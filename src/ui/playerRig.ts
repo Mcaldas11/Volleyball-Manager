@@ -224,6 +224,12 @@ function swingOf(phase: number, duty: number): number | null {
   return into < swing ? into / swing : null;
 }
 
+/** 0 to 1 over 0 to 1, easing in and out. */
+function ease01(t: number): number {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * (3 - 2 * c);
+}
+
 /** Length of a running stride at a speed, m: one foot's landing to its next. */
 export function strideLength(speed: number): number {
   return Math.min(1.3, 0.3 + 0.17 * speed);
@@ -268,9 +274,14 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const pelvisZ = HIP_HEIGHT - s.crouch - bob;
   const pitch = -(s.tilt + drive);
 
+  // Side-on and short of a sprint, the feet shuffle — step out, close up — rather than run, and
+  // never cross; the hands stay up and ready.
+  const side = speed > 1e-3 ? Math.abs(m.moveX) / speed : 0;
+  const shuffle = ease01((side - 0.55) / 0.3) * (1 - ease01((speed - 3) / 1.5));
+
   // Arms: the hitting arm is the right one for a right-hander. Running swings
   // them against the legs, less so the more an arm is already doing.
-  const swing = 0.75 * run * Math.min(1, speed / 3);
+  const swing = 0.75 * run * Math.min(1, speed / 3) * (1 - 0.6 * shuffle);
   const armOf = (side: -1 | 1): Limb => {
     const hitting = side === m.hand;
     const flex = hitting ? s.hFlex : s.oFlex;
@@ -292,7 +303,11 @@ export function buildRig(s: Shape, m: Motion): Rig {
   // the way the player is moving and lifting it on the way through.
   const dirX = speed > 1e-3 ? m.moveX / speed : 0;
   const dirY = speed > 1e-3 ? m.moveY / speed : 0;
-  const half = Math.min(0.28, stride / 2);
+  const full = Math.min(0.28, stride / 2);
+  // A shuffle's step is short enough that the feet, a stride apart in phase and each swinging a
+  // touch past its mark, still keep a gap between them.
+  const step = Math.min(full, Math.max(0.04, (2 * s.stance - 0.06) / 2.9));
+  const half = full + (step - full) * shuffle;
   const duty = Math.max(0.2, Math.min(0.5, half / stride));
   const legOf = (side: -1 | 1): Limb => {
     const ahead = side === m.hand ? -s.stride / 2 : s.stride / 2;
@@ -301,7 +316,7 @@ export function buildRig(s: Shape, m: Motion): Rig {
     // the heel kicks up behind on the way through. The faster the run the less of each stride a
     // foot spends on the floor, so the one on it keeps pace with the floor.
     const reach = half * Math.min(1, run * 1.6) * strideAt(phase, duty);
-    const lift = run * (0.05 + 0.04 * speed) * footLiftAt(phase, duty);
+    const lift = run * (0.05 + 0.04 * speed) * (1 - 0.5 * shuffle) * footLiftAt(phase, duty);
     const ax = side * s.stance + dirX * reach;
     const ay = ahead + dirY * reach - m.airborne * s.tuck * 0.45;
     const az = BONES.ankle + lift + m.airborne * s.tuck;

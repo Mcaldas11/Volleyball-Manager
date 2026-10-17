@@ -328,3 +328,79 @@ test('the line judges flag every ball near their lines: down for in, up for out,
   assert.ok(seen.has('in') && seen.has('out'), `signals seen: ${[...seen].join(', ')}`);
   assert.equal(LINE_JUDGES.length, 2);
 });
+
+test('after a point the side that won it comes together — round the one who won it, if someone did', () => {
+  const { sim, store, teamOf } = liveMatch(15);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  let now = 0;
+  let huddles = 0;
+  let heroes = 0;
+  for (let r = 0; r < 12; r++) {
+    const pre = sim.snapshot();
+    m.scene(setupScene(pre, pre.serving, store.position, 0), now);
+    for (let t = 0; t < 900; t += 16) m.step(0.016, (now += 16));
+    const entry = sim.step()!;
+    const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, r, 0, entry.winner);
+    for (const beat of beats) {
+      m.scene(beat, now);
+      for (let t = 0; t < beat.ms; t += 16) m.step(0.016, (now += 16));
+    }
+    // A second and a bit after the ball goes down.
+    for (let t = 0; t < 1100; t += 16) m.step(0.016, (now += 16));
+    const onCourt = beats.at(-1)!.positions;
+    const six = [...m.bodies].filter(([p, b]) => teamOf(p) === entry.winner && b.side === null && !b.leaving && onCourt.has(p));
+    const xs = six.map(([, b]) => b.x);
+    const ys = six.map(([, b]) => b.y);
+    const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    if (spread < 2.2) huddles++;
+    const hero = beats.at(-1)?.hero;
+    if (hero !== undefined && six.some(([p]) => p === hero)) {
+      const h = m.bodies.get(hero)!;
+      const near = six.filter(([p, b]) => p !== hero && Math.hypot(b.x - h.x, b.y - h.y) < 1.4).length;
+      if (near >= 3) heroes++;
+    }
+  }
+  assert.ok(huddles >= 8, `${huddles} of 12 points ended in a huddle`);
+  assert.ok(heroes >= 2, `team-mates ran to the one who won it ${heroes} times`);
+});
+
+test('a tip is no full swing — the elbow stays soft — and it still meets the ball', () => {
+  let tips = 0;
+  const { sim, store, teamOf } = liveMatch(16);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  let now = 0;
+  for (let r = 0; r < 80 && tips < 3; r++) {
+    const pre = sim.snapshot();
+    m.scene(setupScene(pre, pre.serving, store.position, 0), now);
+    for (let t = 0; t < 900; t += 16) m.step(0.016, (now += 16));
+    const entry = sim.step();
+    if (entry === null) break;
+    for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, r, 0, entry.winner)) {
+      m.scene(beat, now);
+      const end = now + beat.ms;
+      while (now < end - 1e-6) {
+        const dt = Math.min(1000 / 60, end - now);
+        now += dt;
+        m.step(dt / 1000, now);
+      }
+      if (beat.shot !== 'tip' || beat.actor === null || beat.ball === null) continue;
+      const b = m.bodies.get(beat.actor)!;
+      const [l, rh] = handsOf(b);
+      const miss = Math.min(dist(l, beat.ball), dist(rh, beat.ball));
+      assert.ok(miss < 0.35, `the tip meets the ball (${miss.toFixed(2)} m)`);
+      assert.ok(b.shape.hElbow > 0.18, `a soft elbow on a tip (${b.shape.hElbow.toFixed(2)})`);
+      tips++;
+    }
+  }
+  assert.ok(tips >= 1, 'some tips were played');
+});
+
+test('shuffling sideways the feet step and close, and never cross', () => {
+  for (const moveX of [1.2, 2.2, -2.2]) {
+    for (let g = 0; g < Math.PI * 2; g += 0.15) {
+      const j = jointPositions(buildRig(READY, { ...STILL, gait: g, moveX }));
+      // Ankle 0 is the left foot: it stays left of the right one.
+      assert.ok(j.ankles[0][0] < j.ankles[1][0] - 0.04, `feet crossed at ${g.toFixed(2)} moving ${moveX} m/s`);
+    }
+  }
+});

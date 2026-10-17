@@ -62,8 +62,10 @@ Before submitting a change:
 ### MATCH ENGINE
 
 - [x] Rally-by-rally match engine (serve → reception → set → attack → block →
-      dig → transition), calibrated against eleven real elite-level
-      statistical targets
+      dig → transition), calibrated against thirteen real elite-level
+      statistical targets — among them how close sets are: the side that
+      loses a set takes about 20 points, and one lost with 15 or fewer is
+      about one in ten, as in the top flights
 - [x] All six rotations simulated properly, including the reduced attacking
       options when the setter is front row, with a per-rotation performance
       report (side-out %, break-point %) so you can see exactly where a match
@@ -314,7 +316,12 @@ Before submitting a change:
       less of each stride it spends there — and the heel kicks up behind; the
       first step comes from the feet together. A jump leaves the floor and
       lands through the legs, with a give at the knees; the head follows the
-      ball a moment behind it
+      ball a moment behind it. Side-on, players shuffle — step and close,
+      the feet never crossing — and a tip or a roll shot is played with its
+      own soft arm, not the full swing. After every point both sides come
+      together: the winners run to whoever won it — the hitter, the blocker
+      who stuffed it, the server's ace, roaring — and slap hands in the
+      middle; the side that lost it takes it in, then gathers for a low five
 - [x] A coach's bar during the match: a timeout opens the timeout screen;
       the substitutions panel holds play while it is open; clicking one of
       your players beside the court offers who could come on for him; any
@@ -323,6 +330,23 @@ Before submitting a change:
       the moments that deserve one — "MONSTER SPIKE!", "HUGE BLOCK!", "ACE!"
 - [x] Pre-match interviews, post-match press conferences, and a world news
       feed with the fans' comments under each story
+- [x] A press room that never asks the same conference twice: the journalists
+      work from their notebooks — the box score (the night's top scorer, the
+      aces, the blocks, the errors, the passing, a run of points, the set that
+      went 32-30), the table, the last meeting, the fixtures piling up, who is
+      hurt, who has just signed, a milestone, a contract running down — each
+      in a voice of their own (the statistician, the straight talker, the
+      local reporter, the tactician, the feature writer, the headline hunter).
+      They remember: a topic asked lately rarely comes up again, a bold
+      promise before a match is quoted back after it, and a bold answer draws
+      a follow-up. The room reacts to every answer, the effect of each tone on
+      morale is shown as it is chosen, and the conference ends on tomorrow's
+      back page — its headline posted to the news with the fans' say under it
+- [x] An optional AI press room: with an Anthropic API key, Claude writes
+      every question and answer from the same notebooks (called straight from
+      the browser; the key stays in it). Only the words change — who asks,
+      the tones and what they do to morale stay the game's; without a key,
+      or if the call fails, the game writes its own
 - [x] The national team gets what a club gets around its matches: the press
       the day before and after (questions of the tournament, the hosts, a
       medal — answers that move the fourteen's morale, not the club's), the

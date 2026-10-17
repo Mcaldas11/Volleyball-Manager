@@ -31,6 +31,12 @@ import { cityBankFor } from './cities.ts';
 import { nationName, squadOf, userNation, type IntlMatch, type Tournament } from './internationals.ts';
 import { NATIONS } from './nations.ts';
 import { dayOfSeason, type Competition, type Fixture, type World } from './world.ts';
+import {
+  briefOf, emptyFacts, followUp, freshness, gatherFacts, headlineOf, noteAsked, noteQuote, POST_TOPICS, PRE_TOPICS,
+  pressMemory, pressRng, reactionLine, voiced, type PressFacts, type Voice,
+} from './pressRoom.ts';
+import type { Rng as Dice } from '../core/rng.ts';
+import { postNews } from './news.ts';
 
 export type AnswerCategory = 'positive' | 'neutral' | 'convince';
 export type BodyLanguage = 'hostile' | 'skeptical' | 'neutral' | 'pleased' | 'encouraged' | 'delighted';
@@ -47,6 +53,8 @@ export interface JournalistProfile {
   gender: 'men' | 'women';
   /** Portrait pool index — see ui/faces.ts's `portraitUrl()`. */
   photoId: number;
+  /** How they ask — absent on conferences from before the press had voices. */
+  voice?: Voice;
 }
 
 export interface InterviewOption {
@@ -69,6 +77,16 @@ export interface InterviewQuestion {
   answeredIndex: number | null;
   /** How this journalist is reading the manager — 'neutral' until answered. */
   bodyLanguage: BodyLanguage;
+  /** What it is about, for the press's memory — absent on older conferences. */
+  topic?: string;
+  /** How the room took the answer, once given. */
+  reaction?: string;
+  /** Asked on the back of the answer before it. */
+  followUp?: boolean;
+  /** How the journalist takes each tone, when a language model wrote the question. */
+  reactions?: Partial<Record<AnswerCategory, string>>;
+  /** Written by a language model (see ui/pressWriter.ts). */
+  written?: boolean;
 }
 
 export interface InterviewSession {
@@ -90,6 +108,12 @@ export interface InterviewSession {
   /** A national team's match: its tournament, the match, and the manager's nation.
    *  `fixtureId` is then -1 - the match's id, as the matchday screens have it. */
   national?: { tournamentId: number; matchId: number; nation: number };
+  /** What the press had in front of them — the facts a writer works from. */
+  brief?: string[];
+  /** The line the papers lead with, once it is over. */
+  headline?: string;
+  /** The questions and answers were written by a language model rather than the game's own writer. */
+  ai?: boolean;
 }
 
 export interface AnswerResult {
@@ -101,20 +125,26 @@ export interface AnswerResult {
 // ---- The press ----------------------------------------------------------------------
 
 const JOURNALIST_POOL: readonly JournalistProfile[] = [
-  { name: 'Priya Nandan', outlet: 'VolleyWorld', bias: 'positive', gender: 'women', photoId: 12 },
-  { name: 'Marcus Feld', outlet: 'Court Side Report', bias: 'convince', gender: 'men', photoId: 31 },
-  { name: 'Ana Bristow', outlet: 'The Net Post', bias: 'neutral', gender: 'women', photoId: 47 },
-  { name: 'Hugo Salerno', outlet: 'SpikeTV', bias: 'convince', gender: 'men', photoId: 8 },
-  { name: 'Ingrid Solvang', outlet: 'Intl. Volleyball Review', bias: 'positive', gender: 'women', photoId: 63 },
-  { name: 'Dean Okafor', outlet: 'Match Point Daily', bias: 'neutral', gender: 'men', photoId: 54 },
-  { name: 'Camille Duarte', outlet: 'Rally Sports Network', bias: 'convince', gender: 'women', photoId: 22 },
-  { name: 'Tobias Renn', outlet: 'The Serve', bias: 'positive', gender: 'men', photoId: 76 },
-  { name: 'Naomi Ilic', outlet: 'Baseline Weekly', bias: 'neutral', gender: 'women', photoId: 5 },
-  { name: 'Ricardo Mendes', outlet: 'First Whistle', bias: 'convince', gender: 'men', photoId: 90 },
-  { name: 'Sofia Lindqvist', outlet: 'Block & Dig', bias: 'positive', gender: 'women', photoId: 38 },
-  { name: 'Jonas Weber', outlet: 'Volley Insider', bias: 'neutral', gender: 'men', photoId: 17 },
-  { name: 'Elena Morozova', outlet: 'Sideout Magazine', bias: 'convince', gender: 'women', photoId: 71 },
-  { name: 'Paulo Teixeira', outlet: 'Net Zone Radio', bias: 'positive', gender: 'men', photoId: 45 },
+  { name: 'Priya Nandan', outlet: 'VolleyWorld', bias: 'positive', gender: 'women', photoId: 12, voice: 'story' },
+  { name: 'Marcus Feld', outlet: 'Court Side Report', bias: 'convince', gender: 'men', photoId: 31, voice: 'blunt' },
+  { name: 'Ana Bristow', outlet: 'The Net Post', bias: 'neutral', gender: 'women', photoId: 47, voice: 'stats' },
+  { name: 'Hugo Salerno', outlet: 'SpikeTV', bias: 'convince', gender: 'men', photoId: 8, voice: 'tabloid' },
+  { name: 'Ingrid Solvang', outlet: 'Intl. Volleyball Review', bias: 'positive', gender: 'women', photoId: 63, voice: 'tactical' },
+  { name: 'Dean Okafor', outlet: 'Match Point Daily', bias: 'neutral', gender: 'men', photoId: 54, voice: 'stats' },
+  { name: 'Camille Duarte', outlet: 'Rally Sports Network', bias: 'convince', gender: 'women', photoId: 22, voice: 'blunt' },
+  { name: 'Tobias Renn', outlet: 'The Serve', bias: 'positive', gender: 'men', photoId: 76, voice: 'local' },
+  { name: 'Naomi Ilic', outlet: 'Baseline Weekly', bias: 'neutral', gender: 'women', photoId: 5, voice: 'tactical' },
+  { name: 'Ricardo Mendes', outlet: 'First Whistle', bias: 'convince', gender: 'men', photoId: 90, voice: 'tabloid' },
+  { name: 'Sofia Lindqvist', outlet: 'Block & Dig', bias: 'positive', gender: 'women', photoId: 38, voice: 'tactical' },
+  { name: 'Jonas Weber', outlet: 'Volley Insider', bias: 'neutral', gender: 'men', photoId: 17, voice: 'story' },
+  { name: 'Elena Morozova', outlet: 'Sideout Magazine', bias: 'convince', gender: 'women', photoId: 71, voice: 'blunt' },
+  { name: 'Paulo Teixeira', outlet: 'Net Zone Radio', bias: 'positive', gender: 'men', photoId: 45, voice: 'local' },
+  { name: 'Yuki Hara', outlet: 'Spike & Serve Japan', bias: 'neutral', gender: 'women', photoId: 29, voice: 'stats' },
+  { name: 'Mateusz Wrona', outlet: 'Siatkowka Live', bias: 'convince', gender: 'men', photoId: 62, voice: 'tactical' },
+  { name: 'Giulia Ferri', outlet: 'Pallavolo Oggi', bias: 'positive', gender: 'women', photoId: 81, voice: 'story' },
+  { name: 'Can Demir', outlet: 'Voleybol Gundem', bias: 'convince', gender: 'men', photoId: 23, voice: 'tabloid' },
+  { name: 'Larissa Pinto', outlet: 'Rede de Volei', bias: 'neutral', gender: 'women', photoId: 56, voice: 'local' },
+  { name: 'Owen Gallagher', outlet: 'The Attack Line', bias: 'neutral', gender: 'men', photoId: 68, voice: 'blunt' },
 ];
 
 /** How many ask, and how many come, by the size of the occasion. */
@@ -129,7 +159,7 @@ const FAVOURITE_GAP = 1200;
 
 // ---- The occasion -------------------------------------------------------------------
 
-type Tag =
+export type Tag =
   // The match itself.
   | 'final' | 'titleDecider' | 'semi' | 'knockout' | 'relegation' | 'relegationPlayoff' | 'topClash' | 'leaders'
   | 'derby' | 'continental' | 'clubworld' | 'supercup' | 'cupEarly' | 'favourite' | 'underdog' | 'opener' | 'newBoss'
@@ -150,7 +180,7 @@ interface Side {
 }
 
 /** What a press conference knows about a match. */
-interface Ctx {
+export interface Ctx {
   world: World;
   club: Side;
   opp: Side;
@@ -169,6 +199,8 @@ interface Ctx {
   mvp: number;
   /** From the manager's side: "3-1". */
   score: string;
+  /** What the press have in their notebooks — the box score, the table, what he said last time. */
+  facts: PressFacts;
 }
 
 function name(c: Ctx, p: number): string {
@@ -399,6 +431,7 @@ function contextFor(world: World, f: Fixture, kind: InterviewKind): { ctx: Ctx; 
     ctx: {
       world, club, opp, comp, compName, tags, run, oppRun, ownPos, oppPos, city,
       injured: own.injured, oppStar: theirs.star, ownStar: own.star, mvp: f.mvp, score,
+      facts: gatherFacts(world, f, kind, club.id, opp.id),
     },
     stakes,
     occasion,
@@ -409,15 +442,20 @@ function contextFor(world: World, f: Fixture, kind: InterviewKind): { ctx: Ctx; 
 
 type Six = readonly [string, string, string, string, string, string];
 
-interface Archetype {
+export interface Archetype {
+  /** What it is about, for the press's memory; the occasion's own questions go by their prompt. */
+  id?: string;
   kind: InterviewKind;
   /** The tags it needs, all of them. */
   needs: readonly Tag[];
+  /** Anything else it needs: a number worth asking about. */
+  when?: (c: Ctx) => boolean;
   /** How likely it comes up when it can: the occasion's own questions first. */
   weight: number;
-  prompt: (c: Ctx) => string;
+  /** The question; `r` picks among ways of putting it. */
+  prompt: (c: Ctx, r: Dice) => string;
   /** Two answers of each tone: positive, neutral, convince. */
-  answers: (c: Ctx) => Six;
+  answers: (c: Ctx, r: Dice) => Six;
   /** The player the question is about, whose morale the answer touches too. */
   about?: (c: Ctx) => number;
 }
@@ -1193,12 +1231,22 @@ function pickDistinct<T>(rng: Rng, pool: readonly T[], n: number): T[] {
   return arr.slice(0, count);
 }
 
-/** The questions a conference asks: the occasion's own first, by weight, without repeats. */
+/** A question's topic, for the press's memory: its id, or its place in its bank. */
+function topicOf(a: Archetype, bank: readonly Archetype[]): string {
+  return a.id ?? `${a.kind}-${bank.indexOf(a)}`;
+}
+
+/**
+ * The questions a conference asks: the occasion's own first, by weight, without repeats — and
+ * the ones the manager has been asked lately only rarely, so a season's conferences don't
+ * go round the same few.
+ */
 function pickQuestions(rng: Rng, bank: readonly Archetype[], c: Ctx, n: number): Archetype[] {
-  const pool = bank.filter((a) => a.needs.every((t) => c.tags.has(t)));
+  const memory = c.world.press;
+  const pool = bank.filter((a) => a.needs.every((t) => c.tags.has(t)) && (a.when === undefined || a.when(c)));
   const out: Archetype[] = [];
   while (out.length < n && pool.length > 0) {
-    const i = rng.weightedIndex(pool.map((a) => a.weight));
+    const i = rng.weightedIndex(pool.map((a) => a.weight * freshness(memory, topicOf(a, bank))));
     out.push(pool.splice(i, 1)[0]);
   }
   return out;
@@ -1224,11 +1272,9 @@ const PLAYER_MORALE: Readonly<Record<AnswerCategory, number>> = { positive: 5, n
 
 const CATEGORIES: readonly AnswerCategory[] = ['positive', 'positive', 'neutral', 'neutral', 'convince', 'convince'];
 
-function buildQuestion(a: Archetype, journalist: JournalistProfile, c: Ctx, kind: InterviewKind, weight: number): InterviewQuestion {
-  const texts = a.answers(c);
-  const about = a.about?.(c);
-  const result = c.tags.has('lost') ? 'lost' : 'won';
-  const options = texts.map((text, i): InterviewOption => {
+/** The six answers to a question, with what each tone does. */
+function optionsFor(texts: Six, kind: InterviewKind, result: 'won' | 'lost', weight: number, about: number | undefined): InterviewOption[] {
+  return texts.map((text, i): InterviewOption => {
     const category = CATEGORIES[i];
     const own = kind === 'pre' ? PRE_MORALE[category].own : POST_MORALE[result][category];
     const opp = kind === 'pre' ? PRE_MORALE[category].opp : 0;
@@ -1239,7 +1285,14 @@ function buildQuestion(a: Archetype, journalist: JournalistProfile, c: Ctx, kind
       ...(about !== undefined && about >= 0 ? { playerIdx: about, playerMorale: PLAYER_MORALE[category] } : {}),
     };
   });
-  return { journalist, prompt: a.prompt(c), options, answeredIndex: null, bodyLanguage: 'neutral' };
+}
+
+function buildQuestion(
+  a: Archetype, topic: string, journalist: JournalistProfile, c: Ctx, kind: InterviewKind, weight: number, r: Dice,
+): InterviewQuestion {
+  const prompt = voiced(r, journalist.voice, a.prompt(c, r), c.city);
+  const options = optionsFor(a.answers(c, r), kind, c.tags.has('lost') ? 'lost' : 'won', weight, a.about?.(c));
+  return { journalist, prompt, options, answeredIndex: null, bodyLanguage: 'neutral', topic };
 }
 
 /** How a journalist reads an answer relative to what they wanted to hear —
@@ -1265,19 +1318,25 @@ function sessionFrom(
   const room = ROOM[stakes];
   const rng = world.rng;
   const count = rng.int(room.questions[0], room.questions[1]);
-  const archetypes = pickQuestions(rng, kind === 'pre' ? PRE : POST, ctx, count);
+  const bank = kind === 'pre' ? [...PRE, ...PRE_TOPICS] : [...POST, ...POST_TOPICS];
+  const archetypes = pickQuestions(rng, bank, ctx, count);
   const journalists = pickDistinct(rng, JOURNALIST_POOL, archetypes.length);
+  // The phrasing has dice of its own, so the words never change what the world's dice do.
+  const words = pressRng(world, fixtureId);
+  const topics = archetypes.map((a) => topicOf(a, bank));
   const session: InterviewSession = {
     id: world.nextInterviewId++,
     kind,
     fixtureId,
-    questions: archetypes.map((a, i) => buildQuestion(a, journalists[i], ctx, kind, room.weight)),
+    questions: archetypes.map((a, i) => buildQuestion(a, topics[i], journalists[i], ctx, kind, room.weight, words)),
     currentIndex: 0,
     finished: false,
     occasion,
     stakes,
     crowd: rng.int(room.crowd[0], room.crowd[1]),
+    brief: briefOf(ctx, kind, occasion),
   };
+  noteAsked(world, topics);
   return { session, ctx };
 }
 
@@ -1401,6 +1460,32 @@ export function answerInterviewQuestion(
   const bodyLanguage = reactionFor(q.journalist.bias, option.category);
   q.answeredIndex = optionIndex;
   q.bodyLanguage = bodyLanguage;
+  const words = pressRng(world, session.id * 31 + session.currentIndex);
+  const big = session.stakes !== 'routine';
+  q.reaction = q.reactions?.[option.category] ?? reactionLine(words, q.journalist.name, q.journalist.voice, bodyLanguage, option.category, big);
+  // The press keep what he says — a bold promise most of all.
+  noteQuote(world, {
+    day: world.day, fixtureId: session.fixtureId, kind: session.kind, tone: option.category, text: option.text, topic: q.topic ?? '',
+  });
+  const cm = conferenceMatch(world, session);
+  const asked = session.questions.filter((x) => x.followUp === true).length;
+  if (cm !== null && asked < 2) {
+    const more = followUp(words, {
+      opp: cm.oppName, won: cm.ownSets > cm.oppSets, score: `${cm.ownSets}-${cm.oppSets}`, kind: session.kind, big,
+    }, q, option.category, option.text);
+    if (more !== null) {
+      const weight = ROOM[session.stakes].weight;
+      session.questions.splice(session.currentIndex + 1, 0, {
+        journalist: q.journalist,
+        prompt: more.prompt,
+        options: optionsFor(more.answers, session.kind, cm.ownSets > cm.oppSets ? 'won' : 'lost', weight, option.playerIdx),
+        answeredIndex: null,
+        bodyLanguage,
+        topic: more.topic,
+        followUp: true,
+      });
+    }
+  }
 
   // A question that clearly landed (or badly misjudged the room) nudges the
   // outcome a little further than the flat category effect alone.
@@ -1427,15 +1512,50 @@ export function answerInterviewQuestion(
   session.currentIndex++;
   if (session.currentIndex >= session.questions.length) {
     session.finished = true;
+    const said = session.questions.flatMap((x) => (x.answeredIndex === null ? [] : [{ tone: x.options[x.answeredIndex].category, text: x.options[x.answeredIndex].text }]));
+    const own = national !== null ? nationName(national.nation) : world.clubs[world.userClubId]?.name ?? '';
+    session.headline = headlineOf(own, said);
     const msg = interviewMessage(world, session);
     if (msg !== undefined) {
-      msg.body = session.kind === 'pre'
+      msg.body = (session.kind === 'pre'
         ? `You fielded ${session.questions.length} questions from the press before the match.`
-        : `You gave the press your reaction after the match — ${session.questions.length} questions.`;
+        : `You gave the press your reaction after the match — ${session.questions.length} questions.`) +
+        (session.headline !== '' ? ` Tomorrow's headline: ${session.headline}` : '');
     }
+    pressHeadline(world, session);
   }
 
   return { option, bodyLanguage, finished: session.finished };
+}
+
+/** A conference's headline in the paper, with the fans' say under it — a club's only. */
+function pressHeadline(world: World, session: InterviewSession): void {
+  if (session.headline === undefined || session.headline === '' || session.national !== undefined) return;
+  const club = world.clubs[world.userClubId];
+  const f = world.fixtures[session.fixtureId];
+  if (club === undefined || f === undefined) return;
+  const opp = f.home === club.id ? f.away : f.home;
+  const coach = `${world.manager.firstName} ${world.manager.lastName}`;
+  const bold = session.questions.some((x) => x.answeredIndex !== null && x.options[x.answeredIndex].category === 'convince');
+  postNews(world, {
+    kind: 'press',
+    headline: session.headline,
+    body: session.kind === 'pre'
+      ? `${coach} spoke to the press ahead of ${club.name}'s match against ${world.clubs[opp]?.name ?? 'their opponents'}.`
+      : `${coach} faced the press after ${club.name}'s ${f.home === club.id ? f.homeSets : f.awaySets}-${f.home === club.id ? f.awaySets : f.homeSets} against ${world.clubs[opp]?.name ?? 'their opponents'}.`,
+    nation: club.nation,
+    clubId: club.id,
+    otherClubId: opp,
+    fans: { story: bold ? 'pressBold' : 'press', club: club.id, other: opp, coach },
+  });
+}
+
+/** What the press know before or after a nation's match: only what he said. */
+function nationalFacts(world: World, key: number, kind: InterviewKind): PressFacts {
+  const facts = emptyFacts();
+  const quotes = pressMemory(world).quotes;
+  if (kind === 'post') facts.callback = [...quotes].reverse().find((q) => q.fixtureId === key && q.kind === 'pre' && q.tone === 'convince') ?? null;
+  return facts;
 }
 
 /** Skip the conference entirely — no risk, but no reward either. */
@@ -1594,6 +1714,7 @@ function nationalContextFor(
     ctx: {
       world, club: side(nation), opp: side(oppNation), comp: undefined, compName: t.name, tags, run, oppRun,
       ownPos: 0, oppPos: 0, city: '', injured: own.injured, oppStar: theirs.star, ownStar: own.star, mvp: m.mvp, score,
+      facts: nationalFacts(world, nationalFixtureId(m), kind),
     },
     stakes,
     occasion,

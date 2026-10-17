@@ -87,9 +87,10 @@ test('combinations run off a middle up front as the decoy, and not at all when t
   assert.equal(attacks({ combinations: Combinations.Off }, [4, 5]).filter((c) => isCombination(c.play)).length, 0);
 });
 
-test('combination plays rehearsed in training beat a side that runs none', () => {
+test('a combination rehearsed in training beats the block more often than a plain swing — and costs the side nothing', () => {
   const N = 160;
   let won = 0;
+  const eff = { combo: [0, 0], plain: [0, 0] };
   for (let i = 0; i < N; i++) {
     const home = toTeamSetup(world.players, a);
     const away = toTeamSetup(world.players, a);
@@ -97,11 +98,25 @@ test('combination plays rehearsed in training beat a side that runs none', () =>
     away.tactics = { ...defaultTactics(), combinations: Combinations.Off };
     home.prep = { reception: 0, transition: 0, block: 0, combinations: 1 };
     const r = new MatchSimulator(world.players, {
-      home, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: false, seed: 5000 + i,
+      home, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: i < 40, seed: 5000 + i,
     }).run();
     if (r.homeSets > r.awaySets) won++;
+    for (const e of r.log ?? []) {
+      for (const c of e.contacts) {
+        if (c.team !== 0 || !['attack', 'kill', 'attackError', 'blocked'].includes(c.kind)) continue;
+        const into = isCombination(c.play) ? eff.combo : c.detail === 'Outside' || c.detail === 'Opposite' ? eff.plain : null;
+        if (into === null) continue;
+        into[0] += c.kind === 'kill' ? 1 : c.kind === 'attackError' || c.kind === 'blocked' ? -1 : 0;
+        into[1]++;
+      }
+    }
   }
-  assert.ok(won / N > 0.52, `${((won / N) * 100).toFixed(1)}% won`);
+  const combo = eff.combo[0] / eff.combo[1];
+  const plain = eff.plain[0] / eff.plain[1];
+  assert.ok(combo > plain + 0.05, `combinations hit ${(combo * 100).toFixed(1)}%, plain swings at the pins ${(plain * 100).toFixed(1)}%`);
+  // Called off the good passes, they leave the plain swings the bad ones: over a match it comes out
+  // about even against a side that runs none — never a cost.
+  assert.ok(won / N > 0.44, `${((won / N) * 100).toFixed(1)}% won`);
 });
 
 /** Each attack with the zone its pass came down in — the last pass, dig or cover before it. */
@@ -126,7 +141,7 @@ function byZone(tactics: Partial<TeamTactics>, seeds: number[]): Array<{ c: Rall
 }
 
 test('off a pass at the net anything goes; from 3-6 m the middle gets only the quick; from deep, only the pins', () => {
-  const plays = byZone({}, Array.from({ length: 12 }, (_, i) => 11 + i));
+  const plays = byZone({}, Array.from({ length: 24 }, (_, i) => 11 + i));
   const middle = plays.filter(({ c }) => c.detail === 'Quick (middle)');
   assert.ok(middle.length > 10);
   assert.ok(middle.every(({ zone }) => zone !== 'C'), 'no middle off a deep pass');

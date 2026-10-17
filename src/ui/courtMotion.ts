@@ -66,6 +66,13 @@ const FOLLOW = shape(STRIKE, {
   lean: 0.5, twist: -0.45, bend: -0.1, nod: 0.2, tuck: 0.12,
   hFlex: 0.55, hAbd: -0.3, hElbow: 0.35, oFlex: 0.4, oAbd: 0.3, oElbow: 1.0,
 });
+/** A tip: the arm up as for the hit, then the fingers push the ball over the block instead. */
+const TIP_COCK = shape(COCKED, { twist: 0.25, hFlex: 2.95, hAbd: 0.45, hElbow: 1.2 });
+const TIP_HIT = shape(STRIKE, { lean: 0.02, twist: -0.05, bend: -0.05, hFlex: 2.95, hAbd: 0.2, hElbow: 0.3 });
+const TIP_HOLD = shape(TIP_HIT, { lean: 0.12, hFlex: 2.6, hElbow: 0.45, oFlex: 1.2 });
+/** A roll shot: the full swing, slowed, the hand rolling up and over the ball. */
+const ROLL_HIT = shape(STRIKE, { lean: 0.04, twist: -0.15, hFlex: 2.9, hElbow: 0.22 });
+const ROLL_OVER = shape(FOLLOW, { lean: 0.28, twist: -0.25, hFlex: 1.7, hAbd: 0, hElbow: 0.5 });
 const LAND = shape(READY, {
   crouch: 0.32, tilt: 0.45, lean: 0.42, stance: 0.24, stride: 0.12, nod: -0.2, ...arms(0.7, 0.35, 0.7),
 });
@@ -174,6 +181,17 @@ const FIST = shape(STAND, { crouch: 0.06, lean: -0.1, nod: -0.25, hFlex: 1.75, h
 const FIST_DOWN = shape(FIST, { crouch: 0.16, lean: 0.18, nod: 0.1, hFlex: 1.05, hElbow: 2.4 });
 const CLAP_OPEN = shape(STAND, { nod: -0.1, ...arms(1.35, 0.32, 1.1) });
 const CLAP = shape(CLAP_OPEN, { ...arms(1.42, -0.12, 1.0) });
+/** Into the huddle: leaning in, arms out to the middle. */
+const HUDDLE_IN = shape(STAND, { crouch: 0.08, tilt: 0.18, lean: 0.22, nod: 0.1, stance: 0.2, ...arms(1.55, -0.05, 0.5) });
+/** Hands together up in the middle of the huddle. */
+const HUDDLE_UP = shape(HUDDLE_IN, { crouch: 0.03, lean: 0.08, nod: -0.35, ...arms(2.55, 0.05, 0.25) });
+/** A low five in a quiet huddle after a point lost: "next one". */
+const LOW_FIVE = shape(STAND, { crouch: 0.1, tilt: 0.2, lean: 0.26, nod: 0.25, stance: 0.2, ...arms(1.0, -0.1, 0.45) });
+/** The roar after a block or an ace: down in a crouch, both fists clenched. */
+const ROAR = shape(STAND, {
+  crouch: 0.2, hipShift: -0.04, tilt: 0.25, lean: 0.12, nod: -0.45, stance: 0.3,
+  hFlex: 1.15, hAbd: 0.55, hElbow: 2.2, oFlex: 1.15, oAbd: 0.55, oElbow: 2.2,
+});
 /** Hands on hips, head down. */
 const HIPS = shape(STAND, { lean: 0.06, nod: 0.45, ...arms(-0.25, 0.55, 1.9, 0.6) });
 /** Bent over, hands on the knees: that one hurt. */
@@ -437,6 +455,8 @@ export interface Body {
   limp?: boolean;
   /** The physio, crouched over someone: how far, 0 to 1. */
   tend?: number;
+  /** After a point: where in the team's huddle they go, the way they face there, and until when. */
+  huddle?: { x: number; y: number; face: number; from: number; until: number } | null;
   /** A point to pass through on the way to the mark: the substitution zone, on a change. */
   via: { x: number; y: number } | null;
   /** Their place by the bench, that a substitute warming up runs from and back to. */
@@ -741,7 +761,7 @@ export class CourtMotion {
   actor: number | null = null;
   private actorPose: Pose | null = null;
   private first = true;
-  private point: { team: 0 | 1; at: number; out: boolean; big: boolean } | null = null;
+  private point: { team: 0 | 1; at: number; out: boolean; big: boolean; how?: Scene['how']; hero?: number } | null = null;
   /** The last point won, for the crowd: whose, when, and whether it was one to get up for. */
   cheer: Cheer | null = null;
 
@@ -988,7 +1008,11 @@ export class CourtMotion {
     }
     this.actor = sc.actor;
     this.actorPose = sc.actor !== null ? sc.poses.get(sc.actor) ?? null : null;
-    if (sc.point !== null && sc.point !== undefined) this.point = { team: sc.point, at: now + sc.ms, out: sc.out === true, big: sc.big === true };
+    if (sc.point !== null && sc.point !== undefined) {
+      this.point = { team: sc.point, at: now + sc.ms, out: sc.out === true, big: sc.big === true, how: sc.how, hero: sc.hero };
+    }
+    // Play goes on: the huddles break up.
+    for (const b of this.bodies.values()) b.huddle = null;
     for (const [p, pose] of sc.poses) {
       if (pose !== 'hold') continue;
       // Ball in the server's hands: the serve gets waved on shortly.
@@ -1108,16 +1132,21 @@ export class CourtMotion {
         const yaw = serving ? clampYaw(towardsAim, net, 0.5) : towardsAim;
         let h = 0.7;
         if (ball !== null) {
-          const hand = this.placeFor(b, ball, yaw, STRIKE, 'hit');
+          const hand = this.placeFor(b, ball, yaw, !serving && sc.shot === 'tip' ? TIP_HIT : !serving && sc.shot === 'roll' ? ROLL_HIT : STRIKE, 'hit');
           h = Math.min(serving ? 0.85 : 1.0, Math.max(0.25, ball.z - hand[2]));
         }
         const T = hangTime(h, pre * (serving ? 0.4 : 0.5));
+        // A tip or a roll shot: the same run and jump, a different arm.
+        const soft = !serving ? sc.shot : undefined;
+        const [cock, hit, after, ease]: [Shape, Shape, Shape, Ease] = soft === 'tip'
+          ? [TIP_COCK, TIP_HIT, TIP_HOLD, 'smooth']
+          : soft === 'roll' ? [COCKED, ROLL_HIT, ROLL_OVER, 'smooth'] : [COCKED, STRIKE, FOLLOW, 'whip'];
         const keys = timeline(pre, [
           [-pre, serving ? HOLD : APPROACH],
           // A jump server throws the ball up at once — early, high and forward.
           ...(serving ? [[-pre + Math.min(160, pre * 0.15), TOSS] as [number, Shape]] : []),
           // Arms thrown back only over the last two steps, and swung up through the plant.
-          [-T - 380, APPROACH], [-T - 160, LOAD], [-T, TAKEOFF], [-T * 0.45, COCKED], [0, STRIKE, 'whip'], [120, FOLLOW],
+          [-T - 380, APPROACH], [-T - 160, LOAD], [-T, TAKEOFF], [-T * 0.45, cock], [0, hit, ease], [soft === undefined ? 120 : 200, after],
           [T + 30, LAND], [T + 430, READY],
         ]);
         // A server runs in from where they tossed the ball out of their hands.
@@ -1315,33 +1344,91 @@ export class CourtMotion {
     return r === null || now - r.tc > r.end - 250 / this.pace;
   }
 
-  /** The end of a point: the winners celebrate, the losers take it in. */
-  private react(now: number, winner: 0 | 1): void {
+  /**
+   * The end of a point. Whoever won it — the hitter who put it away, the blocker who stuffed it,
+   * the server's ace — lets it out, and his team-mates run to him; on any other point won, the
+   * six come together in the middle of their half, hands in. The side that lost it takes it in
+   * for a moment, then gathers too, quieter: a low five, the next one. Anyone down on the floor
+   * gets up first.
+   */
+  private react(now: number, winner: 0 | 1, how?: Scene['how'], hero?: number): void {
+    const huddles = new Map<number, { x: number; y: number; face: number; delay: number }>();
+    for (const team of [0, 1] as const) {
+      const six = [...this.bodies].filter(([p, b]) => !b.leaving && b.side === null && this.onCourt.has(p) && this.teamOf(p) === team);
+      if (six.length < 2) continue;
+      const won = team === winner;
+      const star = won && hero !== undefined ? six.find(([p]) => p === hero) : undefined;
+      let cx = six.reduce((s, [, b]) => s + b.x, 0) / six.length;
+      let cy = six.reduce((s, [, b]) => s + b.y, 0) / six.length;
+      const side = Math.sign(cy) || this.sides[team];
+      if (star !== undefined) {
+        // Everyone to the hero.
+        cx = star[1].x;
+        cy = star[1].y;
+      }
+      cx = Math.max(-3.6, Math.min(3.6, cx * (star !== undefined ? 1 : 0.6)));
+      cy = side * Math.max(1.3, Math.min(6.5, Math.abs(cy) * (star !== undefined ? 1 : 0.8)));
+      const ring = six.filter(([p, b]) => p !== star?.[0] && (won || grounded(b.shape) <= 0.5));
+      // Round the ring in the order they stand, so nobody runs through anybody.
+      ring.sort((a, b) => Math.atan2(a[1].y - cy, a[1].x - cx) - Math.atan2(b[1].y - cy, b[1].x - cx));
+      const r = won ? 0.62 : 0.8;
+      const first = ring[0]?.[1];
+      const turn = first !== undefined ? Math.atan2(first.y - cy, first.x - cx) : 0;
+      ring.forEach(([p], i) => {
+        const a = turn + (i / ring.length) * Math.PI * 2;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        huddles.set(p, { x, y, face: yawTo(cx - x, cy - y), delay: won ? (star !== undefined ? 260 : 120) : 520 });
+      });
+      if (star !== undefined) huddles.set(star[0], { x: cx, y: cy, face: star[1].yaw, delay: 0 });
+    }
+
     for (const [p, b] of this.bodies) {
       if (b.leaving) continue;
       const won = this.teamOf(p) === winner;
       const style = (b.seed * 7 + 3) % 3;
+      const spot = huddles.get(p);
       let keys: Key[];
       let jump: Jump | null = null;
       if (!won && grounded(b.shape) > 0.5) {
         // Down after a ball that got past him: a moment on the floor first.
         keys = timeline(0, [[0, b.shape], [650, b.shape], [1000, DIVE_PUSH], [1450, HIPS], [2100, HIPS], [2500, STAND]]);
-      } else if (!won) {
+      } else if (won && p === hero && spot !== undefined) {
+        // The one who won it: a roar for a block or an ace, a leap for a kill — then the others are on him.
+        if (how === 'block' || how === 'ace') {
+          keys = timeline(0, [[0, b.shape], [160, ROAR], [420, FIST_DOWN], [620, ROAR], [1000, ARMS_UP], [1350, HUDDLE_UP], [1750, HUDDLE_IN], [2150, STAND]]);
+        } else {
+          keys = timeline(0, [[0, b.shape], [200, ARMS_UP], [700, FIST], [950, FIST_DOWN], [1350, HUDDLE_UP], [1750, HUDDLE_IN], [2150, STAND]]);
+          jump = { up: 140, peak: 330, down: 520, h: 0.3 };
+        }
+      } else if (won && spot !== undefined) {
+        // Running in, hands up together in the middle, a slap, and back out.
+        const slap = style === 0 ? ARMS_UP : HUDDLE_UP;
+        keys = timeline(0, [[0, b.shape], [300, style === 2 ? FIST : CLAP_OPEN], [700, HUDDLE_IN], [900, slap], [1150, HUDDLE_UP], [1400, HUDDLE_IN], [1650, CLAP], [2050, STAND]]);
+        if (style !== 1) jump = { up: 860, peak: 1000, down: 1140, h: 0.16 };
+      } else if (won) {
+        if (style === 0) {
+          keys = timeline(0, [[0, b.shape], [180, ARMS_UP], [950, ARMS_UP], [1400, STAND]]);
+          jump = { up: 120, peak: 300, down: 480, h: 0.22 };
+        } else if (style === 1) {
+          keys = timeline(0, [[0, b.shape], [170, FIST], [380, FIST_DOWN], [600, FIST], [850, FIST_DOWN], [1350, STAND]]);
+        } else {
+          keys = timeline(0, [
+            [0, b.shape], [150, CLAP_OPEN], [290, CLAP], [430, CLAP_OPEN], [570, CLAP], [710, CLAP_OPEN], [850, CLAP],
+            [1300, STAND],
+          ]);
+        }
+      } else if (spot !== undefined) {
+        // It sinks in — then together, a low five: the next one.
+        const sag = style === 1 ? KNEES : HIPS;
+        keys = timeline(0, [[0, b.shape], [320, sag], [800, sag], [1150, LOW_FIVE], [1350, CLAP], [1550, LOW_FIVE], [1950, STAND]]);
+      } else {
         const sag = style === 1 ? KNEES : HIPS;
         keys = timeline(0, [[0, b.shape], [320, sag], [1300, sag], [1750, STAND]]);
-      } else if (style === 0) {
-        keys = timeline(0, [[0, b.shape], [180, ARMS_UP], [950, ARMS_UP], [1400, STAND]]);
-        jump = { up: 120, peak: 300, down: 480, h: 0.22 };
-      } else if (style === 1) {
-        keys = timeline(0, [[0, b.shape], [170, FIST], [380, FIST_DOWN], [600, FIST], [850, FIST_DOWN], [1350, STAND]]);
-      } else {
-        keys = timeline(0, [
-          [0, b.shape], [150, CLAP_OPEN], [290, CLAP], [430, CLAP_OPEN], [570, CLAP], [710, CLAP_OPEN], [850, CLAP],
-          [1300, STAND],
-        ]);
       }
       const last = keys[keys.length - 1].t;
       b.reaction = { kind: won ? 'celebrate' : 'dejected', t0: now, tc: now, keys, jump, yaw: null, path: null, end: last + 60 };
+      b.huddle = spot !== undefined ? { x: spot.x, y: spot.y, face: spot.face, from: now + spot.delay, until: now + last - 200 } : null;
     }
     this.coaches.forEach((c, t) => {
       const keys = t === winner
@@ -1363,7 +1450,7 @@ export class CourtMotion {
       // Where it came down, and the line judge's flag for it.
       const landing = this.flight?.to;
       if (landing !== undefined && landing.z < 0.6) this.flagLanding(now, landing, this.point.out);
-      this.react(now, this.point.team);
+      this.react(now, this.point.team, this.point.how, this.point.hero);
       this.cheer = { team: this.point.team, t0: now, big: this.point.big };
       // The ball is down: whistle, and the point to the side that won it.
       this.calls.unshift({ kind: 'point', team: this.point.team, out: this.point.out });
@@ -1523,8 +1610,9 @@ export class CourtMotion {
         const keys = timeline(0, [[0, b.shape], [140, SLAP], [380, SLAP], [620, b.posture]]);
         b.reaction = { kind: 'celebrate', t0: now, tc: now, keys, jump: null, yaw: null, path: null, end: 680 };
       }
-      const goalX = b.via !== null ? b.via.x : b.tx + b.ox;
-      const goalY = b.via !== null ? b.via.y : b.ty + b.oy;
+      const huddling = b.huddle != null && now >= b.huddle.from && now < b.huddle.until;
+      const goalX = huddling ? b.huddle!.x : b.via !== null ? b.via.x : b.tx + b.ox;
+      const goalY = huddling ? b.huddle!.y : b.via !== null ? b.via.y : b.ty + b.oy;
       const dx = (waiting ? path.from.x : goalX) - b.x;
       const dy = (waiting ? path.from.y : goalY) - b.y;
       const dist = Math.hypot(dx, dy);
@@ -1564,7 +1652,12 @@ export class CourtMotion {
     const net = netYaw(b.ty);
     const remaining = Math.hypot(b.tx + b.ox - b.x, b.ty + b.oy - b.y);
     let face: number;
-    if (action !== null && action.yaw !== null && rel > -Math.max(350, (action.tc - action.t0) * 0.6)) face = action.yaw;
+    const huddle = b.huddle != null && now >= b.huddle.from && now < b.huddle.until ? b.huddle : null;
+    if (huddle !== null) {
+      // Into the huddle: running to it, then facing in.
+      const d = Math.hypot(huddle.x - b.x, huddle.y - b.y);
+      face = d > 0.9 && speed > 1.5 ? yawTo(b.vx, b.vy) : huddle.face;
+    } else if (action !== null && action.yaw !== null && rel > -Math.max(350, (action.tc - action.t0) * 0.6)) face = action.yaw;
     else if ((speed > 2.6 && remaining > 1.5) || (b.via !== null && speed > 0.8)) face = yawTo(b.vx, b.vy);
     else if (b.side !== null) face = yawTo(-b.x, -b.y * 0.5);
     else if (ball !== null && b.pose !== 'stand' && b.pose !== 'hold') face = clampYaw(yawTo(ball.x - b.x, ball.y - b.y), net, 1.2);

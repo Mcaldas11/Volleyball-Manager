@@ -14,9 +14,10 @@ export type IconName =
   | 'press' | 'whistle' | 'clock' | 'star' | 'ball' | 'alert' | 'collapse'
   | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check'
   | 'inbox' | 'archive' | 'medical' | 'coin' | 'contract' | 'board' | 'playOutline' | 'chevronLeft' | 'arrowRight'
-  | 'career' | 'sound' | 'mute' | 'help' | 'download' | 'upload' | 'lock';
+  | 'career' | 'sound' | 'mute' | 'help' | 'download' | 'upload' | 'lock' | 'spark';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
+  spark: <><path d="M11 3.5 12.9 9.1 18.5 11l-5.6 1.9L11 18.5l-1.9-5.6L3.5 11l5.6-1.9L11 3.5Z" /><path d="M18.5 15.5v4M16.5 17.5h4" /></>,
   home: <><path d="M3.5 10.5 12 4l8.5 6.5" /><path d="M5.5 9v10.5h13V9" /><path d="M10 19.5v-5h4v5" /></>,
   squad: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5" /><path d="M15.5 5.2a3 3 0 0 1 0 5.6" /><path d="M17 14.3c1.9.6 3.1 2.2 3.5 4.7" /></>,
   tactics: <><rect x="4" y="3.5" width="16" height="17" rx="1.5" /><path d="M4 12h16" /><circle cx="8.5" cy="7.8" r="1.1" /><circle cx="15.5" cy="7.8" r="1.1" /><path d="m8 15.5 2 2m0-2-2 2" /><path d="M14 17.5c1-1.8 2.2-2.5 3.5-2.2" /></>,
