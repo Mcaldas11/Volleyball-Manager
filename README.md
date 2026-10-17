@@ -305,6 +305,16 @@ Before submitting a change:
       a cool edge from the far stand, film-like tone mapping that keeps the
       kits' colours. In the women's game, women's bodies and hair (a ponytail,
       a bun or a bob)
+- [x] Players move as athletes do: each move flows through its key poses on
+      one smooth curve rather than stopping at each, and the body carries its
+      momentum into the next when one is cut short; they speed up and brake
+      instead of starting and stopping dead, leaning into a burst of pace and
+      back off a hard stop, and turn with a swing. Running, the foot on the
+      floor stays put while the body passes over it — the faster the run, the
+      less of each stride it spends there — and the heel kicks up behind; the
+      first step comes from the feet together. A jump leaves the floor and
+      lands through the legs, with a give at the knees; the head follows the
+      ball a moment behind it
 - [x] A coach's bar during the match: a timeout opens the timeout screen;
       the substitutions panel holds play while it is open; clicking one of
       your players beside the court offers who could come on for him; any

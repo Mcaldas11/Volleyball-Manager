@@ -95,7 +95,7 @@ export interface Shape {
   oElbow: number;
 }
 
-const SHAPE_KEYS = [
+export const SHAPE_KEYS = [
   'crouch', 'hipShift', 'tilt', 'lean', 'twist', 'bend', 'nod', 'stance', 'stride', 'tuck', 'point', 'dive', 'roll',
   'hFlex', 'hAbd', 'hTwist', 'hElbow', 'oFlex', 'oAbd', 'oTwist', 'oElbow',
 ] as const satisfies ReadonlyArray<keyof Shape>;
@@ -180,11 +180,51 @@ export interface Motion {
   /** Where the head turns to, rad, relative to the way the body faces. */
   lookYaw: number;
   lookPitch: number;
+  /** How fast the player is speeding up, in the body frame, m/s²: the body leans into it — forward
+   *  pushing off, back braking, in towards a turn. */
+  accelX?: number;
+  accelY?: number;
 }
 
 export const STILL: Motion = { hand: 1, gait: 0, moveX: 0, moveY: 0, airborne: 0, lookYaw: 0, lookPitch: 0 };
 
-/** Length of a running stride at a speed, m. */
+/**
+ * Where a foot is along the stride, -1 (behind) to 1 (ahead), through the running cycle. On the
+ * floor for `duty` of it, round the middle of the turn, going back at an even pace — so, the stride
+ * matched to the speed, it stays planted while the body passes over it — and swung through in the
+ * air for the rest: leaving the floor and meeting it again at the floor's pace, so the foot never
+ * jerks, the heel carrying on up behind first and the foot reaching out ahead and pawing back
+ * before it lands.
+ */
+export function strideAt(phase: number, duty = 0.5): number {
+  const u = swingOf(phase, duty);
+  if (u === null) {
+    const p = ((phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    return 1 - (p - Math.PI + Math.PI * duty) / (Math.PI * duty);
+  }
+  // A cubic from behind to ahead whose ends keep the stance's pace.
+  const m = (-2 * (1 - duty)) / duty;
+  return ((-4 * u + 6) * u * u - 1) + m * ((2 * u - 3) * u + 1) * u;
+}
+
+/** How high a foot is lifted through the cycle, 0 to 1: off the floor and back onto it gently, the heel kicked up early in the swing. */
+export function footLiftAt(phase: number, duty = 0.5): number {
+  const u = swingOf(phase, duty);
+  if (u === null) return 0;
+  const up = Math.sin(Math.PI * u);
+  return up * up * (1.25 - 0.5 * u);
+}
+
+/** How far through its swing a foot is, 0 to 1 — or null, on the floor. */
+function swingOf(phase: number, duty: number): number | null {
+  const p = ((phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const off = Math.PI * (1 + duty);
+  const into = (((p - off) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const swing = Math.PI * 2 * (1 - duty);
+  return into < swing ? into / swing : null;
+}
+
+/** Length of a running stride at a speed, m: one foot's landing to its next. */
 export function strideLength(speed: number): number {
   return Math.min(1.3, 0.3 + 0.17 * speed);
 }
@@ -217,9 +257,13 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const stride = strideLength(speed);
   // Running, the hips sink as each foot takes the weight under the body and
   // rise through the stride.
-  const bob = run * 0.03 * (1 - Math.abs(Math.sin(m.gait)));
-  // Leaning into the run, a little more the faster it is.
-  const drive = Math.min(0.12, 0.022 * Math.max(0, m.moveY)) * (1 - m.airborne);
+  const bob = run * 0.03 * Math.cos(m.gait) ** 2;
+  // Leaning into the run, a little more the faster it is — and into a burst of pace, back off a
+  // hard stop: the body carries its weight.
+  const push = 0.14 * Math.tanh((m.accelY ?? 0) / 7);
+  const drive = (Math.min(0.12, 0.022 * Math.max(0, m.moveY)) + push) * (1 - m.airborne);
+  // In towards a turn or a sideways push, about the feet.
+  const bank = 0.09 * Math.tanh((m.accelX ?? 0) / 7) * (1 - m.airborne);
 
   const pelvisZ = HIP_HEIGHT - s.crouch - bob;
   const pitch = -(s.tilt + drive);
@@ -248,13 +292,16 @@ export function buildRig(s: Shape, m: Motion): Rig {
   // the way the player is moving and lifting it on the way through.
   const dirX = speed > 1e-3 ? m.moveX / speed : 0;
   const dirY = speed > 1e-3 ? m.moveY / speed : 0;
+  const half = Math.min(0.28, stride / 2);
+  const duty = Math.max(0.2, Math.min(0.5, half / stride));
   const legOf = (side: -1 | 1): Limb => {
     const ahead = side === m.hand ? -s.stride / 2 : s.stride / 2;
     const phase = m.gait + (side === 1 ? Math.PI : 0);
-    // Feet land under the body rather than far out in front, and the heel
-    // kicks up behind on the way through.
-    const reach = Math.min(0.42, stride / 2) * run * Math.sin(phase);
-    const lift = run * (0.05 + 0.04 * speed) * Math.max(0, Math.cos(phase)) * (1 - 0.55 * Math.sin(phase));
+    // Feet land under the body rather than far out in front — no further than a leg reaches — and
+    // the heel kicks up behind on the way through. The faster the run the less of each stride a
+    // foot spends on the floor, so the one on it keeps pace with the floor.
+    const reach = half * Math.min(1, run * 1.6) * strideAt(phase, duty);
+    const lift = run * (0.05 + 0.04 * speed) * footLiftAt(phase, duty);
     const ax = side * s.stance + dirX * reach;
     const ay = ahead + dirY * reach - m.airborne * s.tuck * 0.45;
     const az = BONES.ankle + lift + m.airborne * s.tuck;
@@ -276,7 +323,7 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const shoulderLift = (flex: number): number => 0.05 * Math.min(1, Math.max(0, (flex - 1.6) / 1.4));
   return {
     // The chest's depth keeps a body flat out on the floor from sinking through it.
-    root: { pitch: -s.dive, roll: s.roll, rise: 0.03 * Math.max(Math.sin(Math.abs(s.dive)), Math.sin(Math.abs(s.roll))) },
+    root: { pitch: -s.dive, roll: s.roll + bank, rise: 0.03 * Math.max(Math.sin(Math.abs(s.dive)), Math.sin(Math.abs(s.roll))) },
     pelvis: { y: s.hipShift, z: pelvisZ, pitch },
     spine: { x: -(s.lean + drive), y: s.bend * m.hand, z: twist },
     head: {

@@ -16,6 +16,10 @@
  * reach over the net; a jump server tosses, runs in under the toss and hits
  * it at the top of the jump. Each player stands and jumps where their own
  * reach (they are scaled to their real height) puts the hands on the ball.
+ * Moves flow into one another as a body's do: the keys of a move are joined
+ * by one smooth curve rather than stopped at, players speed up and brake
+ * rather than starting and stopping dead, turn with a swing, and every part
+ * of the body carries its momentum through a move cut short or begun anew.
  * When the ball lands, the side that won the point celebrates and the other
  * lets it sink in.
  *
@@ -32,7 +36,7 @@ import {
   ballAlong, flightBulge, NET_HEIGHT, tossesWithBothHands, type Ball3, type Pose, type Scene,
 } from './matchCourt.ts';
 import {
-  arms, buildRig, COVER, HOLD, jointPositions, mixShape, READY, REF_HEIGHT, shape, STAND, STILL, strideLength,
+  arms, buildRig, COVER, HOLD, jointPositions, mixShape, READY, REF_HEIGHT, shape, SHAPE_KEYS, STAND, STILL, strideLength,
   type Rig, type Shape, type V3,
 } from './playerRig.ts';
 import type { Cheer } from './crowd3d.ts';
@@ -277,6 +281,8 @@ interface Path {
    *  runs from wherever they have got to — the plant it runs to, and where
    *  the jump lands. */
   from: { x: number; y: number };
+  /** How fast they were going when it began, m/s. */
+  v0: { x: number; y: number };
   started: boolean;
   plant: { x: number; y: number };
   land: { x: number; y: number };
@@ -318,17 +324,49 @@ function smooth(t: number): number {
   return c * c * (3 - 2 * c);
 }
 
+type ShapeKey = (typeof SHAPE_KEYS)[number];
+
+/**
+ * The pace, per ms, at which the curve through the keys passes key `j`, arriving (`side` -1) or
+ * leaving (+1). A monotone cubic (Fritsch–Butland): never beyond a key, so a move flows on through
+ * its keys rather than stopping at each, level only at its first and last and wherever it turns
+ * back — and arriving at a 'whip' key at speed, carrying on through it if the next goes on the same way.
+ */
+function pace(keys: Key[], j: number, k: ShapeKey, side: -1 | 1): number {
+  const c = keys[j];
+  const p = keys[j - 1];
+  const n = keys[j + 1];
+  if (p === undefined) return 0;
+  const h0 = c.t - p.t;
+  const d0 = (c.s[k] - p.s[k]) / h0;
+  if (c.ease === 'whip' && side < 0) return 2 * d0;
+  if (n === undefined) return 0;
+  const h1 = n.t - c.t;
+  const d1 = (n.s[k] - c.s[k]) / h1;
+  if (d0 * d1 <= 0) return 0;
+  if (c.ease === 'whip') return Math.sign(d0) * Math.min(2 * Math.abs(d0), 3 * Math.abs(d1));
+  return (3 * (h0 + h1)) / ((2 * h1 + h0) / d0 + (h1 + 2 * h0) / d1);
+}
+
 function sample(keys: Key[], rel: number): Shape {
+  const last = keys.length - 1;
   if (rel <= keys[0].t) return keys[0].s;
-  for (let i = 1; i < keys.length; i++) {
-    const b = keys[i];
-    if (rel < b.t) {
-      const a = keys[i - 1];
-      const u = (rel - a.t) / (b.t - a.t);
-      return mixShape(a.s, b.s, b.ease === 'whip' ? u * u : smooth(u));
-    }
-  }
-  return keys[keys.length - 1].s;
+  if (rel >= keys[last].t) return keys[last].s;
+  let i = 1;
+  while (keys[i].t <= rel) i++;
+  const a = keys[i - 1];
+  const b = keys[i];
+  const h = b.t - a.t;
+  const u = (rel - a.t) / h;
+  const u2 = u * u;
+  const u3 = u2 * u;
+  const h00 = 2 * u3 - 3 * u2 + 1;
+  const h10 = (u3 - 2 * u2 + u) * h;
+  const h01 = 3 * u2 - 2 * u3;
+  const h11 = (u3 - u2) * h;
+  const out = { ...a.s };
+  for (const k of SHAPE_KEYS) out[k] = h00 * a.s[k] + h10 * pace(keys, i - 1, k, 1) + h01 * b.s[k] + h11 * pace(keys, i, k, -1);
+  return out;
 }
 
 function liftAt(j: Jump, rel: number): number {
@@ -379,7 +417,8 @@ export interface Body {
   running: number;
   action: Action | null;
   reaction: Action | null;
-  fade: { from: Shape; t0: number } | null;
+  /** The momentum of every part of the body, kept from frame to frame — made on the first. */
+  flow?: Flow;
   alpha: number;
   leaving: boolean;
   /** Size relative to the reference body. */
@@ -483,10 +522,124 @@ export function flightAt(f: Flight, now: number): Ball3 {
   return at;
 }
 
-/** Top running speed and how quickly players close on their mark. */
+/** Top running speed; how hard players can speed up and brake, and how close to their mark they
+ *  ease off rather than brake; how fast they can turn. */
 const MAX_SPEED = 7.5; // m/s
-const SETTLE = 0.2; // s
+const ACCEL = 18; // m/s²
+const BRAKE = 24; // m/s²
+const SETTLE = 0.12; // s
 const TURN_RATE = 10; // rad/s
+
+/** A step bigger than this, and this much bigger than the step before, is a jump. */
+const JUMP = 0.05;
+
+/**
+ * A value that follows what it is asked for with the momentum of a body. While what is asked for
+ * flows, it keeps to it exactly, at its pace; where that jumps — a move cut short, another begun —
+ * or changes pace at a stroke, it carries on the way it was going and catches up over about `time`
+ * s: a critically damped spring on the difference (the "smooth damp" of Game Programming Gems 4).
+ */
+class Follow {
+  x: number;
+  /** Its pace, per s. */
+  v = 0;
+  /** What it was asked for last; how far that moved last frame, and how fast it has been flowing. */
+  private aim: number;
+  private moved = 0;
+  private pace = 0;
+
+  constructor(x: number) {
+    this.x = x;
+    this.aim = x;
+  }
+
+  /** Moves on `dt` s towards `aim`, catching up no faster than `most` per s; returns where it has got to. */
+  step(aim: number, dt: number, time: number, most = Infinity): number {
+    if (dt <= 0) return this.x;
+    const move = aim - this.aim;
+    if (dt > 0.1) {
+      this.aim = aim;
+      // After a stall, from where it should be.
+      this.x = aim;
+      this.v = 0;
+      this.moved = 0;
+      this.pace = 0;
+      return aim;
+    }
+    // A jump is no pace to follow: through one, it is taken to flow on as it was. A fast move
+    // gathering pace — an arm whipped through — is no jump.
+    const jumped = Math.abs(move) > JUMP && Math.abs(move - this.moved) > JUMP + Math.abs(this.moved);
+    const pace = Math.max(-most, Math.min(most, jumped ? this.pace : move / dt));
+    // The spring works on how far off it is from what it follows, which carries on at its pace —
+    // a jump left out, for the spring to take up from the next frame.
+    const w = 2 / time;
+    const k = w * dt;
+    const e = 1 / (1 + k + 0.48 * k * k + 0.235 * k * k * k);
+    const off = Math.max(-most * time, Math.min(most * time, this.x - this.aim));
+    const base = this.x - off;
+    const v = this.v - pace;
+    const t = (v + w * off) * dt;
+    const to = base + pace * dt + (off + t) * e;
+    this.x += Math.max(-most * dt, Math.min(most * dt, to - this.x));
+    this.v = Math.max(-most, Math.min(most, pace + (v - w * t) * e));
+    this.aim = aim;
+    this.moved = move;
+    this.pace = pace;
+    return this.x;
+  }
+}
+
+/** Everything about a body that carries momentum from one frame to the next. */
+interface Flow {
+  /** Each part of the shape, in SHAPE_KEYS order. */
+  shape: Follow[];
+  /** The way they face, unwrapped. */
+  yaw: Follow;
+  /** Where the head is turned to, relative to the body. */
+  lookYaw: Follow;
+  lookPitch: Follow;
+  /** How hard they are speeding up across the floor, m/s², eased in and out as a body's weight shifts. */
+  ax: Follow;
+  ay: Follow;
+  /** How fast they are going, in the body's frame, as the legs take it up: a first step, not a leap into stride. */
+  moveX: Follow;
+  moveY: Follow;
+  /** Last frame's height off the floor, m, and how fast it was changing, m/s. */
+  lift: number;
+  liftV: number;
+}
+
+const CROUCH = SHAPE_KEYS.indexOf('crouch');
+
+function flowOf(b: Body): Flow {
+  b.flow ??= {
+    shape: SHAPE_KEYS.map((k) => new Follow(b.shape[k])),
+    yaw: new Follow(b.yaw),
+    lookYaw: new Follow(0),
+    lookPitch: new Follow(0),
+    ax: new Follow(0),
+    ay: new Follow(0),
+    moveX: new Follow(0),
+    moveY: new Follow(0),
+    lift: b.lift,
+    liftV: 0,
+  };
+  return b.flow;
+}
+
+/** The shape the body takes, asked for `aim`: each part followed with its momentum. */
+function flowShape(f: Flow, aim: Shape, dt: number, time: number): Shape {
+  const out = { ...aim };
+  SHAPE_KEYS.forEach((k, i) => {
+    out[k] = f.shape[i].step(aim[k], dt, time);
+  });
+  return out;
+}
+
+/** The head turned to the ball, a moment behind it as eyes and neck are. */
+function lookAt(f: Flow, yaw: number, pitch: number, dt: number): [number, number] {
+  return [f.lookYaw.step(yaw, dt, 0.12), f.lookPitch.step(pitch, dt, 0.12)];
+}
 
 /** How fast the ball spins off each kind of contact. */
 const SPIN: Partial<Record<Pose, number>> = { spike: 32, serve: 36, float: 0.4, set: -3, receive: 6, dig: 9, pass: 5 };
@@ -570,6 +723,7 @@ function runUp(b: Body, go: number, up: number, carry: number, from = { x: b.x, 
   const drift = Math.min(0.5, carry * dist);
   return {
     from,
+    v0: { x: 0, y: 0 },
     started: false,
     plant: { x: mark.x - (dx * drift) / 2, y: mark.y - (dy * drift) / 2 },
     land: { x: mark.x + (dx * drift) / 2, y: mark.y + (dy * drift) / 2 },
@@ -627,7 +781,7 @@ export class CourtMotion {
     const r = REFEREE_STAND;
     this.referee = {
       x: r.x, y: r.y, tx: r.x, ty: r.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: -Math.PI / 2, lift: r.height, vz: 0,
-      pose: 'stand', posture: REF_REST, shape: REF_REST, gait: 0, running: 0, action: null, reaction: null, fade: null,
+      pose: 'stand', posture: REF_REST, shape: REF_REST, gait: 0, running: 0, action: null, reaction: null,
       alpha: 1, leaving: false, scale: 1.85 / REF_HEIGHT, hand: 1, seed: 7,
       rig: buildRig(REF_REST, STILL), side: null, via: null, home: null,
     };
@@ -641,7 +795,7 @@ export class CourtMotion {
     return {
       x: at.x, y: at.y, tx: at.x, ty: at.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: yawTo(-at.x, -at.y * 0.4), lift: 0, vz: 0,
       pose: 'stand', posture: LJ_REST, shape: LJ_REST, gait: 0, running: 0, action: null, reaction: null,
-      fade: null, alpha: 1, leaving: false, scale: 1.8 / REF_HEIGHT, hand: 1, seed: 21 + i,
+      alpha: 1, leaving: false, scale: 1.8 / REF_HEIGHT, hand: 1, seed: 21 + i,
       rig: buildRig(LJ_REST, STILL), side: null, via: null, home: null,
     };
   }
@@ -667,7 +821,7 @@ export class CourtMotion {
     return {
       x: at.x, y: at.y, tx: at.x, ty: at.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: yawTo(1, -side * 0.35), lift: 0, vz: 0,
       pose: 'stand', posture: COACH_IDLE, shape: COACH_IDLE, gait: 0, running: 0, action: null, reaction: null,
-      fade: null, alpha: 1, leaving: false, scale: 1.82 / REF_HEIGHT, hand: 1, seed: 11 + team,
+      alpha: 1, leaving: false, scale: 1.82 / REF_HEIGHT, hand: 1, seed: 11 + team,
       rig: buildRig(COACH_IDLE, STILL), side: null, via: null, home: null,
     };
   }
@@ -775,7 +929,7 @@ export class CourtMotion {
     const y = at.y + side * 0.7;
     return {
       x, y, tx: x, ty: y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: yawTo(1, 0), lift: 0, vz: 0,
-      pose: 'stand', posture: STAND, shape: STAND, gait: 0, running: 0, action: null, reaction: null, fade: null,
+      pose: 'stand', posture: STAND, shape: STAND, gait: 0, running: 0, action: null, reaction: null,
       alpha: 1, leaving: false, scale: 1.8 / REF_HEIGHT, hand: 1, seed: 23 + team,
       rig: buildRig(STAND, STILL), side: null, via: null, home: null, tend: 0,
     };
@@ -918,7 +1072,7 @@ export class CourtMotion {
     const posture = postureOf(pose);
     return {
       x: startX, y, tx: x, ty: y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: netYaw(y), lift: 0, vz: 0,
-      pose, posture, shape: posture, gait: 0, running: 0, action: null, reaction: null, fade: null,
+      pose, posture, shape: posture, gait: 0, running: 0, action: null, reaction: null,
       alpha: this.first ? 1 : 0, leaving: false,
       scale: Math.min(1.12, Math.max(0.85, f.height / REF_HEIGHT)), hand: f.hand, seed: p,
       rig: buildRig(posture, { ...STILL, hand: f.hand }), side: null, via: null, home: null,
@@ -944,7 +1098,6 @@ export class CourtMotion {
     const towardsAim = aim !== null ? clampYaw(yawTo(aim.x - b.tx, aim.y - b.ty), net, 0.9) : net;
     const incoming = this.flight !== null ? yawTo(this.flight.from.x - this.flight.to.x, this.flight.from.y - this.flight.to.y) : net;
     const act = (kind: ActionKind, keys: Key[], end: number, yaw: number | null, jump: Jump | null = null, path: Path | null = null): void => {
-      if (b.action !== null) b.fade = { from: b.shape, t0: now };
       b.action = { kind, t0: now, tc, keys, jump, yaw, path, end };
     };
 
@@ -963,8 +1116,8 @@ export class CourtMotion {
           [-pre, serving ? HOLD : APPROACH],
           // A jump server throws the ball up at once — early, high and forward.
           ...(serving ? [[-pre + Math.min(160, pre * 0.15), TOSS] as [number, Shape]] : []),
-          // Arms thrown back only over the last two steps.
-          [-T - 320, APPROACH], [-T - 110, LOAD], [-T, TAKEOFF], [-T * 0.45, COCKED], [0, STRIKE, 'whip'], [120, FOLLOW],
+          // Arms thrown back only over the last two steps, and swung up through the plant.
+          [-T - 380, APPROACH], [-T - 160, LOAD], [-T, TAKEOFF], [-T * 0.45, COCKED], [0, STRIKE, 'whip'], [120, FOLLOW],
           [T + 30, LAND], [T + 430, READY],
         ]);
         // A server runs in from where they tossed the ball out of their hands.
@@ -1116,7 +1269,6 @@ export class CourtMotion {
       [-pre, READY], [-lunge, DIG_LOW], [-Math.min(150, lunge * 0.5), reachShape], [0, hitShape, 'whip'],
       [wide ? 240 : 210, flat], [wide ? 640 : 700, flat], [wide ? 940 : 1020, up], [wide ? 1280 : 1380, READY],
     ]);
-    if (b.action !== null) b.fade = { from: b.shape, t0: now };
     b.action = { kind: 'dig', t0: now, tc, keys, jump: null, yaw, path: null, end: wide ? 1380 : 1480 };
   }
 
@@ -1231,9 +1383,9 @@ export class CourtMotion {
     }
     if (this.signal !== null && now > this.signal.end) this.signal = null;
     const ball = this.ballAt(now);
-    this.stepReferee(now, ball);
-    for (const c of this.coaches) this.stepStill(c, now, ball);
-    for (const j of this.lineJudges) this.stepStill(j, now, ball);
+    this.stepReferee(dt, now, ball);
+    for (const c of this.coaches) this.stepStill(c, dt, now, ball);
+    for (const j of this.lineJudges) this.stepStill(j, dt, now, ball);
     this.stepMedic(dt, now);
     for (const [p, b] of this.bodies) {
       if (b.side === 'bench' && b.home !== null && b.via === null) this.warmUp(p, b, now);
@@ -1269,10 +1421,12 @@ export class CourtMotion {
   }
 
   /** Someone who stays put — a coach at his bench — following the ball with his eyes, and reacting to the points. */
-  private stepStill(r: Body, now: number, ball: Ball3 | null): void {
+  private stepStill(r: Body, dt: number, now: number, ball: Ball3 | null): void {
     if (r.reaction !== null && now - r.reaction.tc > r.reaction.end) r.reaction = null;
+    const f = flowOf(r);
     let s = r.posture;
     if (r.reaction !== null) s = mixShape(s, sample(r.reaction.keys, now - r.reaction.tc), weight(r.reaction, now));
+    s = flowShape(f, s, dt, 0.1);
     r.shape = s;
     let lookYaw = 0;
     let lookPitch = 0;
@@ -1282,16 +1436,19 @@ export class CourtMotion {
       lookYaw = Math.max(-1.2, Math.min(1.2, wrap(yawTo(dx, dy) - r.yaw)));
       lookPitch = 0.4 * Math.atan2(ball.z - 1.7, Math.max(0.5, Math.hypot(dx, dy)));
     }
+    [lookYaw, lookPitch] = lookAt(f, lookYaw, lookPitch, dt);
     r.rig = buildRig(s, { ...STILL, lookYaw, lookPitch });
   }
 
   /** The referee stays put on the stand, following the ball with their eyes
    *  between signals. */
-  private stepReferee(now: number, ball: Ball3 | null): void {
+  private stepReferee(dt: number, now: number, ball: Ball3 | null): void {
     const r = this.referee;
     if (r.reaction !== null && now - r.reaction.tc > r.reaction.end) r.reaction = null;
+    const f = flowOf(r);
     let s = r.posture;
     if (r.reaction !== null) s = mixShape(s, sample(r.reaction.keys, now - r.reaction.tc), weight(r.reaction, now));
+    s = flowShape(f, s, dt, 0.1);
     r.shape = s;
     let lookYaw = 0;
     let lookPitch = 0;
@@ -1301,6 +1458,7 @@ export class CourtMotion {
       lookYaw = wrap(yawTo(dx, dy) - r.yaw);
       lookPitch = 0.5 * Math.atan2(ball.z - r.lift - 1.7, Math.max(0.5, Math.hypot(dx, dy)));
     }
+    [lookYaw, lookPitch] = lookAt(f, lookYaw, lookPitch, dt);
     r.rig = buildRig(s, { ...STILL, lookYaw, lookPitch });
   }
 
@@ -1310,21 +1468,39 @@ export class CourtMotion {
     if (b.reaction !== null && now - b.reaction.tc > b.reaction.end) b.reaction = null;
     const action = b.action;
     const rel = action !== null ? now - action.tc : 0;
+    const f = flowOf(b);
 
     // ---- Where the feet go ----
     const px = b.x;
     const py = b.y;
+    const pvx = b.vx;
+    const pvy = b.vy;
     const path = action?.path ?? null;
     if (path !== null && rel >= path.go && rel <= path.down) {
       if (!path.started) {
         path.started = true;
         path.from = { x: b.x, y: b.y };
+        path.v0 = { x: b.vx, y: b.vy };
       }
       if (rel < path.up) {
-        // Accelerating in, braking into the plant.
-        const e = smooth((rel - path.go) / Math.max(1, path.up - path.go));
-        b.x = path.from.x + (path.plant.x - path.from.x) * e;
-        b.y = path.from.y + (path.plant.y - path.from.y) * e;
+        // One curve from where they are, at the pace they were going, braking into the plant at
+        // the pace the jump carries on: no stop as the run-up begins, none as they leave the floor.
+        const span = Math.max(1, path.up - path.go) / 1000;
+        const air = Math.max(1, path.down - path.up) / 1000;
+        const toX = path.plant.x - path.from.x;
+        const toY = path.plant.y - path.from.y;
+        // Going the wrong way, they don't loop out wide first.
+        const lead = Math.hypot(path.v0.x, path.v0.y) * span;
+        const room = 1.5 * Math.hypot(toX, toY) + 0.4;
+        const q = lead > room ? room / lead : 1;
+        const u = Math.min(1, Math.max(0, (rel - path.go) / Math.max(1, path.up - path.go)));
+        const u2 = u * u;
+        const u3 = u2 * u;
+        const h10 = (u3 - 2 * u2 + u) * span * q;
+        const h01 = 3 * u2 - 2 * u3;
+        const h11 = (u3 - u2) * span;
+        b.x = path.from.x + toX * h01 + path.v0.x * h10 + ((path.land.x - path.plant.x) / air) * h11;
+        b.y = path.from.y + toY * h01 + path.v0.y * h10 + ((path.land.y - path.plant.y) / air) * h11;
       } else {
         const u = (rel - path.up) / Math.max(1, path.down - path.up);
         b.x = path.plant.x + (path.land.x - path.plant.x) * u;
@@ -1334,6 +1510,10 @@ export class CourtMotion {
         // Once in the air the mark is wherever they come down.
         b.ox = path.land.x - b.tx;
         b.oy = path.land.y - b.ty;
+      }
+      if (dt > 0) {
+        b.vx = (b.x - px) / dt;
+        b.vy = (b.y - py) / dt;
       }
     } else {
       const waiting = path !== null && rel < path.go;
@@ -1352,16 +1532,31 @@ export class CourtMotion {
       // the floor after a dive, he goes nowhere until he is up again.
       const floored = Math.min(1, Math.max(0, (grounded(b.shape) - 1.0) * 3));
       const top = ((b.hurtGoal ?? 0) >= 1 ? 0 : b.limp === true ? MAX_SPEED * 0.2 : MAX_SPEED) * (1 - floored);
-      if (dist > 0.001 && b.lift < 0.05) {
-        const move = Math.min(dist, Math.min(top, dist / SETTLE) * dt);
-        b.x += (dx / dist) * move;
-        b.y += (dy / dist) * move;
+      if (b.lift < 0.05) {
+        // As fast as they can go and still stop on the mark, easing off the last stretch; speeding
+        // up and braking as legs can — harder to brake than to push off — never starting or
+        // stopping dead.
+        const want = dist > 0.005 ? Math.min(top, Math.sqrt(2 * BRAKE * dist), dist / SETTLE) / dist : 0;
+        const ex = dx * want - b.vx;
+        const ey = dy * want - b.vy;
+        const e = Math.hypot(ex, ey);
+        const most = (ex * b.vx + ey * b.vy < 0 ? BRAKE : ACCEL) * dt;
+        const k = e > most ? most / e : 1;
+        b.vx += ex * k;
+        b.vy += ey * k;
+      } else {
+        // Off the floor they carry on the way they were going, the jump soon taking it out of them.
+        const k = Math.exp(-dt / 0.15);
+        b.vx *= k;
+        b.vy *= k;
       }
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
     }
-    const k = 1 - Math.exp(-dt / 0.08);
     if (dt > 0) {
-      b.vx += ((b.x - px) / dt - b.vx) * k;
-      b.vy += ((b.y - py) / dt - b.vy) * k;
+      // How hard they are speeding up or braking: the body leans with it.
+      f.ax.step((b.vx - pvx) / dt, dt, 0.16);
+      f.ay.step((b.vy - pvy) / dt, dt, 0.16);
     }
     const speed = Math.hypot(b.vx, b.vy);
 
@@ -1374,10 +1569,9 @@ export class CourtMotion {
     else if (b.side !== null) face = yawTo(-b.x, -b.y * 0.5);
     else if (ball !== null && b.pose !== 'stand' && b.pose !== 'hold') face = clampYaw(yawTo(ball.x - b.x, ball.y - b.y), net, 1.2);
     else face = net;
-    const turn = wrap(face - b.yaw);
-    // Lying on the floor, the body doesn't spin round to the ball.
-    const turnRate = TURN_RATE * (grounded(b.shape) > 0.7 ? 0.05 : 1);
-    b.yaw = wrap(b.yaw + Math.max(-turnRate * dt, Math.min(turnRate * dt, turn * (1 - Math.exp(-dt / 0.06)))));
+    // Turning with a swing, not at a stroke. Lying on the floor, the body doesn't spin round to the ball.
+    const lying = grounded(b.shape) > 0.7;
+    b.yaw = wrap(f.yaw.step(f.yaw.x + wrap(face - f.yaw.x), dt, lying ? 0.5 : 0.09, TURN_RATE * (lying ? 0.05 : 1)));
 
     // ---- Off the floor ----
     const jumpNow = action !== null && action.jump !== null ? liftAt(action.jump, rel) : 0;
@@ -1385,11 +1579,22 @@ export class CourtMotion {
     const hop = r !== null && r.jump !== null ? liftAt(r.jump, now - r.tc) * Math.max(0, 1 - speed / 2.5) : 0;
     const lift = Math.max(jumpNow, hop);
     if (lift > 0) {
+      // Rising and falling with the jump — and, should it end before the floor comes, carrying
+      // on down at the pace it was falling.
+      b.vz = dt > 0 ? (lift - b.lift) / dt : 0;
       b.lift = lift;
-      b.vz = 0;
     } else if (b.lift > 0) {
       b.vz -= 9.81 * dt;
       b.lift = Math.max(0, b.lift + b.vz * dt);
+    }
+    if (dt > 0) {
+      // Leaving the floor and landing on it, the hips carry on as they were going and the legs take
+      // up the difference: the feet snatched up off the floor, and a give at the knees as it stops them.
+      const liftV = (b.lift - f.lift) / dt;
+      if (f.lift === 0 && liftV > 1) f.shape[CROUCH].v += liftV * 0.8;
+      if (b.lift === 0 && f.liftV < -1) f.shape[CROUCH].v -= f.liftV * 0.8;
+      f.lift = b.lift;
+      f.liftV = liftV;
     }
 
     // ---- The shape of the body ----
@@ -1407,11 +1612,6 @@ export class CourtMotion {
     s = { ...s, crouch: s.crouch + (b.pose === 'stand' ? 0.008 : 0.018) * idle };
     if (b.reaction !== null) s = mixShape(s, sample(b.reaction.keys, now - b.reaction.tc), weight(b.reaction, now));
     if (action !== null) s = mixShape(s, sample(action.keys, rel), weight(action, now));
-    if (b.fade !== null) {
-      const u = (now - b.fade.t0) / 140;
-      if (u >= 1) b.fade = null;
-      else s = mixShape(b.fade.from, s, smooth(u));
-    }
     // Hurt: down on one knee, or bent over a bad leg; the physio crouched over him.
     const hurtGoal = b.hurtGoal ?? 0;
     if (hurtGoal > 0 || (b.hurt ?? 0) > 0.001) {
@@ -1420,10 +1620,20 @@ export class CourtMotion {
     }
     if (b.limp === true && speed > 0.15) s = { ...s, crouch: s.crouch + 0.07 * Math.abs(Math.sin(b.gait)), bend: s.bend + 0.12 };
     if ((b.tend ?? 0) > 0.001) s = mixShape(s, TEND, b.tend!);
+    // Every part of the body carries its momentum from one move into the next — tighter close to
+    // a contact, so the hands still find the ball.
+    const tight = action !== null && CONTACTS.has(action.kind as Pose) && Math.abs(rel) < 160;
+    s = flowShape(f, s, dt, tight ? 0.05 : 0.1);
     b.shape = s;
 
     // ---- Running, and looking at the ball ----
-    b.gait += (Math.PI * speed * dt) / strideLength(speed);
+    const legsX = f.moveX.step(moveX, dt, 0.06);
+    const legsY = f.moveY.step(moveY, dt, 0.06);
+    const legs = Math.hypot(legsX, legsY);
+    b.gait += (Math.PI * legs * dt) / strideLength(legs);
+    // Coming to a stop the feet come together under the body, to set off from there again.
+    const still = Math.max(0, 1 - legs / 0.4);
+    if (still > 0) b.gait += (Math.round(b.gait / Math.PI) * Math.PI - b.gait) * (1 - Math.exp(-dt / 0.15)) * still;
     let lookYaw = 0;
     let lookPitch = 0;
     if (ball !== null) {
@@ -1432,8 +1642,12 @@ export class CourtMotion {
       lookYaw = wrap(yawTo(dx, dy) - b.yaw);
       lookPitch = 0.45 * Math.atan2(ball.z - 1.7 * b.scale - b.lift, Math.max(0.5, Math.hypot(dx, dy)));
     }
-    const airborne = Math.min(1, b.lift / 0.06);
-    b.rig = buildRig(s, { hand: b.hand, gait: b.gait, moveX, moveY, airborne, lookYaw, lookPitch });
+    [lookYaw, lookPitch] = lookAt(f, lookYaw, lookPitch, dt);
+    // Into the air the legs leave the run and draw up over the first of the rise, and reach down for the floor again on the way down.
+    const airborne = smooth(b.lift / 0.2);
+    const accelX = f.ax.x * c + f.ay.x * sn;
+    const accelY = -f.ax.x * sn + f.ay.x * c;
+    b.rig = buildRig(s, { hand: b.hand, gait: b.gait, moveX: legsX, moveY: legsY, airborne, lookYaw, lookPitch, accelX, accelY });
 
     const alphaTarget = b.leaving ? 0 : 1;
     b.alpha += (alphaTarget - b.alpha) * (1 - Math.exp(-dt / 0.25));
