@@ -26,6 +26,9 @@ export interface Prediction {
   order: number[];
   /** Owned up to, once the season was over. */
   settled?: boolean;
+  /** Worked out after the league had already begun — a career from before the papers printed tips —
+   *  so the table has them; nobody read them in the summer, so the board judges nothing by them. */
+  late?: boolean;
 }
 
 /** How long before a league's first match the tips come out, days. */
@@ -98,15 +101,21 @@ export function predictionsDay(world: World): void {
   for (const comp of world.competitions) {
     if (comp.kind !== 'league' || comp.participants.length < 4) continue;
     if (list.some((p) => p.leagueId === comp.id && p.season === world.season)) continue;
-    // Only once the season's fixtures are out, and only in the days before the first.
-    if (comp.table.some((r) => r.played > 0)) continue;
-    const first = firstDay(world, comp.fixtureIds);
-    if (first < 0 || world.day < first - AHEAD) continue;
     const rng = new Rng(`tips:${world.season}:${comp.id}`);
-    const order = comp.participants
+    const tips = (): number[] => comp.participants
       .map((id) => ({ id, s: paperStrength(world, world.clubs[id]?.players ?? []) + rng.gaussian(0, OPINION_SD) }))
       .sort((a, b) => b.s - a.s)
       .map((x) => x.id);
+    // A league already under way with no tips — a career from before the papers printed them:
+    // worked out quietly now, from the squads as they stand, so the table has them.
+    if (comp.table.some((r) => r.played > 0)) {
+      list.push({ season: world.season, leagueId: comp.id, day: world.day, order: tips(), late: true });
+      continue;
+    }
+    // Only once the season's fixtures are out, and only in the days before the first.
+    const first = firstDay(world, comp.fixtureIds);
+    if (first < 0 || world.day < first - AHEAD) continue;
+    const order = tips();
     list.push({ season: world.season, leagueId: comp.id, day: world.day, order });
     const name = (id: number): string => world.clubs[id]?.name ?? '?';
     const mine = own !== undefined && own.leagueId === comp.id;
@@ -162,6 +171,8 @@ export function predictionVerdicts(world: World): void {
       if (d > most) { most = d; surprise = id; }
     }
     const mine = own !== undefined && own.leagueId === p.leagueId;
+    // Tips nobody printed in the summer: nothing to own up to, nothing for the board to weigh.
+    if (p.late === true) continue;
     if (inThePaper(world, comp, mine)) {
       const right = p.order[0] === table[0];
       postNews(world, {

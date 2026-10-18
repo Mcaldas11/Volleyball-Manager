@@ -50,3 +50,23 @@ test('the season over, beating the tips by a distance pleases the board, falling
     assert.equal(world.predictions[0].settled, true);
   }
 });
+
+test('a career from before the tips, its league already under way: the table gets them at once — quietly, and judged by nobody', () => {
+  const { world, ctx, club } = career();
+  const league = world.competitions[club.leagueId];
+  // Played into the season with no tips printed, as a save from before them was.
+  for (let d = 0; d < 260 && !league.table.some((r) => r.played > 3); d++) advanceDay(world, ctx, {});
+  world.predictions = [];
+  const messages = world.messages.length;
+  const news = world.news.length;
+  advanceDay(world, ctx, {});
+  const tip = predictionFor(world, league.id)!;
+  assert.ok(tip !== undefined && tip.late === true, 'tipped, late');
+  assert.equal(tip.order.length, league.participants.length);
+  assert.ok(tippedPlace(world, league.id, club.id) >= 1);
+  assert.ok(!world.messages.slice(messages).some((m) => /tip/.test(m.subject)), 'no preview put to him now');
+  assert.ok(!world.news.slice(news).some((n) => /tip/.test(n.headline)), 'nor printed');
+  const before = club.boardConfidence;
+  predictionVerdicts(world);
+  assert.equal(club.boardConfidence, before, 'the board weigh nothing by them');
+});
