@@ -1,8 +1,7 @@
 # VOLLEYBALL MANAGER PROJECT
 
-**Volleyball Manager** is a free and open source sports management simulation
-game, licensed under the [MIT License](#license), inspired by the famous
-franchise Football Manager&trade;, built around a rally-by-rally match engine
+**Volleyball Manager** is a sports management simulation game inspired by the
+famous franchise Football Manager&trade;, built around a rally-by-rally match engine
 for professional indoor volleyball that is calibrated against real elite-level
 statistics rather than tuned to look plausible.
 
@@ -42,14 +41,11 @@ npm run vm world standard # generate a world (small, standard or large) and repo
 npm test                  # unit tests
 ```
 
-## CONTRIBUTING
+## DEVELOPMENT
 
-This is an early-stage solo project without a formal contribution process yet.
-If you'd like to help, open an issue describing what you'd like to work on
-before sending a pull request — the biggest gaps are listed under Planned
-Features below.
+This is a closed-source solo project; outside contributions are not accepted.
 
-Before submitting a change:
+Before committing a change:
 
 - Run `npm run typecheck` and `npm test`
 - Run `npm run vm calibrate` if you touch anything under `src/engine/match/`
@@ -522,27 +518,11 @@ real counterpart). Years after 2028 repeat the 2025–2028 cycle.
 
 ## LICENSE
 
-    MIT License
+Copyright (c) 2026 Miguel Caldas. All rights reserved.
 
-    Copyright (c) 2026 Miguel Caldas
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE.
+This is proprietary software. No part of it — code, art or data — may be
+copied, modified, distributed or used without the author's written
+permission.
 
 ## FIVB DATA
 
