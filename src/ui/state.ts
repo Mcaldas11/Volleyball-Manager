@@ -124,9 +124,6 @@ import {
   type AnswerResult,
   type InterviewSession,
 } from '../engine/world/interviews.ts';
-import {
-  loadPressAi, pressAiReady, savePressAi, unwritten, writeQuestions, type PressAiSettings,
-} from './pressWriter.ts';
 import { chemistryFor } from '../engine/world/chemistry.ts';
 import {
   deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
@@ -618,10 +615,6 @@ class Game {
   /** The player's own settings — see preferences.ts — and whether their window is open. */
   prefs: Preferences = loadPreferences();
   settingsOpen = false;
-  /** The press room written by a language model: the setting, and what it is doing now. */
-  pressAi: PressAiSettings = loadPressAi();
-  pressWriting = false;
-  pressError: string | null = null;
   matchday: MatchdayState | null = null;
   private liveSim: MatchSimulator | null = null;
   /** Distinguishes each substitution for React, even if the same two players swap twice. */
@@ -1514,38 +1507,6 @@ class Game {
     if (msg !== undefined) msg.read = true;
     this.emit();
     return result;
-  }
-
-  /** Change the AI press setting — kept in this browser only. */
-  setPressAi(s: PressAiSettings): void {
-    this.pressAi = s;
-    this.pressError = null;
-    savePressAi(s);
-    this.emit();
-    if (this.activeInterviewId !== null) void this.writePress(this.activeInterviewId);
-  }
-
-  /** Have the model write what is left of a conference, if the setting is on — the game's own
-   *  questions stay if it can't. */
-  async writePress(sessionId: number): Promise<void> {
-    const world = this.world;
-    if (world === null || this.pressWriting || this.pressError !== null || !pressAiReady(this.pressAi)) return;
-    const session = world.pendingInterviews.find((s) => s.id === sessionId);
-    if (session === undefined || session.finished) return;
-    const idx = unwritten(session);
-    if (idx.length === 0) return;
-    this.pressWriting = true;
-    this.pressError = null;
-    this.emit();
-    try {
-      await writeQuestions(world, session, idx, this.pressAi);
-    } catch (e) {
-      // The game's own questions stand; no second try until the setting changes.
-      this.pressError = e instanceof Error ? e.message : 'AI press unavailable.';
-    } finally {
-      this.pressWriting = false;
-      this.emit();
-    }
   }
 
   /** The press conference after a match, still open: offered on its result screen. */

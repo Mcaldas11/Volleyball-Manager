@@ -202,6 +202,11 @@ Before submitting a change:
       league table carries the tip beside each club, and at the season's end
       the papers own up — and the board weigh the manager's finish against
       the tip
+- [x] A preview in the inbox before each of your matches: the analysts' odds
+      (the match played 400 times over in the background engine), every
+      result's chance from 3-0 to 0-3, both sides' form and the fans' poll —
+      and the fans' own calls, partisan as fans are. After the final whistle
+      the thread carries on: whoever called the score lets everyone know
 - [x] Supporters: every club's following grows with wins, derbies won,
       trophies and stars signed, shrinks a little with defeats, and drifts
       towards what its standing draws — filling the arena or leaving it half
@@ -376,11 +381,6 @@ Before submitting a change:
       from hostile to an ally: answers that land warm it, answers that grate
       cool it, a conference declined costs a little with everyone who came —
       and an ally comes in warm while a hostile one comes in wary
-- [x] An optional AI press room: with an Anthropic API key, Claude writes
-      every question and answer from the same notebooks (called straight from
-      the browser; the key stays in it). Only the words change — who asks,
-      the tones and what they do to morale stay the game's; without a key,
-      or if the call fails, the game writes its own
 - [x] The national team gets what a club gets around its matches: the press
       the day before and after (questions of the tournament, the hosts, a
       medal — answers that move the fourteen's morale, not the club's), the

@@ -89,6 +89,14 @@ export function squadStrength(
   return weight > 0 ? total / weight : 800;
 }
 
+/** A match's score alone, point by point: no box score, and nothing written to anyone's career. */
+export interface QuickScore {
+  homeSets: number;
+  awaySets: number;
+  setScores: Array<[number, number]>;
+  totalRallies: number;
+}
+
 /**
  * Simulate a match point by point.
  */
@@ -100,6 +108,40 @@ export function quickSimulate(
   rng: Rng,
   homeAdvantage = true,
 ): QuickResult {
+  const sh = squadStrength(store, home.lineup, home.libero);
+  const sa = squadStrength(store, away.lineup, away.libero);
+  const { homeSets, awaySets, setScores, totalRallies } = quickScore(store, home, away, format, rng, homeAdvantage);
+
+  const homePoints = setScores.reduce((s, [h]) => s + h, 0);
+  const awayPoints = setScores.reduce((s, [, a]) => s + a, 0);
+
+  // How each side's box score reads is against the side it played: an even
+  // match reads the same in the top flight as in the third division.
+  const homeStats = allocateStats(store, home.lineup, home.libero, homePoints, totalRallies, sh, edgeOver(sh, sa), rng);
+  const awayStats = allocateStats(store, away.lineup, away.libero, awayPoints, totalRallies, sa, edgeOver(sa, sh), rng);
+
+  return {
+    homeSets,
+    awaySets,
+    setScores,
+    homeStats,
+    awayStats,
+    mvp: pickMvp(homeSets > awaySets ? homeStats : awayStats),
+  };
+}
+
+/**
+ * Just the score of a match, point by point — what a forecast plays over and over: nobody's box
+ * score is drawn up, and nobody's career is touched.
+ */
+export function quickScore(
+  store: PlayerStore,
+  home: { lineup: number[]; libero: number },
+  away: { lineup: number[]; libero: number },
+  format: MatchFormat,
+  rng: Rng,
+  homeAdvantage = true,
+): QuickScore {
   const sh = squadStrength(store, home.lineup, home.libero);
   const sa = squadStrength(store, away.lineup, away.libero);
 
@@ -152,22 +194,7 @@ export function quickSimulate(
     serving = setScores.length % 2 === 0 ? 1 : 0;
   }
 
-  const homePoints = setScores.reduce((s, [h]) => s + h, 0);
-  const awayPoints = setScores.reduce((s, [, a]) => s + a, 0);
-
-  // How each side's box score reads is against the side it played: an even
-  // match reads the same in the top flight as in the third division.
-  const homeStats = allocateStats(store, home.lineup, home.libero, homePoints, totalRallies, sh, edgeOver(sh, sa), rng);
-  const awayStats = allocateStats(store, away.lineup, away.libero, awayPoints, totalRallies, sa, edgeOver(sa, sh), rng);
-
-  return {
-    homeSets,
-    awaySets,
-    setScores,
-    homeStats,
-    awayStats,
-    mvp: pickMvp(homeSets > awaySets ? homeStats : awayStats),
-  };
+  return { homeSets, awaySets, setScores, totalRallies };
 }
 
 /** Share of a team's attack swings, digs and receptions each role takes in the

@@ -25,6 +25,9 @@ import { AwardsNightSheet, TeamOfSeasonSheet } from '../awardsSheet.tsx';
 import { RetirementSheet } from '../retirementSheet.tsx';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { useGame } from '../state.ts';
+import { fanNameIn, previewReplies, type MatchPreview } from '../../engine/world/matchPreview.ts';
+import type { FanComment } from '../../engine/world/fans.ts';
+import { clubMatchKits } from '../kits.ts';
 import { followsPlan } from '../../engine/world/gamePlan.ts';
 import { BLOCK_OPTIONS, SERVE_OPTIONS, SERVE_TARGET_OPTIONS, SHAPE_OPTIONS } from './Manage.tsx';
 
@@ -360,6 +363,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   const cat = messageCategory(m);
 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
+
+  if (m.preview !== undefined) return <PreviewSheet preview={m.preview} />;
 
   if (m.tables !== undefined && m.tables.length > 0 || m.gamePlanFor !== undefined) {
     return (
@@ -1019,6 +1024,146 @@ function Roundup({ message: m }: { message: GameMessage }): JSX.Element {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A match preview: who the analysts and the fans think wins, every result's chance, both sides'
+ * form, and the fans' calls — and, once it has been played, the result, who called it and what the
+ * fans made of it.
+ */
+function PreviewSheet({ preview: pv }: { preview: MatchPreview }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const home = world.clubs[pv.home];
+  const away = world.clubs[pv.away];
+  const f = world.fixtures[pv.fixtureId];
+  const played = f !== undefined && f.played;
+  const [hk, ak] = clubMatchKits(home, away);
+  const colour = (homeSide: boolean): string => (homeSide ? hk.shirt : ak.shirt);
+  const top = Math.max(1, ...pv.results.map((r) => r.pct));
+  const likeliest = pv.results.reduce((a, b) => (b.pct > a.pct ? b : a));
+  const isFinal = (s: readonly [number, number]): boolean => played && s[0] === f.homeSets && s[1] === f.awaySets;
+  const replies = played ? previewReplies(world, pv) : [];
+  const called = played ? pv.comments.filter((c) => isFinal(c.call)).length : 0;
+  const crest = (club: typeof home, size: number): JSX.Element | null => (club !== undefined ? <ClubCrest club={club} size={size} /> : null);
+  const split = (homePct: number, label: string, title: string): JSX.Element => (
+    <div className="pv-row" title={title}>
+      <span>{label}</span>
+      <b className="r">{homePct}%</b>
+      <span className="pv-split">
+        <i style={{ width: `${homePct}%`, background: colour(true) }} />
+        <i style={{ width: `${100 - homePct}%`, background: colour(false) }} />
+      </span>
+      <b>{100 - homePct}%</b>
+    </div>
+  );
+
+  let verdict = '';
+  if (played) {
+    const homeWon = f.homeSets > f.awaySets;
+    const chance = homeWon ? pv.homeWin : 100 - pv.homeWin;
+    const winner = homeWon ? home : away;
+    verdict = chance < 35 ? `An upset: the analysts gave ${winner?.name ?? 'them'} ${chance}%.`
+      : chance > 65 ? `As the analysts expected: ${chance}% for ${winner?.name ?? 'them'}.`
+      : `The analysts had it close: ${chance}% for ${winner?.name ?? 'them'}.`;
+  }
+
+  return (
+    <div className="pv">
+      {played && (
+        <div className="pv-final">
+          <span className="pv-final-tag">Full time</span>
+          <span className="pv-final-score">
+            {crest(home, 22)} {home?.name} <b>{f.homeSets}–{f.awaySets}</b> {away?.name} {crest(away, 22)}
+          </span>
+          <small>{verdict}</small>
+        </div>
+      )}
+
+      <div className="paper-report pv-odds">
+        <div className="paper-label">Who wins?</div>
+        <div className="pv-sides">
+          <span className="pv-side">{crest(home, 30)}<span>{home?.name ?? '—'}</span></span>
+          <span className="pv-v">v</span>
+          <span className="pv-side right"><span>{away?.name ?? '—'}</span>{crest(away, 30)}</span>
+        </div>
+        {split(pv.homeWin, 'Analysts', `The match played ${400} times over: ${home?.name} win ${pv.homeWin}%, ${away?.name} ${100 - pv.homeWin}%`)}
+        {split(pv.poll, "Fans' poll", `Of the fans who voted, ${pv.poll}% back ${home?.name}`)}
+        <div className="pv-row pv-form">
+          <span>Form</span>
+          <span className="pv-chips">{pv.form[0].length > 0 ? pv.form[0].map((w, i) => <i key={i} className={w ? 'w' : 'l'}>{w ? 'W' : 'L'}</i>) : <em>—</em>}</span>
+          <span />
+          <span className="pv-chips right">{pv.form[1].length > 0 ? pv.form[1].map((w, i) => <i key={i} className={w ? 'w' : 'l'}>{w ? 'W' : 'L'}</i>) : <em>—</em>}</span>
+        </div>
+      </div>
+
+      <div className="paper-report pv-results">
+        <div className="paper-label">Every result</div>
+        {pv.results.map((r) => {
+          const homeWon = r.score[0] > r.score[1];
+          const final = isFinal(r.score);
+          return (
+            <div key={`${r.score[0]}-${r.score[1]}`} className={`pv-result${final ? ' final' : ''}`}
+              title={`${homeWon ? home?.name : away?.name} win ${Math.max(...r.score)}-${Math.min(...r.score)}: ${r.pct}%`}>
+              <span className="pv-result-score">{crest(homeWon ? home : away, 16)} {r.score[0]}–{r.score[1]}</span>
+              <span className="pv-result-track"><i style={{ width: `${(r.pct / top) * 100}%`, background: colour(homeWon) }} /></span>
+              <b>{r.pct}%</b>
+              <em>{final ? 'Final' : r === likeliest && !played ? 'Likeliest' : ''}</em>
+            </div>
+          );
+        })}
+      </div>
+
+      <section className="pv-fans">
+        <header className="pv-fans-head">
+          What the fans say
+          <span>{played ? (called > 0 ? `${called} called it` : 'Nobody called it') : `${pv.comments.length} calls`}</span>
+        </header>
+        {pv.comments.map((c, i) => (
+          <PreviewFan key={i} comment={c} pv={pv}>
+            <span className={`pv-call${played ? (isFinal(c.call) ? ' hit' : ' miss') : ''}`} title="The score called">
+              {played && isFinal(c.call) ? <><Icon name="check" size={12} /> Called it</> : <>{crest(home, 14)} {c.call[0]}–{c.call[1]} {crest(away, 14)}</>}
+            </span>
+          </PreviewFan>
+        ))}
+        {replies.length > 0 && (
+          <>
+            <header className="pv-fans-head after">After the final whistle <span>{replies.length} comments</span></header>
+            {replies.map((c, i) => <PreviewFan key={i} comment={c} pv={pv} />)}
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** One fan's say, under a preview. */
+function PreviewFan({ comment: c, pv, children }: { comment: FanComment; pv: MatchPreview; children?: ReactNode }): JSX.Element {
+  const g = useGame();
+  const clubs = g.world!.clubs;
+  const club = c.clubId !== undefined ? clubs[c.clubId] : undefined;
+  const other = club !== undefined ? clubs[club.id === pv.home ? pv.away : pv.home] : undefined;
+  return (
+    <div className={`pv-fan mood-${c.mood}`}>
+      <span className="pv-fan-badge">
+        {club !== undefined ? <ClubCrest club={club} size={26} /> : c.nation !== undefined ? <Flag nation={c.nation} /> : <Icon name="user" size={16} />}
+      </span>
+      <div className="pv-fan-main">
+        <div className="pv-fan-top">
+          <b>{c.handle}</b>
+          <span>{club !== undefined ? `${other !== undefined ? fanNameIn(club, other) : club.name} fan` : 'Neutral'}</span>
+          {children}
+        </div>
+        <p>{c.text}</p>
+      </div>
+      <span className="pv-fan-likes" title={`${c.likes} likes`}>
+        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+          <path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.4.7-1.2 2.2-2.4 4.3-2.4 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z" />
+        </svg>
+        {c.likes}
+      </span>
     </div>
   );
 }

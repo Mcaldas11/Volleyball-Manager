@@ -84,10 +84,6 @@ export interface InterviewQuestion {
   reaction?: string;
   /** Asked on the back of the answer before it. */
   followUp?: boolean;
-  /** How the journalist takes each tone, when a language model wrote the question. */
-  reactions?: Partial<Record<AnswerCategory, string>>;
-  /** Written by a language model (see ui/pressWriter.ts). */
-  written?: boolean;
   /** What the answer did to the journalist's relationship with the manager. */
   warmth?: number;
 }
@@ -115,8 +111,6 @@ export interface InterviewSession {
   brief?: string[];
   /** The line the papers lead with, once it is over. */
   headline?: string;
-  /** The questions and answers were written by a language model rather than the game's own writer. */
-  ai?: boolean;
 }
 
 export interface AnswerResult {
@@ -1469,7 +1463,7 @@ export function answerInterviewQuestion(
   q.warmth = warmTo(world, q.journalist.name, bodyLanguage);
   const words = pressRng(world, session.id * 31 + session.currentIndex);
   const big = session.stakes !== 'routine';
-  q.reaction = q.reactions?.[option.category] ?? reactionLine(words, q.journalist.name, q.journalist.voice, bodyLanguage, option.category, big);
+  q.reaction = reactionLine(words, q.journalist.name, q.journalist.voice, bodyLanguage, option.category, big);
   // The press keep what he says — a bold promise most of all.
   noteQuote(world, {
     day: world.day, fixtureId: session.fixtureId, kind: session.kind, tone: option.category, text: option.text, topic: q.topic ?? '',

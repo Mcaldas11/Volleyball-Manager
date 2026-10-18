@@ -41,6 +41,7 @@ import type { TeamLine } from './teamAwards.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { PressMemory } from './pressRoom.ts';
 import type { Prediction } from './predictions.ts';
+import type { MatchPreview } from './matchPreview.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
 
@@ -447,6 +448,8 @@ export interface GameMessage {
   teamOfSeason?: { title: string; competitionId?: number; season: number; picks: DreamPick[] };
   /** The season's awards, a league's or the world's — see accolades.ts. */
   awardsNight?: AwardsNight;
+  /** A match preview: the analysts' odds and the fans' calls — see matchPreview.ts. */
+  preview?: MatchPreview;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
    *  tabs existed still load — {@link messageCategory} derives it from the
    *  older fields when absent. */

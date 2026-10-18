@@ -494,7 +494,7 @@ function fill(world: World, b: FanBrief, text: string): string {
 }
 
 /** A fan's name online, from the names of his country: "kamil_resovia", "Marta88", "TrueSkra". */
-function handle(rng: Rng, nation: number, club: Club | undefined): string {
+export function handle(rng: Rng, nation: number, club: Club | undefined): string {
   const bank = bankFor(NATIONS[nation]?.nameGroup ?? '');
   const first = rng.pick(bank.first);
   const last = rng.pick(bank.last);

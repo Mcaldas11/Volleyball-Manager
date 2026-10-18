@@ -10,7 +10,6 @@ import { relationLabel, relationOf, VOICE_LABEL } from '../../engine/world/press
 import { ClubCrest, Flag, managerPhotoUrl, PersonFace, PlayerFace } from '../components.tsx';
 import { portraitUrl } from '../faces.ts';
 import { Icon } from '../icons.tsx';
-import { PRESS_MODELS, pressAiReady, type PressAiSettings } from '../pressWriter.ts';
 import { useGame } from '../state.ts';
 
 type Game = ReturnType<typeof useGame>;
@@ -123,53 +122,10 @@ function OptionEffects({ g, o, kind }: { g: Game; o: InterviewOption; kind: Inte
   );
 }
 
-/** The AI press setting: a key, a model, on or off — kept in this browser. */
-function AiPanel({ g, onClose }: { g: Game; onClose: () => void }): JSX.Element {
-  const [s, setS] = useState<PressAiSettings>(g.pressAi);
-  return (
-    <div className="press-ai-panel" role="dialog" aria-label="AI press settings">
-      <div className="press-ai-head">
-        <Icon name="spark" size={15} /> <b>AI press room</b>
-        <span className="flex-spacer" />
-        <button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={14} /></button>
-      </div>
-      <p className="press-ai-note">
-        Claude writes every question and answer from what the press know — the box score, the table, what you said last time.
-        What each tone does stays the game's.
-      </p>
-      <label className="press-ai-row">
-        <input type="checkbox" checked={s.on} onChange={(e) => setS({ ...s, on: e.target.checked })} />
-        <span>Write press conferences with AI</span>
-      </label>
-      <label className="press-ai-field">
-        <span>Anthropic API key</span>
-        <input type="password" value={s.key} placeholder="sk-ant-…" autoComplete="off" spellCheck={false}
-          onChange={(e) => setS({ ...s, key: e.target.value })} />
-      </label>
-      <label className="press-ai-field">
-        <span>Model</span>
-        <select value={s.model} onChange={(e) => setS({ ...s, model: e.target.value })}>
-          {PRESS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
-      </label>
-      <p className="press-ai-note faint">
-        The key is kept in this browser only and sent only to Anthropic. Each conference uses a little of your API credit.
-        Without it, the game writes its own.
-      </p>
-      <div className="toolbar">
-        <button className="primary" onClick={() => { g.setPressAi(s); onClose(); }}>Save</button>
-        <button onClick={onClose}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-/** The conference's top bar: the occasion, the match, the room, how far through, the AI and the way out. */
+/** The conference's top bar: the occasion, the match, the room, how far through, and the way out. */
 function TopBar({ g, session, cm }: { g: Game; session: InterviewSession; cm: ConferenceMatch | null }): JSX.Element {
-  const [aiOpen, setAiOpen] = useState(false);
   const own = g.world!.userClubId;
   const { lead, result } = cm !== null ? matchLine(session, cm) : { lead: '', result: '' as const };
-  const ai = pressAiReady(g.pressAi);
   return (
     <div className="press-top">
       <span className={`press-occasion stakes-${session.stakes}`}>
@@ -197,12 +153,6 @@ function TopBar({ g, session, cm }: { g: Game; session: InterviewSession; cm: Co
           <span key={i} className={`press-step${i < session.currentIndex ? ` done mood-${q.bodyLanguage}` : i === session.currentIndex ? ' current' : ''}${q.followUp === true ? ' follow' : ''}`} />
         ))}
       </span>
-      <div className="press-ai-wrap">
-        <button className={`press-ai-btn${ai ? ' on' : ''}`} onClick={() => setAiOpen((v) => !v)} title="Write the press with AI">
-          <Icon name="spark" size={13} /> {ai ? 'AI press' : 'AI off'}
-        </button>
-        {aiOpen && <AiPanel g={g} onClose={() => setAiOpen(false)} />}
-      </div>
       <button onClick={() => g.closeInterview()}><Icon name="exit" size={14} /> Leave for now</button>
     </div>
   );
@@ -229,8 +179,7 @@ function Exchange({ q }: { q: InterviewQuestion }): JSX.Element {
  */
 function Room({ g, session }: { g: Game; session: InterviewSession }): JSX.Element {
   const q = session.questions[session.currentIndex];
-  const writing = g.pressWriting && q.written !== true && pressAiReady(g.pressAi);
-  const shown = useReveal(writing ? '' : q.prompt);
+  const shown = useReveal(q.prompt);
   const store = g.world!.players;
   const about = q.options.find((o) => o.playerIdx !== undefined)?.playerIdx;
   const last = session.currentIndex > 0 ? session.questions[session.currentIndex - 1] : null;
@@ -278,11 +227,9 @@ function Room({ g, session }: { g: Game; session: InterviewSession }): JSX.Eleme
 
       {last?.reaction !== undefined && <div className="press-reaction" key={`r${session.currentIndex}`}>{last.reaction}</div>}
 
-      <blockquote className={`press-question${writing ? ' writing' : ''}`} key={`q${session.currentIndex}`}>
-        {writing
-          ? <span className="press-typing">{q.journalist.name.split(' ')[0]} is finding the words<span className="dots"><i /><i /><i /></span></span>
-          : <>{shown}<span className="press-caret" aria-hidden={shown.length >= q.prompt.length} /></>}
-        {q.followUp === true && !writing && <span className="press-tag">follow-up</span>}
+      <blockquote className="press-question" key={`q${session.currentIndex}`}>
+        {shown}<span className="press-caret" aria-hidden={shown.length >= q.prompt.length} />
+        {q.followUp === true && <span className="press-tag">follow-up</span>}
       </blockquote>
       {about !== undefined && store.isActive(about) && (
         <div className="press-about">
@@ -290,7 +237,6 @@ function Room({ g, session }: { g: Game; session: InterviewSession }): JSX.Eleme
           <span><b>{store.fullName(about)}</b> will read what you say — praise lifts him, criticism stings.</span>
         </div>
       )}
-      {g.pressError !== null && <div className="press-ai-error"><Icon name="alert" size={13} /> {g.pressError} The game wrote these instead.</div>}
 
       <div className={`press-lower${fresh ? ' fresh' : ''}`}>
         {notes.length > 0 && (
@@ -313,7 +259,6 @@ function Room({ g, session }: { g: Game; session: InterviewSession }): JSX.Eleme
 /** The manager's side: the answers, by tone, with what each tends to do. */
 function Answers({ g, session, manager }: { g: Game; session: InterviewSession; manager: ManagerProfile }): JSX.Element {
   const q = session.questions[session.currentIndex];
-  const writing = g.pressWriting && q.written !== true && pressAiReady(g.pressAi);
   return (
     <section className="card press-answers">
       <div className="press-me">
@@ -322,7 +267,6 @@ function Answers({ g, session, manager }: { g: Game; session: InterviewSession; 
           <div className="press-name">{manager.firstName} {manager.lastName}</div>
           <div className="faint">Your answer</div>
         </div>
-        {session.ai === true && <span className="press-ai-badge" title="Written by AI"><Icon name="spark" size={12} /> AI</span>}
       </div>
       <div className="press-tones">
         {TONES.map((tone) => (
@@ -332,10 +276,10 @@ function Answers({ g, session, manager }: { g: Game; session: InterviewSession; 
               <span className="faint">{TONE[session.kind][tone].hint}</span>
             </div>
             {q.options.map((o, i) => (o.category === tone ? (
-              <button key={`${session.currentIndex}-${i}`} className="press-answer" disabled={writing}
+              <button key={`${session.currentIndex}-${i}`} className="press-answer"
                 onClick={() => g.answerInterviewQuestion(session.id, i)}>
-                <span className="press-answer-text">{writing ? '…' : o.text}</span>
-                {!writing && <OptionEffects g={g} o={o} kind={session.kind} />}
+                <span className="press-answer-text">{o.text}</span>
+                <OptionEffects g={g} o={o} kind={session.kind} />
               </button>
             ) : null))}
           </div>
@@ -373,7 +317,7 @@ function BackPage({ g, session, cm }: { g: Game; session: InterviewSession; cm: 
         <p className="press-standfirst">
           {world.manager.firstName} {world.manager.lastName} faced {answered.length} questions
           {cm !== null ? <> {session.kind === 'pre' ? 'ahead of the match against' : `after the ${cm.ownSets}-${cm.oppSets} against`} {cm.oppName}</> : null}
-          {session.ai === true ? ' — the room as the AI wrote it.' : '.'}
+.
         </p>
         <ol className="press-paper-x">{answered.map((q, i) => <Exchange key={i} q={q} />)}</ol>
       </article>
@@ -415,7 +359,7 @@ function BackPage({ g, session, cm }: { g: Game; session: InterviewSession; cm: 
  * plays out. Journalists put their questions one by one, each in their own voice, from what is in
  * their notebooks; the manager answers in one of three tones, which nudges morale on both sides
  * and colours how that journalist reads him. A bold answer may draw a follow-up. At the end, the
- * line the papers lead with. With the AI press setting on, Claude writes the words.
+ * line the papers lead with.
  */
 export function InterviewScreen(): JSX.Element | null {
   const g = useGame();
@@ -428,17 +372,6 @@ export function InterviewScreen(): JSX.Element | null {
   useEffect(() => {
     if (sessionId !== null && session === undefined) g.closeInterview();
   }, [sessionId, session]);
-
-  // With the AI press on, whatever is still in the game's words is sent to be written — the
-  // conference as it opens, and a follow-up as it is put.
-  const pending = session !== undefined && !session.finished
-    ? session.questions.slice(session.currentIndex).filter((q) => q.written !== true).length
-    : 0;
-  useEffect(() => {
-    if (session !== undefined && pending > 0 && pressAiReady(g.pressAi) && !g.pressWriting && g.pressError === null) {
-      void g.writePress(session.id);
-    }
-  }, [session?.id, pending, g.pressAi, g.pressWriting, g.pressError]);
 
   if (sessionId === null || session === undefined) return null;
   const cm = conferenceMatch(world, session);

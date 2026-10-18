@@ -344,7 +344,7 @@ export function gatherFacts(world: World, f: Fixture, kind: InterviewKind, clubI
   return facts;
 }
 
-/** The lines the press have in front of them — what a writer (or a language model) is told. */
+/** The lines the press have in front of them: what the room knows, as the screen shows it. */
 export function briefOf(c: Ctx, kind: InterviewKind, occasion: string): string[] {
   const out: string[] = [];
   const f = c.facts;

@@ -13,6 +13,7 @@
  * a match took.
  */
 
+import { matchPreviews } from '../world/matchPreview.ts';
 import { campDay } from '../world/camp.ts';
 import { predictionsDay } from '../world/predictions.ts';
 import { calendarOf } from '../world/calendar.ts';
@@ -598,6 +599,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   expireStaleInterviews(world);
   generateInterviewSessions(world, world.day + 1);
   generateNationalInterviewSessions(world, world.day + 1);
+  // Tomorrow's match: the analysts' odds and the fans' calls.
+  matchPreviews(world, world.day + 1);
 
   dailyRecovery(world, store);
   progressPlayoffs(world);
