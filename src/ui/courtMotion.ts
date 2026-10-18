@@ -175,6 +175,15 @@ const FLOAT_HOLD = shape(FLOAT_HIT, { lean: 0.15, hFlex: 2.3, hElbow: 0.1 });
 const ARMS_UP = shape(STAND, { lean: -0.12, nod: -0.4, ...arms(2.85, 0.62, 0.2) });
 /** A coach between points: arms folded, watching. */
 const COACH_IDLE = shape(STAND, { nod: 0.06, ...arms(0.62, -0.32, 2.15) });
+/** A coach at a time-out, making his point: one hand out, then the other. */
+const TALK_A = shape(STAND, { lean: 0.08, nod: 0.05, hFlex: 1.25, hAbd: 0.25, hElbow: 1.0, oFlex: 0.35, oAbd: 0.2, oElbow: 1.2 });
+const TALK_B = shape(STAND, { lean: 0.1, nod: 0.12, hFlex: 0.45, hAbd: 0.2, hElbow: 1.3, oFlex: 1.35, oAbd: 0.15, oElbow: 0.8 });
+/** Listening to the coach at a time-out: hands on hips, or on the knees. */
+const LISTEN = shape(STAND, { crouch: 0.04, lean: 0.1, nod: 0.18, stance: 0.18, ...arms(-0.2, 0.5, 1.8, 0.5) });
+const LISTEN_LOW = shape(STAND, { crouch: 0.16, hipShift: -0.05, tilt: 0.4, lean: 0.5, nod: 0.15, stance: 0.22, ...arms(0.62, 0.2, 0.2) });
+/** A wave to the crowd before the match. */
+const WAVE = shape(STAND, { nod: -0.15, hFlex: 2.7, hAbd: 0.55, hElbow: 0.5, oFlex: 0.2, oAbd: 0.2, oElbow: 0.4 });
+const WAVE_OUT = shape(WAVE, { hAbd: 0.95, hElbow: 0.35 });
 /** One hand up for a slap as a substitute comes on. */
 const SLAP = shape(STAND, { lean: 0.05, nod: -0.1, hFlex: 2.6, hAbd: 0.35, hElbow: 0.35, oFlex: 0.3, oAbd: 0.25, oElbow: 0.6 });
 const FIST = shape(STAND, { crouch: 0.06, lean: -0.1, nod: -0.25, hFlex: 1.75, hAbd: 0.35, hElbow: 2.3, oFlex: 0.4, oAbd: 0.3, oElbow: 1.2 });
@@ -455,12 +464,23 @@ export interface Body {
   limp?: boolean;
   /** The physio, crouched over someone: how far, 0 to 1. */
   tend?: number;
-  /** After a point: where in the team's huddle they go, the way they face there, and until when. */
-  huddle?: { x: number; y: number; face: number; from: number; until: number } | null;
+  /** After a point, or at a time-out: where in the team's huddle they go, the way they face there, and until when. */
+  huddle?: Spot | null;
+  /** Before the match: the places to be, one after another — warming up, lined up, at the net. */
+  steps?: Spot[] | null;
   /** A point to pass through on the way to the mark: the substitution zone, on a change. */
   via: { x: number; y: number } | null;
   /** Their place by the bench, that a substitute warming up runs from and back to. */
   home: { x: number; y: number } | null;
+}
+
+/** A place a body is to be, the way it faces there, and from when until when, ms on the animation clock. */
+export interface Spot {
+  x: number;
+  y: number;
+  face: number;
+  from: number;
+  until: number;
 }
 
 /** Who is off the court for each side, and what they are doing. */
@@ -980,7 +1000,11 @@ export class CourtMotion {
    *  time-out once the rally in play is over, and waves no serve on until
    *  play is back on — and then waves it on again, even if it had been. */
   setStoppage(timeout: 0 | 1 | null, paused: boolean, now: number): void {
-    if (timeout !== null && timeout !== this.stoppage.timeout) this.calls.push({ kind: 'timeout', team: timeout, out: false });
+    if (timeout !== null && timeout !== this.stoppage.timeout) {
+      this.calls.push({ kind: 'timeout', team: timeout, out: false });
+      this.timeoutHuddles(now);
+    }
+    if (timeout === null && this.stoppage.timeout !== null) this.breakHuddles(now);
     const stopped = timeout !== null || paused;
     const was = this.stoppage.timeout !== null || this.stoppage.paused;
     if (stopped && !this.live) {
@@ -989,6 +1013,84 @@ export class CourtMotion {
     }
     if (!stopped && was && this.needServe) this.serveDue = now + 300 / this.pace;
     this.stoppage = { timeout, paused };
+  }
+
+  /**
+   * A time-out: both sides go to their benches and stand round their coach in a half-circle, he
+   * in front of them making his point, they listening — hands on hips, or on the knees.
+   */
+  private timeoutHuddles(now: number): void {
+    for (const team of [0, 1] as const) {
+      const side = this.sides[team];
+      const coach = coachSpot(side);
+      const six = [...this.bodies].filter(([p, b]) => !b.leaving && b.side === null && this.onCourt.has(p) && this.teamOf(p) === team);
+      // Round the half-circle in the order they come, so nobody crosses anybody.
+      six.sort((a, b) => a[1].y - b[1].y);
+      six.forEach(([, b], i) => {
+        const a = (-0.95 + (1.9 * (i + 0.5)) / six.length) * side;
+        const x = coach.x + Math.cos(a) * 1.45;
+        const y = coach.y + Math.sin(a) * 1.45;
+        b.huddle = { x, y, face: yawTo(coach.x - x, coach.y - y), from: now + 150 + i * 60, until: now + 120_000 };
+        const low = (b.seed * 5 + i) % 3 === 0;
+        b.reaction = {
+          kind: 'stand', t0: now, tc: now, keys: timeline(0, [[0, b.shape], [700, READY], [1600, low ? LISTEN_LOW : LISTEN]]),
+          jump: null, yaw: null, path: null, end: 120_000,
+        };
+      });
+      const c = this.coaches[team];
+      const keys: Array<[number, Shape]> = [[0, c.shape], [500, TALK_A]];
+      for (let t = 1300; t < 60_000; t += 800) keys.push([t, (t / 800) % 2 < 1 ? TALK_B : TALK_A]);
+      c.reaction = { kind: 'stand', t0: now, tc: now, keys: timeline(0, keys), jump: null, yaw: null, path: null, end: 60_000 };
+    }
+  }
+
+  /** Play back on: the huddles break up and everyone goes back to their places. */
+  private breakHuddles(now: number): void {
+    for (const b of this.bodies.values()) {
+      if (b.huddle == null) continue;
+      b.huddle = null;
+      if (b.reaction?.kind === 'stand') {
+        b.reaction = { kind: 'stand', t0: now, tc: now, keys: timeline(0, [[0, b.shape], [500, READY]]), jump: null, yaw: null, path: null, end: 560 };
+      }
+    }
+    for (const c of this.coaches) {
+      if (c.reaction?.kind === 'stand') {
+        c.reaction = { kind: 'stand', t0: now, tc: now, keys: timeline(0, [[0, c.shape], [600, COACH_IDLE]]), jump: null, yaw: null, path: null, end: 660 };
+      }
+    }
+  }
+
+  /**
+   * Before the first serve: a last warm-up — a few strides about their own half — then each side
+   * lines up along its attack line and waves to the crowd, comes to the net and slaps hands with
+   * the side across it, and goes to its places for the serve. About six and a half seconds.
+   */
+  ceremony(now: number): void {
+    for (const team of [0, 1] as const) {
+      const side = this.sides[team];
+      const six = [...this.bodies].filter(([p, b]) => !b.leaving && b.side === null && this.onCourt.has(p) && this.teamOf(p) === team);
+      six.sort((a, b) => a[1].x - b[1].x);
+      const n = six.length;
+      six.forEach(([p, b], i) => {
+        const r = (k: number): number => ((p * 9301 + k * 49297) % 233280) / 233280;
+        const across = n > 1 ? -2.6 + (5.2 * i) / (n - 1) : 0;
+        const face = netYaw(side * 3);
+        b.steps = [
+          { x: -3.6 + r(1) * 7.2, y: side * (2 + r(2) * 6), face: yawTo(0, -side), from: now, until: now + 1000 },
+          { x: -3.6 + r(3) * 7.2, y: side * (2 + r(4) * 6), face: yawTo(0, -side), from: now + 1000, until: now + 2000 },
+          { x: across, y: side * 3.2, face, from: now + 2000, until: now + 4100 },
+          { x: across * 0.85, y: side * 0.5, face, from: now + 4100, until: now + 5700 },
+        ];
+        b.reaction = {
+          kind: 'stand', t0: now, tc: now,
+          keys: timeline(0, [
+            [0, b.shape], [300, READY], [1900, READY], [2500, STAND], [2900, WAVE], [3200, WAVE_OUT], [3500, WAVE], [3800, WAVE_OUT],
+            [4200, STAND], [4900, SLAP], [5300, SLAP], [5700, READY],
+          ]),
+          jump: null, yaw: null, path: null, end: 5760,
+        };
+      });
+    }
   }
 
   /** Hand over a new scene: new marks, postures and contacts, and a new flight. */
@@ -1610,9 +1712,9 @@ export class CourtMotion {
         const keys = timeline(0, [[0, b.shape], [140, SLAP], [380, SLAP], [620, b.posture]]);
         b.reaction = { kind: 'celebrate', t0: now, tc: now, keys, jump: null, yaw: null, path: null, end: 680 };
       }
-      const huddling = b.huddle != null && now >= b.huddle.from && now < b.huddle.until;
-      const goalX = huddling ? b.huddle!.x : b.via !== null ? b.via.x : b.tx + b.ox;
-      const goalY = huddling ? b.huddle!.y : b.via !== null ? b.via.y : b.ty + b.oy;
+      const spot = spotFor(b, now);
+      const goalX = spot !== null ? spot.x : b.via !== null ? b.via.x : b.tx + b.ox;
+      const goalY = spot !== null ? spot.y : b.via !== null ? b.via.y : b.ty + b.oy;
       const dx = (waiting ? path.from.x : goalX) - b.x;
       const dy = (waiting ? path.from.y : goalY) - b.y;
       const dist = Math.hypot(dx, dy);
@@ -1652,7 +1754,7 @@ export class CourtMotion {
     const net = netYaw(b.ty);
     const remaining = Math.hypot(b.tx + b.ox - b.x, b.ty + b.oy - b.y);
     let face: number;
-    const huddle = b.huddle != null && now >= b.huddle.from && now < b.huddle.until ? b.huddle : null;
+    const huddle = spotFor(b, now);
     if (huddle !== null) {
       // Into the huddle: running to it, then facing in.
       const d = Math.hypot(huddle.x - b.x, huddle.y - b.y);
@@ -1745,6 +1847,12 @@ export class CourtMotion {
     const alphaTarget = b.leaving ? 0 : 1;
     b.alpha += (alphaTarget - b.alpha) * (1 - Math.exp(-dt / 0.25));
   }
+}
+
+/** Where a body is to be just now, if anywhere in particular: its huddle, or the step under way. */
+function spotFor(b: Body, now: number): Spot | null {
+  if (b.huddle != null && now >= b.huddle.from && now < b.huddle.until) return b.huddle;
+  return b.steps?.find((s) => now >= s.from && now < s.until) ?? null;
 }
 
 /** How much a move is showing: easing in from its start, out towards its end. */

@@ -11,6 +11,8 @@
 
 import type { ArenaProject, FanRef } from '../world/supporters.ts';
 import type { Owner, OwnerAsk, OwnerDemand } from '../world/owners.ts';
+import type { Philosophy } from '../world/board.ts';
+import type { Camp } from '../world/camp.ts';
 import { defaultTactics, type Formation, type TeamTactics } from '../match/tactics.ts';
 import type { SavedTactic } from './tacticSlots.ts';
 import type { TacticRead } from './tacticRead.ts';
@@ -126,6 +128,13 @@ export interface Club {
   ownerDemand?: OwnerDemand;
   ownerAsk?: OwnerAsk;
   ownerRefusedUntil?: number;
+  /** What the board say the club stands for this season, and when the manager last met them — see board.ts. */
+  philosophy?: Philosophy;
+  boardMeeting?: { last: number };
+  /** The pre-season training camp booked — see camp.ts. */
+  camp?: Camp;
+  /** The club's colour and kit as designed in the editor — absent: made from its id (see ui/kits.ts). */
+  kit?: ClubKit;
   /** Its following, and what it started at; a new stand being asked for or built — see supporters.ts. */
   fans?: number;
   fanRef?: FanRef;
@@ -154,6 +163,14 @@ export interface LeagueTableRow {
   setsAgainst: number;
   pointsFor: number;
   pointsAgainst: number;
+}
+
+/** A club's colour, as a hue, and its kit, as CSS colours. */
+export interface ClubKit {
+  hue: number;
+  shirt: string;
+  shorts: string;
+  libero: string;
 }
 
 export function newTableRow(clubId: number): LeagueTableRow {

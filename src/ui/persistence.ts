@@ -25,6 +25,7 @@ import { contractEndSeason, DAYS_PER_SEASON, seasonEndDay, type World } from '..
 import type { WorldScale } from '../engine/world/worldGen.ts';
 import { cancelOffCycleClubWorld, ensureCupCompetitions } from '../engine/season/cups.ts';
 import { balanceRelegationSlots } from '../engine/season/pyramid.ts';
+import { seedChemistry } from '../engine/world/chemistry.ts';
 import { seedClubHistories } from '../engine/world/clubHistory.ts';
 import { backfillCareer } from '../engine/world/career.ts';
 import { rollHandedness, rollOffHand } from '../engine/world/playerGen.ts';
@@ -257,6 +258,8 @@ export function reviveWorld(raw: World): World {
   raw.pendingMoves ??= [];
   // Saves from before the world's news.
   raw.news ??= [];
+  // Saves from before setters and hitters were known to understand each other: every squad has.
+  if (raw.chemistry === undefined) seedChemistry(raw);
   // National jobs and dual nationals came later than the tournaments.
   if (raw.internationals !== undefined) {
     raw.internationals.tiedTo ??= new Map();

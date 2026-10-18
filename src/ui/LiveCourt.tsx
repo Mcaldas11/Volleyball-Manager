@@ -94,8 +94,10 @@ interface CourtProps {
 
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
-  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null,
+  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null, ceremony = null,
 }: {
+  /** Changes when the pre-match ceremony is to begin — see CourtMotion.ceremony. */
+  ceremony?: number | null;
   scene: Scene;
   /** Someone down hurt, and where the stoppage for him has got to. */
   injury?: CourtInjury | null;
@@ -160,6 +162,11 @@ export function LiveCourt({
   useEffect(() => {
     motion.current?.setStoppage(timeout, paused, performance.now());
   }, [timeout, paused]);
+
+  // Before the first serve: the warm-up, the line-up and the hands at the net.
+  useEffect(() => {
+    if (ceremony != null) motion.current?.ceremony(performance.now());
+  }, [ceremony]);
 
   // Someone hurt: down, the physio on, up again or helped off.
   const injuryKey = injury === null ? '' : `${injury.p}:${injury.phase}`;

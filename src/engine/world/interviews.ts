@@ -34,6 +34,7 @@ import { dayOfSeason, type Competition, type Fixture, type World } from './world
 import {
   briefOf, emptyFacts, followUp, freshness, gatherFacts, headlineOf, noteAsked, noteQuote, POST_TOPICS, PRE_TOPICS,
   pressMemory, pressRng, reactionLine, voiced, type PressFacts, type Voice,
+  colouredBy, moodOnArrival, relationOf, stoodUp, warmTo,
 } from './pressRoom.ts';
 import type { Rng as Dice } from '../core/rng.ts';
 import { postNews } from './news.ts';
@@ -87,6 +88,8 @@ export interface InterviewQuestion {
   reactions?: Partial<Record<AnswerCategory, string>>;
   /** Written by a language model (see ui/pressWriter.ts). */
   written?: boolean;
+  /** What the answer did to the journalist's relationship with the manager. */
+  warmth?: number;
 }
 
 export interface InterviewSession {
@@ -1292,7 +1295,9 @@ function buildQuestion(
 ): InterviewQuestion {
   const prompt = voiced(r, journalist.voice, a.prompt(c, r), c.city);
   const options = optionsFor(a.answers(c, r), kind, c.tags.has('lost') ? 'lost' : 'won', weight, a.about?.(c));
-  return { journalist, prompt, options, answeredIndex: null, bodyLanguage: 'neutral', topic };
+  // They come in as they feel about him.
+  const bodyLanguage = moodOnArrival(relationOf(c.world, journalist.name));
+  return { journalist, prompt, options, answeredIndex: null, bodyLanguage, topic };
 }
 
 /** How a journalist reads an answer relative to what they wanted to hear —
@@ -1457,9 +1462,11 @@ export function answerInterviewQuestion(
   const option = q.options[optionIndex];
   if (option === undefined) return null;
 
-  const bodyLanguage = reactionFor(q.journalist.bias, option.category);
+  // How it lands: what they wanted to hear, and how they feel about him.
+  const bodyLanguage = colouredBy(relationOf(world, q.journalist.name), reactionFor(q.journalist.bias, option.category));
   q.answeredIndex = optionIndex;
   q.bodyLanguage = bodyLanguage;
+  q.warmth = warmTo(world, q.journalist.name, bodyLanguage);
   const words = pressRng(world, session.id * 31 + session.currentIndex);
   const big = session.stakes !== 'routine';
   q.reaction = q.reactions?.[option.category] ?? reactionLine(words, q.journalist.name, q.journalist.voice, bodyLanguage, option.category, big);
@@ -1490,8 +1497,8 @@ export function answerInterviewQuestion(
   // A question that clearly landed (or badly misjudged the room) nudges the
   // outcome a little further than the flat category effect alone.
   let ownDelta = option.ownMorale;
-  if (bodyLanguage === 'encouraged') ownDelta += 1;
-  else if (bodyLanguage === 'skeptical') ownDelta -= 1;
+  if (bodyLanguage === 'encouraged' || bodyLanguage === 'delighted') ownDelta += 1;
+  else if (bodyLanguage === 'skeptical' || bodyLanguage === 'hostile') ownDelta -= 1;
   const national = nationalMatchOf(world, session);
   if (national !== null) {
     // A nation's conference: its fourteen, and the other side's.
@@ -1562,9 +1569,12 @@ function nationalFacts(world: World, key: number, kind: InterviewKind): PressFac
 export function declineInterview(world: World, sessionId: number): boolean {
   const idx = world.pendingInterviews.findIndex((s) => s.id === sessionId);
   if (idx === -1) return false;
-  const msg = interviewMessage(world, world.pendingInterviews[idx]);
+  const session = world.pendingInterviews[idx];
+  const msg = interviewMessage(world, session);
   world.pendingInterviews.splice(idx, 1);
-  if (msg !== undefined) msg.body = 'You declined to attend the press conference.';
+  // Those who came for nothing remember it.
+  stoodUp(world, session.questions.map((q) => q.journalist.name));
+  if (msg !== undefined) msg.body = 'You declined to attend the press conference — the journalists who came will remember it.';
   return true;
 }
 

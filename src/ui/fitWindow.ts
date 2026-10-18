@@ -10,6 +10,8 @@
  * the stylesheet lays everything out to it.
  */
 
+import { fittingScale, setScale } from './preferences.ts';
+
 /** The window's visible height, CSS px. */
 export function visibleHeight(): number {
   const de = document.documentElement;
@@ -34,11 +36,17 @@ export function visibleHeight(): number {
 
 /** Keep `--app-h` on the document to the visible height, from now on. */
 export function watchWindowFit(): void {
-  let last = -1;
+  let last = '';
   const fit = (): void => {
-    const h = visibleHeight();
-    if (h === last) return;
-    last = h;
+    // Drawn larger (see preferences.ts) — as far as the window has room — the page has that much
+    // less height to fill.
+    const seen = visibleHeight();
+    const z = fittingScale(window.innerWidth, seen);
+    const h = Math.floor(seen / z);
+    const key = `${h}:${z}`;
+    if (key === last) return;
+    last = key;
+    setScale(z);
     document.documentElement.style.setProperty('--app-h', `${h}px`);
     // A short window: the sidebar trades its group titles for rules (styles.css).
     document.documentElement.classList.toggle('short-window', h <= 820);

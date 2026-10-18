@@ -13,7 +13,8 @@ import {
   SESSIONS, squadReadiness, weekPlan, weekSettings, weekStartOf,
   type IndividualFocus, type Intensity, type PlannedDay, type PlayerLoad, type PrepArea, type SessionType, type WeeklyFocus,
 } from '../../engine/world/training.ts';
-import { abilityClass, Bar, ClubCrest, Empty, PlayerFace, Pos, Segmented, StarMeter } from '../components.tsx';
+import { abilityClass, Bar, ClubCrest, Empty, money, PlayerFace, Pos, Segmented, StarMeter } from '../components.tsx';
+import { CAMP_DAYS, CAMP_KINDS, campBlock, campCost, CAMPS, campWindow, type CampKind } from '../../engine/world/camp.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -38,14 +39,90 @@ function sessionTone(s: SessionType): string {
 }
 
 export function TrainingScreen(): JSX.Element {
-  const [tab, setTab] = useState<'week' | 'individual'>('week');
+  const [tab, setTab] = useState<'week' | 'individual' | 'camp'>('week');
   return (
     <div className="tr">
       <div className="tr-tabs" role="tablist">
         <button role="tab" className={`hdr-tab${tab === 'week' ? ' active' : ''}`} onClick={() => setTab('week')}>Week plan</button>
         <button role="tab" className={`hdr-tab${tab === 'individual' ? ' active' : ''}`} onClick={() => setTab('individual')}>Individual training</button>
+        <button role="tab" className={`hdr-tab${tab === 'camp' ? ' active' : ''}`} onClick={() => setTab('camp')}>Pre-season camp</button>
       </div>
-      {tab === 'week' ? <WeekPlan /> : <IndividualTraining />}
+      {tab === 'week' ? <WeekPlan /> : tab === 'individual' ? <IndividualTraining /> : <CampPlanner />}
+    </div>
+  );
+}
+
+// ---- The pre-season camp ---------------------------------------------------------------
+
+/** A week away before the season: where, when, and what it costs — or the one booked. */
+function CampPlanner(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const window = campWindow(world);
+  const booked = club.camp !== undefined && club.camp.season === world.season ? club.camp : undefined;
+  // The weeks clear of matches, as start days.
+  const starts: number[] = [];
+  if (window !== null && booked === undefined) {
+    for (let d = window.first; d <= window.last; d++) {
+      const why = campBlock(world, club, 'home', d);
+      if (why === null || /afford/.test(why)) starts.push(d);
+    }
+  }
+  const [kind, setKind] = useState<CampKind>('abroad');
+  const [start, setStart] = useState<number>(starts[0] ?? -1);
+  const chosen = starts.includes(start) ? start : starts[0] ?? -1;
+  const block = chosen >= 0 ? campBlock(world, club, kind, chosen) : 'No week in the pre-season is clear of matches.';
+  const label = (d: number): string => g.dateLabelForDay(d);
+  return (
+    <div className="camp">
+      <p className="tr-note">
+        A week away together before the season. The kind of camp decides what the squad brings back — the dressing room
+        closer, morale up, more in the young players' legs — and what it costs.
+      </p>
+      {booked !== undefined ? (
+        <section className="card camp-booked">
+          <h3 className="card-title"><Icon name="check" size={14} /> {CAMPS[booked.kind].name} — {label(booked.start)} to {label(booked.end)}</h3>
+          <p>{CAMPS[booked.kind].blurb}</p>
+          <p className="faint">{booked.done === true ? 'Done: the squad is back.' : world.day >= booked.start ? 'Under way.' : 'Booked and paid for.'} Cost {money(booked.cost)}.</p>
+        </section>
+      ) : window === null ? (
+        <Empty>The pre-season is too far gone for a camp — there will be another chance next summer.</Empty>
+      ) : (
+        <>
+          <div className="camp-kinds">
+            {CAMP_KINDS.map((k) => (
+              <button key={k} className={`camp-kind${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>
+                <b>{CAMPS[k].name}</b>
+                <span>{CAMPS[k].blurb}</span>
+                <span className="camp-fx">
+                  <span>Dressing room +{CAMPS[k].bond}</span>
+                  <span>Morale +{CAMPS[k].morale}</span>
+                  {k === 'altitude' && <span>Stamina for the young</span>}
+                </span>
+                <span className="camp-cost">{money(campCost(club, k))}</span>
+              </button>
+            ))}
+          </div>
+          <div className="camp-book">
+            <label className="tr-field">
+              <span>Starting</span>
+              <Dropdown
+                size="sm"
+                value={chosen}
+                searchable={false}
+                menuWidth={220}
+                options={starts.map((d) => ({ value: d, label: label(d), hint: `to ${label(d + CAMP_DAYS - 1)}` }))}
+                onChange={(v) => setStart(v)}
+              />
+            </label>
+            <button className="primary" disabled={block !== null} title={block ?? undefined} onClick={() => g.bookCamp(kind, chosen)}>
+              Book the camp · {money(campCost(club, kind))}
+            </button>
+            {block !== null && <span className="faint">{block}</span>}
+          </div>
+        </>
+      )}
     </div>
   );
 }

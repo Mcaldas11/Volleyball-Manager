@@ -15,6 +15,7 @@
  * owner has had enough — and the new man comes with his own ideas.
  */
 
+import { philosophyOf } from './board.ts';
 import type { Club } from '../model/club.ts';
 import { postMessage } from './inbox.ts';
 import { bankFor } from './names.ts';
@@ -141,6 +142,8 @@ export function ownerSeasonStart(world: World): void {
     }
   }
   setDemand(world, club, o);
+  // And the board say what the club stands for this season.
+  philosophyOf(world, club);
 }
 
 /** The owner's wish for the season, and his word of it. */

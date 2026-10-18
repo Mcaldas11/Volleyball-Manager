@@ -5,6 +5,7 @@
  * both look and behave identically and neither reimplements the drag-and-drop.
  */
 
+import { chemistryLabel } from '../engine/world/chemistry.ts';
 import { useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { familiarityLabel, MATCHDAY_SQUAD, Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import type { PlayerStore } from '../engine/model/players.ts';
@@ -48,12 +49,14 @@ function ConditionStrip({ value }: { value: number }): JSX.Element {
  *  target, and (when there is anyone to swap in) a select as a non-drag
  *  alternative. */
 export function LineupCard({
-  label, playerIdx, store, swapOptions, isDragOver, draggable = true, role,
+  label, playerIdx, store, swapOptions, isDragOver, draggable = true, role, link,
   onSelectChange, onDropPlayer, onDragOverZone, onDragLeaveZone,
 }: {
   label: string;
   playerIdx: number;
   store: PlayerStore;
+  /** How well he and the setter on court understand each other, 0-1 — a hitter's card only. */
+  link?: { c: number; setter: string };
   /** The position the slot plays — his own, or another he is put in. */
   role?: Position;
   swapOptions: number[];
@@ -99,6 +102,14 @@ export function LineupCard({
       {pos !== natural && (
         <span className={`lineup-card-oop ${fam.cls}`} title={`A natural ${POSITION_SHORT[natural]} playing ${POSITION_SHORT[pos]}: ${fam.label.toLowerCase()} there`}>
           {POSITION_SHORT[natural]} · {fam.label}
+        </span>
+      )}
+      {link !== undefined && (
+        <span
+          className={`lineup-card-link chem-${chemistryLabel(link.c).toLowerCase()}`}
+          title={`Understanding with ${link.setter}: ${chemistryLabel(link.c)} — the better they know each other, the more sets arrive on time`}
+        >
+          {[0.25, 0.4, 0.6, 0.8, 0.95].map((t) => <i key={t} className={link.c >= t - 0.1 ? 'on' : ''} />)}
         </span>
       )}
       <ConditionStrip value={store.condition[playerIdx]} />
@@ -190,6 +201,8 @@ export interface TeamSheetProps {
   restrictSwapsByPosition?: boolean;
   /** Each slot's position for the team's system — the 5-1 unless told otherwise. */
   slotPositions?: readonly Position[];
+  /** How well a setter and a hitter understand each other, 0-1 — shown on each hitter's card. */
+  chemistry?: (setter: number, hitter: number) => number;
   /** Fit players left out of the matchday squad — given with the two below,
    *  the fourteen can be picked here. */
   outOfSquad?: number[];
@@ -219,9 +232,16 @@ export interface TeamSheetProps {
 export function TeamSheet({
   lineup, libero, defensiveLibero, bench, store, onSetPlayer, onSwapPlayers, onSetLibero,
   onSetDefensiveLibero, restrictSwapsByPosition = false, slotPositions = LINEUP_SLOT_POSITIONS,
-  outOfSquad, onAddToSquad, onDropFromSquad, registered, outfieldLiberos, onToggleReserveLibero,
+  outOfSquad, onAddToSquad, onDropFromSquad, registered, outfieldLiberos, onToggleReserveLibero, chemistry,
 }: TeamSheetProps): JSX.Element {
   const [dragOverZone, setDragOverZone] = useState<number | null>(null);
+  // The setter (or, in a 4-2, the setters) on court, for each hitter's understanding with him.
+  const setters = lineup.filter((p, z) => p >= 0 && slotPositions[z] === Position.Setter);
+  const linkOf = (p: number, z: number): { c: number; setter: string } | undefined => {
+    if (chemistry === undefined || setters.length === 0 || slotPositions[z] === Position.Setter || slotPositions[z] === Position.Libero) return undefined;
+    const c = setters.reduce((s, x) => s + chemistry(x, p), 0) / setters.length;
+    return { c, setter: setters.map((x) => store.shortName(x)).join(' & ') };
+  };
   const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
   // Once the match is on, the liberos named for it are fixed: they play libero and nothing else.
   const fixed = new Set(registered ?? []);
@@ -265,6 +285,7 @@ export function TeamSheet({
         playerIdx={p}
         role={slotPositions[z]}
         store={store}
+        link={linkOf(p, z)}
         swapOptions={swapOptions}
         isDragOver={dragOverZone === z}
         onSelectChange={(np) => onSetPlayer(z, np)}

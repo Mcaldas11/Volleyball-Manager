@@ -404,3 +404,54 @@ test('shuffling sideways the feet step and close, and never cross', () => {
     }
   }
 });
+
+test('a time-out: both sides go to their benches and stand round their coach — and back to their places after', () => {
+  const { sim, store, teamOf } = liveMatch(17);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  m.setSideline({ bench: [[], []], waiting: [[], []], warming: new Set() }, 0, 0);
+  const pre = sim.snapshot();
+  let now = 0;
+  const setup = setupScene(pre, pre.serving, store.position, 0);
+  m.scene(setup, now);
+  for (let t = 0; t < 1500; t += 16) m.step(0.016, (now += 16));
+  m.setStoppage(1, true, now);
+  for (let t = 0; t < 4000; t += 16) m.step(0.016, (now += 16));
+  for (const [p] of setup.positions) {
+    const b = m.bodies.get(p)!;
+    const coach = m.coaches[teamOf(p)];
+    assert.ok(Math.hypot(b.x - coach.x, b.y - coach.y) < 2.2, `${p} by the coach (${Math.hypot(b.x - coach.x, b.y - coach.y).toFixed(1)} m)`);
+  }
+  m.setStoppage(null, false, now);
+  for (let t = 0; t < 3500; t += 16) m.step(0.016, (now += 16));
+  for (const [p, g] of setup.positions) {
+    const b = m.bodies.get(p)!;
+    assert.ok(Math.hypot(b.x - g.x, b.y - g.y) < 0.8, `${p} back in place`);
+  }
+});
+
+test('before the first serve: lined up, then hands slapped at the net — each side on its own — then to their places', () => {
+  const { sim, store, teamOf } = liveMatch(18);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  const pre = sim.snapshot();
+  let now = 0;
+  const setup = setupScene(pre, pre.serving, store.position, 0);
+  m.scene(setup, now);
+  m.step(0.016, (now += 16));
+  const side = new Map([...setup.positions].map(([p, g]) => [p, Math.sign(g.y)]));
+  m.ceremony(now);
+  const t0 = now;
+  const until = (ms: number): void => { while (now < t0 + ms) m.step(0.016, (now += 16)); };
+  until(3800);
+  for (const [p] of setup.positions) assert.ok(Math.abs(Math.abs(m.bodies.get(p)!.y) - 3.2) < 0.6, 'lined up on the attack line');
+  until(5400);
+  for (const [p] of setup.positions) {
+    const b = m.bodies.get(p)!;
+    assert.ok(Math.abs(b.y) < 1.3, `${p} at the net (${b.y.toFixed(2)})`);
+    assert.equal(Math.sign(b.y), side.get(p), 'and on his own side of it');
+  }
+  until(9000);
+  for (const [p, g] of setup.positions) {
+    const b = m.bodies.get(p)!;
+    assert.ok(Math.hypot(b.x - g.x, b.y - g.y) < 0.6, `${p} in place for the serve`);
+  }
+});

@@ -6,13 +6,14 @@
  * shows it, and can be watched as often as you like after that.
  */
 
+import { clubMatchKits } from './kits.ts';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react';
 import type { Highlight } from '../engine/match/highlights.ts';
 import { defenceLayoutsOf } from '../engine/match/defence.ts';
 import { describeHighlight } from '../engine/world/monthAwards.ts';
-import { ClubCrest, clubHue, Segmented } from './components.tsx';
+import { ClubCrest, Segmented } from './components.tsx';
 import { Icon } from './icons.tsx';
-import { kitsFor, LiveCourt, type CourtLabels } from './LiveCourt.tsx';
+import { LiveCourt, type CourtLabels } from './LiveCourt.tsx';
 import { rallyBeats, setupScene, type CourtState, type Radar, type Scene } from './matchCourt.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from './rallyPlayer.ts';
 import { BigPlayCallout, crowdFor, ServeRadar } from './screens/Matchday.tsx';
@@ -33,7 +34,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
   const store = world.players;
   const home = h.home !== undefined ? world.clubs[h.home] : undefined;
   const away = h.away !== undefined ? world.clubs[h.away] : undefined;
-  const kits = kitsFor(home !== undefined ? clubHue(home) : 210, away !== undefined ? clubHue(away) : 20);
+  const kits = clubMatchKits(home, away);
   // The side that made it plays in the near half, closest to the camera.
   const nearTeam = h.starTeam;
 

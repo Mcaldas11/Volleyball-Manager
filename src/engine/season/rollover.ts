@@ -11,6 +11,10 @@
  * too generous, the world will have visibly drifted by season twenty.
  */
 
+import { judgePhilosophy } from '../world/board.ts';
+import { summerPress } from '../world/pressRoom.ts';
+import { predictionVerdicts } from '../world/predictions.ts';
+import { summerChemistry } from '../world/chemistry.ts';
 import { fansTrophy } from '../world/supporters.ts';
 import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
@@ -61,6 +65,12 @@ export interface RolloverReport {
 export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   // Any competition of the manager's not reviewed yet gets its review before the season is wiped.
   competitionReviewsDay(world, true);
+  // Pairs split up are forgotten; the rest lose a little over the break.
+  summerChemistry(world);
+  // The papers look back at their tips, and the board at the manager's finish against them.
+  predictionVerdicts(world);
+  // The press's grudges and friendships soften over the summer.
+  summerPress(world);
   const report: RolloverReport = {
     season: world.season,
     year: world.year,
@@ -100,6 +110,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   settleFinances(world, report, record);
   // The owner's verdict on his wish — and his money, if the club ended in the red.
   ownerSeasonEnd(world);
+  // The board weigh the season against what the club stands for.
+  judgePhilosophy(world);
   const finishes = captureFinishes(world);
   applyPromotionRelegation(world, report);
   // Every board judges its coach's season — before the summer's contracts

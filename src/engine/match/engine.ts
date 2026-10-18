@@ -82,6 +82,15 @@ const RECYCLE_RATE = 0.22;
 const ZONE_TARGET_PULL = 1.8;
 /** A fast set to the pin beats the block a little and is a little harder to hit; a high one the other way round. */
 const FAST_SET_BLOCK = 0.94;
+/**
+ * A combination the side has rehearsed in training: the decoy freezes the middle blocker and the
+ * hitter swings at a block a beat late — better than the fast set it takes the place of. Not
+ * rehearsed, it costs the timing instead (see the attack).
+ */
+const COMBO_EDGE = 0.1;
+/** How much a setter–hitter pair's understanding (0-1, around a fair 0.5) puts the set on the hitter — see chemistry.ts. */
+const CHEMISTRY_SET = 0.14;
+const COMBO_BLOCK_EDGE = 0.07;
 const FAST_SET_ERROR = 1.08;
 const HIGH_BALL_BLOCK = 1.03;
 const HIGH_BALL_ERROR = 0.95;
@@ -135,6 +144,8 @@ export interface TeamSetup {
   promised?: readonly number[];
   /** What the dressing room is worth on court, a multiplier — see dressingRoom.ts. Absent: 1. */
   roomEdge?: number;
+  /** How well a setter and a hitter of the side understand each other, 0-1 — see chemistry.ts. Absent: a fair 0.5 for all. */
+  chemistry?: (setter: number, hitter: number) => number;
 }
 
 export interface MatchSetup {
@@ -533,6 +544,8 @@ class TeamRuntime {
   readonly read: number;
   /** What it prepared for. */
   readonly prep: { reception: number; transition: number; block: number; combinations?: number };
+  /** How well each setter and hitter of the side know each other. */
+  readonly chemistry: (setter: number, hitter: number) => number;
   /** The liberos named for the match: only they play libero, and they play nothing else. */
   readonly registeredLiberos: ReadonlySet<number>;
   /** Playing on with a knock: who, and what it is. */
@@ -554,6 +567,7 @@ class TeamRuntime {
     this.startLineup = setup.lineup.slice();
     this.read = Math.min(1, Math.max(0, setup.read ?? 0));
     this.prep = setup.prep ?? { reception: 0, transition: 0, block: 0 };
+    this.chemistry = setup.chemistry ?? (() => 0.5);
     this.startRotation = setup.startingRotation ?? 0;
     this.room = setup.roomEdge ?? 1;
     this.liberoIdx = setup.libero;
@@ -2139,7 +2153,10 @@ export class MatchSimulator {
     const decoy = combo ? this.laneAttacker[AttackLane.QuickMiddle] : -1;
     const rehearsed = atk.prep.combinations ?? 0;
     const timing = combo ? 0.07 : call === 'slide' ? 0.04 : call === 'backQuick' ? 0.03 : 0;
-    const setOnIt = clamp(setQuality - timing * (1 - rehearsed), 0, 1);
+    // A hitter who knows his setter is on the ball, a little more so on the quick, which is all timing.
+    const chem = atk.chemistry(atk.settingIdx(), attacker);
+    const understanding = CHEMISTRY_SET * (chem - 0.5) * (lane === AttackLane.QuickMiddle ? 1.5 : 1);
+    const setOnIt = clamp(setQuality - timing * (1 - rehearsed) + understanding, 0, 1);
 
     // ---- Attack strength ----
     let attackBase: number;
@@ -2171,7 +2188,8 @@ export class MatchSimulator {
     const attackRating =
       firstBall * attackBase * ar.fatigue * ar.confidence * (0.82 + 0.28 * setOnIt) *
       (1 + OFF_HAND_EDGE * (ar.offHand - OFF_HAND_TYPICAL) * (1 - setOnIt)) *
-      (transition ? 1 + PREP_EDGE * atk.prep.transition : 1) +
+      (transition ? 1 + PREP_EDGE * atk.prep.transition : 1) *
+      (combo ? 1 + COMBO_EDGE * rehearsed : 1) +
       rng.gaussian(0, (1 - ar.consistency) * 9);
     const height = this.spikeHeight(ar, lane, setOnIt);
 
@@ -2182,7 +2200,7 @@ export class MatchSimulator {
       ? Math.max(1, this.blockersFor(lane, grade, def, rotTac, transition) - 1)
       : this.blockersFor(lane, grade, def, rotTac, transition);
     const high = call === undefined && (lane === AttackLane.OutsideHigh || lane === AttackLane.OppositeRight);
-    const beaten = combo ? 0.86 + 0.1 * atk.read : call === 'slide' ? 0.9 : call === 'backQuick' ? 0.95
+    const beaten = combo ? 0.86 - COMBO_BLOCK_EDGE * rehearsed + 0.1 * atk.read : call === 'slide' ? 0.9 : call === 'backQuick' ? 0.95
       : call === 'fastSet' ? FAST_SET_BLOCK : high ? HIGH_BALL_BLOCK : 1;
     // A block that knows the attack's patterns is there before the ball.
     const blockRating =

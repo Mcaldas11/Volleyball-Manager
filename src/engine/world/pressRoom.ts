@@ -127,6 +127,8 @@ export interface PressMemory {
   asked: string[];
   /** What the manager has said lately, the latest last. */
   quotes: PressQuote[];
+  /** How each journalist gets on with the manager, -100 (hostile) to 100 (an ally), by name — absent, 0. */
+  relations?: Record<string, number>;
 }
 
 /** The press's notebooks for one conference. */
@@ -1111,4 +1113,62 @@ export function noteQuote(world: World, q: PressQuote): void {
 /** The writer's own dice for a conference: the same conference reads the same, without touching the world's. */
 export function pressRng(world: World, salt: number): Rng {
   return new Rng(`press:${world.season}:${world.day}:${salt}:${world.nextInterviewId}`);
+}
+
+// ---- Relationships -----------------------------------------------------------------------
+//
+// Every journalist keeps a relationship with the manager over a career. Answers that land with
+// them warm it; answers that grate cool it; standing them up — declining a conference they came
+// to — costs a little with all of them. An ally comes into the room already warm and takes an
+// answer a shade better than it was; someone who has turned hostile comes in wary and takes it a
+// shade worse. Summers soften both.
+
+/** What an answer's reception does to the relationship. */
+const WARMTH: Readonly<Record<BodyLanguage, number>> = {
+  delighted: 8, encouraged: 6, pleased: 3, neutral: 0, skeptical: -5, hostile: -8,
+};
+const MOODS: readonly BodyLanguage[] = ['hostile', 'skeptical', 'neutral', 'pleased', 'encouraged', 'delighted'];
+/** Where a relationship starts to colour how they take things, either way. */
+const COLOURS = 40;
+
+export function relationOf(world: World, name: string): number {
+  return world.press?.relations?.[name] ?? 0;
+}
+
+export function relationLabel(r: number): string {
+  return r >= 60 ? 'Ally' : r >= 25 ? 'Friendly' : r > -25 ? 'Neutral' : r > -60 ? 'Wary' : 'Hostile';
+}
+
+/** How they come into the room: warm if they like him, wary if they don't. */
+export function moodOnArrival(r: number): BodyLanguage {
+  return r >= COLOURS ? 'pleased' : r <= -COLOURS ? 'skeptical' : 'neutral';
+}
+
+/** How an answer lands with them, given how they feel about him: a step warmer or colder. */
+export function colouredBy(r: number, bl: BodyLanguage): BodyLanguage {
+  const shift = r >= COLOURS ? 1 : r <= -COLOURS ? -1 : 0;
+  return MOODS[Math.max(0, Math.min(MOODS.length - 1, MOODS.indexOf(bl) + shift))];
+}
+
+/** The relationship after an answer landed as `bl`; returns the change. */
+export function warmTo(world: World, name: string, bl: BodyLanguage): number {
+  const m = pressMemory(world);
+  const rel = (m.relations ??= {});
+  const was = rel[name] ?? 0;
+  rel[name] = Math.max(-100, Math.min(100, was + WARMTH[bl]));
+  return rel[name] - was;
+}
+
+/** Stood up: a conference declined costs a little with everyone who came. */
+export function stoodUp(world: World, names: readonly string[]): void {
+  const m = pressMemory(world);
+  const rel = (m.relations ??= {});
+  for (const n of names) rel[n] = Math.max(-100, (rel[n] ?? 0) - 3);
+}
+
+/** The summer: every relationship drifts back towards nothing much. */
+export function summerPress(world: World): void {
+  const rel = world.press?.relations;
+  if (rel === undefined) return;
+  for (const n of Object.keys(rel)) rel[n] = Math.round(rel[n] * 0.7);
 }

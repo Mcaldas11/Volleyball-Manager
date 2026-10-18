@@ -87,7 +87,7 @@ test('combinations run off a middle up front as the decoy, and not at all when t
   assert.equal(attacks({ combinations: Combinations.Off }, [4, 5]).filter((c) => isCombination(c.play)).length, 0);
 });
 
-test('a combination rehearsed in training beats the block more often than a plain swing — and costs the side nothing', () => {
+test('combination plays rehearsed in training beat the block, and a side that runs none', () => {
   const N = 160;
   let won = 0;
   const eff = { combo: [0, 0], plain: [0, 0] };
@@ -114,9 +114,29 @@ test('a combination rehearsed in training beats the block more often than a plai
   const combo = eff.combo[0] / eff.combo[1];
   const plain = eff.plain[0] / eff.plain[1];
   assert.ok(combo > plain + 0.05, `combinations hit ${(combo * 100).toFixed(1)}%, plain swings at the pins ${(plain * 100).toFixed(1)}%`);
-  // Called off the good passes, they leave the plain swings the bad ones: over a match it comes out
-  // about even against a side that runs none — never a cost.
-  assert.ok(won / N > 0.44, `${((won / N) * 100).toFixed(1)}% won`);
+  assert.ok(won / N > 0.52, `${((won / N) * 100).toFixed(1)}% won`);
+});
+
+test('a combination not rehearsed is mistimed: the same side wins less with it than with it drilled', () => {
+  const N = 300;
+  const wins = (rehearsed: number): number => {
+    let won = 0;
+    for (let i = 0; i < N; i++) {
+      const home = toTeamSetup(world.players, a);
+      const away = toTeamSetup(world.players, a);
+      home.tactics = { ...defaultTactics(), combinations: Combinations.Often };
+      away.tactics = { ...defaultTactics(), combinations: Combinations.Off };
+      home.prep = { reception: 0, transition: 0, block: 0, combinations: rehearsed };
+      const r = new MatchSimulator(world.players, {
+        home, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: false, seed: 7000 + i,
+      }).run();
+      if (r.homeSets > r.awaySets) won++;
+    }
+    return won / N;
+  };
+  const drilled = wins(1);
+  const cold = wins(0);
+  assert.ok(drilled > cold + 0.025, `drilled ${(drilled * 100).toFixed(0)}%, not rehearsed ${(cold * 100).toFixed(0)}%`);
 });
 
 /** Each attack with the zone its pass came down in — the last pass, dig or cover before it. */

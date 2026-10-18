@@ -60,6 +60,8 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
 
 /** Each day: anything newly reached is unlocked, dated, and the manager hears. */
 export function achievementsDay(world: World): void {
+  // A career changed in the editor earns none.
+  if (world.edited === true) return;
   const career = world.career;
   // A promotion: the club he coaches gone up a division since he last looked.
   const job = career.jobs[career.jobs.length - 1];

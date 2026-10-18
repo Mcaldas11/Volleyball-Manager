@@ -79,6 +79,14 @@ export function MainMenu(): JSX.Element {
             </span>
             <Icon name="chevronRight" size={20} className="start-item-chev" />
           </button>
+          <button className="start-item" onClick={() => g.openSettings()}>
+            <span className="start-item-icon"><Icon name="gear" size={22} /></span>
+            <span className="start-item-text">
+              <span className="start-item-title">Settings</span>
+              <span className="start-item-meta">Text size, colour-blind friendly colours, less motion.</span>
+            </span>
+            <Icon name="chevronRight" size={20} className="start-item-chev" />
+          </button>
           <button className="start-item" onClick={() => g.goToMenu('load')}>
             <span className="start-item-icon"><Icon name="save" size={22} /></span>
             <span className="start-item-text">

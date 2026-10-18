@@ -25,7 +25,7 @@ export type FanStory =
   | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top' | 'retiring' | 'retired'
   | 'playerAward' | 'coachAward' | 'title' | 'match' | 'derby'
   | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified'
-  | 'press' | 'pressBold';
+  | 'press' | 'pressBold' | 'tips';
 
 /** What a story's comments turn on. */
 export interface FanBrief {
@@ -69,6 +69,25 @@ type Line = readonly [FanMood, string];
  * nations, {coach}, {score}, {fee}, {weeks}, {comp}.
  */
 const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>> = {
+  tips: {
+    club: [
+      ['happy', 'Favourites? We will take that. Now go and do it.'],
+      ['worried', 'Being tipped means nothing. Ask anyone who was tipped last year.'],
+      ['delighted', 'The papers can see it too. This is our year!'],
+      ['neutral', 'Previews are for the summer. Talk to me in April.'],
+    ],
+    other: [
+      ['neutral', 'Second favourites suits us fine. Less pressure.'],
+      ['happy', 'Let {c} carry the weight of it. We will be right behind them.'],
+    ],
+    rival: [
+      ['angry', '{c} favourites again? Lazy previews, every summer.'],
+      ['neutral', 'Tips are cheap. Points are not.'],
+    ],
+    neutral: [
+      ['neutral', 'Same top three as every year. Someone surprise us, please.'],
+    ],
+  },
   press: {
     club: [
       ['happy', 'Calm and sensible from {coach}. Like it.'],
@@ -429,7 +448,7 @@ const COMMENTS: Readonly<Record<FanStory, number>> = {
   rumour: 4, signing: 5, extension: 3, sacked: 4, appointed: 4, injury: 3, shock: 5, top: 4, retiring: 4, retired: 4,
   playerAward: 3, coachAward: 3, title: 6, match: 5, derby: 6,
   nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4, qualified: 4,
-  press: 3, pressBold: 5,
+  press: 3, pressBold: 5, tips: 3,
 };
 
 /** Words in a club's name that say nothing about it. */

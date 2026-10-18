@@ -8,6 +8,10 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import { applyPreferences, loadPreferences, savePreferences, type Preferences } from './preferences.ts';
+import { playAroundTheLeague, type AroundTheLeague } from '../engine/season/aroundTheLeague.ts';
+import { bookCamp, type CampKind } from '../engine/world/camp.ts';
+import { requestLowerTarget, requestWages } from '../engine/world/board.ts';
 import { setUiGame } from './gameGender.ts';
 import { arrangeFriendly, toggleFrame, toggleWatch } from '../engine/world/nationalExtras.ts';
 import { startCourse } from '../engine/world/courses.ts';
@@ -123,6 +127,7 @@ import {
 import {
   loadPressAi, pressAiReady, savePressAi, unwritten, writeQuestions, type PressAiSettings,
 } from './pressWriter.ts';
+import { chemistryFor } from '../engine/world/chemistry.ts';
 import {
   deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
   newSaveId, saveGame as writeSaveWorld, type SaveMeta,
@@ -165,13 +170,13 @@ export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals'
-  | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses';
+  | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses' | 'editor';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
   'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news', 'internationals',
-  'achievements', 'courses',
+  'achievements', 'courses', 'editor',
 ]);
 
 /** The team screens a national team has as well as a club: its squad, its team sheet, its instructions, its rotations. */
@@ -450,6 +455,8 @@ export interface MatchdayLogEntry {
 
 export interface MatchdayState {
   fixture: Fixture;
+  /** The rest of the round in the competition, played at kick-off to unfold alongside — see aroundTheLeague.ts. */
+  around?: AroundTheLeague;
   /** Home and away, as the screens show them. */
   sides: [MatchSide, MatchSide];
   /** The competition, as the banner shows it. */
@@ -608,6 +615,9 @@ class Game {
   /** Fixture id of the press conference currently open full-screen, if any. */
   /** The press conference on screen, by its id. */
   activeInterviewId: number | null = null;
+  /** The player's own settings — see preferences.ts — and whether their window is open. */
+  prefs: Preferences = loadPreferences();
+  settingsOpen = false;
   /** The press room written by a language model: the setting, and what it is doing now. */
   pressAi: PressAiSettings = loadPressAi();
   pressWriting = false;
@@ -2557,12 +2567,13 @@ class Game {
       read: isFriendly(world, md.fixture) ? 0 : oppositionRead(world, club),
       prep: matchPrep(world, club, md.fixture.day),
       roomEdge: cohesionEdge(cohesionOf(world, club.id)),
+      chemistry: chemistryFor(world),
     };
     // The other side keeps any promise of games it has made a loanee — and
     // comes having prepared for the match, as it would anywhere else.
     const theirs = (c: Club): TeamSetup => ({
       ...toTeamSetup(world.players, c, loanStarters(world, c)), prep: matchPrep(world, c, md.fixture.day),
-      roomEdge: cohesionEdge(cohesionOf(world, c.id)),
+      roomEdge: cohesionEdge(cohesionOf(world, c.id)), chemistry: chemistryFor(world),
     });
     const homeSetup = md.userIsHome ? userSetup : theirs(homeClub);
     const awaySetup = md.userIsHome ? theirs(awayClub) : userSetup;
@@ -2581,6 +2592,8 @@ class Game {
     });
     const talk = md.talks?.prematch;
     if (talk !== undefined) this.liveSim.teamTalk(md.userIsHome ? 0 : 1, talk.result.multiplier, 'match');
+    // The rest of the round is played alongside.
+    md.around = playAroundTheLeague(world, this.ctx, md.fixture) ?? undefined;
     this.startLive();
   }
 
@@ -3169,6 +3182,48 @@ class Game {
   }
 
   /** Go to the owner for money for transfers. */
+  /** The world changed by hand in the editor: marked, and shown again. */
+  markEdited(): void {
+    if (this.world !== null) this.world.edited = true;
+    this.emit();
+  }
+
+  openSettings(): void {
+    this.settingsOpen = true;
+    this.emit();
+  }
+
+  closeSettings(): void {
+    this.settingsOpen = false;
+    this.emit();
+  }
+
+  /** Change the player's settings: kept in this browser, and put on the page at once. */
+  setPreferences(p: Preferences): void {
+    this.prefs = p;
+    savePreferences(p);
+    applyPreferences(p);
+    this.emit();
+  }
+
+  /** Book the pre-season training camp. */
+  bookCamp(kind: CampKind, start: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = bookCamp(world, club, kind, start);
+    this.emit();
+  }
+
+  /** Put a case to the board: more money for wages, or a target the squad can reach. */
+  boardRequest(kind: 'wages' | 'target'): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = kind === 'wages' ? requestWages(world, club) : requestLowerTarget(world, club);
+    this.emit();
+  }
+
   askOwner(amount: number): void {
     const world = this.world;
     const club = this.club;

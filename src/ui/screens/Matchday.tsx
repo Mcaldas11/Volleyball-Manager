@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import { clubKit, kitFromHue, matchKits } from '../kits.ts';
+import { asItStands, liveTable, type AroundTheLeague, type Progress } from '../../engine/season/aroundTheLeague.ts';
+import { chemistryOf } from '../../engine/world/chemistry.ts';
 import { TRAVEL_COST, tripTo, type Trip } from '../../engine/world/fatigue.ts';
 import { fixtureRivalry } from '../../engine/world/rivals.ts';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
@@ -14,7 +17,7 @@ import {
 import { NATIONS } from '../../engine/world/nations.ts';
 import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
-import { kitsFor, LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
+import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
 import type { Kit } from '../court3d.ts';
@@ -51,6 +54,15 @@ function sideHue(world: World, side: MatchSide): number {
     return club !== undefined ? clubHue(club) : 210;
   }
   return NATION_HUES[NATIONS[side.nation]?.code ?? ''] ?? (side.nation * 137.508) % 360;
+}
+
+/** The two sides' kits: a club's own (as designed, or from its colour), a nation's from its colours — the away side changing on a clash. */
+function sideKits(world: World, home: MatchSide, away: MatchSide): [Kit, Kit] {
+  const kit = (s: MatchSide): Kit => {
+    const club = s.clubId >= 0 ? world.clubs[s.clubId] : undefined;
+    return club !== undefined ? clubKit(club) : kitFromHue(sideHue(world, s));
+  };
+  return matchKits(kit(home), kit(away), sideHue(world, away));
 }
 
 /** A side's badge: the club's crest, or the nation's flag. */
@@ -266,6 +278,7 @@ function LineupSetup(): JSX.Element {
         onDropFromSquad={(p) => g.dropFromMatchdaySquad(p)}
         outfieldLiberos={md.homeOutfieldLiberos}
         onToggleReserveLibero={(p) => g.toggleReserveLibero(p)}
+        chemistry={(s, h) => chemistryOf(world, s, h)}
       />
     </div>
   );
@@ -413,6 +426,7 @@ function SetBreak(): JSX.Element {
         onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
         slotPositions={lineupSlotPositions(formationOf(g.matchTactics() ?? undefined))}
         registered={md.homeLiberos ?? g.matchLiberosOf(md.userIsHome ? 0 : 1)}
+        chemistry={(s, h) => chemistryOf(world, s, h)}
       />
     </div>
   );
@@ -651,6 +665,60 @@ function liveStats(log: readonly MatchdayLogEntry[]): [TeamLiveStats, TeamLiveSt
 }
 
 /** Final scores of every set already finished, from the last rally of each. */
+/**
+ * The rest of the round, alongside: each match at the same point of the evening as the manager's —
+ * its sets so far and the one under way — and the table if they all ended now.
+ */
+function AroundPanel({ around, progress, own }: {
+  around: AroundTheLeague;
+  progress: Progress;
+  own: { home: number; away: number; homeSets: number; awaySets: number };
+}): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const me = world.userClubId;
+  const name = (id: number): string => world.clubs[id]?.shortName ?? '?';
+  const games = around.ids.map((id) => world.fixtures[id]).filter((f) => f !== undefined).map((f) => {
+    const now = asItStands(f, progress);
+    const won = now.sets.reduce((s, [h, a]) => [s[0] + (h > a ? 1 : 0), s[1] + (a > h ? 1 : 0)], [0, 0]);
+    return { f, now, homeSets: won[0], awaySets: won[1] };
+  });
+  const table = liveTable(around.base, [own, ...games.map((x) => ({ home: x.f.home, away: x.f.away, homeSets: x.homeSets, awaySets: x.awaySets }))]);
+  return (
+    <div className="lv-around">
+      <div className="lv-around-games">
+        {games.map(({ f, now, homeSets, awaySets }) => (
+          <div key={f.id} className="lv-around-game">
+            <span className="lv-around-team">{name(f.home)}</span>
+            <b className="lv-around-sets">{homeSets}–{awaySets}</b>
+            <span className="lv-around-team away">{name(f.away)}</span>
+            <span className={`lv-around-now${now.done ? ' done' : ''}`}>
+              {now.done ? 'FT' : now.live !== null ? `${now.live[0]}-${now.live[1]}` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="lv-around-sub">As it stands</div>
+      <table className="lv-around-table">
+        <tbody>
+          {table.map((r, i) => {
+            const move = r.was - (i + 1);
+            return (
+              <tr key={r.clubId} className={r.clubId === me ? 'me' : ''}>
+                <td className="num">{i + 1}</td>
+                <td className={`mv ${move > 0 ? 'up' : move < 0 ? 'down' : ''}`}>{move > 0 ? '▲' : move < 0 ? '▼' : ''}</td>
+                <td className="club">{name(r.clubId)}</td>
+                <td className="num faint">{r.played}</td>
+                <td className="num pts">{r.points}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function completedSets(log: readonly MatchdayLogEntry[], currentSet: number, matchOver: boolean): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   const last = new Map<number, MatchdayLogEntry>();
@@ -1218,6 +1286,8 @@ function LiveMatchView(): JSX.Element {
   }, [panelOpen]);
   const [shoutOpen, setShoutOpen] = useState(false);
   const shoutRef = useDismiss(shoutOpen, () => setShoutOpen(false));
+  const [sideTab, setSideTab] = useState<'stats' | 'around'>('stats');
+  const [ceremony, setCeremony] = useState<number | null>(null);
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
   const [bigPlay, setBigPlay] = useState<(BigPlay & { key: number }) | null>(null);
@@ -1349,12 +1419,19 @@ function LiveMatchView(): JSX.Element {
       // A moment before the first serve, for the referee to wave it on — which
       // also stops a throwaway mount before it has played a single rally.
       await sleep(1200 / (g.matchday?.speed ?? 1));
+      // The very start of the match: the warm-up, the line-up and the hands at the net first.
+      if (!cancelled.current && (g.matchday?.log.length ?? 1) === 0) {
+        setCeremony(Date.now());
+        await sleep(6600 / (g.matchday?.speed ?? 1));
+      }
       let stopped = false;
+      let fromTimeout = false;
       while (!cancelled.current) {
         const current = g.matchday;
         if (current === null) break;
         if (current.paused) {
           stopped = true;
+          if (current.timeoutActive !== null) fromTimeout = true;
           // A substitution stoppage ends by itself once its wall-clock time is
           // up — but never while a timeout is open, which only the clock or
           // the Resume button may close.
@@ -1366,9 +1443,11 @@ function LiveMatchView(): JSX.Element {
           continue;
         }
         if (stopped) {
-          // Play back on: a moment for the referee to wave the serve on.
+          // Play back on: a moment for the referee to wave the serve on — longer after a
+          // time-out, for both sides to come back from their benches.
           stopped = false;
-          await sleep(1100 / current.speed);
+          await sleep((fromTimeout ? 2600 : 1100) / current.speed);
+          fromTimeout = false;
           continue;
         }
         // A set won while this view was away (it unmounted mid-pause) still
@@ -1489,7 +1568,7 @@ function LiveMatchView(): JSX.Element {
 
   const [homeClub, awayClub] = md.sides;
   const userTeamIdx: 0 | 1 = md.userIsHome ? 0 : 1;
-  const kits = kitsFor(sideHue(world, homeClub), sideHue(world, awayClub));
+  const kits = sideKits(world, homeClub, awayClub);
   const teamOf = (p: number): 0 | 1 => (homeClub.players.includes(p) ? 0 : 1);
   // What the scoreboard shows: the state before the rally still being
   // animated, or the live snapshot once every rally has been shown.
@@ -1615,6 +1694,7 @@ function LiveMatchView(): JSX.Element {
               teamNames={[homeClub.shortName, awayClub.shortName]}
               view={g.courtView}
               zoom={varZoom}
+              ceremony={ceremony}
             />
             <div className="lv-court-tools">
               <Segmented<'3d' | '2d'> size="sm" options={[['3d', '3D'], ['2d', '2D']]} value={g.courtView} onChange={(v) => g.setCourtView(v)} />
@@ -1674,7 +1754,16 @@ function LiveMatchView(): JSX.Element {
             onPick={userTeamIdx === 1 ? (p, row) => pickPlayer(p, row, 'right') : undefined} />
           {quick !== null && <QuickSub key={quick.p} at={quick} onClose={closeQuick} />}
           <section className="card lv-stats-card">
-            <header className="lv-card-head">Match stats</header>
+            <header className="lv-card-head lv-tabs">
+              <button className={sideTab === 'stats' ? 'on' : ''} onClick={() => setSideTab('stats')}>Match stats</button>
+              {md.around !== undefined && (
+                <button className={sideTab === 'around' ? 'on' : ''} onClick={() => setSideTab('around')}>Around the league</button>
+              )}
+            </header>
+            {sideTab === 'around' && md.around !== undefined ? (
+              <AroundPanel around={md.around} progress={{ sets: setHistory.length, score: [view.homeScore, view.awayScore], over: view.matchOver }}
+                own={{ home: md.fixture.home, away: md.fixture.away, homeSets: view.homeSets, awaySets: view.awaySets }} />
+            ) : <>
             <div className="lv-stats-names">
               <span>{homeClub.shortName}</span>
               <span>{awayClub.shortName}</span>
@@ -1693,6 +1782,7 @@ function LiveMatchView(): JSX.Element {
                 </div>
               );
             })}
+            </>}
           </section>
         </div>
       </div>

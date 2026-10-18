@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import { EditorScreen } from './screens/Editor.tsx';
+import { SettingsDialog } from './settingsDialog.tsx';
 import { AchievementsScreen, CoursesScreen } from './screens/Milestones.tsx';
 import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
@@ -146,6 +148,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         icon: 'stats',
         tabs: [['stats', 'Player Stats'], ['rankings', 'World Rankings'], ['halloffame', 'Hall of Fame']],
       },
+      { id: 'editor', label: 'Editor', icon: 'gear', tabs: [['editor', 'Editor']] },
     ],
   },
 ];
@@ -177,10 +180,12 @@ function readCollapsed(): boolean {
 }
 
 export function App(): JSX.Element {
+  const g = useGame();
   return (
     <>
       <AppBody />
       <TaskWindow />
+      {g.settingsOpen && <SettingsDialog />}
     </>
   );
 }
@@ -321,6 +326,7 @@ function Screen(): JSX.Element {
     case 'owner': return <OwnerScreen />;
     case 'achievements': return <AchievementsScreen />;
     case 'courses': return <CoursesScreen />;
+    case 'editor': return <EditorScreen />;
     case 'rankings': return <RankingsScreen />;
     case 'halloffame': return <HallOfFameScreen />;
     default: return <HomeScreen />;
@@ -471,6 +477,9 @@ function ManagerMenu({ name, photo }: { name: string; photo: string }): JSX.Elem
           <button disabled={g.busy} onClick={() => { void g.exportCurrentCareer(); setOpen(false); }}
             title="Download the career as a file — a copy outside the browser">
             <Icon name="download" size={16} /> Export career file
+          </button>
+          <button onClick={() => { setOpen(false); g.openSettings(); }}>
+            <Icon name="gear" size={16} /> Settings
           </button>
           <button disabled={g.busy} onClick={() => { setOpen(false); void g.exitToMenu(); }}>
             <Icon name="exit" size={16} /> Save &amp; exit to menu

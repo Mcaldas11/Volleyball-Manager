@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
+import { lessMotion } from '../preferences.ts';
 import type { ManagerProfile } from '../../engine/world/world.ts';
 import {
   conferenceMatch,
   type AnswerCategory, type BodyLanguage, type ConferenceMatch, type InterviewKind, type InterviewOption, type InterviewQuestion,
   type InterviewSession,
 } from '../../engine/world/interviews.ts';
-import { VOICE_LABEL } from '../../engine/world/pressRoom.ts';
+import { relationLabel, relationOf, VOICE_LABEL } from '../../engine/world/pressRoom.ts';
 import { ClubCrest, Flag, managerPhotoUrl, PersonFace, PlayerFace } from '../components.tsx';
 import { portraitUrl } from '../faces.ts';
 import { Icon } from '../icons.tsx';
@@ -57,7 +58,7 @@ function SideMark({ g, club, nation, size = 22 }: { g: Game; club: number; natio
 function useReveal(text: string): string {
   const [shown, setShown] = useState(text);
   useEffect(() => {
-    const still = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    const still = typeof window !== 'undefined' && lessMotion();
     if (still) { setShown(text); return; }
     let n = 0;
     const step = Math.max(2, Math.ceil(text.length / 38));
@@ -81,6 +82,17 @@ function MoodMeter({ mood }: { mood: BodyLanguage }): JSX.Element {
         {[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= m.level ? 'on' : ''} />)}
       </span>
       <span className="press-mood-label">{m.label}</span>
+    </span>
+  );
+}
+
+/** How a journalist gets on with the manager, over his career. */
+function Relation({ g, name }: { g: Game; name: string }): JSX.Element {
+  const r = relationOf(g.world!, name);
+  const label = relationLabel(r);
+  return (
+    <span className={`press-rel rel-${label.toLowerCase()}`} title={`How ${name.split(' ')[0]} gets on with you, built up over your career: ${r > 0 ? '+' : ''}${r}`}>
+      {label}
     </span>
   );
 }
@@ -243,7 +255,7 @@ function Room({ g, session }: { g: Game; session: InterviewSession }): JSX.Eleme
           const now = x.journalist.name === q.journalist.name;
           const asked = x.answeredIndex !== null;
           return (
-            <span key={x.journalist.name} className={`press-seat${now ? ' now' : ''}${asked && !now ? ` asked mood-${x.bodyLanguage}` : ''}`} title={`${x.journalist.name} · ${x.journalist.outlet}`}>
+            <span key={x.journalist.name} className={`press-seat${now ? ' now' : ''}${asked && !now ? ` asked mood-${x.bodyLanguage}` : ''}`} title={`${x.journalist.name} · ${x.journalist.outlet} · ${relationLabel(relationOf(g.world!, x.journalist.name))}`}>
               <PersonFace photoUrl={portraitUrl(x.journalist.photoId, x.journalist.gender)} name={x.journalist.name} size={now ? 34 : 28} />
             </span>
           );
@@ -256,7 +268,10 @@ function Room({ g, session }: { g: Game; session: InterviewSession }): JSX.Eleme
         <div className="press-who">
           <div className="press-name">{q.journalist.name}</div>
           <div className="faint">{q.journalist.outlet}</div>
-          {q.journalist.voice !== undefined && <span className="press-voice">{VOICE_LABEL[q.journalist.voice]}</span>}
+          <span className="press-tags">
+            {q.journalist.voice !== undefined && <span className="press-voice">{VOICE_LABEL[q.journalist.voice]}</span>}
+            <Relation g={g} name={q.journalist.name} />
+          </span>
         </div>
         <MoodMeter mood={q.bodyLanguage} />
       </div>
@@ -370,6 +385,10 @@ function BackPage({ g, session, cm }: { g: Game; session: InterviewSession; cm: 
               <div key={i} className="press-took-row">
                 <PersonFace photoUrl={portraitUrl(q.journalist.photoId, q.journalist.gender)} name={q.journalist.name} size={26} />
                 <span className="press-took-name">{q.journalist.name}</span>
+                {q.warmth !== undefined && q.warmth !== 0 && (
+                  <span className={`press-warmth ${q.warmth > 0 ? 'up' : 'down'}`} title="What the answer did to your relationship">{q.warmth > 0 ? '+' : ''}{q.warmth}</span>
+                )}
+                <Relation g={g} name={q.journalist.name} />
                 <MoodMeter mood={q.bodyLanguage} />
               </div>
             ))}

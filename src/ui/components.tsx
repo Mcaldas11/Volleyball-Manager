@@ -5,6 +5,7 @@
  * ability, money and injury status read identically everywhere they appear.
  */
 
+import { hueOf } from './kits.ts';
 import {
   useEffect, useId, useRef, useState, type CSSProperties, type JSX, type ReactNode, type RefObject,
 } from 'react';
@@ -230,7 +231,7 @@ export function Flag({ nation }: { nation: number }): JSX.Element {
  *  and sidebar accent all share it, so a club reads as one colour everywhere.
  *  The golden-angle step keeps consecutive ids visually distinct. */
 export function clubHue(club: Club): number {
-  return (club.id * 137.508) % 360;
+  return hueOf(club);
 }
 
 /** CSS custom properties that theme a region in a club's colours. */

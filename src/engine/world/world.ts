@@ -40,6 +40,7 @@ import type { RetirementPlan } from './retirement.ts';
 import type { TeamLine } from './teamAwards.ts';
 import type { InterviewSession } from './interviews.ts';
 import type { PressMemory } from './pressRoom.ts';
+import type { Prediction } from './predictions.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
 
@@ -692,6 +693,8 @@ export interface World {
   cohesion?: Record<number, number>;
   /** A club's room unsettled by a leader leaving: when, and by how much. */
   roomShock?: Record<number, { day: number; amount: number }>;
+  /** A pre-season camp's lift to a club's room, by club id, fading — see camp.ts. */
+  roomBond?: Record<number, { day: number; amount: number }>;
   /** The manager's talks to hire staff, or to keep his own — see staffDeals.ts. */
   staffNegotiations?: StaffTalks[];
   nextStaffTalksId?: number;
@@ -717,6 +720,12 @@ export interface World {
   matchReports?: Map<number, MatchReport>;
   /** What the press remember: the questions asked lately, and what the manager said — see pressRoom.ts. */
   press?: PressMemory;
+  /** Every setter–hitter pair's understanding, 0-1, by chemKey — see chemistry.ts. */
+  chemistry?: Map<number, number>;
+  /** The press's tips for each league's table, this season and last — see predictions.ts. */
+  predictions?: Prediction[];
+  /** Changed by hand in the editor: such a career earns no achievements. */
+  edited?: boolean;
   /** The tutorial's step while it runs (see the UI's tutorial.tsx); absent otherwise. */
   tutorial?: number;
   /** The day the staff last warned the manager a player was unhappy, by player. */

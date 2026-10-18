@@ -5,6 +5,7 @@
 
 import { expansionBlock, expansionOptions, fansOf } from '../../engine/world/supporters.ts';
 import { askBlock, DEMAND_TEXT, demandProgress, OWNER_KIND_NAMES, ownerMeans, ownerOf } from '../../engine/world/owners.ts';
+import { meetingBlock, paperRank, PHILOSOPHY_TEXT, philosophyOf, principleProgress } from '../../engine/world/board.ts';
 import type { JSX } from 'react';
 import type { Position } from '../../engine/model/positions.ts';
 import {
@@ -271,6 +272,61 @@ function Pips({ n }: { n: number }): JSX.Element {
   return <span className="own-pips">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= n ? 'on' : ''} />)}</span>;
 }
 
+/** What the board say the club stands for this season, and how the side is living up to it. */
+function PhilosophyCard(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const p = philosophyOf(world, club);
+  return (
+    <Card title="What the club stands for" icon="board">
+      <p className="biz-note">The board judge every season on these too, beyond the results: each kept counts for you, each ignored against you.</p>
+      <div className="phil-list">
+        {p.kinds.map((k) => {
+          const pr = principleProgress(world, club, k);
+          return (
+            <div key={k} className={`phil-row${pr.done ? ' done' : ''}`}>
+              <div className="phil-head">
+                <b>{PHILOSOPHY_TEXT[k].title}</b>
+                <span className={pr.done ? 'good' : 'faint'}>{pr.done ? 'On track' : 'Not yet'}</span>
+              </div>
+              <div className="faint phil-aim">{PHILOSOPHY_TEXT[k].aim}</div>
+              <div className="phil-bar"><i style={{ width: `${Math.round(pr.share * 100)}%` }} /></div>
+              <div className="phil-now">{pr.text}</div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/** A meeting with the board: a case for more wages, or for a target the squad can reach. */
+function BoardMeetingCard(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const block = meetingBlock(world, club);
+  const rank = paperRank(world, club);
+  return (
+    <Card title="Board meeting" icon="board">
+      <p className="biz-note">Put a case to the board, once every six weeks. They answer on the spot, from their confidence in you and the books.</p>
+      <KV k="Season target">{club.boardExpectation === 1 ? 'Win the league' : `${club.boardExpectation}th or better`}</KV>
+      <KV k="The squad on paper">{rank === 1 ? 'Strongest in the league' : `${rank}${rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'} strongest in the league`}</KV>
+      <KV k="Wage budget">{money(club.finances.wageBudget)} a season</KV>
+      <div className="own-asks">
+        <button className="sm" disabled={block !== null} title={block ?? 'Ask the board for more money for wages'} onClick={() => g.boardRequest('wages')}>
+          <Icon name="coin" size={13} /> More for wages
+        </button>
+        <button className="sm" disabled={block !== null} title={block ?? 'Ask the board to expect less this season — it will cost you some of their confidence'} onClick={() => g.boardRequest('target')}>
+          <Icon name="trophy" size={13} /> A lower target
+        </button>
+      </div>
+      {block !== null && <p className="faint biz-why">{block}</p>}
+    </Card>
+  );
+}
+
 export function OwnerScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -291,6 +347,7 @@ export function OwnerScreen(): JSX.Element {
         <StatTile label="Balance" value={money(club.finances.balance)} tone={club.finances.balance < 0 ? 'bad' : undefined} sub="in the bank" />
       </div>
       <div className="own-grid">
+        <div className="own-col">
         <Card title="The man behind the club" icon="board">
           <KV k="Means"><Pips n={o.wealth} /></KV>
           <KV k="Ambition"><Pips n={o.ambition} /></KV>
@@ -302,16 +359,6 @@ export function OwnerScreen(): JSX.Element {
                   : 'Investors: there is money, and they want it to make money.'}
             {o.wealth >= 3 ? ' He will not let the club end a season in the red.' : ''}
           </p>
-        </Card>
-        <Card title="His wish for the season" icon="trophy">
-          {d === undefined ? <Empty>He will tell you soon.</Empty> : (
-            <>
-              <p className="own-wish">{DEMAND_TEXT[d.kind]}</p>
-              <KV k="So far" cls={progress.done ? 'good' : undefined}>{progress.text}</KV>
-              <KV k="If it happens">The board's confidence up, his goodwill up</KV>
-              <KV k="If it doesn't">{o.patience <= 2 ? 'He will not forget it quickly' : 'A mark against you'}</KV>
-            </>
-          )}
         </Card>
         <Card title="Ask him for money" icon="coin">
           <p className="biz-note">For the transfer budget. He gives what his means allow, to a manager he believes in — and every euro costs some of his goodwill.</p>
@@ -325,6 +372,23 @@ export function OwnerScreen(): JSX.Element {
           {club.ownerAsk !== undefined && <p className="biz-status">Asked for {money(club.ownerAsk.amount)} — he answers by {g.dateLabelForDay(club.ownerAsk.until)}.</p>}
           {block !== null && club.ownerAsk === undefined && <p className="faint biz-why">{block}</p>}
         </Card>
+        </div>
+        <div className="own-col">
+        <Card title="His wish for the season" icon="trophy">
+          {d === undefined ? <Empty>He will tell you soon.</Empty> : (
+            <>
+              <p className="own-wish">{DEMAND_TEXT[d.kind]}</p>
+              <KV k="So far" cls={progress.done ? 'good' : undefined}>{progress.text}</KV>
+              <KV k="If it happens">The board's confidence up, his goodwill up</KV>
+              <KV k="If it doesn't">{o.patience <= 2 ? 'He will not forget it quickly' : 'A mark against you'}</KV>
+            </>
+          )}
+        </Card>
+        <BoardMeetingCard />
+        </div>
+        <div className="own-col">
+        <PhilosophyCard />
+        </div>
       </div>
     </>
   );

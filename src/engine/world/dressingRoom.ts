@@ -21,6 +21,7 @@
  * which spares the room much of the shock.
  */
 
+import { bondOf } from './camp.ts';
 import type { Club } from '../model/club.ts';
 import { hasTrait, Trait } from '../model/traits.ts';
 import { spellsOf } from './clubHistory.ts';
@@ -176,7 +177,8 @@ export function dressingRoom(world: World, club: Club): DressingRoom {
   const tenure = members.length > 0 ? members.reduce((s, m) => s + Math.min(5, m.seasons), 0) / members.length : 1;
   const { groups, isolated, effects } = roomGroups(world, club, members);
   const groupPoints = Math.max(-12, Math.min(4, effects.reduce((s, e) => s + e.points, 0)));
-  const cohesion = 35 + tenure * 9 - newcomers * 2.5 + (leaderMorale - 60) * 0.25 - shockOf(world, club.id) + groupPoints;
+  const cohesion = 35 + tenure * 9 - newcomers * 2.5 + (leaderMorale - 60) * 0.25 - shockOf(world, club.id) + groupPoints +
+    bondOf(world, club.id);
   return {
     members, captain, viceCaptain, groups, isolated, effects,
     cohesion: Math.round(Math.max(5, Math.min(100, cohesion))), leaderMorale, newcomers,

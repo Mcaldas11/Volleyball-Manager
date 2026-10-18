@@ -13,6 +13,8 @@
  * a match took.
  */
 
+import { campDay } from '../world/camp.ts';
+import { predictionsDay } from '../world/predictions.ts';
 import { calendarOf } from '../world/calendar.ts';
 import { watchedInMatch } from '../world/nationalExtras.ts';
 import { deadlineDay, deadlineMorning, rumoursAboutUs } from '../world/market.ts';
@@ -63,6 +65,7 @@ import { boardResults, careerDay, setBoardExpectations } from '../world/career.t
 import { coachesSetUp } from '../world/aiTactics.ts';
 import { analysisEdge, medicalQuality, staffDay, topUpStaffPool } from '../world/staffMarket.ts';
 import { processStaffDeals } from '../world/staffDeals.ts';
+import { chemistryFor, noteTogether } from '../world/chemistry.ts';
 import { cohesionEdge, cohesionOf, dressingRoomWeek } from '../world/dressingRoom.ts';
 import { changesOfMind, playerHappinessWeek } from '../world/playerTalks.ts';
 import { reportsDay } from '../world/reports.ts';
@@ -307,11 +310,11 @@ export function playFixture(
     const result = simulateMatch(store, {
       home: {
         ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home), prep: matchPrep(world, home, fixture.day),
-        roomEdge: cohesionEdge(cohesionOf(world, home.id)),
+        roomEdge: cohesionEdge(cohesionOf(world, home.id)), chemistry: chemistryFor(world),
       },
       away: {
         ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away), prep: matchPrep(world, away, fixture.day),
-        roomEdge: cohesionEdge(cohesionOf(world, away.id)),
+        roomEdge: cohesionEdge(cohesionOf(world, away.id)), chemistry: chemistryFor(world),
       },
       format: fixture.format,
       importance: fixture.importance,
@@ -427,6 +430,8 @@ function aftermath(
   const home = took(homeStats);
   const away = took(awayStats);
   noteMatchLoad(world, [...home, ...away]);
+  // Setters and hitters on court together learn each other's timing.
+  noteTogether(world, homeStats, awayStats);
   // A player rushed back from an injury may break down again.
   relapseAfterMatch(world, fixture.id, [...home, ...away]);
   if (!competitive) return;
@@ -563,6 +568,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   retirementDay(world);
   friendliesDay(world);
   trainingDay(world);
+  campDay(world);
   youthDay(world);
 
   if (todays !== undefined) {
@@ -585,6 +591,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   // The national teams' tournaments, and what the papers make of the day.
   internationalDay(world);
   newsDay(world, (todays ?? []).map((id) => world.fixtures[id]));
+  predictionsDay(world);
 
   // Any press conference for a match just played goes stale unfinished; line
   // up tomorrow's, if the user's club or national team has one, before the day rolls over.

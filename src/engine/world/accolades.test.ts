@@ -21,12 +21,14 @@ test("a season ends with its awards: the league's and the world's players, coach
     if (world.userClubId !== club.id) appointManager(world, club.id);
   }
   const season = world.season;
+  // His league as the season was played — the club may go up or down as it ends.
+  const leagueId = club.leagueId;
   endSeason(world, ctx);
   const store = world.players;
 
   // His league's night, and the world's: each award with a shortlist of up to three, the winner first.
   const nights = world.messages.filter((m) => m.awardsNight !== undefined).map((m) => m.awardsNight!);
-  const league = nights.find((n) => n.scope === club.leagueId);
+  const league = nights.find((n) => n.scope === leagueId);
   const globe = nights.find((n) => n.scope === 'world');
   assert.ok(league !== undefined && globe !== undefined);
   // The world always has its young player of the year; a league only if a young player held a place in it.
@@ -52,7 +54,7 @@ test("a season ends with its awards: the league's and the world's players, coach
   assert.ok(globe.extras !== undefined && globe.extras.length > 0, 'the top scorer and the rest');
 
   // The league's team of the season, on the court, in a message of its own.
-  const team = world.messages.find((m) => m.teamOfSeason?.competitionId === club.leagueId);
+  const team = world.messages.find((m) => m.teamOfSeason?.competitionId === leagueId);
   assert.ok(team !== undefined && team.teamOfSeason!.picks.length === 7);
 
   // Every top flight's awards are on the record, and the winners' profiles show them.

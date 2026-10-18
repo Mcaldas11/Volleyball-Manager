@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react';
+import { predictionFor } from '../../engine/world/predictions.ts';
 import { RivalTag } from '../components.tsx';
 import { fixtureRivalry, rivalryName } from '../../engine/world/rivals.ts';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
@@ -642,6 +643,8 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
   const { championship: champSize, relegation: relegationSize } = playoffBandSizes(comp);
   const activeGroup = comp.playoffGroups.find((grp) => grp.id === tab);
   const form = formByClub(comp, world);
+  // The press's tips for the table, once printed.
+  const tips = predictionFor(world, comp.id);
 
   return (
     <>
@@ -691,6 +694,7 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
                   <th className="num">Sets</th>
                   <th className="num">Ratio</th>
                   <th>Form</th>
+                  {tips !== undefined && <th className="num" title="Where the press tipped them before the season">Tip</th>}
                   <th className="num">Pts</th>
                 </tr>
               </thead>
@@ -707,6 +711,16 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
                       <td className="num dim">{r.setsFor}:{r.setsAgainst}</td>
                       <td className="num dim">{setRatio(r).toFixed(2)}</td>
                       <td><FormGuide results={form.get(r.clubId) ?? []} /></td>
+                      {tips !== undefined && (() => {
+                        const tip = tips.order.indexOf(r.clubId) + 1;
+                        const diff = r.played >= 3 && tip > 0 ? tip - (i + 1) : 0;
+                        return (
+                          <td className={`num tip-cell${diff >= 2 ? ' above' : diff <= -2 ? ' below' : ''}`}
+                            title={tip > 0 ? `Tipped ${tip}${diff > 0 ? `, ${diff} above it` : diff < 0 ? `, ${-diff} below it` : ''}` : undefined}>
+                            {tip > 0 ? tip : '–'}{diff >= 2 ? ' ▲' : diff <= -2 ? ' ▼' : ''}
+                          </td>
+                        );
+                      })()}
                       <td className="num pts-cell">{r.points}</td>
                     </tr>
                   );

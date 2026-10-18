@@ -74,7 +74,15 @@ Before submitting a change:
       with its setter in zone 1 keeps its places all rally
 - [x] Combination plays — quicks, slides, back quicks, pipes — and a plan per
       pass zone: what the setter may run off a perfect pass, a 3-6 m one or a
-      deep one
+      deep one. Rehearsed in training, a combination beats the block clearly
+      better than the fast set it replaces — a side that drills them and runs
+      them often wins more; one that runs them cold is mistimed
+- [x] Setters and hitters who know each other: every pair at a club has an
+      understanding that grows with every match they play together, eases
+      over a summer and is gone when one of them leaves — the sets arrive on
+      time a little more often, the quick most of all. Each hitter's card on
+      the team sheet shows his understanding with the setter, and the
+      assistant tells you when a pair has clicked
 - [x] Per-rotation instructions (preferred attacker, serve target, block
       assignment, defensive shape, tempo) and a defensive layout against each
       kind of attack
@@ -182,6 +190,18 @@ Before submitting a change:
       the young players given their chance, a top-three finish — judged at the
       season's end; he can be asked for money for transfers, a rich one
       covers a season in the red, and now and then the club changes hands
+- [x] What the club stands for: each season the board name two principles,
+      from who owns the club — young players given their chance, a team built
+      round the country's own, attacking volleyball, going after the serve,
+      living within the means — followed as the season goes and weighed at
+      its end. And board meetings, once every six weeks: put a case for more
+      money for wages, or for a target the squad can actually reach (never
+      free)
+- [x] The press's predictions: before each league starts the papers tip its
+      table from the squads, the manager hears where his side is tipped, the
+      league table carries the tip beside each club, and at the season's end
+      the papers own up — and the board weigh the manager's finish against
+      the tip
 - [x] Supporters: every club's following grows with wins, derbies won,
       trophies and stars signed, shrinks a little with defeats, and drifts
       towards what its standing draws — filling the arena or leaving it half
@@ -198,6 +218,10 @@ Before submitting a change:
 - [x] Weekly training plans, individual training, and players learning new
       positions in training and on court, driven by age, potential, coaching
       quality, facilities and the player's own professionalism
+- [x] A pre-season training camp: a week at home (cheap, good for the
+      group), at altitude (more in the young players' legs, everyone tired
+      for a few days) or abroad (the dearest, the dressing room tight for
+      months), booked for a week clear of matches
 - [x] Mentoring: pair a young player (23 and under) with a veteran (28 and
       over) — two at most each — and he comes on quicker, most of all under a
       mentor of his own position; the mentor's professionalism and
@@ -328,6 +352,12 @@ Before submitting a change:
       player's profile opens over the match
 - [x] A live commentary ticker alongside the match, plus flashed callouts for
       the moments that deserve one — "MONSTER SPIKE!", "HUGE BLOCK!", "ACE!"
+- [x] Around the league, beside your match: the rest of the round unfolds in
+      step with it, set for set, and the table as it would stand if every
+      match ended now
+- [x] Before the first serve, a last warm-up, the line-up and hands slapped
+      through the net; at a time-out both sides go to their benches and stand
+      round the coach, who makes his point
 - [x] Pre-match interviews, post-match press conferences, and a world news
       feed with the fans' comments under each story
 - [x] A press room that never asks the same conference twice: the journalists
@@ -341,7 +371,11 @@ Before submitting a change:
       promise before a match is quoted back after it, and a bold answer draws
       a follow-up. The room reacts to every answer, the effect of each tone on
       morale is shown as it is chosen, and the conference ends on tomorrow's
-      back page — its headline posted to the news with the fans' say under it
+      back page — its headline posted to the news with the fans' say under it.
+      Over a career each journalist keeps a relationship with the manager,
+      from hostile to an ally: answers that land warm it, answers that grate
+      cool it, a conference declined costs a little with everyone who came —
+      and an ally comes in warm while a hostile one comes in wary
 - [x] An optional AI press room: with an Anthropic API key, Claude writes
       every question and answer from the same notebooks (called straight from
       the browser; the key stays in it). Only the words change — who asks,
@@ -402,6 +436,14 @@ Before submitting a change:
 - [x] Every screen fits the window, Football Manager style: the page never
       scrolls, long lists scroll inside their own panels, and the layout
       follows the height that can actually be seen
+- [x] Settings: a larger text size (the whole interface grows, as far as the
+      window has room), colour-blind friendly colours (good and bad in blue
+      and orange), and less motion
+- [x] An editor and a kit designer: a club's name, arena and money; a
+      player's name, position, nationality, height, potential and every
+      attribute; each club's colour, shirt, shorts and libero shirt — worn in
+      every match, the away side changing on a clash. An edited career earns
+      no achievements
 
 ### PLANNED FEATURES
 

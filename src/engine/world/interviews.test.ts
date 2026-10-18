@@ -336,3 +336,47 @@ test('a bold promise before the match is put to him after it — and the boldest
   assert.ok(quoted, 'what he said before is quoted back at him');
   assert.ok(followed, 'a bold answer draws a follow-up');
 });
+
+test('a journalist told what they want to hear, conference after conference, becomes an ally — and one stood up remembers', () => {
+  const { world, opponentId } = managed(13);
+  let name = '';
+  for (let k = 0; k < 50; k++) {
+    const day = world.day + 1;
+    addTestFixture(world, world.userClubId, opponentId, day, world.clubs[world.userClubId].leagueId);
+    generateInterviewSessions(world, day);
+    const s = world.pendingInterviews.at(-1)!;
+    for (let i = 0; i < 12 && !s.finished; i++) {
+      const q = s.questions[s.currentIndex];
+      // Always the tone each one likes.
+      answerInterviewQuestion(world, s.id, q.options.findIndex((o) => o.category === q.journalist.bias));
+    }
+    name ||= s.questions[0].journalist.name;
+    world.pendingInterviews = [];
+    world.day += 4;
+  }
+  const rel = world.press!.relations!;
+  const allies = Object.entries(rel).filter(([, r]) => r >= 40);
+  assert.ok(allies.length >= 3, `allies: ${JSON.stringify(rel)}`);
+  // An ally comes in warm, and an answer to their liking delights them.
+  const [ally] = allies[0];
+  const day = world.day + 1;
+  addTestFixture(world, world.userClubId, opponentId, day, world.clubs[world.userClubId].leagueId);
+  generateInterviewSessions(world, day);
+  const s = world.pendingInterviews.at(-1)!;
+  const q = s.questions.find((x) => x.journalist.name === ally);
+  if (q !== undefined) {
+    assert.equal(q.bodyLanguage, 'pleased');
+    while (s.questions[s.currentIndex] !== q) answerInterviewQuestion(world, s.id, 2);
+    answerInterviewQuestion(world, s.id, q.options.findIndex((o) => o.category === q.journalist.bias));
+    assert.equal(q.bodyLanguage, 'delighted');
+  }
+  // Standing a room up costs a little with everyone in it.
+  world.pendingInterviews = [];
+  const day2 = world.day + 2;
+  addTestFixture(world, world.userClubId, opponentId, day2, world.clubs[world.userClubId].leagueId);
+  generateInterviewSessions(world, day2);
+  const snub = world.pendingInterviews.at(-1)!;
+  const before = snub.questions.map((x) => rel[x.journalist.name] ?? 0);
+  declineInterview(world, snub.id);
+  snub.questions.forEach((x, i) => assert.ok((world.press!.relations![x.journalist.name] ?? 0) < before[i] || before[i] === -100));
+});

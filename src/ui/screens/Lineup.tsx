@@ -4,6 +4,7 @@ import { lineupSlotPositions } from '../../engine/season/seasonEngine.ts';
 import { abilityClass, Empty, Segmented, StarMeter } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { TeamSheet } from '../teamSheet.tsx';
+import { chemistryOf } from '../../engine/world/chemistry.ts';
 import { useGame } from '../state.ts';
 
 /**
@@ -73,6 +74,7 @@ export function LineupScreen(): JSX.Element {
         outOfSquad={out}
         onAddToSquad={(p) => g.addToPreferredSquad(p)}
         onDropFromSquad={(p) => g.dropFromPreferredSquad(p)}
+        chemistry={(s, h) => chemistryOf(world, s, h)}
       />
     </div>
   );
