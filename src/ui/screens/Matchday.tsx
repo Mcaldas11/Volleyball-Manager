@@ -18,6 +18,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
+import { serverReadyOnCourt } from '../courtMotion.ts';
 import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
 import type { Kit } from '../court3d.ts';
@@ -1456,6 +1457,12 @@ function LiveMatchView(): JSX.Element {
           g.openSetBreak();
           break;
         }
+        // The server takes the ball to his spot behind the end line before the referee waves him
+        // on — never a serve from inside the court. (A court not being drawn holds nobody up.)
+        for (let waited = 0; waited < 4000 && !cancelled.current && !document.hidden && !serverReadyOnCourt(); waited += 100) {
+          await sleep(100);
+        }
+        if (cancelled.current) break;
         animatingRef.current = true;
         playWhistle();
         const logEntry = g.playNextRally();

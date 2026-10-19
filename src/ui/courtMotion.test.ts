@@ -227,6 +227,9 @@ test('the referee waves each serve on before the toss, and gives each point to t
   for (let i = 0; i < 12; i++) {
     const { serving } = setup();
     run(1800);
+    // As the match does: as long again as the server needs to get behind the end line.
+    for (let w = 0; w < 4000 && !m.serverReady(); w += 100) run(100);
+    run(600);
     const waved = calls[calls.length - 1];
     assert.equal(waved?.kind, 'serve', 'the serve is waved on before the toss');
     assert.equal(waved.team, serving);
@@ -260,7 +263,7 @@ test('a time-out is signalled once the rally in play is over, and no serve is wa
 });
 
 test('a serve waved on before a stoppage is waved on again once play is back on', () => {
-  const { calls, run, setup, stoppage } = refereeing(17);
+  const { m, calls, run, setup, stoppage } = refereeing(17);
   setup();
   run(1200);
   assert.equal(calls[calls.length - 1]?.kind, 'serve');
@@ -268,7 +271,10 @@ test('a serve waved on before a stoppage is waved on again once play is back on'
   run(3000);
   const waved = calls.filter((c) => c.kind === 'serve').length;
   stoppage(null, false);
+  // Back from the benches, the server to his spot behind the line — then the serve is waved on.
   run(1000);
+  for (let w = 0; w < 4000 && !m.serverReady(); w += 100) run(100);
+  run(600);
   assert.equal(calls.filter((c) => c.kind === 'serve').length, waved + 1);
 });
 
@@ -454,4 +460,38 @@ test('before the first serve: lined up, then hands slapped at the net — each s
     const b = m.bodies.get(p)!;
     assert.ok(Math.hypot(b.x - g.x, b.y - g.y) < 0.6, `${p} in place for the serve`);
   }
+});
+
+test('the serve waits for the server: the ball is tossed only from behind the end line', () => {
+  const { sim, store, teamOf } = liveMatch(23);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  let now = 0;
+  const run = (ms: number): void => {
+    for (const end = now + ms; now < end - 1e-6;) {
+      const dt = Math.min(1000 / 60, end - now);
+      now += dt;
+      m.step(dt / 1000, now);
+    }
+  };
+  let heldUp = 0;
+  for (let i = 0; i < 30; i++) {
+    const pre = sim.snapshot();
+    m.scene(setupScene(pre, pre.serving, store.position, 0), now);
+    // As the match does: the referee's moment, then as long as the server needs to get there.
+    run(300);
+    if (!m.serverReady()) heldUp++;
+    let waited = 0;
+    for (; waited < 4000 && !m.serverReady(); waited += 100) run(100);
+    assert.ok(m.serverReady(), `rally ${i}: the server got to his spot`);
+    const entry = sim.step();
+    if (entry === null) break;
+    const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner);
+    const server = m.bodies.get(entry.contacts[0].player)!;
+    assert.ok(Math.abs(server.y) > 9, `rally ${i}: tossed from ${server.y.toFixed(2)} m — behind the line`);
+    for (const beat of beats) {
+      m.scene(beat, now);
+      run(beat.ms);
+    }
+  }
+  assert.ok(heldUp > 0, 'some serves had to wait for the server');
 });

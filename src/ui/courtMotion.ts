@@ -33,7 +33,7 @@
  */
 
 import {
-  ballAlong, flightBulge, NET_HEIGHT, tossesWithBothHands, type Ball3, type Pose, type Scene,
+  ballAlong, COURT_HALF_LENGTH, flightBulge, NET_HEIGHT, tossesWithBothHands, type Ball3, type Pose, type Scene,
 } from './matchCourt.ts';
 import {
   arms, buildRig, COVER, HOLD, jointPositions, mixShape, READY, REF_HEIGHT, shape, SHAPE_KEYS, STAND, STILL, strideLength,
@@ -317,6 +317,9 @@ interface Path {
   go: number;
   up: number;
   down: number;
+  /** Overtaken by a new scene while still under way: the jump comes down where it was going, but
+   *  the new mark stands — the landing no longer decides where they go next. */
+  stale?: boolean;
 }
 
 type ActionKind = Pose | 'celebrate' | 'dejected';
@@ -773,6 +776,22 @@ function runUp(b: Body, go: number, up: number, carry: number, from = { x: b.x, 
   };
 }
 
+/** The court on screen now, if one is: the match waits on its server before each serve. */
+let onCourt: CourtMotion | null = null;
+
+/** Show (or, with null, stop showing) a court — the one the match's serves wait on. */
+export function showCourt(m: CourtMotion | null): void {
+  onCourt = m;
+}
+
+/**
+ * Whether the server on the court on screen has the ball at his spot behind the end line, and is
+ * stood there — the referee waves the serve on only then. With no court on screen, nobody waits.
+ */
+export function serverReadyOnCourt(): boolean {
+  return onCourt === null || onCourt.serverReady();
+}
+
 export class CourtMotion {
   readonly bodies = new Map<number, Body>();
   flight: Flight | null = null;
@@ -1093,6 +1112,20 @@ export class CourtMotion {
     }
   }
 
+  /**
+   * Whether the server, ball in hand, is behind the end line and stood still — no serve is tossed
+   * from inside the court. Nobody holding the ball: nothing to wait on.
+   */
+  serverReady(): boolean {
+    for (const b of this.bodies.values()) {
+      if (b.pose !== 'hold' || b.leaving || b.side !== null) continue;
+      // Behind the line by his spot — a stride's grace short of it is near enough to stop at.
+      const behind = Math.abs(b.y) >= Math.min(COURT_HALF_LENGTH + 0.3, Math.abs(b.ty) - 0.2);
+      return behind && Math.hypot(b.vx, b.vy) < 1.2;
+    }
+    return true;
+  }
+
   /** Hand over a new scene: new marks, postures and contacts, and a new flight. */
   scene(sc: Scene, now: number): void {
     const struck = this.actorPose;
@@ -1148,6 +1181,9 @@ export class CourtMotion {
       if (!continuing) {
         b.ox = 0;
         b.oy = 0;
+        // A jump still in the air comes down, but the new mark stands: a hitter who has just put
+        // the point away and is to serve next goes to the end line, not back to where he landed.
+        if (b.action?.path != null) b.action.path.stale = true;
       }
       b.pose = pose;
       if (CONTACTS.has(pose) && !continuing) this.startContact(b, p, pose, sc, now);
@@ -1566,7 +1602,7 @@ export class CourtMotion {
       if (next !== undefined) {
         this.whistle(next, now);
       } else if (this.needServe && this.serveDue !== null && now >= this.serveDue && this.serveTeam !== null
-        && this.stoppage.timeout === null && !this.stoppage.paused) {
+        && this.stoppage.timeout === null && !this.stoppage.paused && this.serverReady()) {
         this.whistle({ kind: 'serve', team: this.serveTeam, out: false }, now);
       }
     }
@@ -1695,7 +1731,7 @@ export class CourtMotion {
         b.x = path.plant.x + (path.land.x - path.plant.x) * u;
         b.y = path.plant.y + (path.land.y - path.plant.y) * u;
       }
-      if (rel > path.up) {
+      if (rel > path.up && path.stale !== true) {
         // Once in the air the mark is wherever they come down.
         b.ox = path.land.x - b.tx;
         b.oy = path.land.y - b.ty;

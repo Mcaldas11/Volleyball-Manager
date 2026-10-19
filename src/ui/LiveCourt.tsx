@@ -28,7 +28,7 @@ import { RATING_BANDS } from '../engine/match/playerRating.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
 import {
-  type Body, CourtMotion, type CourtInjury, type CourtSideline, flightAt, SIDELINE,
+  type Body, CourtMotion, type CourtInjury, type CourtSideline, flightAt, showCourt, SIDELINE,
 } from './courtMotion.ts';
 import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, NET_HEIGHT, type Ball3, type Scene } from './matchCourt.ts';
 
@@ -150,6 +150,15 @@ export function LiveCourt({
       (p) => props.current.teamOf(p),
     );
   }
+
+  // This is the court the match's serves wait on, while it is on screen.
+  useEffect(() => {
+    const m = motion.current;
+    showCourt(m);
+    return () => {
+      if (m !== null) showCourt(null);
+    };
+  }, []);
 
   // Hand each new scene to the motion: new marks, new moves, a new flight.
   useEffect(() => {
