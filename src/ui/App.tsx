@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import { Splash, splashDue } from './splash.tsx';
 import { EditorScreen } from './screens/Editor.tsx';
 import { SettingsDialog } from './settingsDialog.tsx';
 import { AchievementsScreen, CoursesScreen } from './screens/Milestones.tsx';
@@ -181,11 +182,14 @@ function readCollapsed(): boolean {
 
 export function App(): JSX.Element {
   const g = useGame();
+  // As the game opens, before the menu: the splash.
+  const [splash, setSplash] = useState(() => g.world === null && splashDue());
   return (
     <>
       <AppBody />
       <TaskWindow />
       {g.settingsOpen && <SettingsDialog />}
+      {splash && <Splash onDone={() => setSplash(false)} />}
     </>
   );
 }
