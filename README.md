@@ -41,6 +41,8 @@ npm run vm world standard # generate a world (small, standard or large) and repo
 npm test                  # unit tests
 ```
 
+To publish the game on itch.io (web, Windows and Mac), see [PUBLICAR.md](PUBLICAR.md).
+
 ## DEVELOPMENT
 
 This is a closed-source solo project; outside contributions are not accepted.
