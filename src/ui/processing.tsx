@@ -6,6 +6,7 @@
  * around today on the calendar, results filling in as matches are played.
  */
 
+import logo from './logo.png';
 import { internationalNotes } from '../engine/world/internationals.ts';
 import { useEffect, type CSSProperties, type JSX } from 'react';
 import { messageSender } from '../engine/world/inbox.ts';
@@ -114,7 +115,7 @@ function DayCard({ turning }: { turning: boolean }): JSX.Element {
         <strong key={turning ? world.day : 'date'} className={`proc-day-date${turning ? ' turning' : ''}`}>
           {g.weekdayLabelForDay(world.day)} {date?.getUTCDate()} {date?.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}
         </strong>
-        <span className="spinner" />
+        <img className="proc-logo" src={logo} alt="" />
       </div>
       <span className="proc-day-kicker">Next match</span>
       {next !== null && opp !== undefined ? (

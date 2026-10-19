@@ -1,5 +1,6 @@
 import { useRef, useState, type CSSProperties, type JSX, type PointerEvent } from 'react';
 import pkg from '../../package.json';
+import logo from './logo.png';
 import { lessMotion } from './preferences.ts';
 import { playCrowd, playWhistle } from './sound.ts';
 
@@ -140,26 +141,11 @@ export function Splash({ onDone }: { onDone: () => void }): JSX.Element {
 
       {/* The ball, set high above the net and spiked down onto the court. */}
       <div className="splash-ball" aria-hidden="true">
-        <svg viewBox="0 0 64 64" fill="none" strokeLinecap="round">
-          <defs>
-            <radialGradient id="splash-ball-shade" cx="0.35" cy="0.3" r="0.8">
-              <stop offset="0" stopColor="#ffffff" />
-              <stop offset="0.6" stopColor="#efeadf" />
-              <stop offset="1" stopColor="#b9b2a3" />
-            </radialGradient>
-          </defs>
-          <g className="splash-ball-spin">
-            <circle cx="32" cy="32" r="28" fill="url(#splash-ball-shade)" />
-            <path d="M32 4 C 20 16 20 48 32 60" stroke="#d7a73f" strokeWidth="4" />
-            <path d="M6 22 C 24 30 40 30 58 22" stroke="#2f5fc4" strokeWidth="4" />
-            <path d="M7 44 C 24 35 40 35 57 44" stroke="#d7a73f" strokeWidth="4" />
-          </g>
-          <circle cx="32" cy="32" r="28" stroke="#0c1521" strokeOpacity="0.3" strokeWidth="1.5" />
-        </svg>
+        <img className="splash-ball-spin" src={logo} alt="" />
       </div>
 
       <div className="splash-brand">
-        <span className="splash-badge">VM</span>
+        <img className="splash-badge" src={logo} alt="" />
         <h1 className="splash-name">
           <span className="splash-top">
             {'VOLLEYBALL'.split('').map((c, i) => (

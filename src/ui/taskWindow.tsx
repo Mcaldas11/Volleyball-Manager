@@ -6,6 +6,7 @@
  * off the main thread: it keeps moving even while a big save holds the page.
  */
 
+import logo from './logo.png';
 import type { JSX } from 'react';
 import { Icon } from './icons.tsx';
 import { useGame, useTaskProgress } from './state.ts';
@@ -26,7 +27,7 @@ export function TaskWindow(): JSX.Element | null {
         <section className="proc-day task-card">
           <div className="task-card-top">
             <span className="task-ball" aria-hidden="true">
-              <span className="task-ball-spin"><Icon name="ball" size={24} /></span>
+              <img className="task-ball-spin task-logo" src={logo} alt="" />
             </span>
             <div className="task-card-text">
               <strong className="task-title">{task.title}</strong>

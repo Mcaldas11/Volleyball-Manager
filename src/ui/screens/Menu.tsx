@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
+import logo from '../logo.png';
 import { PlayerFlag } from '../../engine/model/players.ts';
 import {
   pickSquad, secondNation, SQUAD_SIZE, worldRanking, type Tournament,
@@ -16,22 +17,10 @@ import { Dropdown } from '../dropdown.tsx';
 const MIN_BIRTH_DATE = '1946-01-01';
 const MAX_BIRTH_DATE = '2008-07-01';
 
-/** The match ball's own colours (Mikasa V200W blue and gold), not a flat tint. */
-function VolleyballIcon({ className }: { className?: string }): JSX.Element {
-  return (
-    <svg viewBox="0 0 64 64" className={className} fill="none" strokeWidth="2.5" strokeLinecap="round">
-      <circle cx="32" cy="32" r="27" style={{ stroke: 'var(--accent)' }} />
-      <path d="M32 5 C 21 16 21 48 32 59" style={{ stroke: 'var(--gold)' }} />
-      <path d="M8 22 C 24 29 40 29 56 22" style={{ stroke: 'var(--gold)' }} />
-      <path d="M9 44 C 24 35 40 35 55 44" style={{ stroke: 'var(--gold)' }} />
-    </svg>
-  );
-}
-
 function Wordmark(): JSX.Element {
   return (
     <div className="wordmark">
-      <span className="brand-badge brand-badge-lg">VM</span>
+      <img className="brand-logo brand-logo-lg" src={logo} alt="" />
       <div className="wordmark-text">
         <span className="wordmark-top">Volleyball</span>
         <span className="wordmark-bottom">Manager</span>
@@ -101,12 +90,12 @@ export function MainMenu(): JSX.Element {
           </button>
         </nav>
 
-        <p className="start-footer">Free and open source, MIT licensed.</p>
+        <p className="start-footer">© 2026 Miguel Caldas. All rights reserved.</p>
       </div>
 
       <div className="start-hero">
         <div className="start-hero-court" />
-        <VolleyballIcon className="hero-volleyball" />
+        <img className="hero-volleyball" src={logo} alt="" />
         {mostRecent !== undefined && mostRecent.clubNationCode !== '' && (
           <span className="hero-flag"><FlagByCode code={mostRecent.clubNationCode} /></span>
         )}

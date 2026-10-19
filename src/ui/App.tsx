@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import logo from './logo.png';
 import { Splash, splashDue } from './splash.tsx';
 import { EditorScreen } from './screens/Editor.tsx';
 import { SettingsDialog } from './settingsDialog.tsx';
@@ -384,7 +385,7 @@ function Sidebar({
   return (
     <aside className="sidebar">
       <div className="side-brand">
-        <span className="brand-badge">VM</span>
+        <img className="brand-logo" src={logo} alt="" />
         <span className="side-brand-text">Volleyball<small>Manager</small></span>
         <button
           className="side-collapse"
