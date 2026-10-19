@@ -3,22 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "description": "Volleyball Manager — a deep management simulation for professional indoor volleyball.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "desktop": "node scripts/package-desktop.mjs",
+    "desktop:run": "npm run build && electron .",
+    "itch": "npm run build && powershell -NoProfile -Command \"New-Item -ItemType Directory -Force itch | Out-Null; Compress-Archive -Path dist/* -DestinationPath itch/volleyball-manager-web.zip -Force\"",
     "typecheck": "tsc --noEmit",
     "vm": "tsx src/cli/index.ts",
     "test": "tsx --test src/**/*.test.ts",
     "bench": "tsx src/cli/index.ts bench"
   },
   "devDependencies": {
+    "@electron/packager": "^18.4.4",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@types/three": "^0.170.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.4.11",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"

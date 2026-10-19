@@ -1,0 +1,84 @@
+# The game's downloads, built on GitHub's own machines: the web version, Windows, and macOS (which
+# has to be built and signed on a Mac). Runs when a version tag is pushed (git tag v0.2.0 && git push
+# --tags) or by hand from the Actions tab. The zips are kept on the run's page; with the itch.io
+# secrets set (see README), they also go straight to the game's itch.io page — and the itch app
+# updates everyone who installed through it.
+
+name: Desktop builds
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: macos-latest
+            target: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop -- ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: release/*.zip
+          if-no-files-found: error
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: cd dist && zip -r ../volleyball-manager-web.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: volleyball-manager-web.zip
+
+  itch:
+    # Only with the itch.io secrets in place: Settings → Secrets and variables → Actions.
+    needs: [build, web]
+    runs-on: ubuntu-latest
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      ITCH_GAME: ${{ vars.ITCH_GAME }}
+    steps:
+      - name: Check itch.io is set up
+        id: ready
+        run: echo "go=${{ env.BUTLER_API_KEY != '' && env.ITCH_GAME != '' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.go == 'true'
+      - uses: actions/download-artifact@v4
+        if: steps.ready.outputs.go == 'true'
+        with:
+          path: out
+      - name: Install butler
+        if: steps.ready.outputs.go == 'true'
+        run: |
+          curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip butler.zip -d butler && chmod +x butler/butler
+      - name: Push to itch.io
+        if: steps.ready.outputs.go == 'true'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          ./butler/butler push out/web/volleyball-manager-web.zip "$ITCH_GAME:web" --userversion "$VERSION"
+          ./butler/butler push out/win/volleyball-manager-$VERSION-windows.zip "$ITCH_GAME:windows" --userversion "$VERSION"
+          ./butler/butler push out/mac/volleyball-manager-$VERSION-mac-apple-silicon.zip "$ITCH_GAME:mac-apple-silicon" --userversion "$VERSION"
+          ./butler/butler push out/mac/volleyball-manager-$VERSION-mac-intel.zip "$ITCH_GAME:mac-intel" --userversion "$VERSION"
