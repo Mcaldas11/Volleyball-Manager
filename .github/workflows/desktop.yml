@@ -1,18 +1,39 @@
 # The game's downloads, built on GitHub's own machines: the web version, Windows, and macOS (which
-# has to be built and signed on a Mac). Runs when a version tag is pushed (git tag v0.2.0 && git push
-# --tags) or by hand from the Actions tab. The zips are kept on the run's page; with the itch.io
-# secrets set (see README), they also go straight to the game's itch.io page — and the itch app
-# updates everyone who installed through it.
+# has to be built and signed on a Mac). Runs on every push to main that changes the game (a change
+# to the docs alone doesn't count), on a version tag, or by hand from the Actions tab. The zips are
+# kept on the run's page; with the itch.io secrets set (see PUBLICAR.md), they also go straight to
+# the game's itch.io page — and the itch app updates everyone who installed through it.
 
 name: Desktop builds
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths-ignore: ['**.md']
   workflow_dispatch:
 
+# Pushed again before the last run finished: only the newest is worth building.
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Nothing reaches the players unless the game type-checks and every test passes.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
   build:
+    needs: test
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +58,7 @@ jobs:
           if-no-files-found: error
 
   web:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +100,9 @@ jobs:
         if: steps.ready.outputs.go == 'true'
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          ./butler/butler push out/web/volleyball-manager-web.zip "$ITCH_GAME:web" --userversion "$VERSION"
-          ./butler/butler push out/win/volleyball-manager-$VERSION-windows.zip "$ITCH_GAME:windows" --userversion "$VERSION"
-          ./butler/butler push out/mac/volleyball-manager-$VERSION-mac-apple-silicon.zip "$ITCH_GAME:mac-apple-silicon" --userversion "$VERSION"
-          ./butler/butler push out/mac/volleyball-manager-$VERSION-mac-intel.zip "$ITCH_GAME:mac-intel" --userversion "$VERSION"
+          # Each build its own version on itch.io: the game's version and the run's number.
+          BUILD="$VERSION-build.${{ github.run_number }}"
+          ./butler/butler push out/web/volleyball-manager-web.zip "$ITCH_GAME:web" --userversion "$BUILD"
+          ./butler/butler push out/win/volleyball-manager-$VERSION-windows.zip "$ITCH_GAME:windows" --userversion "$BUILD"
+          ./butler/butler push out/mac/volleyball-manager-$VERSION-mac-apple-silicon.zip "$ITCH_GAME:mac-apple-silicon" --userversion "$BUILD"
+          ./butler/butler push out/mac/volleyball-manager-$VERSION-mac-intel.zip "$ITCH_GAME:mac-intel" --userversion "$BUILD"
