@@ -8,6 +8,10 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import {
+  addPlanTarget, firstGap, isPlanTarget, planCandidates, removePlanTarget, squadPlan, type SquadPlan,
+} from '../engine/world/squadPlanner.ts';
+import { acceptSuggestion, declineSuggestion, meetingsOf, type StaffMeeting } from '../engine/world/staffMeeting.ts';
 import { applyPreferences, loadPreferences, savePreferences, type Preferences } from './preferences.ts';
 import { playAroundTheLeague, type AroundTheLeague } from '../engine/season/aroundTheLeague.ts';
 import { bookCamp, type CampKind } from '../engine/world/camp.ts';
@@ -167,7 +171,8 @@ export type ScreenId =
   | 'home' | 'inbox' | 'calendar' | 'competitions' | 'squad' | 'lineup' | 'tactics' | 'rotations' | 'fixtures' | 'table'
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals'
-  | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses' | 'editor';
+  | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses' | 'editor'
+  | 'planner' | 'meeting';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
@@ -2968,6 +2973,89 @@ class Game {
   }
 
   // ---- The dressing room ------------------------------------------------------------------
+
+  // ---- The squad planner and the staff meeting ------------------------------------------------
+
+  /** The squad by position over this season and the next two, with its gaps and targets. */
+  squadPlan(): SquadPlan | null {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? null : squadPlan(world, club);
+  }
+
+  /** Players worth marking for a position's gap, the scouts' order. */
+  planCandidates(position: Position, season: number): number[] {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? [] : planCandidates(world, club, position, 40, season);
+  }
+
+  /** Mark a player as a target for a gap: a position, in a season. */
+  addPlanTarget(p: number, position: Position, season: number): void {
+    const world = this.world;
+    if (world === null) return;
+    addPlanTarget(world, p, position, season);
+    const y = world.startYear + season;
+    this.notice = `${world.players.fullName(p)} is on the squad plan as a target for ${y}/${String((y + 1) % 100).padStart(2, "0")}.`;
+    this.emit();
+  }
+
+  removePlanTarget(p: number): void {
+    const world = this.world;
+    if (world === null) return;
+    removePlanTarget(world, p);
+    this.emit();
+  }
+
+  isPlanTarget(p: number): boolean {
+    return this.world !== null && isPlanTarget(this.world, p);
+  }
+
+  /** From a player's profile: on the plan for his position's first gap (this season's if there is none), or off it. */
+  togglePlanTarget(p: number): void {
+    const world = this.world;
+    if (world === null) return;
+    if (isPlanTarget(world, p)) {
+      this.removePlanTarget(p);
+      this.notice = `${world.players.fullName(p)} is off the squad plan.`;
+      this.emit();
+      return;
+    }
+    const plan = this.squadPlan();
+    const position = world.players.position[p] as Position;
+    const season = plan !== null ? firstGap(plan, position) ?? world.season : world.season;
+    this.addPlanTarget(p, position, season);
+  }
+
+  /** The staff meetings, the latest last. */
+  staffMeetings(): StaffMeeting[] {
+    return this.world === null ? [] : meetingsOf(this.world);
+  }
+
+  /** Take a staff suggestion: done on the spot, or — talks, a word with the player — opened for the manager. */
+  acceptSuggestion(meetingId: number, itemId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const item = acceptSuggestion(world, meetingId, itemId);
+    if (item === undefined) return;
+    if (item.kind === 'renew' && item.p !== undefined) {
+      this.startRenewal(item.p);
+      return;
+    }
+    if (item.kind === 'morale' && item.p !== undefined) {
+      this.openPlayerTalk(item.p);
+      return;
+    }
+    if (item.outcome !== undefined) this.notice = item.outcome;
+    this.emit();
+  }
+
+  declineSuggestion(meetingId: number, itemId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    declineSuggestion(world, meetingId, itemId);
+    this.emit();
+  }
 
   /** The club's dressing room as it stands. */
   dressingRoom(): DressingRoom | null {

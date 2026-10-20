@@ -200,6 +200,20 @@ Before committing a change:
       league table carries the tip beside each club, and at the season's end
       the papers own up — and the board weigh the manager's finish against
       the tip
+- [x] A squad planner: the squad by position over this season and the next
+      two — who is under contract, whose deal runs out, who may retire, the
+      academy players coming through, each player's ability projected for
+      that season — the gaps against the depth a side needs, and the wage
+      bill each season against the budget. Mark transfer targets against
+      each gap, from the scouts' list (within reach first) or from a
+      player's profile
+- [x] A monthly staff meeting: on the 3rd of each month the assistant, the
+      scouts, the doctor, the youth coach and the psychologist bring
+      concrete suggestions — a key contract to renew, a position short for
+      next season, a player heading for an injury, an academy player ready,
+      a youngster who needs a loan, a player to sell, one who is down. Take
+      each one (it is done, or the talks open) or leave it; what is left
+      unanswered lapses at the next meeting
 - [x] A preview in the inbox before each of your matches: the analysts' odds
       (the match played 400 times over in the background engine), every
       result's chance from 3-0 to 0-3, both sides' form and the fans' poll —

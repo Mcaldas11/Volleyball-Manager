@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
+import { MeetingSheet } from '../staffMeeting.tsx';
 import { relapseChance, TREATMENT_NAMES, treatmentWeeks, type Treatment } from '../../engine/world/treatment.ts';
 import { INJURY_NAMES } from '../../engine/model/players.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
@@ -365,6 +366,11 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
   if (m.preview !== undefined) return <PreviewSheet preview={m.preview} />;
+
+  if (m.meetingId !== undefined) {
+    const meeting = g.staffMeetings().find((x) => x.id === m.meetingId);
+    return meeting !== undefined ? <div className="paper-embed"><MeetingSheet meeting={meeting} /></div> : null;
+  }
 
   if (m.tables !== undefined && m.tables.length > 0 || m.gamePlanFor !== undefined) {
     return (

@@ -360,21 +360,27 @@ export function assistantLoad(world: World, p: number): PlayerLoad {
   return 'normal';
 }
 
-/** A player's programme as it stands: his own, or the assistant's. */
+/** A player's programme as it stands: his own, or the assistant's — never harder than the doctor allows. */
 export function individualOf(world: World, club: Club, p: number): { focus: IndividualFocus; load: PlayerLoad; byAssistant: boolean } {
   const plan = readPlan(world, club);
   const own = plan.individual[p];
   if (plan.assistantIndividual || own === undefined) {
-    return { focus: assistantFocus(world, p), load: assistantLoad(world, p), byAssistant: plan.assistantIndividual };
+    return { focus: assistantFocus(world, p), load: doctorsLoad(world, p, assistantLoad(world, p)), byAssistant: plan.assistantIndividual };
   }
-  return { ...own, byAssistant: false };
+  return { ...own, load: doctorsLoad(world, p, own.load), byAssistant: false };
 }
 
 /** Just how hard a player's programme has him working — all the daily and injury sums need. */
 export function loadOf(world: World, club: Club, p: number): PlayerLoad {
   const plan = readPlan(world, club);
   const own = plan.individual[p];
-  return plan.assistantIndividual || own === undefined ? assistantLoad(world, p) : own.load;
+  return doctorsLoad(world, p, plan.assistantIndividual || own === undefined ? assistantLoad(world, p) : own.load);
+}
+
+/** On the doctor's word (the staff meeting), a player trains no harder than reduced for a fortnight. */
+function doctorsLoad(world: World, p: number, load: PlayerLoad): PlayerLoad {
+  const until = world.medicalRest?.[p];
+  return until !== undefined && until >= world.day && (load === 'normal' || load === 'extra') ? 'reduced' : load;
 }
 
 // ---- What it does ----------------------------------------------------------------------

@@ -42,6 +42,8 @@ import type { InterviewSession } from './interviews.ts';
 import type { PressMemory } from './pressRoom.ts';
 import type { Prediction } from './predictions.ts';
 import type { MatchPreview } from './matchPreview.ts';
+import type { SquadPlanState } from './squadPlanner.ts';
+import type { StaffMeeting } from './staffMeeting.ts';
 import type { CompetitionRecord } from './records.ts';
 import type { ManagerCareer, Vacancy } from './career.ts';
 
@@ -448,6 +450,8 @@ export interface GameMessage {
   teamOfSeason?: { title: string; competitionId?: number; season: number; picks: DreamPick[] };
   /** The season's awards, a league's or the world's — see accolades.ts. */
   awardsNight?: AwardsNight;
+  /** The monthly staff meeting it reports — see staffMeeting.ts. */
+  meetingId?: number;
   /** A match preview: the analysts' odds and the fans' calls — see matchPreview.ts. */
   preview?: MatchPreview;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
@@ -729,6 +733,14 @@ export interface World {
   predictions?: Prediction[];
   /** Changed by hand in the editor: such a career earns no achievements. */
   edited?: boolean;
+  /** The squad planner's transfer targets — see squadPlanner.ts. */
+  squadPlan?: SquadPlanState;
+  /** The monthly staff meetings, the latest last — see staffMeeting.ts. */
+  staffMeetings?: StaffMeeting[];
+  /** When each staff suggestion was last settled, by kind and player or position. */
+  meetingMemory?: Record<string, number>;
+  /** Players on lighter training on the doctor's word, until which day, by player. */
+  medicalRest?: Record<number, number>;
   /** The tutorial's step while it runs (see the UI's tutorial.tsx); absent otherwise. */
   tutorial?: number;
   /** The day the staff last warned the manager a player was unhappy, by player. */

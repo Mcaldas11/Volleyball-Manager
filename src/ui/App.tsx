@@ -44,6 +44,8 @@ import { MatchResultScreen } from './screens/MatchResult.tsx';
 import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { StaffNegotiationScreen } from './screens/StaffNegotiation.tsx';
 import { DressingRoomScreen } from './screens/DressingRoom.tsx';
+import { SquadPlannerScreen } from './screens/SquadPlanner.tsx';
+import { StaffMeetingScreen } from './staffMeeting.tsx';
 import { HelpDialog } from './help.tsx';
 import { TutorialOverlay } from './tutorial.tsx';
 import { AffiliatesScreen, OwnerScreen, CommercialScreen, FacilitiesScreen } from './screens/ClubBusiness.tsx';
@@ -97,7 +99,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'Team',
     sections: [
-      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Squad'], ['dressing', 'Dressing Room']] },
+      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Squad'], ['planner', 'Squad Planner'], ['dressing', 'Dressing Room']] },
       {
         id: 'lineup',
         label: 'Lineup',
@@ -119,7 +121,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'Club',
     sections: [
-      { id: 'staff', label: 'Staff', icon: 'staff', tabs: [['staff', 'Staff']] },
+      { id: 'staff', label: 'Staff', icon: 'staff', tabs: [['staff', 'Staff'], ['meeting', 'Staff Meeting']] },
       {
         id: 'finances',
         label: 'Finances',
@@ -324,6 +326,8 @@ function Screen(): JSX.Element {
     case 'staff': return <StaffScreen />;
     case 'finances': return <FinancesScreen />;
     case 'dressing': return <DressingRoomScreen />;
+    case 'planner': return <SquadPlannerScreen />;
+    case 'meeting': return <StaffMeetingScreen />;
     case 'analysis': return <AnalysisScreen />;
     case 'commercial': return <CommercialScreen />;
     case 'facilities': return <FacilitiesScreen />;

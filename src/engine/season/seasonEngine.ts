@@ -13,6 +13,7 @@
  * a match took.
  */
 
+import { staffMeetingDay } from '../world/staffMeeting.ts';
 import { matchPreviews } from '../world/matchPreview.ts';
 import { campDay } from '../world/camp.ts';
 import { predictionsDay } from '../world/predictions.ts';
@@ -551,6 +552,8 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   // running down, the answers to every offer that is due today — and the
   // job market: applications answered, coaches appointed, boards meeting.
   monthlyStatement(world);
+  // The third of the month: the staff meet, and bring the manager their suggestions.
+  staffMeetingDay(world);
   facilitiesDay(world);
   arenaDay(world);
   coursesDay(world);

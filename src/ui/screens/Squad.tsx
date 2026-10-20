@@ -660,6 +660,16 @@ export function PlayerDetail(): JSX.Element | null {
                   {loanTalks === null ? 'Request loan' : loanTalks.pending !== null ? 'Awaiting their answer' : 'Loan talks'}
                 </button>
               )}
+              {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && (
+                <button
+                  className={g.isPlanTarget(p) ? 'on' : ''}
+                  title={g.isPlanTarget(p) ? 'Take him off the squad plan' : 'Mark him as a target on the squad plan, for his position\'s first gap'}
+                  onClick={() => g.togglePlanTarget(p)}
+                >
+                  <Icon name={g.isPlanTarget(p) ? 'check' : 'star'} size={14} />
+                  {g.isPlanTarget(p) ? 'On the squad plan' : 'Add to squad plan'}
+                </button>
+              )}
             </>
           )}
           <CompareMenu p={p} />
