@@ -12,4 +12,5 @@ data/local/
 data/fivb-cache/
 .env
 .env.local
+.ua/
 
