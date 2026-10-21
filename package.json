@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "desktop": "node scripts/package-desktop.mjs",
     "desktop:run": "npm run build && electron .",
+    "hooks": "node scripts/install-hooks.mjs",
     "itch": "npm run build && powershell -NoProfile -Command \"New-Item -ItemType Directory -Force itch | Out-Null; Compress-Archive -Path dist/* -DestinationPath itch/volleyball-manager-web.zip -Force\"",
     "typecheck": "tsc --noEmit",
     "vm": "tsx src/cli/index.ts",
