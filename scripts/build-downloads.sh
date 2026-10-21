@@ -5,11 +5,12 @@
 #
 # Commits in quick succession don't start builds side by side: one runs, and if more commits came
 # in meanwhile it builds once more at the end, from the latest. Progress and errors go to
-# .git/vm-build/build.log.
+# release/build.log, next to the Windows zip.
 
 cd "$(git rev-parse --show-toplevel)" || exit 0
 STATE=.git/vm-build
-mkdir -p "$STATE"
+LOG=release/build.log
+mkdir -p "$STATE" release
 touch "$STATE/pending"
 
 # A build already running picks this commit up when it finishes — unless it is a stale marker,
@@ -32,6 +33,6 @@ fi
     fi
   done
   rm -f "$STATE/running"
-) >> "$STATE/build.log" 2>&1 < /dev/null &
+) >> "$LOG" 2>&1 < /dev/null &
 
 exit 0
