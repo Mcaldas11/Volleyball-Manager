@@ -13,6 +13,7 @@
  * still makes sense forty seasons later after all of it has drifted.
  */
 
+import { addUniquePlayers } from './uniquePlayers.ts';
 import { seedChemistry } from './chemistry.ts';
 import { planInternationals } from './internationals.ts';
 import { Rng } from '../core/rng.ts';
@@ -137,6 +138,8 @@ export function generateWorld(opts: WorldGenOptions): World {
   planInternationals(world);
   // Every squad has trained together: its setters and hitters know each other.
   seedChemistry(world);
+  // The real players written into the game, free agents to begin with.
+  addUniquePlayers(world);
 
   return world;
 }

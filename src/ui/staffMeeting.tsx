@@ -62,7 +62,7 @@ function MeetingItemCard({ meetingId, item: it }: { meetingId: number; item: Mee
       <p>{it.text}</p>
       {live && (
         <button className="meet-player" onClick={() => g.select(p)} title="Open his profile">
-          <PlayerFace playerId={p} name={store.fullName(p)} size={28} />
+          <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} />
           <span>{store.fullName(p)}</span>
           <Pos pos={store.position[p] as Position} />
           <small>{store.ageOn(p, world.year, 181)} · {store.currentAbility[p]}</small>

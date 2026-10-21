@@ -318,6 +318,9 @@ Before committing a change:
       statistics
 - [x] Import real players from the official FIVB VIS database, for anyone
       with their own FIVB credentials — see [FIVB Data](#fivb-data)
+- [x] Real players written in by hand, with their own photo: Diogo Couto, a
+      Portuguese libero who can also play outside hitter, starts every men's
+      career as a free agent (and joins older saves the same way)
 - [x] Database of 100,000+ fictitious players, generated with realistic
       positions, anthropometrics and national distributions
 - [x] Save and load a career, locally in the browser (IndexedDB) — multiple

@@ -21,7 +21,16 @@ export function setFaceSet(set: 'men' | 'women'): void {
   faceSet = set;
 }
 
+/** Real players' own photos, by permanent player id — see uniqueFaces.ts. */
+let ownPhotos: ReadonlyMap<number, string> = new Map();
+
+export function setOwnPhotos(photos: ReadonlyMap<number, string>): void {
+  ownPhotos = photos;
+}
+
 export function playerFaceUrl(playerId: number): string {
+  const own = ownPhotos.get(playerId);
+  if (own !== undefined) return own;
   const index = ((playerId % PORTRAIT_COUNT) + PORTRAIT_COUNT) % PORTRAIT_COUNT;
   return `https://randomuser.me/api/portraits/${faceSet}/${index}.jpg`;
 }

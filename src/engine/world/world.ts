@@ -733,6 +733,8 @@ export interface World {
   predictions?: Prediction[];
   /** Changed by hand in the editor: such a career earns no achievements. */
   edited?: boolean;
+  /** The real players written into the game, where each is in the store, by key — see uniquePlayers.ts. */
+  uniquePlayers?: Record<string, number>;
   /** The squad planner's transfer targets — see squadPlanner.ts. */
   squadPlan?: SquadPlanState;
   /** The monthly staff meetings, the latest last — see staffMeeting.ts. */

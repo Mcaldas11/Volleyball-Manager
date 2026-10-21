@@ -8,6 +8,7 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import { showUniqueFaces } from './uniqueFaces.ts';
 import {
   addPlanTarget, firstGap, isPlanTarget, planCandidates, removePlanTarget, squadPlan, type SquadPlan,
 } from '../engine/world/squadPlanner.ts';
@@ -704,6 +705,7 @@ class Game {
     // Every new career offers the tutorial — its first card has the way out for those who know the game.
     this.welcomeOpen = true;
     setUiGame(gender);
+    showUniqueFaces(world);
     this.ctx = newSeasonContext();
     startSeason(world, this.ctx);
     this.world = world;
@@ -769,6 +771,7 @@ class Game {
       const { world, season } = await readSaveWorld(id, () => this.taskStep(1));
       this.world = world;
       setUiGame(world.gender ?? 'men');
+      showUniqueFaces(world);
       this.teamView = 'club';
       this.ctx = season;
       this.watched = null;
@@ -919,7 +922,10 @@ class Game {
     if (meta === undefined) return;
     await this.exportTo(meta, ['Reading the save', 'Setting up the world', 'Writing the file'], () => readSaveWorld(id, () => this.taskStep(1)));
     // Reading a save sets its game up: back to the one in play.
-    if (this.world !== null) setUiGame(this.world.gender ?? 'men');
+    if (this.world !== null) {
+      setUiGame(this.world.gender ?? 'men');
+      showUniqueFaces(this.world);
+    }
   }
 
   /** A career file brought in: saved as a career of its own, and listed. */
@@ -937,7 +943,10 @@ class Game {
     } catch (err) {
       this.notice = err instanceof Error ? err.message : 'Could not import that file.';
     }
-    if (this.world !== null) setUiGame(this.world.gender ?? 'men');
+    if (this.world !== null) {
+      setUiGame(this.world.gender ?? 'men');
+      showUniqueFaces(this.world);
+    }
     this.endTask();
     this.emit();
   }

@@ -374,13 +374,16 @@ test('a career can begin at a national team alone: his name from its standing, a
   assert.equal(world.userClubId, -1);
   assert.equal(world.career.nationalTeam, nation);
   assert.ok(world.career.reputation >= 3000, `${world.career.reputation}`);
-  runTo(world, ctx, 250);
-  assert.ok(world.messages.some((m) => m.jobOfferId !== undefined), 'a club has offered him its job');
-  // Stepping down leaves him out of work — a career, not one still to begin.
+  // Stepping down — before a tournament can cost him the job — leaves him out of work: a career, not one still to begin.
+  runTo(world, ctx, 30);
+  assert.equal(world.career.nationalTeam, nation);
   leaveNationalJob(world, false);
   assert.equal(world.career.nationalTeam, undefined);
   assert.deepEqual(world.career.nationalJobs?.map((j) => [j.nation, j.endDay]), [[nation, world.day]]);
   assert.equal(lastJobEnded(world), world.day);
+  // His name from the national job is enough for the clubs to call.
+  runTo(world, ctx, 250);
+  assert.ok(world.messages.some((m) => m.jobOfferId !== undefined), 'a club has offered him its job');
 });
 
 test('club and country: the club sets his name, and the nation comes on top', () => {

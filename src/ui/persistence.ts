@@ -16,6 +16,7 @@
  * touches the other two stores.
  */
 
+import { addUniquePlayers } from '../engine/world/uniquePlayers.ts';
 import { setNationsGame } from '../engine/world/nations.ts';
 import { Rng } from '../engine/core/rng.ts';
 import { PLAYING_TIME_UNKNOWN, PlayerStore, POSITION_SLOTS, StringTable } from '../engine/model/players.ts';
@@ -321,6 +322,8 @@ export function reviveWorld(raw: World): World {
     coachesSetUp(raw, (club) => pickLineup(raw.players, club).lineup);
     raw.coachedSides = true;
   }
+  // Saves from before a real player was written into the game: he joins, a free agent.
+  addUniquePlayers(raw);
   return raw;
 }
 
