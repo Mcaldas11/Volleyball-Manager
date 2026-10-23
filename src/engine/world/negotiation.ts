@@ -294,9 +294,13 @@ export function contractDemands(world: World, club: Club, playerIdx: number, ren
 
   // An ambitious player good enough for better, or a young one, wants a way
   // out written in — the more ambitious, the lower he wants it.
-  const wantsClause = ambition >= 0.6 && (playerLevel >= clubLevel - 0.05 || age <= 24);
+  // His agent has his say too: a hard bargainer wants a clause written in for anyone good enough to
+  // be sold on — and lower — while an easy-going one only asks when the player insists.
+  const hard = agent.style === 'hardball';
+  const wantsClause = (ambition >= (agent.style === 'easy' ? 0.75 : 0.6) && (playerLevel >= clubLevel - 0.05 || age <= 24))
+    || (hard && playerLevel >= clubLevel - 0.15);
   const clauseMax = wantsClause
-    ? Math.max(50_000, Math.round((store.value[playerIdx] * (1.4 + (1 - ambition) * 1.2)) / 10_000) * 10_000)
+    ? Math.max(50_000, Math.round((store.value[playerIdx] * (1.4 + (1 - ambition) * 1.2) * (hard ? 0.85 : 1)) / 10_000) * 10_000)
     : null;
 
   return {

@@ -8,6 +8,15 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import {
+  addMission, cancelMission, isShortlisted, missionsOf, scoutEstimate, shortlistOf, toggleShortlist, type MissionSpec, type ScoutMission,
+} from '../engine/world/recruitment.ts';
+import { delegationOf, handlerAvailable, setDelegation, type DelegableTask, type Delegation, type Handler } from '../engine/world/delegation.ts';
+import {
+  cancelDirectorTask, delegateDeal, directorBlock, directorOf, directorTaskFor, directorTasks, type DirectorTask,
+} from '../engine/world/director.ts';
+import { deadlineToday, type DeadlinePlan } from '../engine/world/deadline.ts';
+import { agentProfile, preContractOf, type AgentProfile, type PreContract } from '../engine/world/agents.ts';
 import { showUniqueFaces } from './uniqueFaces.ts';
 import {
   addPlanTarget, firstGap, isPlanTarget, planCandidates, removePlanTarget, squadPlan, type SquadPlan,
@@ -173,7 +182,7 @@ export type ScreenId =
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals'
   | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses' | 'editor'
-  | 'planner' | 'meeting';
+  | 'planner' | 'meeting' | 'shortlist' | 'missions' | 'deadline' | 'director';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
@@ -3034,6 +3043,111 @@ class Game {
     const position = world.players.position[p] as Position;
     const season = plan !== null ? firstGap(plan, position) ?? world.season : world.season;
     this.addPlanTarget(p, position, season);
+  }
+
+  // ---- Recruitment, delegation, the Director of Football, deadline day -----------------------
+
+  shortlist(): number[] {
+    return this.world === null ? [] : shortlistOf(this.world);
+  }
+
+  isShortlisted(p: number): boolean {
+    return this.world !== null && isShortlisted(this.world, p);
+  }
+
+  toggleShortlist(p: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const on = toggleShortlist(world, p);
+    this.notice = `${world.players.fullName(p)} is ${on ? 'on' : 'off'} your shortlist.`;
+    this.emit();
+  }
+
+  scoutMissions(): ScoutMission[] {
+    return this.world === null ? [] : missionsOf(this.world);
+  }
+
+  addScoutMission(spec: MissionSpec): boolean {
+    const world = this.world;
+    if (world === null) return false;
+    const r = addMission(world, spec);
+    this.notice = r.text;
+    this.emit();
+    return r.ok;
+  }
+
+  cancelScoutMission(id: number): void {
+    if (this.world === null) return;
+    cancelMission(this.world, id);
+    this.emit();
+  }
+
+  /** The scouts' rating of a player, 0-2000. */
+  scoutEstimate(p: number): number {
+    return this.world === null ? 0 : scoutEstimate(this.world, p);
+  }
+
+  delegation(): Delegation | null {
+    return this.world === null ? null : delegationOf(this.world);
+  }
+
+  canDelegateTo(handler: Handler): boolean {
+    return this.world !== null && handlerAvailable(this.world, handler);
+  }
+
+  setDelegation(task: DelegableTask, handler: Handler): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = setDelegation(world, task, handler);
+    this.emit();
+  }
+
+  director(): Staff | undefined {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? undefined : directorOf(world, club);
+  }
+
+  directorTasks(): DirectorTask[] {
+    return this.world === null ? [] : [...directorTasks(this.world)].reverse();
+  }
+
+  directorTaskFor(p: number): DirectorTask | undefined {
+    return this.world === null ? undefined : directorTaskFor(this.world, p);
+  }
+
+  directorBlock(p: number, kind: DirectorTask['kind']): string | null {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? 'No club.' : directorBlock(world, club, p, kind);
+  }
+
+  /** Hand a deal to the Director of Football, with the most he may spend. */
+  delegateDeal(p: number, kind: DirectorTask['kind'], maxFee: number, maxWage: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = delegateDeal(world, club, p, kind, maxFee, maxWage).text;
+    this.emit();
+  }
+
+  cancelDirectorTask(id: number): void {
+    if (this.world === null) return;
+    cancelDirectorTask(this.world, id);
+    this.emit();
+  }
+
+  deadlineToday(): DeadlinePlan | undefined {
+    return this.world === null ? undefined : deadlineToday(this.world);
+  }
+
+  agentProfile(p: number): AgentProfile | null {
+    return this.world === null ? null : agentProfile(this.world, p);
+  }
+
+  /** The summer move an agent has lined up for one of ours, if one stands. */
+  preContractOf(p: number): PreContract | undefined {
+    return this.world === null ? undefined : preContractOf(this.world, p);
   }
 
   /** The staff meetings, the latest last. */

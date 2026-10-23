@@ -21,6 +21,8 @@ export enum StaffRole {
   YouthCoach = 8,
   RecruitmentAnalyst = 9,
   HeadCoach = 10,
+  /** Runs the club's dealings: negotiates signings and renewals for the manager, within a budget. */
+  DirectorOfFootball = 11,
 }
 
 export const STAFF_ROLE_NAMES: Readonly<Record<StaffRole, string>> = {
@@ -35,6 +37,7 @@ export const STAFF_ROLE_NAMES: Readonly<Record<StaffRole, string>> = {
   [StaffRole.YouthCoach]: 'Youth Coach',
   [StaffRole.RecruitmentAnalyst]: 'Recruitment Analyst',
   [StaffRole.HeadCoach]: 'Head Coach',
+  [StaffRole.DirectorOfFootball]: 'Director of Football',
 };
 
 /** Staff attributes, all on the same 1-20 scale as players. */
@@ -144,9 +147,16 @@ export function staffRating(s: Staff): number {
       return (a.physiotherapy * 2 + a.sportsScience) / 3;
     case StaffRole.YouthCoach:
       return (a.workingWithYouth * 2 + a.coachTactical + a.motivating) / 4;
+    case StaffRole.DirectorOfFootball:
+      return negotiatingRating(a);
     default:
       return 10;
   }
+}
+
+/** How well someone does a deal, 1-20: how he handles people across a table, how he judges a player's worth, and his nerve. */
+export function negotiatingRating(a: StaffAttributes): number {
+  return (a.manManagement * 2 + a.judgingAbility * 1.5 + a.discipline) / 4.5;
 }
 
 /** A coach's worth on the training court, 1-20 — a head coach's, an assistant's, the manager's own. */

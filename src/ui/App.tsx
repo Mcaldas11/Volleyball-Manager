@@ -45,6 +45,8 @@ import { NegotiationScreen } from './screens/Negotiation.tsx';
 import { StaffNegotiationScreen } from './screens/StaffNegotiation.tsx';
 import { DressingRoomScreen } from './screens/DressingRoom.tsx';
 import { SquadPlannerScreen } from './screens/SquadPlanner.tsx';
+import { DirectorScreen, MissionsScreen, ShortlistScreen } from './screens/Recruitment.tsx';
+import { DeadlineDayScreen } from './screens/DeadlineDay.tsx';
 import { StaffMeetingScreen } from './staffMeeting.tsx';
 import { HelpDialog } from './help.tsx';
 import { TutorialOverlay } from './tutorial.tsx';
@@ -114,8 +116,11 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'Recruitment',
     sections: [
-      { id: 'scouting', label: 'Scouting', icon: 'scouting', tabs: [['scouting', 'Player Search']] },
-      { id: 'transfers', label: 'Transfers', icon: 'transfers', tabs: [['transfers', 'Transfer Centre']] },
+      { id: 'scouting', label: 'Scouting', icon: 'scouting', tabs: [['scouting', 'Player Search'], ['shortlist', 'Shortlist'], ['missions', 'Scout Missions']] },
+      {
+        id: 'transfers', label: 'Transfers', icon: 'transfers',
+        tabs: [['transfers', 'Transfer Centre'], ['deadline', 'Deadline Day'], ['director', 'Director & Delegation']],
+      },
     ],
   },
   {
@@ -327,6 +332,10 @@ function Screen(): JSX.Element {
     case 'finances': return <FinancesScreen />;
     case 'dressing': return <DressingRoomScreen />;
     case 'planner': return <SquadPlannerScreen />;
+    case 'shortlist': return <ShortlistScreen />;
+    case 'missions': return <MissionsScreen />;
+    case 'deadline': return <DeadlineDayScreen />;
+    case 'director': return <DirectorScreen />;
     case 'meeting': return <StaffMeetingScreen />;
     case 'analysis': return <AnalysisScreen />;
     case 'commercial': return <CommercialScreen />;

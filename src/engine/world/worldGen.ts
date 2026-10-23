@@ -432,6 +432,7 @@ export function generateStaff(
     case StaffRole.YouthCoach: boost('workingWithYouth'); break;
     case StaffRole.PerformanceAnalyst: boost('coachTactical'); break;
     case StaffRole.RecruitmentAnalyst: boost('judgingAbility'); break;
+    case StaffRole.DirectorOfFootball: boost('manManagement'); boost('judgingAbility'); break;
     default: boost('coachTactical'); boost('manManagement'); break;
   }
 

@@ -21,6 +21,7 @@
  * no reward either.
  */
 
+import { StaffRole } from '../model/staff.ts';
 import type { Rng } from '../core/rng.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { NO_CLUB } from '../model/players.ts';
@@ -1387,7 +1388,30 @@ export function generateInterviewSessions(world: World, day: number): void {
       fixtureId: f.id,
       interviewId: session.id,
     });
+    assistantFrontsIt(world, session);
   }
+}
+
+/**
+ * The press conferences handed to the assistant: he fronts this one — calm, nothing said to
+ * win anyone over or upset anyone, so no journalist feels stood up and nobody's morale moves.
+ * Returns whether he took it.
+ */
+function assistantFrontsIt(world: World, session: InterviewSession): boolean {
+  if (world.delegation?.press !== 'assistant' || session.national !== undefined) return false;
+  const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
+  const assistant = club !== undefined
+    ? world.staff.find((s) => s.clubId === club.id && s.role === StaffRole.AssistantCoach && s.retired !== true)
+    : undefined;
+  if (assistant === undefined) return false;
+  world.pendingInterviews = world.pendingInterviews.filter((s) => s.id !== session.id);
+  const msg = interviewMessage(world, session);
+  if (msg !== undefined) {
+    msg.body = `${assistant.firstName} ${assistant.lastName} fronted the ${session.kind === 'pre' ? 'pre-match' : 'post-match'} press conference for you, as you asked: ` +
+      'calm and polite, nothing the papers can make a story of. (Take the conferences back under Transfers → Director, Responsibilities.)';
+    msg.read = false;
+  }
+  return true;
 }
 
 /** Days after a match the press still want the manager's reaction. */
@@ -1421,7 +1445,7 @@ export function generatePostMatchInterview(world: World, f: Fixture): InterviewS
     fixtureId: f.id,
     interviewId: session.id,
   });
-  return session;
+  return assistantFrontsIt(world, session) ? null : session;
 }
 
 function adjustSquadMorale(world: World, clubId: number, delta: number): void {

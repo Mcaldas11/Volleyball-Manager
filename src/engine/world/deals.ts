@@ -85,6 +85,8 @@ export interface Talks {
   rivalBid?: { clubId: number; fee: number; until: number };
   /** Left idle past this day, the talks lapse. */
   expiresOn: number;
+  /** Run by the Director of Football, not the manager — see director.ts. */
+  byDirector?: boolean;
 }
 
 /** How long each kind of answer takes, in days (both ends inclusive). */

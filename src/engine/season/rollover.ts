@@ -11,6 +11,7 @@
  * too generous, the world will have visibly drifted by season twenty.
  */
 
+import { honourPreContract } from '../world/agents.ts';
 import { judgePhilosophy } from '../world/board.ts';
 import { summerPress } from '../world/pressRoom.ts';
 import { predictionVerdicts } from '../world/predictions.ts';
@@ -389,6 +390,11 @@ function runTransferWindow(world: World): number {
       // The user renews their own players by negotiating; anyone left
       // unsigned walks out on a free.
       if (club !== undefined && club.id === world.userClubId) {
+        // His agent lined a move up while he went unrenewed: he goes there, not onto the free list.
+        if (honourPreContract(world, i)) {
+          userLeavers.push(i);
+          continue;
+        }
         club.players = club.players.filter((p) => p !== i);
         logTransfer(world, i, club.id, -1, 0);
         store.clubId[i] = -1;

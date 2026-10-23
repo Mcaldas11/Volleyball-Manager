@@ -85,7 +85,8 @@ export function messageNeedsAction(world: World, m: GameMessage): boolean {
   }
   if (m.talksId !== undefined) {
     const talks = world.talks.find((t) => t.id === m.talksId);
-    if (talks !== undefined && talks.pending === null) return true;
+    // The director's talks are his to move on, not the manager's.
+    if (talks !== undefined && talks.pending === null && talks.byDirector !== true) return true;
   }
   if (m.transferRequestOf !== undefined && world.transferRequests?.[m.transferRequestOf]?.status === 'open') return true;
   // A staff meeting with suggestions still to take or leave.

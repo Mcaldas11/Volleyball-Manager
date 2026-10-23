@@ -7,6 +7,11 @@
  * same shape as one on day one — only larger.
  */
 
+import type { DeadlinePlan } from './deadline.ts';
+import type { PreContract } from './agents.ts';
+import type { ScoutMission } from './recruitment.ts';
+import type { Delegation } from './delegation.ts';
+import type { DirectorTask } from './director.ts';
 import { calendarOf, type ClubCalendar } from './calendar.ts';
 import type { ContractExtras } from './contractTerms.ts';
 import type { Mentorship } from './mentoring.ts';
@@ -452,6 +457,8 @@ export interface GameMessage {
   awardsNight?: AwardsNight;
   /** The monthly staff meeting it reports — see staffMeeting.ts. */
   meetingId?: number;
+  /** The morning of deadline day: opens the deadline-day screen. */
+  deadlineDay?: boolean;
   /** A match preview: the analysts' odds and the fans' calls — see matchPreview.ts. */
   preview?: MatchPreview;
   /** Inbox tab this belongs in. Optional so saves written before the inbox
@@ -735,6 +742,18 @@ export interface World {
   edited?: boolean;
   /** The real players written into the game, where each is in the store, by key — see uniquePlayers.ts. */
   uniquePlayers?: Record<string, number>;
+  /** Agents' business: the summer moves lined up for the manager's players, and the clients offered him lately — see agents.ts. */
+  preContracts?: Record<number, PreContract>;
+  agentPitches?: Record<number, number>;
+  /** The manager's shortlist, and the scouts' missions — see recruitment.ts. */
+  shortlist?: number[];
+  scoutMissions?: ScoutMission[];
+  /** Deadline day as it unfolds, planned that morning — see deadline.ts. */
+  deadline?: DeadlinePlan;
+  /** Who does which of the manager's jobs — see delegation.ts. */
+  delegation?: Partial<Delegation>;
+  /** The deals handed to the Director of Football — see director.ts. */
+  directorTasks?: DirectorTask[];
   /** The squad planner's transfer targets — see squadPlanner.ts. */
   squadPlan?: SquadPlanState;
   /** The monthly staff meetings, the latest last — see staffMeeting.ts. */

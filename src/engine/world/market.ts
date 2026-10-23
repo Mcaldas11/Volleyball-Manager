@@ -17,6 +17,7 @@ import { pendingMoveOf, windowOpeningLabel } from './moves.ts';
 import { followed, postNews } from './news.ts';
 import { hash01 } from './offerStance.ts';
 import { euros, nextTransferWindow, seasonEndDay, windowCloseDay, type World } from './world.ts';
+import { planDeadline } from './deadline.ts';
 
 /** Weekly chance the papers link one of the manager's best with a bigger club. */
 const RUMOUR_CHANCE = 0.3;
@@ -80,25 +81,31 @@ export function deadlineMorning(world: World): void {
     bids.length > 0 ? `Bids on the table for ${[...new Set(bids.map((o) => store.fullName(o.playerIdx)))].join(', ')}.` : '',
     `Anything for a player under contract not done by midnight waits until the window opens again on ${windowOpeningLabel(world, next.day)}.`,
   ].filter((l) => l !== '');
-  postMessage(world, { category: 'news', from: 'Director of Football', subject: 'Deadline day', body: lines.join(' ') });
+  postMessage(world, { category: 'news', from: 'Director of Football', subject: 'Deadline day', body: lines.join(' '), deadlineDay: true });
   // Everyone answers today.
   for (const t of world.talks) if (t.pending !== null && t.pending.resolvesOn > world.day) t.pending.resolvesOn = world.day;
   for (const o of world.incomingOffers) if (o.resolvesOn !== undefined && o.resolvesOn > world.day) o.resolvesOn = world.day;
-}
-
-/**
- * Deadline day itself: the bids fly in, the other clubs do their late business,
- * and the papers round it up. Called each day, before the deals are answered.
- */
-export function deadlineDay(world: World): void {
-  if (windowCloseDay(world.day) !== world.day) return;
-  // More bids than any other day.
+  // The first of the day's late bids are in by the morning — there is a day to answer them.
   generateIncomingOffers(world);
   generateListedBids(world);
-  // The other clubs' late deals: a fringe player from a full squad to a bigger club with room.
+  // The day as it will unfold, for the deadline-day screen: every late deal, at its hour.
+  planDeadline(world);
+}
+
+/** One of the other clubs' late deals: who goes where, for what, and when the news breaks. */
+export interface LateDeal {
+  p: number;
+  from: number;
+  to: number;
+  fee: number;
+  /** Minutes after midnight the deal is announced: between 10:00 and 23:55. */
+  at: number;
+}
+
+/** The other clubs' late business: a fringe player from a full squad to a bigger club with room. */
+export function pickLateDeals(world: World): LateDeal[] {
   const store = world.players;
-  const deals: Array<{ p: number; from: number; to: number; fee: number }> = [];
-  const lastDay = seasonEndDay(world.season + 1);
+  const deals: LateDeal[] = [];
   for (const seller of world.clubs) {
     if (seller.id === world.userClubId || !followed(world, seller) || seller.players.length <= 14) continue;
     if (hash01(world.day, seller.id * 17 + 5) > 0.35) continue;
@@ -111,9 +118,33 @@ export function deadlineDay(world: World): void {
     const buyer = buyers[Math.floor(hash01(world.day, seller.id * 17 + 6) * buyers.length)];
     const fee = Math.round((store.value[fringe] * (0.8 + 0.4 * hash01(world.day, fringe))) / 1000) * 1000;
     if (fee > buyer.finances.balance) continue;
-    completeTransfer(world, buyer, fringe, Math.round(store.wage[fringe] * 1.05), fee, lastDay);
-    deals.push({ p: fringe, from: seller.id, to: buyer.id, fee });
+    const at = 600 + Math.floor(hash01(fringe, world.day) * (23 * 60 + 55 - 600));
+    deals.push({ p: fringe, from: seller.id, to: buyer.id, fee, at });
     if (deals.length >= 6) break;
+  }
+  return deals.sort((a, b) => a.at - b.at);
+}
+
+/**
+ * Deadline day itself: the bids fly in, the other clubs do their late business,
+ * and the papers round it up. Called each day, before the deals are answered.
+ */
+export function deadlineDay(world: World): void {
+  if (windowCloseDay(world.day) !== world.day) return;
+  // More bids than any other day.
+  generateIncomingOffers(world);
+  generateListedBids(world);
+  // The other clubs' late deals — those the morning's plan named, if they still stand.
+  const store = world.players;
+  const deals: Array<{ p: number; from: number; to: number; fee: number }> = [];
+  const lastDay = seasonEndDay(world.season + 1);
+  const planned = world.deadline?.day === world.day ? world.deadline.deals : pickLateDeals(world);
+  for (const d of planned) {
+    const buyer = world.clubs[d.to];
+    if (buyer === undefined || store.clubId[d.p] !== d.from || pendingMoveOf(world, d.p) !== undefined || loanOf(world, d.p) !== undefined) continue;
+    if (d.fee > buyer.finances.balance || buyer.players.length >= MAX_SQUAD) continue;
+    completeTransfer(world, buyer, d.p, Math.round(store.wage[d.p] * 1.05), d.fee, lastDay);
+    deals.push(d);
   }
   const ours = world.transferLog.filter((t) => t.day === world.day);
   const all = [

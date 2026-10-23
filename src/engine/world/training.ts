@@ -161,7 +161,12 @@ const ASSISTANT_PLAN: TrainingPlan = newTrainingPlan();
 
 /** The plan a club trains to: the user's own, or its assistant's. */
 function readPlan(world: World, club: Club): TrainingPlan {
-  return club.id === world.userClubId ? planOf(club) : ASSISTANT_PLAN;
+  return ownPlan(world, club) ? planOf(club) : ASSISTANT_PLAN;
+}
+
+/** Whether a club trains to the plan the manager set: his own club's — unless he has handed the training to his assistant. */
+function ownPlan(world: World, club: Club): boolean {
+  return club.id === world.userClubId && world.delegation?.training !== 'assistant';
 }
 
 // ---- The calendar ---------------------------------------------------------------------
@@ -248,7 +253,7 @@ export function weekSettings(plan: TrainingPlan, monday: number): { focus: Weekl
  * no match, light in a week of two, normal otherwise.
  */
 export function weekSettingsFor(world: World, club: Club, monday: number): { focus: WeeklyFocus; intensity: Intensity } {
-  if (club.id === world.userClubId) return weekSettings(planOf(club), monday);
+  if (ownPlan(world, club)) return weekSettings(planOf(club), monday);
   let matches = 0;
   for (let i = 0; i < 7; i++) if (clubFixtureOn(world, club.id, monday + i) !== undefined) matches++;
   const preSeason = ((monday % DAYS_PER_SEASON) + DAYS_PER_SEASON) % DAYS_PER_SEASON < 48;

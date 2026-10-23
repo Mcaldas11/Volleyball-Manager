@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react';
+import { DirectorDialog } from './Recruitment.tsx';
 import { PlayerCompare } from './Compare.tsx';
 import { AbilityChart } from '../abilityChart.tsx';
 import { feeText, youthRound, youthRoundDay, youthTable, type YouthLeague } from '../../engine/world/youth.ts';
@@ -477,6 +478,8 @@ export function PlayerDetail(): JSX.Element | null {
   const store = world.players;
   const p = g.selectedPlayer;
   const [tab, setTab] = useState<ProfileTab>('overview');
+  // A deal being handed to the Director of Football: which kind.
+  const [toDirector, setToDirector] = useState<'transfer' | 'renewal' | null>(null);
   if (p === null) return null;
   if (g.compareTo !== null && g.compareTo !== p) return <PlayerCompare a={p} b={g.compareTo} />;
 
@@ -608,6 +611,13 @@ export function PlayerDetail(): JSX.Element | null {
                   {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
                 </button>
               )}
+              {((isOwn && !isYouth) || lentOut) && move === null && !retiring && g.director() !== undefined && (
+                g.directorTaskFor(p) !== undefined
+                  ? <span className="profile-chip"><Icon name="contract" size={13} /> Director on it</span>
+                  : <button onClick={() => setToDirector('renewal')} title="Let the Director of Football agree a new contract, within a wage you set">
+                    <Icon name="contract" size={14} /> Director: renew
+                  </button>
+              )}
               {isOwn && !isYouth && (
                 <button onClick={() => g.openPlayerTalk(p)} title="Call him in for a word" data-tour="talk">
                   <Icon name="press" size={14} /> Talk
@@ -666,9 +676,23 @@ export function PlayerDetail(): JSX.Element | null {
                   title={g.isPlanTarget(p) ? 'Take him off the squad plan' : 'Mark him as a target on the squad plan, for his position\'s first gap'}
                   onClick={() => g.togglePlanTarget(p)}
                 >
-                  <Icon name={g.isPlanTarget(p) ? 'check' : 'star'} size={14} />
-                  {g.isPlanTarget(p) ? 'On the squad plan' : 'Add to squad plan'}
+                  <Icon name={g.isPlanTarget(p) ? 'check' : 'squad'} size={14} />
+                  {g.isPlanTarget(p) ? 'On the plan' : 'Squad plan'}
                 </button>
+              )}
+              {(elsewhere || (managing && club === null && store.isActive(p))) && (
+                <button className={g.isShortlisted(p) ? 'on' : ''} onClick={() => g.toggleShortlist(p)}
+                  title={g.isShortlisted(p) ? 'Take him off your shortlist' : 'Add him to your shortlist'}>
+                  <Icon name="star" size={14} className={g.isShortlisted(p) ? 'icon-filled' : undefined} />
+                  {g.isShortlisted(p) ? 'Shortlisted' : 'Shortlist'}
+                </button>
+              )}
+              {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && g.director() !== undefined && (
+                g.directorTaskFor(p) !== undefined
+                  ? <span className="profile-chip"><Icon name="contract" size={13} /> Director on it</span>
+                  : <button onClick={() => setToDirector('transfer')} title="Let the Director of Football do the deal, within limits you set">
+                    <Icon name="contract" size={14} /> Director
+                  </button>
               )}
             </>
           )}
@@ -676,6 +700,7 @@ export function PlayerDetail(): JSX.Element | null {
           <button onClick={() => g.select(null)}><Icon name="close" size={14} /> Close</button>
         </div>
       </div>
+      {toDirector !== null && <DirectorDialog p={p} kind={toDirector} onClose={() => setToDirector(null)} />}
 
       <div className="tiles">
         <StatTile label="Value" value={money(store.value[p])} />
@@ -828,7 +853,23 @@ export function PlayerDetail(): JSX.Element | null {
             <KV k="Agent">
               <span title={agent.agency}>{agent.name}</span>
               <span className={agent.style === 'hardball' ? 'warn-text' : 'faint'}> · {AGENT_STYLE_NAMES[agent.style]}</span>
+              {(() => {
+                const prof = g.agentProfile(p);
+                if (prof === null) return null;
+                return (
+                  <span className="faint" title={`${prof.agency}. His cut: ${Math.round(prof.commission * 100)}% of a season's wage on a new deal, ${Math.round(prof.renewalCommission * 100)}% on a renewal.${prof.wantsClauses ? ' He has his clients ask for a release clause.' : ''} Contacts: ${prof.network === 'international' ? 'clubs everywhere' : 'his own country'}. Takes clients elsewhere when their contracts run out: ${prof.poaching}.`}>
+                    {' '}· {Math.round(prof.commission * 100)}% fee{prof.wantsClauses ? ' · wants clauses' : ''}{prof.network === 'international' ? ' · international' : ''}
+                  </span>
+                );
+              })()}
             </KV>
+            {isOwn && g.preContractOf(p) !== undefined && (
+              <KV k="Summer move">
+                <span className="warn-text">
+                  {world.clubs[g.preContractOf(p)!.clubId]?.name} have offered him a contract from July — renew him, or he goes.
+                </span>
+              </KV>
+            )}
             <InterestedClubs p={p} />
             <KV k="Nationality"><Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}</KV>
             {secondNation(world, p) >= 0 && (

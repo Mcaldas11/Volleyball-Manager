@@ -48,6 +48,7 @@ export const STAFF_SLOTS: Readonly<Record<StaffRole, number>> = {
   [StaffRole.Scout]: 4,
   [StaffRole.RecruitmentAnalyst]: 1,
   [StaffRole.YouthCoach]: 2,
+  [StaffRole.DirectorOfFootball]: 1,
 };
 
 /** How far above his general level a specialist rates at his own job — measured on the game's backrooms. */
@@ -63,6 +64,7 @@ const ROLE_EDGE: Readonly<Record<StaffRole, number>> = {
   [StaffRole.Scout]: 2.75,
   [StaffRole.RecruitmentAnalyst]: 1.0,
   [StaffRole.YouthCoach]: 1.75,
+  [StaffRole.DirectorOfFootball]: 1.6,
 };
 
 /** What each role does for the club — as the staff screen tells it. */
@@ -78,13 +80,14 @@ export const STAFF_DUTIES: Readonly<Record<StaffRole, string>> = {
   [StaffRole.Scout]: 'Scouts players — best where he knows the region.',
   [StaffRole.RecruitmentAnalyst]: 'Judges players for the scouting reports.',
   [StaffRole.YouthCoach]: 'Develops the academy, and counts as a coach for development.',
+  [StaffRole.DirectorOfFootball]: 'Does the club\'s deals for you: signings and renewals within a budget you set — and any task you hand him.',
 };
 
 /** The roles the manager hires for — everyone but the head coach, which is him. */
 export const HIRABLE_ROLES: readonly StaffRole[] = [
   StaffRole.AssistantCoach, StaffRole.StrengthCoach, StaffRole.Doctor, StaffRole.Physiotherapist,
   StaffRole.SportsPsychologist, StaffRole.PerformanceAnalyst, StaffRole.HeadScout, StaffRole.Scout,
-  StaffRole.RecruitmentAnalyst, StaffRole.YouthCoach,
+  StaffRole.RecruitmentAnalyst, StaffRole.YouthCoach, StaffRole.DirectorOfFootball,
 ];
 
 /** The places every club wants filled, the rest as its standing allows. */

@@ -1199,6 +1199,15 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
   const out: JSX.Element[] = [];
   const p = m.playerIdx;
 
+  // Deadline day: the day as it unfolds, on its own screen.
+  if (m.deadlineDay === true && g.deadlineToday() !== undefined) {
+    out.push(<button key="deadline" className="paper-btn primary-dark" onClick={() => g.go('deadline')}>Open Deadline Day</button>);
+  }
+  // A staff meeting's scouting mission report, or an agent's client: the shortlist and the profile.
+  if (m.subject.startsWith('Scouting mission:') && (m.tables?.length ?? 0) > 0) {
+    out.push(<button key="shortlist" className="paper-btn" onClick={() => g.go('shortlist')}>Open the shortlist</button>);
+  }
+
   // Another club wants one of the staff: let them talk to him, ask for more, or keep him — and maybe give him a new deal.
   const approach = m.staffApproachId !== undefined ? world.staffApproaches?.find((a) => a.id === m.staffApproachId) : undefined;
   if (approach !== undefined && approach.status === 'open') {

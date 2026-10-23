@@ -13,6 +13,10 @@
  * a match took.
  */
 
+import { agentsDay } from '../world/agents.ts';
+import { recruitmentDay } from '../world/recruitment.ts';
+import { delegationDay } from '../world/delegation.ts';
+import { directorDay } from '../world/director.ts';
 import { staffMeetingDay } from '../world/staffMeeting.ts';
 import { matchPreviews } from '../world/matchPreview.ts';
 import { campDay } from '../world/camp.ts';
@@ -566,6 +570,12 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   // Deadline day: the bids fly in and the other clubs do their late business, before the day's answers.
   deadlineDay(world);
   processDeals(world);
+  // The director's next move wherever an answer has come back — and whatever the delegates have to do.
+  directorDay(world);
+  delegationDay(world);
+  // The scouts' missions: a report each week. And the agents' own business.
+  recruitmentDay(world);
+  agentsDay(world);
   careerDay(world);
   staffDay(world);
   processStaffDeals(world);

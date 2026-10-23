@@ -214,6 +214,33 @@ Before committing a change:
       a youngster who needs a loan, a player to sell, one who is down. Take
       each one (it is done, or the talks open) or leave it; what is left
       unanswered lapses at the next meeting
+- [x] A Director of Football: a staff role of his own, rated as a
+      negotiator. Hand him a signing or a renewal with the most he may pay —
+      a fee and a wage — and he bids, haggles over the terms and walks away
+      past the limit, reporting to the inbox either way. A better director
+      comes in under the limits more often
+- [x] Delegation: choose who handles contract renewals (you or the
+      director), pre-season friendlies (you, the assistant or the director),
+      training (you or the assistant) and press conferences (you or the
+      assistant). The director goes through the expiring contracts each
+      winter, keeping whoever is worth it within the wage budget; the
+      assistant fronts the press and runs the training programme
+- [x] A shortlist and scout missions: shortlist anyone from his profile, and
+      send the scouts out with a brief — "an opposite aged 24 or under, up to
+      €200k", a level, a region, free agents only. Every week each mission
+      brings new names that fit, onto the shortlist and into the inbox, rated
+      as well as the scouts know where the player plays
+- [x] Agents with a personality: each has a commission (on a new deal and on
+      a renewal), a style, contacts at home or abroad, and how often he takes
+      clients elsewhere. Hardball agents have their clients ask for release
+      clauses; agents offer you their clients for the gaps in your squad
+      plan; and a player whose contract is running out can sign a
+      pre-contract with another club and leave in the summer unless renewed
+- [x] Deadline day: a screen of its own on the last day of each window — a
+      clock running down to midnight at the speed you choose, the live feed
+      of the other clubs' late deals and the rumours, last-minute bids for
+      your players to answer, your own talks still open and your shortlist to
+      bid from (or hand to the director) before the window shuts
 - [x] A preview in the inbox before each of your matches: the analysts' odds
       (the match played 400 times over in the background engine), every
       result's chance from 3-0 to 0-3, both sides' form and the fans' poll —
