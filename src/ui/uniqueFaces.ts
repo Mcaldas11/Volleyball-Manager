@@ -21,3 +21,4 @@ export function showUniqueFaces(world: World): void {
   }
   setOwnPhotos(photos);
 }
+
