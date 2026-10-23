@@ -35,7 +35,9 @@ export interface UniquePlayer {
   /** Every attribute, 1-20 — whatever is left out is 10. */
   attrs: Partial<Record<AttributeName, number>>;
   /** How much better he can still get than he is now, in ability points. */
-  growth: number;
+  growth?: number;
+  /** Or the potential ability he has, outright (1-2000). */
+  potential?: number;
 }
 
 /** Diogo Couto: a libero who can play on the outside, from Portugal. */
@@ -95,7 +97,7 @@ const MATTHEW_LIENERT: UniquePlayer = {
     injuryProneness: 7, loyalty: 11, ambition: 16, temperament: 12, mediaHandling: 8, consistency: 9,
     bigMatchPerformance: 11, homesickness: 9, coachability: 16, retirementPreference: 14,
   },
-  growth: 1000,
+  potential: 1870,
 };
 
 export const UNIQUE_PLAYERS: readonly UniquePlayer[] = [DIOGO_COUTO, MATTHEW_LIENERT];
@@ -197,7 +199,7 @@ function createUnique(world: World, def: UniquePlayer): number {
   if (def.offHand !== undefined) store.offHand[i] = def.offHand;
 
   store.currentAbility[i] = computeCurrentAbility(store, i);
-  store.potentialAbility[i] = Math.min(2000, store.currentAbility[i] + def.growth);
+  store.potentialAbility[i] = Math.min(2000, Math.max(store.currentAbility[i], def.potential ?? store.currentAbility[i] + (def.growth ?? 0)));
   rollTraits(store, i);
 
   store.condition[i] = 100;

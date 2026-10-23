@@ -58,7 +58,7 @@ test('Matthew Lienert: an Australian opposite of twelve, as good with either han
   assert.equal(store.position[p], Position.Opposite);
   assert.equal(store.clubId[p], -1);
   assert.ok(!store.hasFlag(p, PlayerFlag.Youth), 'a free agent the manager can find, not an academy boy');
-  assert.ok(store.potentialAbility[p] >= store.currentAbility[p] + 1000, 'a long way still to go');
+  assert.equal(store.potentialAbility[p], 1870, 'a long way still to go');
 
   // Summer by summer he grows into his 2.01 m — and nobody signs him before he is sixteen.
   const ctx = newSeasonContext();
