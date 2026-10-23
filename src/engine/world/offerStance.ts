@@ -8,13 +8,15 @@
  * what he is deciding.
  *
  * It matters afterwards. Turn down a bid a player wanted, or let it lapse,
- * and he takes it badly: his morale drops, and he may ask to leave there and
- * then. Turn down one he didn't want, and he is glad the club values him.
+ * and he takes it badly: his morale drops, and he comes to see the manager
+ * about it — what he is told there decides whether he asks to leave (see
+ * blockedMoves.ts). Turn down one he didn't want, and he is glad the club values him.
  * Agree to sell one who wanted to stay, and he will most likely refuse to go
  * — and resent being shown the door; one who wanted to go agrees terms.
  */
 
 import { agentPush } from './contractTerms.ts';
+import { askForWord, salePromiseBroken, RIGHT_OFFER } from './blockedMoves.ts';
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import type { IncomingOffer } from './negotiation.ts';
@@ -35,10 +37,13 @@ export const STANCE_NAMES: Readonly<Record<OfferStance, string>> = {
 export function stanceLine(world: World, offer: IncomingOffer): string {
   const name = world.players.fullName(offer.playerIdx);
   const buyer = world.clubs[offer.buyingClubId]?.name ?? 'them';
+  const promised = world.movePromises?.[offer.playerIdx];
+  const held = promised?.kind === 'sale' && offer.fee >= promised.fee * RIGHT_OFFER && offer.loan === undefined
+    ? ' You told him he could go if a bid like this came in.' : '';
   switch (stanceOf(world, offer)) {
-    case 'keen': return `${name} knows about it, and wants to go to ${buyer} — turn it down and he won't take it well.`;
+    case 'keen': return `${name} knows about it, and wants to go to ${buyer} — turn it down and he will want a word with you.${held}`;
     case 'staying': return `${name} is happy here and would rather stay — he may well refuse to go even if you accept.`;
-    default: return `${name} could go either way.`;
+    default: return `${name} could go either way.${held}`;
   }
 }
 
@@ -81,9 +86,9 @@ export function stanceOf(world: World, offer: IncomingOffer): OfferStance {
 
 /**
  * A bid gone without a sale — turned down, or left to lapse. A player who
- * wanted it is hurt, and may ask to leave; one who wanted to stay is glad.
- * Only the last bid standing for him counts: while another is on the table,
- * the move isn't off.
+ * wanted it is hurt and wants a word with the manager; one who wanted to stay
+ * is glad. Only the last bid standing for him counts: while another is on the
+ * table, the move isn't off.
  */
 export function bidTurnedDown(world: World, offer: IncomingOffer, how: 'declined' | 'lapsed'): void {
   if (offer.loan !== undefined) return;
@@ -95,6 +100,9 @@ export function bidTurnedDown(world: World, offer: IncomingOffer, how: 'declined
   const stance = stanceOf(world, offer);
   const name = store.fullName(p);
   const buyer = world.clubs[offer.buyingClubId]?.name ?? 'the club';
+  const what = how === 'declined' ? `you turned down ${buyer}` : `${buyer}'s offer was left to lapse`;
+  // Told he could go if the right offer came in — and this was it.
+  if (stance !== 'staying' && salePromiseBroken(world, offer, what)) return;
   if (stance === 'staying' && how === 'declined') {
     store.morale[p] = Math.min(100, store.morale[p] + 3);
     postMessage(world, {
@@ -109,20 +117,12 @@ export function bidTurnedDown(world: World, offer: IncomingOffer, how: 'declined
   store.morale[p] = Math.max(0, store.morale[p] - Math.round(6 + 10 * pull));
   const asked = world.transferRequests?.[p];
   const already = asked !== undefined && (asked.status === 'open' || asked.status === 'listed');
-  const temper = (store.getAttr(p, 'temperament') - 10) / 10;
-  const chance = Math.min(0.85, Math.max(0.15, 0.25 + pull * 0.8 + (store.getAttr(p, 'ambition') - 10) * 0.03 - temper * 0.15));
-  const what = how === 'declined' ? `you turned down ${buyer}` : `${buyer}'s offer was left to lapse`;
-  if (!already && !store.hasFlag(p, PlayerFlag.Transferable) && hash01(p, offer.id * 7 + 3) < chance) {
-    (world.transferRequests ??= {})[p] = { day: world.day, status: 'open', reason: 'blockedMove' };
-    postMessage(world, {
-      category: 'contract', from: name, playerIdx: p, transferRequestOf: p,
-      subject: `${name} asks to leave`,
-      body: `${name} is furious that ${what}. He wanted that move, and has handed in a transfer request. ` +
-        'You can let him go, promise him what he wants, or tell him he is staying.',
-    });
+  // He comes to see the manager about it: what he is told there decides what he does next.
+  if (!already && !store.hasFlag(p, PlayerFlag.Transferable)) {
+    askForWord(world, offer, what, pull);
     return;
   }
-  // Not yet a request — but he is unsettled, and a few weeks of it will bring one.
+  // Already on his way out — asked, or listed: he is unsettled, and it shows.
   const weeks = (world.unhappyWeeks ??= {});
   weeks[p] = Math.max(weeks[p] ?? 0, 2);
   postMessage(world, {

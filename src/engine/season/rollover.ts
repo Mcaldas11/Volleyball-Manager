@@ -11,6 +11,7 @@
  * too generous, the world will have visibly drifted by season twenty.
  */
 
+import { growUniquePlayers, MIN_SIGNING_AGE } from '../world/uniquePlayers.ts';
 import { honourPreContract } from '../world/agents.ts';
 import { judgePhilosophy } from '../world/board.ts';
 import { summerPress } from '../world/pressRoom.ts';
@@ -121,6 +122,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
 
   revisePotential(world, ctx.stats);
   applyAgeing(world);
+  // The real players still growing put on their inches.
+  growUniquePlayers(world);
   // A summer's growth can earn a player a trait.
   for (let i = 0; i < world.players.count; i++) if (world.players.isActive(i)) rollTraits(world.players, i);
 
@@ -382,7 +385,8 @@ function runTransferWindow(world: World): number {
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i) || store.hasFlag(i, PlayerFlag.Youth)) continue;
     if (store.clubId[i] < 0) {
-      freeAgents.push(i);
+      // A boy without a club waits until he is old enough for one to sign him.
+      if (store.ageOn(i, world.year, 181) >= MIN_SIGNING_AGE) freeAgents.push(i);
       continue;
     }
     if (store.contractUntil[i] <= lastDay) {

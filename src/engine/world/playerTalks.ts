@@ -88,6 +88,10 @@ export const CHAT_LINES: Readonly<Record<ChatTopic, string>> = {
 export function chatOpening(world: World, p: number): string {
   const store = world.players;
   const morale = store.morale[p];
+  const blocked = world.moveGrievances?.[p];
+  if (blocked !== undefined) {
+    return `You turned down ${world.clubs[blocked.clubId]?.name ?? 'that club'}. I wanted that move, boss \u2014 I think I deserve an explanation.`;
+  }
   if (world.transferRequests?.[p]?.status === 'refused') return 'If this is about me staying — I haven\u2019t changed my mind.';
   if (morale >= 75) return 'Boss! You wanted to see me?';
   if (morale >= 50) return 'You wanted a word?';
@@ -187,6 +191,13 @@ function worriesOf(world: World, p: number): Array<[string, string]> {
     out.push([`he is waiting on your promise of games — ${left} days left`, `I\u2019m still waiting on those games you promised me`]);
   }
   if (world.transferRequests?.[p]?.status === 'refused') out.push(['he still wants to leave', 'I still want to leave']);
+  const moved = world.movePromises?.[p];
+  if (moved?.kind === 'contract') {
+    const left = Math.max(0, moved.due - world.day);
+    out.push([`he is waiting on the better contract you promised him — ${left} days left`, 'I\u2019m still waiting on that new contract you promised me']);
+  } else if (moved?.kind === 'sale') {
+    out.push(['he expects to be let go if the right offer comes in, as you promised', 'I\u2019m holding you to your word \u2014 if the right offer comes, I go']);
+  }
   return out;
 }
 

@@ -567,7 +567,7 @@ export function PlayerDetail(): JSX.Element | null {
             </span>
             <span>{age} years old</span>
             <span>{store.heightCm[p]} cm</span>
-            <span title="The hand he hits with">{store.hasFlag(p, PlayerFlag.LeftHanded) ? 'Left-handed' : 'Right-handed'}</span>
+            <span title="The hand he hits with">{store.offHand[p] >= 19 ? 'Ambidextrous' : store.hasFlag(p, PlayerFlag.LeftHanded) ? 'Left-handed' : 'Right-handed'}</span>
             <span>{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</span>
             {loan !== null && (
               <span className="loan-note">

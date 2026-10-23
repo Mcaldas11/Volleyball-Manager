@@ -2,8 +2,9 @@ import { useEffect, useRef, type JSX } from 'react';
 import type { Position } from '../../engine/model/positions.ts';
 import { TRAIT_HINTS, TRAIT_NAMES, traitsOf } from '../../engine/model/traits.ts';
 import { CHAT_HINTS, CHAT_LINES, CHAT_NAMES, CHAT_TOPICS, recentForm } from '../../engine/world/playerTalks.ts';
+import { MOVE_REPLIES, MOVE_REPLY_HINTS, MOVE_REPLY_LINES, MOVE_REPLY_NAMES, RIGHT_OFFER } from '../../engine/world/blockedMoves.ts';
 import { contractEndSeason } from '../../engine/world/world.ts';
-import { Bar, Card, managerPhotoUrl, Morale, PersonFace, PlayerFace, Pos, RatingBadge } from '../components.tsx';
+import { Bar, Card, managerPhotoUrl, money, Morale, PersonFace, PlayerFace, Pos, RatingBadge } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -31,6 +32,9 @@ export function PlayerTalkScreen(): JSX.Element | null {
   const managerName = `${manager.firstName} ${manager.lastName}`;
   const form = recentForm(world, p);
   const promise = (world.promises ?? []).find((x) => x.p === p);
+  const movePromise = g.movePromise(p);
+  // He came about the move the club blocked: that is what this talk is, until he has had his answer.
+  const grievance = g.moveGrievance(p);
   const request = world.transferRequests?.[p];
   const lastChat = world.playerChats?.[p];
   const traits = traitsOf(store, p);
@@ -73,7 +77,11 @@ export function PlayerTalkScreen(): JSX.Element | null {
             <span className="ptalk-fact-val">
               {promise !== undefined
                 ? <span className="warn">Games due in {Math.max(0, promise.due - world.day)} days</span>
-                : <span className="faint">None</span>}
+                : movePromise?.kind === 'contract'
+                  ? <span className="warn">New contract due in {Math.max(0, movePromise.due - world.day)} days</span>
+                  : movePromise?.kind === 'sale'
+                    ? <span className="warn" title="Turn down a bid this size and he asks to leave">Can go for {money(Math.round(movePromise.fee * RIGHT_OFFER))}+</span>
+                    : <span className="faint">None</span>}
             </span>
           </div>
           <div className="ptalk-fact">
@@ -94,7 +102,7 @@ export function PlayerTalkScreen(): JSX.Element | null {
         </div>
       </Card>
 
-      <Card className="ptalk-chat" title={`A word with ${store.shortName(p)}`} icon="press" flush>
+      <Card className="ptalk-chat" title={grievance !== undefined ? `${store.shortName(p)} wants a word: the blocked move` : `A word with ${store.shortName(p)}`} icon="press" flush>
         <div className="ptalk-log" ref={logRef}>
           {t.lines.map((line, i) => (line.who === 'note' ? (
             <div key={i} className="ptalk-note">
@@ -118,7 +126,14 @@ export function PlayerTalkScreen(): JSX.Element | null {
           )))}
         </div>
         <div className="ptalk-options">
-          {CHAT_TOPICS.map((topic) => {
+          {grievance !== undefined && MOVE_REPLIES.map((reply) => (
+            <button key={reply} className="ptalk-option" title={MOVE_REPLY_HINTS[reply]} onClick={() => g.answerMoveTalk(reply)}>
+              <span className="ptalk-option-name">{MOVE_REPLY_NAMES[reply]}</span>
+              <span className="ptalk-option-line">“{MOVE_REPLY_LINES[reply]}”</span>
+              <span className="ptalk-option-hint">{MOVE_REPLY_HINTS[reply]}</span>
+            </button>
+          ))}
+          {grievance === undefined && CHAT_TOPICS.map((topic) => {
             const block = topic === 'mood' && t.asked.includes('mood') ? 'You have just asked him.' : g.chatBlock(p, topic);
             return (
               <button key={topic} className="ptalk-option" disabled={block !== null} title={block ?? CHAT_HINTS[topic]}
@@ -131,7 +146,7 @@ export function PlayerTalkScreen(): JSX.Element | null {
           })}
           <button className="ptalk-option ptalk-leave" onClick={() => g.closePlayerTalk()}>
             <span className="ptalk-option-name"><Icon name="back" size={13} /> End conversation</span>
-            <span className="ptalk-option-hint">Back to his profile</span>
+            <span className="ptalk-option-hint">{grievance !== undefined ? 'He is still waiting for an answer' : 'Back to his profile'}</span>
           </button>
         </div>
       </Card>

@@ -89,6 +89,7 @@ export function messageNeedsAction(world: World, m: GameMessage): boolean {
     if (talks !== undefined && talks.pending === null && talks.byDirector !== true) return true;
   }
   if (m.transferRequestOf !== undefined && world.transferRequests?.[m.transferRequestOf]?.status === 'open') return true;
+  if (m.moveTalkOf !== undefined && world.moveGrievances?.[m.moveTalkOf] !== undefined) return true;
   // A staff meeting with suggestions still to take or leave.
   if (m.meetingId !== undefined && (world.staffMeetings ?? []).some((x) => x.id === m.meetingId && x.items.some((it) => it.status === 'open'))) return true;
   // An injury whose treatment the manager hasn't chosen, while he is still out.

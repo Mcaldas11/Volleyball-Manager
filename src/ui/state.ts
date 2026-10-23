@@ -60,6 +60,9 @@ import {
 import { cohesionEdge, cohesionOf, dressingRoom, setCaptain, setViceCaptain, type DressingRoom } from '../engine/world/dressingRoom.ts';
 import { applyTalkMorale, favouriteness, giveTalk, type TalkMoment, type TalkResult, type TalkTone } from '../engine/world/teamTalk.ts';
 import { answerTransferRequest, CHAT_LINES, chatBlock, chatOpening, talkToPlayer, type ChatTopic } from '../engine/world/playerTalks.ts';
+import {
+  answerGrievance, grievanceOf, MOVE_REPLY_LINES, movePromiseOf, type MoveGrievance, type MovePromise, type MoveReply,
+} from '../engine/world/blockedMoves.ts';
 import { requestUpgrade, upgradeBlock, type FacilityKind } from '../engine/world/facilities.ts';
 import { chooseSponsor, setTicketPrice } from '../engine/world/commercial.ts';
 import { endAffiliation, proposeAffiliation } from '../engine/world/affiliates.ts';
@@ -3295,6 +3298,30 @@ class Game {
 
   closePlayerTalk(): void {
     this.playerTalk = null;
+    this.emit();
+  }
+
+  /** A player waiting for a word about a move the club blocked. */
+  moveGrievance(p: number): MoveGrievance | undefined {
+    return this.world === null ? undefined : grievanceOf(this.world, p);
+  }
+
+  /** What the manager told him about the move, to be held to. */
+  movePromise(p: number): MovePromise | undefined {
+    return this.world === null ? undefined : movePromiseOf(this.world, p);
+  }
+
+  /** Answer him about the move he wanted: he says his piece, and it shows in his morale. */
+  answerMoveTalk(reply: MoveReply): void {
+    const world = this.world;
+    const club = this.club;
+    const t = this.playerTalk;
+    if (world === null || club === null || t === null) return;
+    const result = answerGrievance(world, club, t.p, reply);
+    if (result === null) return;
+    t.lines.push({ who: 'you', text: MOVE_REPLY_LINES[reply] });
+    t.lines.push({ who: 'him', text: result.reply });
+    t.lines.push({ who: 'note', text: result.text, morale: result.morale });
     this.emit();
   }
 

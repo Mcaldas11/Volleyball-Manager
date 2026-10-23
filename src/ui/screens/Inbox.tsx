@@ -1222,6 +1222,13 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
       </span>,
     );
   }
+  // A player who wants a word about a move the club blocked: call him in.
+  if (m.moveTalkOf !== undefined) {
+    const mp = m.moveTalkOf;
+    out.push(g.moveGrievance(mp) !== undefined
+      ? <button key="move-talk" className="paper-btn primary-dark" onClick={() => g.openPlayerTalk(mp)}><Icon name="press" size={15} /> Talk to him</button>
+      : <span key="move-talk" className="paper-note">You have had your word with him.</span>);
+  }
   // A player asking to leave: let him go, promise him games, or keep him.
   const request = m.transferRequestOf !== undefined ? world.transferRequests?.[m.transferRequestOf] : undefined;
   if (m.transferRequestOf !== undefined && request !== undefined) {

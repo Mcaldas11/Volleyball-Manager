@@ -6,6 +6,7 @@ import { appointManager } from './career.ts';
 import { appointNationalCoach } from './internationals.ts';
 import type { IncomingOffer } from './negotiation.ts';
 import { bidTurnedDown, stanceOf, stanceOnAgreedSale } from './offerStance.ts';
+import { blockedMovesDay, GRIEVANCE_DAYS } from './blockedMoves.ts';
 import { changesOfMind } from './playerTalks.ts';
 import { assistantReport, nationalFormReport, scoutingReport } from './reports.ts';
 import { generateWorld } from './worldGen.ts';
@@ -40,27 +41,35 @@ test('a player has his say on a bid: a bigger club and no games make him keen; s
   assert.equal(stanceOf(world, bid(world, p, small.id, 2)), 'staying');
 });
 
-test('turn down a move he wanted and he takes it badly — often asking to leave; turn down one he didn\'t, and he is glad', () => {
+test('turn down a move he wanted and he takes it badly — he wants a word, and left waiting often asks to leave; turn down one he didn\'t, and he is glad', () => {
   const { world, club } = managed(82);
   const store = world.players;
   const big = world.clubs.reduce((a, b) => (b.reputation > a.reputation && b.id !== club.id ? b : a));
   let asked = 0;
-  let keen = 0;
+  const keen: number[] = [];
   for (const [i, p] of club.players.slice(0, 10).entries()) {
     store.morale[p] = 30;
     store.playingTime[p] = 10;
     const offer = bid(world, p, big.id, 100 + i);
     // Loyal, long-serving men may still be in two minds: it is the keen ones this is about.
     if (stanceOf(world, offer) !== 'keen') { world.incomingOffers = world.incomingOffers.filter((o) => o !== offer); continue; }
-    keen++;
+    keen.push(p);
     world.incomingOffers = world.incomingOffers.filter((o) => o !== offer);
     bidTurnedDown(world, offer, 'declined');
     assert.ok(store.morale[p] < 30, 'he is hurt');
+    assert.ok(world.moveGrievances?.[p] !== undefined, 'and wants a word');
+    assert.ok(world.messages.some((m) => m.moveTalkOf === p && m.subject.endsWith('wants a word')));
+  }
+  // Nobody talks to them: a week on, they take the silence as an answer.
+  world.day += GRIEVANCE_DAYS;
+  blockedMovesDay(world);
+  for (const p of keen) {
+    assert.equal(world.moveGrievances?.[p], undefined);
     if (world.transferRequests?.[p]?.status === 'open') asked++;
     else assert.ok((world.unhappyWeeks?.[p] ?? 0) >= 2, 'and unsettled if he hasn\'t asked yet');
   }
-  assert.ok(keen >= 5, `${keen} of 10 keen`);
-  assert.ok(asked > 0, `${asked} of ${keen} asked to leave`);
+  assert.ok(keen.length >= 5, `${keen.length} of 10 keen`);
+  assert.ok(asked > 0, `${asked} of ${keen.length} asked to leave`);
 
   const small = world.clubs.filter((c) => c.id !== club.id).reduce((a, b) => (b.reputation < a.reputation ? b : a));
   const happy = club.players[11];

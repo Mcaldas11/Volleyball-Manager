@@ -230,6 +230,16 @@ Before committing a change:
       €200k", a level, a region, free agents only. Every week each mission
       brings new names that fit, onto the shortlist and into the inbox, rated
       as well as the scouts know where the player plays
+- [x] Bids for your players priced by their contracts: a player with years
+      left costs his value or more (a club he would lift pays extra), one
+      whose deal is running out goes cheaply — six months from the end,
+      cheaper still
+- [x] A player who wanted a move you turned down comes to see you: tell him
+      he is too important to sell (it rings true for a key man, not a bench
+      player), that the right offer will see him go (turn down the next fair
+      bid and he asks to leave), that a better contract is coming (within six
+      weeks, or he asks to leave) or that he is staying, full stop. Leave him
+      waiting a week and he takes the silence as an answer
 - [x] Agents with a personality: each has a commission (on a new deal and on
       a renewal), a style, contacts at home or abroad, and how often he takes
       clients elsewhere. Hardball agents have their clients ask for release
@@ -345,9 +355,13 @@ Before committing a change:
       statistics
 - [x] Import real players from the official FIVB VIS database, for anyone
       with their own FIVB credentials — see [FIVB Data](#fivb-data)
-- [x] Real players written in by hand, with their own photo: Diogo Couto, a
-      Portuguese libero who can also play outside hitter, starts every men's
-      career as a free agent (and joins older saves the same way)
+- [x] Real players written in by hand, with their own face: Diogo Couto, a
+      Portuguese libero who can also play outside hitter, and Matthew
+      Lienert, a twelve-year-old Australian opposite (ambidextrous, drawn
+      rather than photographed) who grows each summer towards his expected
+      2.01 m. Both start every men's career as free agents (and join older
+      saves the same way); no other club signs a free agent under 16, but you
+      can
 - [x] Database of 100,000+ fictitious players, generated with realistic
       positions, anthropometrics and national distributions
 - [x] Save and load a career, locally in the browser (IndexedDB) — multiple

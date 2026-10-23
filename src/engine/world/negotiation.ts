@@ -251,6 +251,28 @@ export function yearsLeft(world: World, playerIdx: number): number {
   return Math.max(1, contractEndSeason(world.players.contractUntil[playerIdx]) - world.season + 1);
 }
 
+/** Days left on a contract against what a bid for him is worth, of his value — see contractFeeFactor. */
+const CONTRACT_FEE_CURVE: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.3], [183, 0.5], [365, 0.75], [730, 1.0], [1095, 1.15], [1460, 1.25],
+];
+
+/**
+ * What the time left on his contract does to the price of a player: with years to run, his club
+ * needn't sell, and a bid has to clear his value; with his deal running out he can walk away for
+ * nothing in the summer — six months from the end, agree terms elsewhere — and the bids come in low.
+ */
+export function contractFeeFactor(world: World, playerIdx: number): number {
+  const days = Math.max(0, world.players.contractUntil[playerIdx] - world.day);
+  const curve = CONTRACT_FEE_CURVE;
+  for (let i = 1; i < curve.length; i++) {
+    const [d1, f1] = curve[i];
+    if (days > d1) continue;
+    const [d0, f0] = curve[i - 1];
+    return f0 + ((days - d0) / (d1 - d0)) * (f1 - f0);
+  }
+  return curve[curve.length - 1][1];
+}
+
 /**
  * What a player wants to join `club` — or, for a renewal, to stay. Wages are
  * anchored on what he earns and what his value says he is worth; ambition
@@ -453,12 +475,17 @@ export function generateIncomingOffers(world: World): void {
   const appeal = Math.max(0, playerLevel - squadLevel + 0.05);
   if (!world.rng.chance(Math.min(0.35, appeal * 1.8 + 0.02))) return;
 
+  // The price is his value as the years left on his contract make it — the bidders are those who can pay it.
+  const price = store.value[playerIdx] * contractFeeFactor(world, playerIdx);
   const suitors = world.clubs.filter(
-    (c) => c.id !== club.id && c.reputation / 10000 >= playerLevel - 0.15,
+    (c) => c.id !== club.id && c.reputation / 10000 >= playerLevel - 0.15 &&
+      Math.min(c.finances.transferBudget, c.finances.balance) >= price * 0.92,
   );
   if (suitors.length === 0) return;
   const buyingClub = world.rng.pick(suitors);
-  const fee = Math.round(store.value[playerIdx] * world.rng.range(0.65, 1.05));
+  // A club that would be lifted by him pays more to get him.
+  const lift = Math.min(0.2, Math.max(0, playerLevel - buyingClub.reputation / 10000) * 0.8);
+  const fee = Math.round((price * (world.rng.range(0.92, 1.12) + lift)) / 1000) * 1000;
   if (fee > buyingClub.finances.transferBudget || fee > buyingClub.finances.balance) return;
 
   const id = world.nextOfferId++;
@@ -489,7 +516,8 @@ const MAX_LISTED_BIDS = 2;
 /**
  * The user's transfer-listed players draw bids: the club has said he can go,
  * so interest doesn't depend on him outshining the squad, a wider range of
- * clubs come in, and they pitch below his value, expecting a deal. Called
+ * clubs come in, and they pitch below his price, expecting a deal — the
+ * price itself set by the years left on his contract. Called
  * weekly, all year: a sale agreed while the window is shut completes when it
  * opens.
  */
@@ -505,12 +533,14 @@ export function generateListedBids(world: World): void {
     if (bids.length >= MAX_LISTED_BIDS || !world.rng.chance(LISTED_BID_CHANCE)) continue;
 
     const level = store.currentAbility[p] / 2000;
+    const price = store.value[p] * contractFeeFactor(world, p);
     const suitors = world.clubs.filter((c) =>
       c.id !== club.id && c.players.length > 0 && c.players.length < MAX_SQUAD &&
-      c.reputation / 10000 >= level - 0.25 && !bids.some((o) => o.buyingClubId === c.id));
+      c.reputation / 10000 >= level - 0.25 && !bids.some((o) => o.buyingClubId === c.id) &&
+      Math.min(c.finances.transferBudget, c.finances.balance) >= price * 0.75);
     if (suitors.length === 0) continue;
     const buyer = world.rng.pick(suitors);
-    const fee = Math.round((store.value[p] * world.rng.range(0.7, 1.0)) / 1000) * 1000;
+    const fee = Math.round((price * world.rng.range(0.75, 0.95)) / 1000) * 1000;
     if (fee > buyer.finances.transferBudget || fee > buyer.finances.balance) continue;
 
     const id = world.nextOfferId++;

@@ -8,6 +8,7 @@
  */
 
 import type { DeadlinePlan } from './deadline.ts';
+import type { MoveGrievance, MovePromise } from './blockedMoves.ts';
 import type { PreContract } from './agents.ts';
 import type { ScoutMission } from './recruitment.ts';
 import type { Delegation } from './delegation.ts';
@@ -412,6 +413,8 @@ export interface GameMessage {
   staffTalksId?: number;
   /** A player of the manager's who has asked to leave — the message offers the answers. */
   transferRequestOf?: number;
+  /** A player who wants a word about a move the club blocked — the message opens the talk. */
+  moveTalkOf?: number;
   /** The summer's sponsorship offers — the message leads to them. */
   sponsorOffers?: boolean;
   /** The member of staff a message is about. */
@@ -703,6 +706,10 @@ export interface World {
   unhappyWeeks?: Record<number, number>;
   /** Players who have asked to leave, and where each request stands. */
   transferRequests?: Record<number, TransferRequest>;
+  /** Players waiting for a word about a move the club blocked — see blockedMoves.ts. */
+  moveGrievances?: Record<number, MoveGrievance>;
+  /** What the manager told them there, to be held to: let go for the right offer, or a better contract. */
+  movePromises?: Record<number, MovePromise>;
   /** Each club's dressing-room cohesion, 0-100, as last worked out — see dressingRoom.ts. */
   cohesion?: Record<number, number>;
   /** A club's room unsettled by a leader leaving: when, and by how much. */

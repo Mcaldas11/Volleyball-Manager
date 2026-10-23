@@ -17,6 +17,7 @@ import { agentsDay } from '../world/agents.ts';
 import { recruitmentDay } from '../world/recruitment.ts';
 import { delegationDay } from '../world/delegation.ts';
 import { directorDay } from '../world/director.ts';
+import { blockedMovesDay } from '../world/blockedMoves.ts';
 import { staffMeetingDay } from '../world/staffMeeting.ts';
 import { matchPreviews } from '../world/matchPreview.ts';
 import { campDay } from '../world/camp.ts';
@@ -572,6 +573,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   processDeals(world);
   // The director's next move wherever an answer has come back — and whatever the delegates have to do.
   directorDay(world);
+  blockedMovesDay(world);
   delegationDay(world);
   // The scouts' missions: a report each week. And the agents' own business.
   recruitmentDay(world);
