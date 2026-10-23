@@ -14,7 +14,7 @@ export type IconName =
   | 'press' | 'whistle' | 'clock' | 'star' | 'ball' | 'alert' | 'collapse'
   | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check'
   | 'inbox' | 'archive' | 'medical' | 'coin' | 'contract' | 'board' | 'playOutline' | 'chevronLeft' | 'arrowRight'
-  | 'career' | 'sound' | 'mute' | 'help' | 'download' | 'upload' | 'lock' | 'gear';
+  | 'career' | 'sound' | 'mute' | 'help' | 'download' | 'upload' | 'lock' | 'gear' | 'camera';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3 5.5 5.5" /><circle cx="12" cy="12" r="6.2" /></>,
@@ -58,6 +58,7 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   mute: <><path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4v-5Z" /><path d="m16 9.5 5 5M21 9.5l-5 5" /></>,
   help: <><circle cx="12" cy="12" r="8.5" /><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6" /><path d="M12 16.6v.1" /></>,
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
+  camera: <><rect x="3" y="7" width="12.5" height="10" rx="1.8" /><path d="m15.5 10.5 5.5-3v9l-5.5-3" /></>,
   star: <path d="m12 3.8 2.5 5.2 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8L12 3.8Z" />,
   ball: <><circle cx="12" cy="12" r="8.5" /><path d="M12 3.5c-3 3-3 14 0 17" /><path d="M4.2 8.6c5 2.2 10.6 2.2 15.6 0" /><path d="M4.6 16.2c4.8-2.6 10-2.6 14.8 0" /></>,
   alert: <><path d="M12 4 21 19.5H3L12 4Z" /><path d="M12 10v4.5M12 17v.1" /></>,

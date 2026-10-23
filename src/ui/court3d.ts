@@ -10,7 +10,9 @@
  * skeleton courtMotion.ts works out; the net with its tapes, antennas and
  * posts; the ball, spinning as it was struck; and real shadows cast on to the
  * painted floor. The camera is the same pinhole the painted hall is projected
- * with (courtCamera.ts), so the two layers line up to the pixel. On the bench
+ * with (courtCamera.ts), so the two layers line up to the pixel — unless another
+ * camera is chosen (courtCameras.ts), when the hall itself is built in 3D
+ * (hall3d.ts) and the painted one is put away. On the bench
  * side: each team's bench along the boards, in its colours, with the water
  * bottles on the floor in front of it, and its coach.
  */
@@ -23,7 +25,9 @@ import {
   WebGLRenderer, type Material,
 } from 'three';
 import { fitCamera } from './courtCamera.ts';
+import { Cameraman, lens, type CameraMode } from './courtCameras.ts';
 import { Crowd } from './crowd3d.ts';
+import { buildHall, liveHall, type Hall } from './hall3d.ts';
 import { REFEREE_STAND, SIDELINE, type CourtMotion } from './courtMotion.ts';
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
 import { Figure, type Kit, type Look } from './figure3d.ts';
@@ -51,18 +55,8 @@ const MEDIC_LOOK: Look = {
 /** A perspective camera that sees exactly what the painted hall's projector
  *  does for a `width` × `height` box. */
 export function courtCamera(width: number, height: number, camera = new PerspectiveCamera()): PerspectiveCamera {
-  const fit = fitCamera(width, height);
-  camera.fov = (2 * Math.atan(height / 2 / fit.focal) * 180) / Math.PI;
-  camera.aspect = width / height;
-  camera.near = 0.5;
-  camera.far = 150;
-  camera.up.set(0, 0, 1);
-  camera.position.set(fit.position.x, fit.position.y, fit.position.z);
-  camera.lookAt(fit.target.x, fit.target.y, fit.target.z);
   // The line of sight meets the screen at (cx, cy), not the middle.
-  camera.setViewOffset(width, height, width / 2 - fit.cx, height / 2 - fit.cy, width, height);
-  camera.updateProjectionMatrix();
-  camera.updateMatrixWorld();
+  lens(camera, fitCamera(width, height), width, height);
   return camera;
 }
 
@@ -281,6 +275,12 @@ export class Court3D {
   private benchKey = '';
   /** The people in the stand, made the first time the court is drawn. */
   private crowd: Crowd | null = null;
+  private fill = 0.85;
+  private kits: [Kit, Kit] | null = null;
+  /** Who aims the camera, and through which of them the match is watched. */
+  private readonly cameraman = new Cameraman();
+  /** The hall in 3D, built the first time a camera other than the broadcast is chosen. */
+  private hall: Hall | null = null;
   private readonly ball: Mesh;
   private readonly trail: Mesh[] = [];
   private readonly actorRing: Mesh;
@@ -387,6 +387,8 @@ export class Court3D {
     this.renderer.setPixelRatio(Math.min(dpr, 1.5));
     this.renderer.setSize(width, height, false);
     courtCamera(width, height, this.camera);
+    // Whichever camera is chosen, aimed again for the new box on the next frame.
+    this.cameraman.invalidate();
   }
 
   /** The crowd in the stand, `fill` full, in these sides' colours. */
@@ -394,8 +396,21 @@ export class Court3D {
     if (this.crowd === null) {
       this.crowd = new Crowd(fill);
       this.scene.add(this.crowd.group);
+      this.fill = fill;
     }
+    this.kits = kits;
     this.crowd.setKits(kits);
+  }
+
+  /** Watch through this camera. Any but the broadcast brings the hall up in 3D. */
+  setCamera(mode: CameraMode): void {
+    if (mode === this.cameraman.current) return;
+    this.cameraman.setMode(mode);
+    if (mode !== 'broadcast' && this.hall === null) {
+      this.hall = buildHall(this.fill, this.renderer.capabilities.getMaxAnisotropy());
+      this.scene.add(this.hall.group);
+    }
+    if (this.hall !== null) this.hall.group.visible = mode !== 'broadcast';
   }
 
   /** The benches for these kits, the near team (`sides[t]` the half team `t` is on) on its own. */
@@ -503,7 +518,9 @@ export class Court3D {
       this.crowd.react(motion.cheer);
       this.crowd.update(now);
     }
+    if (this.hall !== null && this.hall.group.visible && this.kits !== null) liveHall(this.hall, this.kits, motion.cheer, now);
 
+    this.cameraman.aim(this.camera, motion, now, dt, this.width, this.height);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -511,6 +528,12 @@ export class Court3D {
   headOnScreen(p: number): { X: number; Y: number; s: number } | null {
     const f = this.figures.get(p);
     return f === undefined ? null : this.onScreen(f);
+  }
+
+  /** Where a spot on the floor is on screen, CSS px — for the video's close-up of it. */
+  groundOnScreen(x: number, y: number): { X: number; Y: number } {
+    this.tmp.set(x, y, 0).project(this.camera);
+    return { X: ((this.tmp.x + 1) / 2) * this.width, Y: ((1 - this.tmp.y) / 2) * this.height };
   }
 
   /** Where the referee's head is on screen, for their call over it. */

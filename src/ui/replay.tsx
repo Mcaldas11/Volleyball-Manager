@@ -16,7 +16,7 @@ import { Icon } from './icons.tsx';
 import { LiveCourt, type CourtLabels } from './LiveCourt.tsx';
 import { rallyBeats, setupScene, type CourtState, type Radar, type Scene } from './matchCourt.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from './rallyPlayer.ts';
-import { BigPlayCallout, crowdFor, ServeRadar } from './screens/Matchday.tsx';
+import { BigPlayCallout, CameraPicker, crowdFor, ServeRadar } from './screens/Matchday.tsx';
 import { useGame } from './state.ts';
 
 export function ReplayViewer(): JSX.Element | null {
@@ -170,6 +170,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
             nearTeam={nearTeam}
             teamNames={[home?.shortName ?? 'Home', away?.shortName ?? 'Away']}
             view={view}
+            camera={g.courtCamera}
             crowdFill={crowdFor(world, h.competitionId ?? -1, 0.6)}
           />
           {pace !== 1 && !done && <span className="rp-slowmo"><Icon name="clock" size={12} /> Slow motion</span>}
@@ -188,6 +189,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
             {h.setTarget === 15 ? 'Tie-break' : `Set ${h.set + 1}`}
           </span>
           <div className="rp-tools">
+            {view === '3d' && <CameraPicker />}
             <Segmented<'3d' | '2d'> size="sm" options={[['3d', '3D'], ['2d', '2D']]} value={view} onChange={setView} />
             <Segmented<CourtLabels> size="sm" options={[['names', 'Names'], ['off', 'Off']]} value={labels} onChange={setLabels} />
             <button className="sm" onClick={() => again(pace)} title="Play it from the serve again">

@@ -22,15 +22,27 @@ import {
 import type { Kit } from './court3d.ts';
 
 /** The stand: where its front row sits, how many rows climb back, and how the seats are spaced. */
-const ROWS = 20;
-const FRONT_X = -8.2;
-const ROW_DEPTH = 0.8;
-const ROW_RISE = 0.6;
-const FRONT_Z = 1.42;
+export const ROWS = 20;
+export const FRONT_X = -8.2;
+export const ROW_DEPTH = 0.8;
+export const ROW_RISE = 0.6;
+export const FRONT_Z = 1.42;
 const SEAT_GAP = 0.62;
 const SPAN = 31;
 /** The away end: a block of the stand on the positive side. */
 const AWAY_BLOCK: readonly [number, number] = [11.5, 23];
+
+/**
+ * A stand other than the far one: as many rows, seats either side of its middle out to `span`,
+ * its own people (`seed`) and, if it has one, its own away block. Built as the far stand is — the
+ * front row along x = FRONT_X, facing +x — and turned into place by whoever puts it in the hall.
+ */
+export interface StandLayout {
+  rows: number;
+  span: number;
+  seed: number;
+  away: readonly [number, number] | null;
+}
 
 /** A point won, for the stands. */
 export interface Cheer {
@@ -103,19 +115,20 @@ export class Crowd {
   private moving = true;
   private key = '';
 
-  /** `fill` is how full the stand is, 0-1. */
-  constructor(fill: number) {
-    const r = seeded(20260728);
+  /** `fill` is how full the stand is, 0-1; `layout`, for a stand other than the far one. */
+  constructor(fill: number, layout: StandLayout = { rows: ROWS, span: SPAN, seed: 20260728, away: AWAY_BLOCK }) {
+    const r = seeded(layout.seed);
     const seatSpots: Array<[number, number, number]> = [];
-    for (let row = 0; row < ROWS; row++) {
+    const span = layout.span;
+    for (let row = 0; row < layout.rows; row++) {
       const x = FRONT_X - row * ROW_DEPTH;
       const z = FRONT_Z + row * ROW_RISE;
       const dim = 0.95 - row * 0.022;
-      for (let y = -SPAN; y <= SPAN; y += SEAT_GAP) {
+      for (let y = -span; y <= span; y += SEAT_GAP) {
         seatSpots.push([x, y, z]);
         // Fuller near the middle, where the view is best — and the away block packed.
-        const away = y >= AWAY_BLOCK[0] && y <= AWAY_BLOCK[1];
-        const centre = 1 - Math.min(1, Math.abs(y) / SPAN) * 0.25;
+        const away = layout.away !== null && y >= layout.away[0] && y <= layout.away[1];
+        const centre = 1 - Math.min(1, Math.abs(y) / span) * 0.25;
         if (r() > Math.min(0.98, fill * (away ? 1.12 : centre))) continue;
         const roll = r();
         const side: 0 | 1 | 2 = away

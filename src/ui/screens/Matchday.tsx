@@ -36,6 +36,7 @@ import { defenceLayoutsOf, type DefenceLayouts } from '../../engine/match/defenc
 import { describeRallyHighlight } from './Match.tsx';
 import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide, type VideoReview } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
+import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
 import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn } from '../sound.ts';
@@ -1700,10 +1701,12 @@ function LiveMatchView(): JSX.Element {
               speed={md.speed}
               teamNames={[homeClub.shortName, awayClub.shortName]}
               view={g.courtView}
+              camera={g.courtCamera}
               zoom={varZoom}
               ceremony={ceremony}
             />
             <div className="lv-court-tools">
+              {g.courtView === '3d' && <CameraPicker />}
               <Segmented<'3d' | '2d'> size="sm" options={[['3d', '3D'], ['2d', '2D']]} value={g.courtView} onChange={(v) => g.setCourtView(v)} />
               <Segmented<CourtLabels>
                 size="sm"
@@ -2167,5 +2170,21 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
         </button>
       </div>
     </div>
+  );
+}
+
+/** Which camera the 3D court is watched through — the broadcast's, or one of the others. */
+export function CameraPicker(): JSX.Element {
+  const g = useGame();
+  return (
+    <Dropdown<CameraMode>
+      size="sm"
+      className="lv-camera"
+      title="Camera"
+      menuWidth={300}
+      value={g.courtCamera}
+      onChange={(c) => g.setCourtCamera(c)}
+      options={CAMERA_MODES.map((c) => ({ value: c.mode, label: c.name, icon: <Icon name="camera" size={13} />, hint: c.hint }))}
+    />
   );
 }

@@ -16,6 +16,10 @@
  * Where the browser has no WebGL the players are drawn flat on the top layer
  * instead.
  *
+ * The broadcast camera is the default; the others (courtCameras.ts) — closer
+ * and following the ball, a director's cut, from the roof, from behind an end
+ * line, down by the court — see a hall built in 3D instead of the painted one.
+ *
  * Or the match from above, in 2D: the court upright, the far team at the top,
  * every player a disc with their name, the ball and its shadow — the same
  * motion, so the view can change in the middle of a rally.
@@ -27,6 +31,8 @@ import { Position } from '../engine/model/positions.ts';
 import { RATING_BANDS } from '../engine/match/playerRating.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
+import type { CameraMode } from './courtCameras.ts';
+import { BOARD_HEIGHT, BOARD_TEXT, BOARD_X, END_BOARD_Y, FLOOR } from './hall3d.ts';
 import {
   type Body, CourtMotion, type CourtInjury, type CourtSideline, flightAt, showCourt, SIDELINE,
 } from './courtMotion.ts';
@@ -35,15 +41,6 @@ import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, NET_HEIGHT, type Ball3, type Scene
 export type { Kit } from './court3d.ts';
 
 type P3 = [number, number, number];
-
-/** The hall's colours: an FIVB court — orange inside, blue free zone. */
-const FLOOR = {
-  arena: '#1d2a3c',
-  freeZone: '#1f5c9f',
-  court: '#d8773f',
-  frontZone: '#df8550',
-  line: 'rgba(255, 255, 255, 0.92)',
-};
 
 function ratingColour(r: number): string {
   if (r >= RATING_BANDS.star) return '#4f9dff';
@@ -88,13 +85,16 @@ interface CourtProps {
   /** Short names for the referee's calls: home, away. */
   teamNames: [string, string];
   view: CourtView;
+  /** Which camera the 3D view is watched through. */
+  camera?: CameraMode;
   /** A spot on the floor to zoom in on, court metres — the video's close-up of where a ball came down. */
   zoom?: { x: number; y: number } | null;
 }
 
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
-  teamNames = ['Home', 'Away'], view = '3d', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null, ceremony = null,
+  teamNames = ['Home', 'Away'], view = '3d', camera = 'broadcast', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null,
+  ceremony = null,
 }: {
   /** Changes when the pre-match ceremony is to begin — see CourtMotion.ceremony. */
   ceremony?: number | null;
@@ -121,14 +121,16 @@ export function LiveCourt({
   speed?: number;
   teamNames?: [string, string];
   view?: CourtView;
+  /** Which camera the 3D view is watched through — see courtCameras.ts. */
+  camera?: CameraMode;
   /** A spot on the floor to zoom in on — see CourtProps. */
   zoom?: { x: number; y: number } | null;
 }): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill, zoom });
-  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, sideline, nearTeam, crowdFill, zoom };
+  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, sideline, nearTeam, crowdFill, zoom });
+  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, sideline, nearTeam, crowdFill, zoom };
   /** The bench side as last handed to the motion. */
   const sidelineKey = useRef('');
   const applySideline = (now: number): void => {
@@ -266,7 +268,7 @@ export function LiveCourt({
         const scale = 2.6;
         const at = shownView === '2d'
           ? (() => { const P = topProjector(cssW, cssH); return { X: P.X(z.x), Y: P.Y(z.y) }; })()
-          : project(z.x, z.y, 0);
+          : court !== null ? court.groundOnScreen(z.x, z.y) : project(z.x, z.y, 0);
         const tx = Math.min(0, Math.max(cssW - cssW * scale, cssW / 2 - at.X * scale));
         const ty = Math.min(0, Math.max(cssH - cssH * scale, cssH / 2 - at.Y * scale));
         transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${scale})`;
@@ -278,6 +280,14 @@ export function LiveCourt({
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(wrap);
+
+    // The painted hall is the broadcast camera's; any other sees the hall in 3D instead.
+    let paintedShown = true;
+    const showPainted = (shown: boolean): void => {
+      if (shown === paintedShown) return;
+      paintedShown = shown;
+      hallCanvas.style.visibility = shown ? '' : 'hidden';
+    };
 
     let raf = 0;
     let last = performance.now();
@@ -296,11 +306,15 @@ export function LiveCourt({
       // font behind threw the other's names and ratings off their players.
       top.save();
       if (shownView === '2d') {
+        showPainted(true);
         drawTopDown(top, topProjector(cssW, cssH), m, props.current, now);
       } else if (court !== null) {
         const near = props.current.nearTeam ?? 0;
         court.setBenches(props.current.kits, near === 0 ? [-1, 1] : [1, -1]);
         court.setCrowd(props.current.kits, props.current.crowdFill ?? 0.85);
+        const cam = props.current.camera ?? 'broadcast';
+        court.setCamera(cam);
+        showPainted(cam === 'broadcast');
         court.render(m, now, dt, lookOf, (t) => coachLook(props.current.kits[t]));
         const c = court;
         drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
@@ -698,11 +712,6 @@ function seeded(seed: number): () => number {
 
 // ---- The hall: painted once per size -----------------------------------------------
 
-/** Where the far stand starts, and the advertising boards in front of it. */
-const BOARD_X = -7.3;
-const BOARD_HEIGHT = 0.9;
-const END_BOARD_Y = 12.4;
-
 function drawHall(
   ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number, project: Projector, kits: [Kit, Kit], crowd: boolean,
 ): void {
@@ -803,7 +812,7 @@ function drawHall(
   }
 
   // ---- Advertising boards: along the far side, and across both ends ----
-  const boardText = 'VM  ·  VOLLEYBALL MANAGER';
+  const boardText = BOARD_TEXT;
   const board = (from: P3, to: P3, length: number): void => {
     // Lettered left to right as the camera sees the board, never mirrored.
     const [a, b] = project(...from).X <= project(...to).X ? [from, to] : [to, from];

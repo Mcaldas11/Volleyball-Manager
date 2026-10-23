@@ -5167,6 +5167,8 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .lv-court { flex: 1; min-height: 0; }
 .lv-court-tools { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; }
 .lv-court-tools .segmented { background: rgba(8, 10, 14, 0.7); }
+.lv-camera { width: 132px; }
+.lv-court-tools .lv-camera > button { background: rgba(8, 10, 14, 0.7); }
 .lv-caption {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px;
   background: linear-gradient(180deg, #172233, #101926); border: 1px solid var(--line-strong); border-radius: 8px; font-size: 13px;

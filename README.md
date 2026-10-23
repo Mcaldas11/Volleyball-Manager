@@ -382,6 +382,14 @@ Before committing a change:
       a medic running on to an injured player. Two line judges at opposite
       corners flag every ball near their lines: in, out, or off the block; and
       the video replay goes in close, low over the spot where it came down
+- [x] Six cameras for the 3D match, as television has them: Broadcast (the
+      main camera high in the side stand), Dynamic (closer, panning with the
+      ball), Professional (a director cutting between shots — behind the
+      server, the rally from the side, tight on the point, wide between
+      points), Sky (straight down from the roof), Behind (high behind your end
+      line) and Courtside (down by the court, following the play). Away from
+      the broadcast camera the whole hall is in 3D, with full stands on all
+      four sides; the choice is remembered between matches and replays
 - [x] Players drawn as bodies, not mannequins: smooth limbs shaped by their
       muscles, a ball in every joint so bends stay one surface, a face (jaw,
       nose, ears, eyes, brows) under hair with strands in it, hands with a

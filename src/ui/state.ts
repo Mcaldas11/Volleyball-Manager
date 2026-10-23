@@ -18,6 +18,7 @@ import {
 import { deadlineToday, type DeadlinePlan } from '../engine/world/deadline.ts';
 import { agentProfile, preContractOf, type AgentProfile, type PreContract } from '../engine/world/agents.ts';
 import { showUniqueFaces } from './uniqueFaces.ts';
+import { isCameraMode, type CameraMode } from './courtCameras.ts';
 import {
   addPlanTarget, firstGap, isPlanTarget, planCandidates, removePlanTarget, squadPlan, type SquadPlan,
 } from '../engine/world/squadPlanner.ts';
@@ -561,6 +562,16 @@ export const MAX_WARMING = 4;
 const COLD_STRAIN = 0.18;
 
 const COURT_VIEW_KEY = 'vm.courtView';
+const COURT_CAMERA_KEY = 'vm.courtCamera';
+
+function readCourtCamera(): CameraMode {
+  try {
+    const v = window.localStorage.getItem(COURT_CAMERA_KEY);
+    return isCameraMode(v) ? v : 'broadcast';
+  } catch {
+    return 'broadcast';
+  }
+}
 
 function readCourtView(): '3d' | '2d' {
   try {
@@ -2658,6 +2669,19 @@ class Game {
 
   /** How the user watches the court: from the stand in 3D, or from above in 2D — remembered between matches. */
   courtView: '3d' | '2d' = readCourtView();
+
+  /** The camera the 3D court is watched through — remembered between matches. */
+  courtCamera: CameraMode = readCourtCamera();
+
+  setCourtCamera(camera: CameraMode): void {
+    this.courtCamera = camera;
+    try {
+      window.localStorage.setItem(COURT_CAMERA_KEY, camera);
+    } catch {
+      // A private window: the choice lasts the session.
+    }
+    this.emit();
+  }
 
   setCourtView(view: '3d' | '2d'): void {
     this.courtView = view;
