@@ -571,6 +571,15 @@ export class Figure {
     hand.add(flag);
   }
 
+  /** Where the palms are, in court metres — for something held in them, a trophy over the head. */
+  handsAt(a: Vector3, b: Vector3): void {
+    this.root.updateMatrixWorld(true);
+    for (const [v, i] of [[a, 0], [b, 1]] as const) {
+      v.set(0, 0, -BONES.forearm - BONES.hand * 0.5);
+      this.elbows[i].localToWorld(v);
+    }
+  }
+
   restyle(look: Look): void {
     if (look === this.look) return;
     const key = JSON.stringify(look.kit);

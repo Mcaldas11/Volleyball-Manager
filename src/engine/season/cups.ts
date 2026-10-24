@@ -754,6 +754,22 @@ export function isCupFinal(world: World, fixture: Fixture): boolean {
   return fixture.round === PLAYOFF_ROUND_BASE + knockoutRounds(bracket.seeds.length) - 1;
 }
 
+/**
+ * The trophy a match decides there and then, by its competition's name: a cup, super cup, continental
+ * or world final, or the final of a league's title playoff. Null for any other match — a series game
+ * included, since only the title final is a single match.
+ */
+export function trophyAtStake(world: World, fixture: Fixture): string | null {
+  const comp = world.competitions[fixture.competitionId];
+  if (comp === undefined || comp.kind === 'friendly') return null;
+  if (isCupFinal(world, fixture)) return comp.name;
+  if (comp.kind === 'league') {
+    const at = playoffTieOf(comp, fixture.id);
+    if (at !== null && at.group.id === 'championship' && at.stage === 'final' && at.game === null) return comp.name;
+  }
+  return null;
+}
+
 // ---- The manager's post ----------------------------------------------------------------
 
 function venue(f: Fixture, club: number): string {

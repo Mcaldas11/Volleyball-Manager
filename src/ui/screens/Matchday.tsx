@@ -18,7 +18,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
-import { serverReadyOnCourt } from '../courtMotion.ts';
+import { serverReadyOnCourt, TROPHY_LIFT_AT } from '../courtMotion.ts';
 import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
 import type { Kit } from '../court3d.ts';
@@ -1488,9 +1488,11 @@ function LiveMatchView(): JSX.Element {
         // A close call that went against the other bench: they may ask for the video.
         g.aiConsidersChallenge();
         if (g.matchday?.snapshot?.matchOver === true) {
-          // Full time: let the last point sink in, then on to the report.
+          // Full time: let the last point sink in, then on to the report — or, a final, the trophy first.
           await sleep(2200 / current.speed);
-          if (!cancelled.current) g.completeMatchday();
+          if (cancelled.current) break;
+          if (g.matchday?.final != null) g.liftTrophy();
+          else g.completeMatchday();
           break;
         }
         if (g.matchday?.setBreakPending === true) {
@@ -1704,8 +1706,10 @@ function LiveMatchView(): JSX.Element {
               camera={g.courtCamera}
               zoom={varZoom}
               ceremony={ceremony}
+              trophy={md.trophy ?? null}
             />
-            <div className="lv-court-tools">
+            {md.trophy != null && <TrophyBanner />}
+            <div className={`lv-court-tools${md.trophy != null ? ' hidden' : ''}`}>
               {g.courtView === '3d' && <CameraPicker />}
               <Segmented<'3d' | '2d'> size="sm" options={[['3d', '3D'], ['2d', '2D']]} value={g.courtView} onChange={(v) => g.setCourtView(v)} />
               <Segmented<CourtLabels>
@@ -2186,5 +2190,36 @@ export function CameraPicker(): JSX.Element {
       onChange={(c) => g.setCourtCamera(c)}
       options={CAMERA_MODES.map((c) => ({ value: c.mode, label: c.name, icon: <Icon name="camera" size={13} />, hint: c.hint }))}
     />
+  );
+}
+
+/**
+ * A final won: over the court as the winners lift the trophy, whose it is and in what — and the way
+ * on to the report. The crowd's roar comes up as it goes over the captain's head.
+ */
+function TrophyBanner(): JSX.Element | null {
+  const g = useGame();
+  const md = g.matchday;
+  const trophy = md?.trophy ?? null;
+  useEffect(() => {
+    if (trophy === null) return;
+    // A roar as they celebrate, and another as it goes up.
+    const at = [300, 1600, 2900, ...[0, 1, 2, 3, 4, 5].map((k) => TROPHY_LIFT_AT + k * 1300)];
+    const timers = at.map((ms) => setTimeout(() => playCrowd(1), ms));
+    return () => timers.forEach(clearTimeout);
+  }, [trophy?.team]);
+  if (md == null || trophy === null) return null;
+  const winner = md.sides[trophy.team];
+  const ours = trophy.team === (md.userIsHome ? 0 : 1);
+  return (
+    <div className={`trophy-banner${ours ? ' ours' : ''}`} role="status" style={{ animationDelay: `${TROPHY_LIFT_AT - 200}ms` }}>
+      <span className="trophy-banner-cup"><Icon name="trophy" size={28} /></span>
+      <div className="trophy-banner-text">
+        <small>{md.final}</small>
+        <b>{ours ? 'Champions!' : `${winner.shortName} are champions`}</b>
+        <span><SideCrest side={winner} size={16} /> {winner.name} lift the trophy</span>
+      </div>
+      <button className="primary" onClick={() => g.completeMatchday()}>Continue <Icon name="arrowRight" size={14} /></button>
+    </div>
   );
 }

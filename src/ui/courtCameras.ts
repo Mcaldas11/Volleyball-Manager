@@ -12,9 +12,11 @@
 
 import { PerspectiveCamera } from 'three';
 import { fitCamera, fitView, type CameraFit, type V3 } from './courtCamera.ts';
-import type { CourtMotion } from './courtMotion.ts';
+import { TROPHY_GATHER_AT, TROPHY_HAND_AT, type CourtMotion } from './courtMotion.ts';
 
-export type CameraMode = 'broadcast' | 'dynamic' | 'professional' | 'sky' | 'behind' | 'courtside';
+export type CameraMode = 'broadcast' | 'dynamic' | 'professional' | 'sky' | 'behind' | 'courtside'
+  /** Not one to choose: the court takes it for a final's trophy lift, whatever the choice. */
+  | 'trophy';
 
 export const CAMERA_MODES: ReadonlyArray<{ mode: CameraMode; name: string; hint: string }> = [
   { mode: 'broadcast', name: 'Broadcast', hint: 'The main TV camera' },
@@ -77,6 +79,12 @@ const POINT_TAKE = 2600;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
+/** Part way from one shot to another. */
+function mix(a: Shot, b: Shot, k: number): Shot {
+  const v = (p: V3, q: V3): V3 => ({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k, z: p.z + (q.z - p.z) * k });
+  return { position: v(a.position, b.position), target: v(a.target, b.target), hfov: a.hfov + (b.hfov - a.hfov) * k };
+}
+
 export class Cameraman {
   private mode: CameraMode = 'broadcast';
   /** The box and still shot the lens was last set for — a still camera isn't re-aimed every frame. */
@@ -128,7 +136,54 @@ export class Cameraman {
         return this.moving(camera, this.courtsideShot(motion, now, dt), width, height);
       case 'professional':
         return this.direct(camera, motion, now, dt, width, height);
+      case 'trophy':
+        return this.trophyShot(camera, motion, now, width, height);
     }
+  }
+
+  /**
+   * The trophy: in on the winners' huddle in the middle of their half; wider for the line-up as the
+   * federation's man walks out with the cup; close on him handing it to the captain; then pushing in
+   * as it goes up, and a slow arc round them. Never a cut — each shot eases into the next.
+   */
+  private trophyShot(camera: PerspectiveCamera, motion: CourtMotion, now: number, width: number, height: number): void {
+    const t = motion.trophy;
+    if (t === null) return this.fixed(camera, 'broadcast', width, height, () => fitCamera(width, height));
+    const since = now - t.t0;
+    const side = Math.sign(t.front.y) || 1;
+    const smooth = (from: number, ms: number): number => {
+      const k = clamp((since - from) / ms, 0, 1);
+      return k * k * (3 - 2 * k);
+    };
+    const huddle: Shot = {
+      position: { x: t.huddle.x + 7.4, y: t.huddle.y, z: 3.3 },
+      target: { x: t.huddle.x - 0.3, y: t.huddle.y, z: 1.2 },
+      hfov: 46,
+    };
+    // Wide enough for him coming out from behind their end.
+    const line: Shot = {
+      position: { x: t.at.x + 8.6, y: t.at.y + side * 0.9, z: 3.6 },
+      target: { x: t.at.x, y: t.at.y + side * 0.9, z: 1.3 },
+      hfov: 62,
+    };
+    const handover: Shot = {
+      position: { x: t.front.x + 6.6, y: t.front.y + side * 0.5, z: 2.9 },
+      target: { x: t.front.x - 0.2, y: t.front.y + side * 0.45, z: 1.45 },
+      hfov: 40,
+    };
+    const up = smooth(t.lift, 1500);
+    const swing = Math.sin(Math.max(0, since - t.lift) / 5200) * 0.38;
+    const dist = 8 - 0.8 * up;
+    const cx = t.at.x + 0.6;
+    const lifted: Shot = {
+      position: { x: cx + Math.cos(swing) * dist, y: t.at.y + Math.sin(swing) * dist, z: 3.6 },
+      target: { x: cx - 0.6, y: t.at.y, z: 1.35 + 0.15 * up },
+      hfov: 52 - 6 * up,
+    };
+    let shot = mix(huddle, line, smooth(TROPHY_GATHER_AT - 600, 1600));
+    shot = mix(shot, handover, smooth(TROPHY_HAND_AT - 2000, 1500));
+    shot = mix(shot, lifted, smooth(t.lift - 400, 1300));
+    return this.moving(camera, shot, width, height);
   }
 
   private fixed(camera: PerspectiveCamera, key: string, width: number, height: number, fit: () => CameraFit): void {

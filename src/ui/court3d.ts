@@ -28,7 +28,8 @@ import { fitCamera } from './courtCamera.ts';
 import { Cameraman, lens, type CameraMode } from './courtCameras.ts';
 import { Crowd } from './crowd3d.ts';
 import { buildHall, liveHall, type Hall } from './hall3d.ts';
-import { REFEREE_STAND, SIDELINE, type CourtMotion } from './courtMotion.ts';
+import { buildTrophy, Confetti } from './trophy3d.ts';
+import { REFEREE_STAND, SIDELINE, TROPHY_HAND_AT, TROPHY_OFFICIAL_AT, type CourtMotion } from './courtMotion.ts';
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
 import { Figure, type Kit, type Look } from './figure3d.ts';
 
@@ -44,6 +45,12 @@ const REFEREE_LOOK: Look = {
 const LINE_JUDGE_LOOK: Look = {
   kit: { shirt: '#2a3448', shorts: '#151a24', libero: '#2a3448' },
   libero: false, trim: '#e8c547', number: 0, skin: '#c99a73', hair: '#1a1410', hairStyle: 1, trousers: true,
+};
+
+/** The federation's man who presents a trophy: a dark suit, a gold lanyard, grey at the temples. */
+const OFFICIAL_LOOK: Look = {
+  kit: { shirt: '#222a3a', shorts: '#171c27', libero: '#222a3a' },
+  libero: false, trim: '#d8b04a', number: 0, skin: '#d2a07a', hair: '#8f8f8f', hairStyle: 1, trousers: true,
 };
 
 /** The physio: a white polo trimmed in red, dark trousers. */
@@ -281,6 +288,13 @@ export class Court3D {
   private readonly cameraman = new Cameraman();
   /** The hall in 3D, built the first time a camera other than the broadcast is chosen. */
   private hall: Hall | null = null;
+  /** A final's cup and its confetti, made when the trophy is lifted. */
+  private cup: Group | null = null;
+  private confetti: Confetti | null = null;
+  /** The federation's man who brings it out. */
+  private official: Figure | null = null;
+  private readonly handA = new Vector3();
+  private readonly handB = new Vector3();
   private readonly ball: Mesh;
   private readonly trail: Mesh[] = [];
   private readonly actorRing: Mesh;
@@ -519,6 +533,7 @@ export class Court3D {
       this.crowd.update(now);
     }
     if (this.hall !== null && this.hall.group.visible && this.kits !== null) liveHall(this.hall, this.kits, motion.cheer, now);
+    this.renderTrophy(motion, now, dt);
 
     this.cameraman.aim(this.camera, motion, now, dt, this.width, this.height);
     this.renderer.render(this.scene, this.camera);
@@ -528,6 +543,41 @@ export class Court3D {
   headOnScreen(p: number): { X: number; Y: number; s: number } | null {
     const f = this.figures.get(p);
     return f === undefined ? null : this.onScreen(f);
+  }
+
+  /** A final won: the cup in the captain's hands — handed to him once they have gathered — and the confetti once it goes up. */
+  private renderTrophy(motion: CourtMotion, now: number, dt: number): void {
+    const t = motion.trophy;
+    if (t === null) return;
+    if (this.cup === null) {
+      this.cup = buildTrophy();
+      this.scene.add(this.cup);
+      this.confetti = new Confetti();
+      this.scene.add(this.confetti.mesh);
+    }
+    const since = now - t.t0;
+    // The federation's man, walking out with it.
+    if (motion.official !== null) {
+      if (this.official === null) {
+        this.official = new Figure(OFFICIAL_LOOK);
+        this.scene.add(this.official.root);
+      }
+      this.official.pose(motion.official);
+    }
+    // In his hands until it is handed over; the captain's after.
+    const holder = since < TROPHY_HAND_AT ? this.official ?? undefined : t.captain !== null ? this.figures.get(t.captain) : undefined;
+    this.cup.visible = holder !== undefined && since >= TROPHY_OFFICIAL_AT;
+    if (holder !== undefined && this.cup.visible) {
+      // Held by its handles, upright, turned with his hands.
+      holder.handsAt(this.handA, this.handB);
+      this.cup.position.set((this.handA.x + this.handB.x) / 2, (this.handA.y + this.handB.y) / 2, (this.handA.z + this.handB.z) / 2 - 0.4);
+      this.cup.rotation.set(0, 0, Math.atan2(this.handB.y - this.handA.y, this.handB.x - this.handA.x));
+      this.cup.scale.setScalar(Math.min(1, (since - TROPHY_OFFICIAL_AT) / 400));
+    }
+    if (this.confetti !== null) {
+      if (since >= t.lift) this.confetti.start(t.at.x, t.at.y, this.kits?.[t.team].shirt ?? '#f2c14e', now);
+      this.confetti.update(now, dt);
+    }
   }
 
   /** Where a spot on the floor is on screen, CSS px — for the video's close-up of it. */
@@ -553,6 +603,7 @@ export class Court3D {
   dispose(): void {
     for (const f of this.figures.values()) f.dispose();
     this.referee.dispose();
+    this.official?.dispose();
     for (const f of this.coaches ?? []) f.dispose();
     this.figures.clear();
     this.scene.traverse((o) => {

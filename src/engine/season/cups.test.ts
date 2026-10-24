@@ -6,7 +6,7 @@ import { NATIONS } from '../world/nations.ts';
 import { DAYS_PER_SEASON, stubManager, type World } from '../world/world.ts';
 import {
   cancelOffCycleClubWorld, clubWorldYear, cupGroupTable, cupProgress, ensureCupCompetitions, isCupCompetition, knockoutRoundName,
-  nextClubWorldYear, qualifyForCups, stageLabel,
+  nextClubWorldYear, qualifyForCups, stageLabel, trophyAtStake,
 } from './cups.ts';
 import { endSeason } from './rollover.ts';
 import { advanceDay, newSeasonContext, startSeason } from './seasonEngine.ts';
@@ -85,6 +85,27 @@ test('the top two of each group go through, and group winners meet runners-up', 
   for (const tie of cup.bracket!.rounds[0]) assert.ok(tie.homeSeed < 4 && tie.awaySeed >= 4);
   assert.equal(stageLabel(world, world.fixtures[cup.bracket!.rounds[2][0].fixtureId]), 'Final');
   assert.equal(knockoutRoundName(0, 3), 'Quarter-final');
+});
+
+// Before the rollover below, which starts a new season on the same world.
+test('a trophy is at stake in the finals only: a cup final, a super cup, the title playoff final', () => {
+  const { world } = season;
+  const deciders = world.fixtures.filter((f) => trophyAtStake(world, f) !== null);
+  assert.ok(deciders.length > 0);
+  for (const f of deciders) {
+    const label = stageLabel(world, f);
+    assert.ok(label === 'Final' || label === 'Playoff final', `${trophyAtStake(world, f)}: ${label}`);
+    assert.equal(trophyAtStake(world, f), world.competitions[f.competitionId].name);
+  }
+  // One final a competition — and every cup that has been played to the end had one.
+  const byComp = new Map<number, number>();
+  for (const f of deciders) byComp.set(f.competitionId, (byComp.get(f.competitionId) ?? 0) + 1);
+  for (const n of byComp.values()) assert.equal(n, 1);
+  for (const comp of world.competitions.filter((c) => isCupCompetition(c) && c.cup?.bracket != null)) {
+    const done = world.fixtures.some((f) => f.competitionId === comp.id && f.played && stageLabel(world, f) === 'Final');
+    if (done) assert.equal(byComp.get(comp.id), 1, comp.name);
+  }
+  assert.ok(world.fixtures.every((f) => !stageLabel(world, f).startsWith('Semi') || trophyAtStake(world, f) === null));
 });
 
 test('the rollover records the cup winners and qualifies next season\'s entrants', () => {

@@ -21,7 +21,8 @@
  * rather than starting and stopping dead, turn with a swing, and every part
  * of the body carries its momentum through a move cut short or begun anew.
  * When the ball lands, the side that won the point celebrates and the other
- * lets it sink in.
+ * lets it sink in. A final won, the winners gather in front of the cameras
+ * and their captain lifts the trophy (trophyLift).
  *
  * Off the court, the bench side: the substitutes stand in the warm-up area,
  * a square in the corner — volleyball players don't sit — those sent to warm
@@ -203,6 +204,11 @@ const ROAR = shape(STAND, {
 });
 /** Hands on hips, head down. */
 const HIPS = shape(STAND, { lean: 0.06, nod: 0.45, ...arms(-0.25, 0.55, 1.9, 0.6) });
+/** The trophy in both hands, held in front at the chest… */
+const TROPHY_CARRY = shape(STAND, { nod: -0.1, ...arms(1.3, 0.02, 1.35) });
+/** …and up over the head by its handles, looking up at it. */
+const TROPHY_UP = shape(STAND, { lean: -0.16, nod: -0.6, ...arms(2.95, 0.02, 0.3) });
+const TROPHY_HIGH = shape(TROPHY_UP, { lean: -0.22, nod: -0.7, ...arms(3.1, 0.02, 0.1) });
 /** Bent over, hands on the knees: that one hurt. */
 const KNEES = shape(STAND, { crouch: 0.2, hipShift: -0.06, tilt: 0.5, lean: 0.72, nod: 0.25, stance: 0.24, ...arms(0.62, 0.22, 0.2) });
 
@@ -465,6 +471,8 @@ export interface Body {
   hurtGoal?: number;
   /** Hobbling: off the court on a bad leg. */
   limp?: boolean;
+  /** As fast as he goes, m/s, if not flat out: a walk for an official, a jog to line up. */
+  pace?: number;
   /** The physio, crouched over someone: how far, 0 to 1. */
   tend?: number;
   /** After a point, or at a time-out: where in the team's huddle they go, the way they face there, and until when. */
@@ -792,8 +800,40 @@ export function serverReadyOnCourt(): boolean {
   return onCourt === null || onCourt.serverReady();
 }
 
+/** A final won: whose, from when, who lifts the cup, and where each part of it happens — see trophyLift. */
+export interface TrophyLift {
+  team: 0 | 1;
+  t0: number;
+  captain: number | null;
+  /** Where they celebrate first, all together in the middle of their half. */
+  huddle: { x: number; y: number };
+  /** The middle of the line-up they make for the presentation… */
+  at: { x: number; y: number };
+  /** …the captain at its front, and the federation's man beside him with the cup. */
+  front: { x: number; y: number };
+  official: { x: number; y: number };
+  /** When the cup goes up, ms after t0. */
+  lift: number;
+}
+
+/** The ceremony's moments, ms after it begins: the federation's man walks out with the cup… */
+export const TROPHY_OFFICIAL_AT = 2600;
+/** …the winners leave their huddle to line up… */
+export const TROPHY_GATHER_AT = 5200;
+/** …the cup is handed to their captain… */
+export const TROPHY_HAND_AT = 9600;
+/** …and up it goes. */
+export const TROPHY_LIFT_AT = 11200;
+
+/** Where the federation's man comes out from: the corner behind the winners' end, by their bench. */
+const OFFICIAL_FROM = { x: -4.6, y: 12.0 };
+
 export class CourtMotion {
   readonly bodies = new Map<number, Body>();
+  /** The trophy being lifted, once a final is won — see trophyLift. Nothing else happens on the court after it. */
+  trophy: TrophyLift | null = null;
+  /** The federation's man who presents it, once he has come out. */
+  official: Body | null = null;
   flight: Flight | null = null;
   /** The ball's last few positions, for the streak behind a fast one. */
   trail: Ball3[] = [];
@@ -891,6 +931,7 @@ export class CourtMotion {
    * bench, anyone new there appears at it, and the coaches stand by theirs.
    */
   setSideline(sl: CourtSideline, nearTeam: 0 | 1, now: number): void {
+    if (this.trophy !== null) return;
     this.sideline = sl;
     this.sides = nearTeam === 0 ? [-1, 1] : [1, -1];
     this.coaches.forEach((c, t) => {
@@ -948,6 +989,7 @@ export class CourtMotion {
    * Null: the stoppage is over, and the physio goes back.
    */
   setInjury(next: CourtInjury | null, now: number): void {
+    if (this.trophy !== null) return;
     const prev = this.injury;
     this.injury = next;
     if (next === null) {
@@ -1019,6 +1061,7 @@ export class CourtMotion {
    *  time-out once the rally in play is over, and waves no serve on until
    *  play is back on — and then waves it on again, even if it had been. */
   setStoppage(timeout: 0 | 1 | null, paused: boolean, now: number): void {
+    if (this.trophy !== null) return;
     if (timeout !== null && timeout !== this.stoppage.timeout) {
       this.calls.push({ kind: 'timeout', team: timeout, out: false });
       this.timeoutHuddles(now);
@@ -1085,6 +1128,7 @@ export class CourtMotion {
    * the side across it, and goes to its places for the serve. About six and a half seconds.
    */
   ceremony(now: number): void {
+    if (this.trophy !== null) return;
     for (const team of [0, 1] as const) {
       const side = this.sides[team];
       const six = [...this.bodies].filter(([p, b]) => !b.leaving && b.side === null && this.onCourt.has(p) && this.teamOf(p) === team);
@@ -1128,6 +1172,7 @@ export class CourtMotion {
 
   /** Hand over a new scene: new marks, postures and contacts, and a new flight. */
   scene(sc: Scene, now: number): void {
+    if (this.trophy !== null) return;
     const struck = this.actorPose;
     const from = this.flight !== null ? flightAt(this.flight, now) : sc.ball;
     if (sc.ball !== null && from !== null) {
@@ -1577,6 +1622,215 @@ export class CourtMotion {
     });
   }
 
+  /**
+   * A final won, and the trophy presented, as it goes on television. First the winners — the bench
+   * with them — run together into the middle of their half and go up and down in a huddle, while
+   * the beaten side sink to their knees or stand with their hands on their hips. Then the man from
+   * the federation walks out with the cup, the winners line up in front of the cameras, their
+   * captain at the front, and the losers turn to watch and applaud. He hands the captain the cup —
+   * the captain turned to him to take it — and the captain turns back and lifts it over his head,
+   * everyone round him leaping with their arms up. The stand roars throughout. It goes on until the
+   * screen moves on. `captain` lifts the cup — or, not with them, the first of the six.
+   */
+  trophyLift(winner: 0 | 1, captain: number | null, now: number): void {
+    if (this.trophy !== null) return;
+    this.flight = null;
+    this.trail = [];
+    this.actor = null;
+    this.actorPose = null;
+    this.point = null;
+    this.live = false;
+    this.calls = [];
+    this.needServe = false;
+    this.serveDue = null;
+    this.signal = null;
+    this.injury = null;
+    const side = this.sides[winner];
+    const ours = [...this.bodies].filter(([p, b]) => !b.leaving && this.teamOf(p) === winner);
+    const cap = captain !== null && ours.some(([p]) => p === captain)
+      ? captain
+      : ours.find(([p]) => this.onCourt.has(p))?.[0] ?? ours[0]?.[0] ?? null;
+    // The captain in the middle of the court's width, facing the cameras' side; the official by him, away from the net.
+    const front = { x: 0.3, y: side * 3.4 };
+    const huddle = { x: 0, y: side * 2.6 };
+    const official = { x: 0.65, y: side * 4.35 };
+    this.trophy = { team: winner, t0: now, captain: cap, huddle, at: { x: -0.6, y: front.y }, front, official, lift: TROPHY_LIFT_AT };
+    const gather = now + TROPHY_GATHER_AT;
+    const forever = now + 3_600_000;
+    const toCameras = yawTo(1, 0);
+
+    const reset = (b: Body): void => {
+      b.side = null;
+      b.home = null;
+      b.via = null;
+      b.huddle = null;
+      b.action = null;
+      b.reaction = null;
+      b.ox = 0;
+      b.oy = 0;
+      b.pose = 'stand';
+    };
+
+    // Into the huddle: a ring, round the order they come from so nobody runs through anybody.
+    ours.sort((a, b) => Math.atan2(a[1].y - huddle.y, a[1].x - huddle.x) - Math.atan2(b[1].y - huddle.y, b[1].x - huddle.x));
+    const r = Math.max(0.75, ours.length * 0.085);
+    ours.forEach(([, b], i) => {
+      reset(b);
+      const a = (i / ours.length) * Math.PI * 2;
+      const x = huddle.x + Math.cos(a) * r;
+      const y = huddle.y + Math.sin(a) * r;
+      b.huddle = { x, y, face: yawTo(huddle.x - x, huddle.y - y), from: now, until: gather };
+    });
+
+    // Then the line-up: the others round behind the captain in rows, the rows filled from the middle out.
+    const slots: Array<{ x: number; y: number }> = [];
+    for (const [rr, n] of [[1.15, 5], [2.0, 7], [2.8, 9]] as const) {
+      for (let k = 0; k < n; k++) {
+        const a = -1.2 + (2.4 * k) / (n - 1);
+        slots.push({ x: front.x - rr * Math.cos(a), y: front.y + rr * Math.sin(a) });
+      }
+    }
+    const rest = ours.filter(([p]) => p !== cap);
+    const taken = slots.slice(0, rest.length).sort((a, b) => a.y - b.y);
+    rest.sort((a, b) => a[1].y - b[1].y);
+    rest.forEach(([, b], i) => {
+      b.tx = taken[i].x;
+      b.ty = taken[i].y;
+      b.steps = [{ x: taken[i].x, y: taken[i].y, face: toCameras, from: gather + (i % 5) * 90, until: forever }];
+    });
+    if (cap !== null) {
+      // At the front — turned to the official to take the cup, then back to the cameras to lift it.
+      const b = this.bodies.get(cap)!;
+      const toHim = yawTo(official.x - front.x, official.y - front.y);
+      b.tx = front.x;
+      b.ty = front.y;
+      b.steps = [
+        { x: front.x, y: front.y, face: toCameras, from: gather, until: now + TROPHY_HAND_AT - 900 },
+        { x: front.x, y: front.y, face: toHim, from: now + TROPHY_HAND_AT - 900, until: now + TROPHY_LIFT_AT - 450 },
+        { x: front.x, y: front.y, face: toCameras, from: now + TROPHY_LIFT_AT - 450, until: forever },
+      ];
+    }
+
+    // The beaten side where they are at first, then in its own half, turned to watch.
+    const theirs = [...this.bodies].filter(([p, b]) => !b.leaving && b.side === null && this.teamOf(p) !== winner);
+    theirs.sort((a, b) => a[1].x - b[1].x);
+    theirs.forEach(([, b], i) => {
+      reset(b);
+      const x = -3.2 + (i % 3) * 1.25;
+      const y = -side * (2.2 + Math.floor(i / 3) * 1.3);
+      b.tx = b.x;
+      b.ty = b.y;
+      b.steps = [{ x, y, face: yawTo(front.x - x, front.y - y), from: gather + 400 + i * 80, until: forever }];
+    });
+    this.cheer = { team: winner, t0: now, big: true };
+  }
+
+  /** The federation's man, coming out with the cup: round behind the winners, to the captain's side, and back a step once it is handed over. */
+  private officialOut(t: TrophyLift): Body {
+    const side = Math.sign(t.front.y) || 1;
+    const from = { x: OFFICIAL_FROM.x, y: side * OFFICIAL_FROM.y };
+    const round = { x: 1.7, y: side * 7.4 };
+    const after = { x: t.official.x + 0.45, y: t.official.y + side * 0.85 };
+    const atCaptain = yawTo(t.front.x - t.official.x, t.front.y - t.official.y);
+    const t0 = t.t0;
+    return {
+      x: from.x, y: from.y, tx: after.x, ty: after.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: yawTo(round.x - from.x, round.y - from.y),
+      lift: 0, vz: 0, pose: 'stand', posture: STAND, shape: STAND, gait: 0, running: 0, action: null, reaction: null,
+      alpha: 0, leaving: false, scale: 1.8 / REF_HEIGHT, hand: 1, seed: 41, rig: buildRig(STAND, STILL), side: null, via: null, home: null,
+      pace: 1.7,
+      steps: [
+        { x: round.x, y: round.y, face: atCaptain, from: t0 + TROPHY_OFFICIAL_AT, until: t0 + TROPHY_OFFICIAL_AT + 4300 },
+        { x: t.official.x, y: t.official.y, face: atCaptain, from: t0 + TROPHY_OFFICIAL_AT + 4300, until: t0 + TROPHY_HAND_AT + 700 },
+        { x: after.x, y: after.y, face: yawTo(1, -side * 0.6), from: t0 + TROPHY_HAND_AT + 700, until: t0 + 3_600_000 },
+      ],
+    };
+  }
+
+  /** The trophy's moment, frame by frame: each body's next move as the last one ends, the stand kept roaring. */
+  private stepTrophy(now: number): void {
+    const t = this.trophy;
+    if (t === null) return;
+    const since = now - t.t0;
+    const lifted = since >= t.lift;
+    const together = since < TROPHY_GATHER_AT - 300;
+    // The stand roars on — and again as it goes up.
+    if (this.cheer === null || now - this.cheer.t0 > 3000 || (lifted && this.cheer.t0 < t.t0 + t.lift)) {
+      this.cheer = { team: t.team, t0: now, big: true };
+    }
+    if (this.official === null && since >= TROPHY_OFFICIAL_AT) this.official = this.officialOut(t);
+    const cycle = (b: Body, kind: Action['kind'], keys: Key[], jump: Jump | null, tc = now): void => {
+      b.reaction = { kind, t0: now, tc, keys, jump, yaw: null, path: null, end: keys[keys.length - 1].t + 60 };
+    };
+    const clapping = (b: Body): Key[] => timeline(0, [
+      [0, b.shape], [150, CLAP_OPEN], [300, CLAP], [450, CLAP_OPEN], [600, CLAP], [750, CLAP_OPEN], [900, CLAP],
+    ]);
+    for (const [p, b] of this.bodies) {
+      if (b.leaving || b.reaction !== null) continue;
+      const won = this.teamOf(p) === t.team;
+      const style = (b.seed * 7 + Math.floor(now / 1013)) % 3;
+      if (won && together) {
+        // In the huddle: up and down together, on the beat.
+        const beat = t.t0 + Math.ceil(since / 1000) * 1000;
+        cycle(b, 'celebrate', timeline(0, [[0, b.shape], [220, HUDDLE_UP], [650, HUDDLE_IN], [950, HUDDLE_UP]]),
+          { up: 180, peak: 380, down: 600, h: 0.3 }, beat);
+      } else if (won && !lifted) {
+        if (since >= TROPHY_GATHER_AT) b.pace = 2.6;
+        if (p === t.captain && since >= TROPHY_HAND_AT - 500) {
+          // His hands out for it, and on it, until the moment.
+          const wait = t.lift - since;
+          cycle(b, 'stand', timeline(0, [[0, b.shape], [Math.min(450, wait), TROPHY_CARRY], [Math.max(470, wait - 60), TROPHY_CARRY]]), null);
+          b.reaction!.end = wait;
+        } else {
+          cycle(b, 'celebrate', clapping(b), null);
+        }
+      } else if (won && p === t.captain) {
+        // Up it goes — and stays up, raised again and again.
+        const keys: Array<[number, Shape]> = [[0, b.shape], [380, TROPHY_UP]];
+        for (let k = 1; k < 80; k++) keys.push([380 + k * 650, k % 2 === 1 ? TROPHY_HIGH : TROPHY_UP]);
+        cycle(b, 'celebrate', timeline(0, keys), since < t.lift + 500 ? { up: 120, peak: 330, down: 560, h: 0.24 } : null);
+      } else if (won) {
+        if (style === 0) {
+          cycle(b, 'celebrate', timeline(0, [[0, b.shape], [180, ARMS_UP], [900, ARMS_UP], [1250, STAND]]),
+            { up: 120, peak: 330, down: 560, h: 0.3 + (b.seed % 3) * 0.05 });
+        } else if (style === 1) {
+          cycle(b, 'celebrate', timeline(0, [[0, b.shape], [170, FIST], [380, FIST_DOWN], [600, FIST], [850, FIST_DOWN], [1150, ARMS_UP]]), null);
+        } else {
+          cycle(b, 'celebrate', timeline(0, [[0, b.shape], [200, ARMS_UP], [650, HUDDLE_UP], [1100, ARMS_UP], [1400, STAND]]),
+            { up: 160, peak: 360, down: 560, h: 0.22 });
+        }
+      } else if (since < TROPHY_GATHER_AT) {
+        // It sinks in: down on their knees, or hands on hips, head down.
+        const low = b.seed % 2 === 0 ? KNEES : HIPS;
+        cycle(b, 'dejected', timeline(0, [[0, b.shape], [500, low], [Math.max(520, TROPHY_GATHER_AT - since), low]]), null);
+      } else if (since < TROPHY_HAND_AT - 400 || (b.seed + Math.floor(now / 1700)) % 3 === 0) {
+        cycle(b, 'stand', timeline(0, [[0, b.shape], [400, STAND], [1700, STAND]]), null);
+      } else {
+        // Then, like sportsmen, they applaud.
+        cycle(b, 'stand', timeline(0, [
+          [0, b.shape], [200, CLAP_OPEN], [380, CLAP], [560, CLAP_OPEN], [740, CLAP], [920, CLAP_OPEN], [1100, CLAP], [1700, STAND],
+        ]), null);
+      }
+    }
+    const o = this.official;
+    if (o !== null && o.reaction === null) {
+      if (since < TROPHY_HAND_AT) {
+        // The cup held out in front of him, all the way.
+        const wait = TROPHY_HAND_AT - since;
+        cycle(o, 'stand', timeline(0, [[0, o.shape], [Math.min(400, wait), TROPHY_CARRY], [Math.max(420, wait), TROPHY_CARRY]]), null);
+        o.reaction!.end = wait + 120;
+      } else {
+        cycle(o, 'stand', since < t.lift + 2500 ? clapping(o) : timeline(0, [[0, o.shape], [400, STAND], [1600, STAND]]), null);
+      }
+    }
+    this.coaches.forEach((c, team) => {
+      if (c.reaction !== null && now - c.reaction.tc <= c.reaction.end) return;
+      const keys = team === t.team
+        ? timeline(0, [[0, c.shape], [200, ARMS_UP], [900, ARMS_UP], [1300, CLAP_OPEN], [1450, CLAP], [1800, COACH_IDLE]])
+        : timeline(0, [[0, c.shape], [300, CLAP_OPEN], [450, CLAP], [600, CLAP_OPEN], [750, CLAP], [1500, COACH_IDLE]]);
+      c.reaction = { kind: 'celebrate', t0: now, tc: now, keys, jump: null, yaw: null, path: null, end: keys[keys.length - 1].t + 60 };
+    });
+  }
+
   /** The ball, where it is now. */
   ballAt(now: number): Ball3 | null {
     return this.flight !== null ? flightAt(this.flight, now) : null;
@@ -1607,11 +1861,13 @@ export class CourtMotion {
       }
     }
     if (this.signal !== null && now > this.signal.end) this.signal = null;
+    this.stepTrophy(now);
     const ball = this.ballAt(now);
     this.stepReferee(dt, now, ball);
     for (const c of this.coaches) this.stepStill(c, dt, now, ball);
     for (const j of this.lineJudges) this.stepStill(j, dt, now, ball);
     this.stepMedic(dt, now);
+    if (this.official !== null) this.stepBody(this.official, dt, now, null);
     for (const [p, b] of this.bodies) {
       if (b.side === 'bench' && b.home !== null && b.via === null) this.warmUp(p, b, now);
       this.stepBody(b, dt, now, ball);
@@ -1757,7 +2013,8 @@ export class CourtMotion {
       // Down hurt, nobody moves him; on a bad leg, he hobbles. Flat out on
       // the floor after a dive, he goes nowhere until he is up again.
       const floored = Math.min(1, Math.max(0, (grounded(b.shape) - 1.0) * 3));
-      const top = ((b.hurtGoal ?? 0) >= 1 ? 0 : b.limp === true ? MAX_SPEED * 0.2 : MAX_SPEED) * (1 - floored);
+      const flat = b.pace ?? MAX_SPEED;
+      const top = ((b.hurtGoal ?? 0) >= 1 ? 0 : b.limp === true ? flat * 0.2 : flat) * (1 - floored);
       if (b.lift < 0.05) {
         // As fast as they can go and still stop on the mark, easing off the last stretch; speeding
         // up and braking as legs can — harder to brake than to push off — never starting or
@@ -1815,7 +2072,9 @@ export class CourtMotion {
       b.vz = dt > 0 ? (lift - b.lift) / dt : 0;
       b.lift = lift;
     } else if (b.lift > 0) {
-      b.vz -= 9.81 * dt;
+      // Only ever down from here: a jump over is never carried on upwards — as a long frame, its
+      // time cut short, could make it look as if it were.
+      b.vz = Math.min(0, b.vz) - 9.81 * dt;
       b.lift = Math.max(0, b.lift + b.vz * dt);
     }
     if (dt > 0) {

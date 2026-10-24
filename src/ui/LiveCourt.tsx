@@ -94,8 +94,10 @@ interface CourtProps {
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
   teamNames = ['Home', 'Away'], view = '3d', camera = 'broadcast', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null,
-  ceremony = null,
+  ceremony = null, trophy = null,
 }: {
+  /** A final won: the side lifting the trophy, and who holds it — see CourtMotion.trophyLift. */
+  trophy?: { team: 0 | 1; captain: number | null } | null;
   /** Changes when the pre-match ceremony is to begin — see CourtMotion.ceremony. */
   ceremony?: number | null;
   scene: Scene;
@@ -178,6 +180,11 @@ export function LiveCourt({
   useEffect(() => {
     if (ceremony != null) motion.current?.ceremony(performance.now());
   }, [ceremony]);
+
+  // A final won: the trophy lifted.
+  useEffect(() => {
+    if (trophy !== null) motion.current?.trophyLift(trophy.team, trophy.captain, performance.now());
+  }, [trophy?.team, trophy?.captain]);
 
   // Someone hurt: down, the physio on, up again or helped off.
   const injuryKey = injury === null ? '' : `${injury.p}:${injury.phase}`;
@@ -312,13 +319,17 @@ export function LiveCourt({
         const near = props.current.nearTeam ?? 0;
         court.setBenches(props.current.kits, near === 0 ? [-1, 1] : [1, -1]);
         court.setCrowd(props.current.kits, props.current.crowdFill ?? 0.85);
-        const cam = props.current.camera ?? 'broadcast';
+        // The trophy lift has a camera of its own, in close.
+        const cam = m.trophy !== null ? 'trophy' : props.current.camera ?? 'broadcast';
         court.setCamera(cam);
         showPainted(cam === 'broadcast');
         court.render(m, now, dt, lookOf, (t) => coachLook(props.current.kits[t]));
         const c = court;
-        drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
-        drawCall(top, m, props.current, c.refereeOnScreen(), now);
+        // The trophy's moment is the picture's own: no ratings over heads, no referee's call.
+        if (m.trophy === null) {
+          drawLabels(top, m, props.current, (p) => c.headOnScreen(p));
+          drawCall(top, m, props.current, c.refereeOnScreen(), now);
+        }
       } else {
         drawFlat(top, project, m, props.current, now);
       }

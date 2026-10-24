@@ -113,7 +113,7 @@ import {
   arrivalsFor, moveDay, pendingMoveOf, seasonOfDay, type PendingMove,
 } from '../engine/world/moves.ts';
 import { NATIONS } from '../engine/world/nations.ts';
-import { isCupFinal } from '../engine/season/cups.ts';
+import { isCupFinal, trophyAtStake } from '../engine/season/cups.ts';
 import {
   boardArrangeFriendly, friendlyBlock, isFriendly, requestFriendly, withdrawFriendlyRequest,
 } from '../engine/season/friendlies.ts';
@@ -547,6 +547,10 @@ export interface MatchdayState {
   pausedForPanel?: boolean;
   /** Injuries still to be shown, each once the rally it came in has been played out. */
   injuryQueue?: LiveInjury[];
+  /** The trophy this match decides — a final's — by its competition's name; null or absent for any other. */
+  final?: string | null;
+  /** The final won: the side lifting the trophy on the court, and who holds it — before the report. */
+  trophy?: { team: 0 | 1; captain: number | null } | null;
   /** The stoppage for someone hurt under way — null when there is none. */
   injury?: LiveInjury | null;
 }
@@ -2277,6 +2281,7 @@ class Game {
       sides: [side(next.home), side(next.away)],
       title: (world.competitions[next.competitionId]?.name ?? 'Match') + (rivalryName(world, next) !== null ? ` · ${rivalryName(world, next)}` : ''),
       national: null,
+      final: trophyAtStake(world, next),
       stage: 'lineup',
       setBreakPending: false,
       opponentChanges: [],
@@ -3754,6 +3759,26 @@ class Game {
     this.finalizeMatchday();
   }
 
+  /** A final's last point played: the winners lift the trophy on the court, and the report waits for it. */
+  liftTrophy(): void {
+    const md = this.matchday;
+    const snap = md?.snapshot;
+    if (md == null || snap == null || !snap.matchOver || md.final == null || md.trophy != null) return;
+    const team: 0 | 1 = snap.homeSets > snap.awaySets ? 0 : 1;
+    md.trophy = { team, captain: this.trophyCaptain(md, team) };
+    this.emit();
+  }
+
+  /** Who lifts it: the club's captain. A nation's, or a captain not in the squad: the court picks one of the six. */
+  private trophyCaptain(md: MatchdayState, team: 0 | 1): number | null {
+    const world = this.world;
+    const side = md.sides[team];
+    const club = world !== null && side.clubId >= 0 ? world.clubs[side.clubId] : undefined;
+    if (world === null || club === undefined) return null;
+    const captain = dressingRoom(world, club).captain;
+    return captain >= 0 ? captain : null;
+  }
+
   /**
    * Skip straight to the result without watching the rest of the match. The
    * engine takes both benches from here — the user's changes as the
@@ -3762,9 +3787,20 @@ class Game {
   finishMatchdayNow(): void {
     const md = this.matchday;
     if (md === null || this.liveSim === null) return;
+    // The trophy already up: on to the report.
+    if (md.trophy != null) {
+      this.finalizeMatchday();
+      return;
+    }
     this.liveSim.setAutoCoach(0, true);
     this.liveSim.setAutoCoach(1, true);
     this.liveSim.finish();
+    // A final skipped to its end still has its trophy lifted.
+    if (md.final != null) {
+      md.snapshot = this.liveSim.snapshot();
+      this.liftTrophy();
+      return;
+    }
     this.finalizeMatchday();
   }
 
@@ -4250,6 +4286,7 @@ class Game {
       sides: [this.nationalSide(t, m.home), this.nationalSide(t, m.away)],
       title,
       national: { tournamentId: t.id, matchId: m.id, nation, title },
+      final: m.stage === 'Final' && t.kind !== 'friendly' ? t.name : null,
       stage: 'lineup',
       setBreakPending: false,
       opponentChanges: [],

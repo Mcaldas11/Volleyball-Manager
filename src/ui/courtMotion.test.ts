@@ -4,7 +4,7 @@ import { MatchFormat, MatchSimulator } from '../engine/match/engine.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
-import { CourtMotion, LINE_JUDGES, lineCall, REFEREE_STAND, type Body, type Signal } from './courtMotion.ts';
+import { CourtMotion, LINE_JUDGES, lineCall, REFEREE_STAND, TROPHY_HAND_AT, TROPHY_LIFT_AT, type Body, type Signal } from './courtMotion.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
 import { rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
 import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL } from './playerRig.ts';
@@ -494,4 +494,59 @@ test('the serve waits for the server: the ball is tossed only from behind the en
     }
   }
   assert.ok(heldUp > 0, 'some serves had to wait for the server');
+});
+
+test('a final won: the winners celebrate together, the federation hands their captain the cup, and he lifts it over his head', () => {
+  const { sim, store, teamOf } = liveMatch(61);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  let now = 0;
+  const run = (ms: number): void => {
+    const end = now + ms;
+    while (now < end - 1e-6) {
+      now += 1000 / 60;
+      m.step(1 / 60, now);
+    }
+  };
+  const pre = sim.snapshot();
+  m.scene(setupScene(pre, pre.serving, store.position, 0), now);
+  run(900);
+  const entry = sim.step()!;
+  for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, 0, 0, entry.winner)) {
+    m.scene(beat, now);
+    run(beat.ms);
+  }
+  const winners = [...m.bodies.keys()].filter((p) => teamOf(p) === 0);
+  const captain = winners[2];
+  const t0 = now;
+  m.trophyLift(0, captain, now);
+  const t = m.trophy!;
+  assert.equal(t.captain, captain);
+  assert.equal(m.ballAt(now), null, 'the ball is put away');
+  // Another scene after it changes nothing.
+  m.scene(setupScene(sim.snapshot(), 1, store.position, 0), now);
+  const dist = (p: number, at: { x: number; y: number }): number => Math.hypot(m.bodies.get(p)!.x - at.x, m.bodies.get(p)!.y - at.y);
+  const official = (): Body | null => m.official;
+
+  // First all together in the middle of their half.
+  run(2400);
+  for (const p of winners) assert.ok(dist(p, t.huddle) < 1.6, `${p} in the huddle: ${dist(p, t.huddle).toFixed(2)} m away`);
+  assert.equal(official(), null, 'nobody from the federation yet');
+
+  // Then lined up, the federation's man come out to the captain's side with the cup.
+  run(TROPHY_HAND_AT - 400 - (now - t0));
+  for (const p of winners) assert.ok(dist(p, t.at) < 3.6, `${p} lined up: ${dist(p, t.at).toFixed(2)} m away`);
+  const o = official();
+  assert.ok(o !== null && Math.hypot(o.x - t.official.x, o.y - t.official.y) < 0.5, 'the official beside him');
+  const head = (p: number): number => {
+    const b = m.bodies.get(p)!;
+    return b.lift + jointPositions(b.rig).head[2] * b.scale;
+  };
+  run(TROPHY_LIFT_AT - 300 - (now - t0));
+  const [l0, r0] = handsOf(m.bodies.get(captain)!);
+  assert.ok(Math.max(l0.z, r0.z) < head(captain), 'the cup at his chest before he lifts it');
+  run(1500);
+  const [l, r] = handsOf(m.bodies.get(captain)!);
+  assert.ok(Math.min(l.z, r.z) > head(captain) + 0.15, `up over his head: hands at ${l.z.toFixed(2)}, ${r.z.toFixed(2)}, head at ${head(captain).toFixed(2)}`);
+  assert.ok(Math.abs(Math.hypot(l.x - r.x, l.y - r.y) - 0.42) < 0.25, 'a hand on each handle');
+  assert.ok(m.cheer !== null && m.cheer.team === 0 && m.cheer.big, 'the stand roaring');
 });

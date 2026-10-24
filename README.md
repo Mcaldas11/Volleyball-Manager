@@ -382,6 +382,16 @@ Before committing a change:
       a medic running on to an injured player. Two line judges at opposite
       corners flag every ball near their lines: in, out, or off the block; and
       the video replay goes in close, low over the spot where it came down
+- [x] The trophy lift after a final — a cup, super cup, continental or world
+      final, the title playoff's final, a national team's tournament final:
+      the winners and their bench run together into the middle of their half
+      and celebrate in a huddle while the beaten side sink to their knees;
+      then they line up in front of the cameras, a man from the federation
+      walks out with the cup and hands it to their captain, and the captain
+      lifts it over his head, everyone round him jumping with their arms up
+      as the confetti comes down and the stand roars, the beaten side
+      applauding — and a Champions banner over it, before the report.
+      Skipping to the result still shows it
 - [x] Six cameras for the 3D match, as television has them: Broadcast (the
       main camera high in the side stand), Dynamic (closer, panning with the
       ball), Professional (a director cutting between shots — behind the
