@@ -87,6 +87,10 @@ interface CourtProps {
   view: CourtView;
   /** Which camera the 3D view is watched through. */
   camera?: CameraMode;
+  /** The number a player wears at his club, if he has one — his shirt shows it, unless a team-mate in the match has it. */
+  numberOf?: (p: number) => number | null;
+  /** How a side's coach looks, when not as every coach does — the manager's own, on his side. */
+  coachLookFor?: (team: 0 | 1, kit: Kit) => Look | null;
   /** A spot on the floor to zoom in on, court metres — the video's close-up of where a ball came down. */
   zoom?: { x: number; y: number } | null;
 }
@@ -94,8 +98,12 @@ interface CourtProps {
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
   teamNames = ['Home', 'Away'], view = '3d', camera = 'broadcast', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null,
-  ceremony = null, trophy = null,
+  ceremony = null, trophy = null, numberOf, coachLookFor,
 }: {
+  /** The manager's own look for his side's coach — see CourtProps. */
+  coachLookFor?: (team: 0 | 1, kit: Kit) => Look | null;
+  /** Each player's shirt number — see CourtProps. */
+  numberOf?: (p: number) => number | null;
   /** A final won: the side lifting the trophy, and who holds it — see CourtMotion.trophyLift. */
   trophy?: { team: 0 | 1; captain: number | null } | null;
   /** Changes when the pre-match ceremony is to begin — see CourtMotion.ceremony. */
@@ -131,8 +139,8 @@ export function LiveCourt({
   const wrapRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
-  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, sideline, nearTeam, crowdFill, zoom });
-  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, sideline, nearTeam, crowdFill, zoom };
+  const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, numberOf, coachLookFor, sideline, nearTeam, crowdFill, zoom });
+  props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, numberOf, coachLookFor, sideline, nearTeam, crowdFill, zoom };
   /** The bench side as last handed to the motion. */
   const sidelineKey = useRef('');
   const applySideline = (now: number): void => {
@@ -323,7 +331,7 @@ export function LiveCourt({
         const cam = m.trophy !== null ? 'trophy' : props.current.camera ?? 'broadcast';
         court.setCamera(cam);
         showPainted(cam === 'broadcast');
-        court.render(m, now, dt, lookOf, (t) => coachLook(props.current.kits[t]));
+        court.render(m, now, dt, lookOf, (t) => props.current.coachLookFor?.(t, props.current.kits[t]) ?? coachLook(props.current.kits[t]));
         const c = court;
         // The trophy's moment is the picture's own: no ratings over heads, no referee's call.
         if (m.trophy === null) {
@@ -607,10 +615,11 @@ class ShirtNumbers {
   private readonly given = new Map<number, number>();
   private readonly taken: [Set<number>, Set<number>] = [new Set(), new Set()];
 
-  of(p: number, id: number, team: 0 | 1): number {
+  /** His number in this match: the one he wears at his club, or would pick — the next free, should a team-mate have it. */
+  of(p: number, id: number, team: 0 | 1, preferred: number | null = null): number {
     let n = this.given.get(p);
     if (n === undefined) {
-      const want = 1 + (((id * 7) % 20) + 20) % 20;
+      const want = preferred ?? 1 + (((id * 7) % 20) + 20) % 20;
       n = want;
       for (let i = 0; i < 99 && this.taken[team].has(n); i++) n = (n % 99) + 1;
       this.given.set(p, n);
@@ -632,13 +641,18 @@ function lookFor(p: number, props: CourtProps, numbers: ShirtNumbers): Look {
     kit: props.kits[team],
     libero: role === Position.Libero,
     trim: ROLE_TRIM[role],
-    number: numbers.of(p, id, team),
+    number: numbers.of(p, id, team, props.numberOf?.(p) ?? null),
     skin: SKIN_TONES[tone],
     // Darker skin, darker hair.
     hair: tone >= 4 ? HAIR[(h >> 4) % 3 === 0 ? 2 : 0] : HAIR[(h >> 4) % HAIR.length],
     hairStyle: (h >> 8) % 7 === 0 ? 2 : (h >> 8) % 2,
+    // Darker skin, brown eyes; otherwise any colour, brown the most often.
+    eyes: tone >= 4 ? EYES[(h >> 12) % 2] : EYES[(h >> 12) % EYES.length],
   };
 }
+
+/** Irises: dark brown, brown, hazel, green, blue, grey — the browns first. */
+const EYES: readonly string[] = ['#2b1a10', '#4a2c18', '#4a2c18', '#6b5a2e', '#4f6b3a', '#4c6f94', '#6e7b85'];
 
 /** A coach: a polo in his team's colours, dark trousers, no number. */
 function coachLook(kit: Kit): Look {

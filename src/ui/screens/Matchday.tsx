@@ -37,6 +37,7 @@ import { describeRallyHighlight } from './Match.tsx';
 import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide, type VideoReview } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
+import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
 import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn } from '../sound.ts';
@@ -1704,6 +1705,8 @@ function LiveMatchView(): JSX.Element {
               teamNames={[homeClub.shortName, awayClub.shortName]}
               view={g.courtView}
               camera={g.courtCamera}
+              numberOf={(p) => g.shirtNumber(p)}
+              coachLookFor={(t, kit) => (t === userTeamIdx ? figureLook(world.manager.look ?? DEFAULT_LOOK, kit, world.manager.gender === 'female') : null)}
               zoom={varZoom}
               ceremony={ceremony}
               trophy={md.trophy ?? null}

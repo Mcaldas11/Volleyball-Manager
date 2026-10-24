@@ -382,12 +382,24 @@ Before committing a change:
       a medic running on to an injured player. Two line judges at opposite
       corners flag every ball near their lines: in, out, or off the block; and
       the video replay goes in close, low over the spot where it came down
+- [x] Squad numbers: every player at a club wears his own, 1 to 99. Pick
+      your players' from the squad list or a profile — a grid of every
+      number, the ones taken marked; giving a player a team-mate's number
+      swaps the two. Newcomers take the nearest free one, and the shirts in
+      the 3D match wear them
+- [x] Your look on the touchline: a step of its own when a career begins
+      (and from your profile later) — a suit, a shirt and tie, a tracksuit
+      or a polo, in the club's colours or your own; shirt, tie, trousers and
+      shoes; skin, hair colour and style, a beard, glasses — with you turning
+      in 3D beside the choices. It is you at the bench in every match, and a
+      portrait made from it is your face wherever the game shows it
 - [x] The trophy lift after a final — a cup, super cup, continental or world
       final, the title playoff's final, a national team's tournament final:
       the winners and their bench run together into the middle of their half
       and celebrate in a huddle while the beaten side sink to their knees;
       then they line up in front of the cameras, a man from the federation
-      walks out with the cup and hands it to their captain, and the captain
+      walks out with the cup — gold on a black plinth, a lid and a ball on top,
+      curled handles — and hands it to their captain, and the captain
       lifts it over his head, everyone round him jumping with their arms up
       as the confetti comes down and the stand roars, the beaten side
       applauding — and a Champions banner over it, before the report.
@@ -401,9 +413,12 @@ Before committing a change:
       the broadcast camera the whole hall is in 3D, with full stands on all
       four sides; the choice is remembered between matches and replays
 - [x] Players drawn as bodies, not mannequins: smooth limbs shaped by their
-      muscles, a ball in every joint so bends stay one surface, a face (jaw,
-      nose, ears, eyes, brows) under hair with strands in it, hands with a
-      thumb; the kit as cloth with a satin sheen — collar, short sleeves cuffed
+      muscles, a ball in every joint so bends stay one surface; a sculpted
+      head — cheekbones, the jaw narrowing to the chin, the brow over the
+      eye sockets, the nose, the lips — with a face painted on it (brows,
+      lips, colour in the cheeks, stubble or a beard), glossy eyes in every
+      colour under their upper lids, ears, and hair with strands in it; hands
+      with a thumb; the kit as cloth with a satin sheen — collar, short sleeves cuffed
       in the role's colour, the number outlined on the back, side panels —
       shorts cut at the thigh, knee pads with their cushion, crew socks, court
       shoes on a sole. Lit as an arena is: the hall's light from every side,

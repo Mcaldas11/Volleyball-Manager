@@ -29,9 +29,10 @@ import { Icon, type IconName } from '../icons.tsx';
 import { ClubHistoryCard } from '../clubHistory.tsx';
 import { affiliatesOf } from '../../engine/world/affiliates.ts';
 import { useGame } from '../state.ts';
+import { ShirtNumber } from '../shirtNumber.tsx';
 
 type SquadSort =
-  | 'name' | 'pos' | 'age' | 'height' | 'spike' | 'block' | 'ability' | 'potential'
+  | 'number' | 'name' | 'pos' | 'age' | 'height' | 'spike' | 'block' | 'ability' | 'potential'
   | 'condition' | 'morale' | 'wage' | 'contract' | 'apps' | 'rating';
 
 /** "2026/27" for a 0-based season index. */
@@ -82,6 +83,7 @@ export function SquadScreen(): JSX.Element {
   const byPos = (list: number[]): number[] => (posFilter < 0 ? list : list.filter((p) => store.position[p] === posFilter));
   const sorter = (p: number, k: SquadSort): number | string => {
     switch (k) {
+      case 'number': return g.shirtNumber(p) ?? 100;
       case 'name': return store.fullName(p);
       case 'pos': return store.position[p];
       case 'age': return age(p);
@@ -150,6 +152,7 @@ export function SquadScreen(): JSX.Element {
           <table className="data-table">
             <thead>
               <tr>
+                <SortTh k="number" sort={sort} onSort={onSort} title="Shirt number — click one to change it">No.</SortTh>
                 <th />
                 <SortTh k="name" sort={sort} onSort={onSort}>Name</SortTh>
                 <SortTh k="pos" sort={sort} onSort={onSort}>Pos</SortTh>
@@ -179,6 +182,9 @@ export function SquadScreen(): JSX.Element {
                     className={`clickable${out !== undefined || incoming !== undefined ? ' row-away' : ''}`}
                     onClick={() => g.select(p)}
                   >
+                    <td className="no-cell">
+                      {out === undefined && incoming === undefined && !borrowed.has(p) ? <ShirtNumber p={p} editable /> : <ShirtNumber p={p} />}
+                    </td>
                     <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
                     <td>
                       <span className="name-cell">
@@ -244,7 +250,7 @@ export function SquadScreen(): JSX.Element {
                 );
               })}
               {rows.length + awayRows.length === 0 && (
-                <tr><td colSpan={17}><Empty>No players in this position.</Empty></td></tr>
+                <tr><td colSpan={18}><Empty>No players in this position.</Empty></td></tr>
               )}
             </tbody>
           </table>
@@ -559,7 +565,10 @@ export function PlayerDetail(): JSX.Element | null {
               </span>
             )}
           </div>
-          <h2 className="profile-name">{store.fullName(p)}</h2>
+          <h2 className="profile-name">
+            {club !== null && <ShirtNumber p={p} size="lg" editable={isOwn && loan === null} />}
+            {store.fullName(p)}
+          </h2>
           <div className="profile-sub">
             <span>
               <Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}

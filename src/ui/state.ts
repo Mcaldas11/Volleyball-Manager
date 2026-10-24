@@ -83,7 +83,7 @@ import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
   currentPhase, dayOfSeason, DAYS_PER_SEASON, euros, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
   transferWindowOn,
-  type Fixture, type GameMessage, type ManagerProfile, type World,
+  type Fixture, type GameMessage, type ManagerLook, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import { MAX_CONTRACT_YEARS, refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
 import { releaseClauseOf, takeUpOption } from '../engine/world/contractTerms.ts';
@@ -114,6 +114,7 @@ import {
 } from '../engine/world/moves.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import { isCupFinal, trophyAtStake } from '../engine/season/cups.ts';
+import { clubNumbers, setShirtNumber, shirtNumberOf } from '../engine/world/squadNumbers.ts';
 import {
   boardArrangeFriendly, friendlyBlock, isFriendly, requestFriendly, withdrawFriendlyRequest,
 } from '../engine/season/friendlies.ts';
@@ -211,7 +212,7 @@ interface SheetOwner {
   tactics: TeamTactics;
 }
 
-export type MenuStage = 'main' | 'load' | 'createManager' | 'worldSetup';
+export type MenuStage = 'main' | 'load' | 'createManager' | 'managerLook' | 'worldSetup';
 
 /** Something the game waits on — a save, a load, a career file in or out, a new world —
  *  shown in a window of its own while it runs. */
@@ -775,8 +776,27 @@ class Game {
   }
 
   setPendingManager(manager: ManagerProfile): void {
-    this.pendingManager = manager;
+    // Whatever look was chosen already is kept, should the details be changed.
+    this.pendingManager = { ...manager, look: this.pendingManager?.look, portrait: this.pendingManager?.portrait };
+    this.menuStage = 'managerLook';
+    this.emit();
+  }
+
+  /** The look chosen for the new manager — and the portrait made from it — then on to the world. */
+  setPendingLook(look: ManagerLook, portrait: string | null): void {
+    if (this.pendingManager === null) return;
+    this.pendingManager = { ...this.pendingManager, look, portrait: portrait ?? undefined };
     this.menuStage = 'worldSetup';
+    this.emit();
+  }
+
+  /** From his profile: a new look for the manager, and a new portrait with it. */
+  setManagerLook(look: ManagerLook, portrait: string | null): void {
+    const world = this.world;
+    if (world === null) return;
+    world.manager.look = look;
+    if (portrait !== null) world.manager.portrait = portrait;
+    this.notice = 'Your new look is ready for the next match.';
     this.emit();
   }
 
@@ -3059,6 +3079,27 @@ class Game {
 
   isPlanTarget(p: number): boolean {
     return this.world !== null && isPlanTarget(this.world, p);
+  }
+
+  /** A player's shirt number at his club; null for a free agent. */
+  shirtNumber(p: number): number | null {
+    return this.world === null ? null : shirtNumberOf(this.world, p);
+  }
+
+  /** The manager's squad and the number each wears. */
+  squadNumbers(): Map<number, number> {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? new Map() : clubNumbers(world, club);
+  }
+
+  /** Give one of the squad a number — a team-mate wearing it takes his old one. */
+  setShirtNumber(p: number, n: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    this.notice = setShirtNumber(world, club, p, n).text;
+    this.emit();
   }
 
   /** From a player's profile: on the plan for his position's first gap (this season's if there is none), or off it. */

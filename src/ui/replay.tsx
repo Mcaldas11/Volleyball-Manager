@@ -171,6 +171,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
             teamNames={[home?.shortName ?? 'Home', away?.shortName ?? 'Away']}
             view={view}
             camera={g.courtCamera}
+            numberOf={(p) => g.shirtNumber(p)}
             crowdFill={crowdFor(world, h.competitionId ?? -1, 0.6)}
           />
           {pace !== 1 && !done && <span className="rp-slowmo"><Icon name="clock" size={12} /> Slow motion</span>}

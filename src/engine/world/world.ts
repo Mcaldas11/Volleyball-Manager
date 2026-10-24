@@ -491,6 +491,29 @@ export interface ManagerProfile {
   gender: 'male' | 'female';
   /** Index into NATIONS, same convention as Club.nation / player nation fields. */
   nation: number;
+  /** How the manager looks on the touchline, as chosen — absent: a polo in the club's colours. */
+  look?: ManagerLook;
+  /** A portrait made from that look, as an image's data URL — absent: a photo picked for the name. */
+  portrait?: string;
+}
+
+/** What the manager wears on the touchline, and looks like. Colours are CSS hex; 'club' is the club's own. */
+export interface ManagerLook {
+  outfit: 'suit' | 'tracksuit' | 'polo' | 'shirt';
+  /** The jacket, the tracksuit top or the polo. */
+  top: string;
+  /** Under a suit, or the shirt itself. */
+  shirt: string;
+  tie: string | null;
+  trousers: string;
+  shoes: string;
+  /** Index into the skin tones, lightest first. */
+  skin: number;
+  hair: string;
+  /** Men: cropped, short, shaved. Women: a ponytail, a bun, a bob. */
+  hairStyle: number;
+  beard: 0 | 1 | 2;
+  glasses: boolean;
 }
 
 /** A manager profile for headless call sites (CLI/calibration) with no real user. */
@@ -747,6 +770,8 @@ export interface World {
   predictions?: Prediction[];
   /** Changed by hand in the editor: such a career earns no achievements. */
   edited?: boolean;
+  /** Each player's shirt number at his club — see squadNumbers.ts. */
+  shirtNumbers?: Record<number, number>;
   /** The real players written into the game, where each is in the store, by key — see uniquePlayers.ts. */
   uniquePlayers?: Record<string, number>;
   /** Agents' business: the summer moves lined up for the manager's players, and the clients offered him lately — see agents.ts. */

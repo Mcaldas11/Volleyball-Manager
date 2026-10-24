@@ -19,6 +19,8 @@ import { coachAccolades } from '../../engine/world/accolades.ts';
 import { CoachAttributes, coachStrengths } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { EditLookDialog } from '../lookEditor.tsx';
+import { clubKit } from '../kits.ts';
 import { Dropdown } from '../dropdown.tsx';
 
 const EXIT_LABEL: Readonly<Record<JobExit, string>> = {
@@ -240,6 +242,7 @@ export function CareerScreen(): JSX.Element {
   const career = world.career;
   const m = world.manager;
   const name = `${m.firstName} ${m.lastName}`;
+  const [editingLook, setEditingLook] = useState(false);
   const club = g.club;
   const jobs = career.jobs;
   const spells = careerSpells(world);
@@ -250,8 +253,22 @@ export function CareerScreen(): JSX.Element {
 
   return (
     <div className="club-profile">
+      {editingLook && (
+        <EditLookDialog
+          initial={m.look}
+          women={m.gender === 'female'}
+          kit={club !== null ? clubKit(club) : undefined}
+          onSave={(look, portrait) => { g.setManagerLook(look, portrait); setEditingLook(false); }}
+          onClose={() => setEditingLook(false)}
+        />
+      )}
       <div className="club-hero career-hero">
-        <PersonFace photoUrl={managerPhotoUrl(m)} name={name} size={84} />
+        <span className="career-face">
+          <PersonFace photoUrl={managerPhotoUrl(m)} name={name} size={84} />
+          <button className="sm career-look-btn" onClick={() => setEditingLook(true)} title="Change how you look on the touchline">
+            <Icon name="user" size={12} /> Your look
+          </button>
+        </span>
         <div className="club-hero-text">
           <span className="club-hero-kicker"><Flag nation={m.nation} /> {NATIONS[m.nation]?.name ?? '—'} · Age {world.year - m.birthYear}</span>
           <h2 className="club-hero-name">{name}</h2>

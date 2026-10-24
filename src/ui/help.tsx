@@ -34,6 +34,7 @@ const TOPICS: readonly HelpTopic[] = [
         <p>On a profile, <b>Talk</b> lets you speak to him one to one — praise him when he is playing well, criticise him when he is not (if he can take it), lift him when he is down, or promise him games. Keep your promises: a broken one makes him want out. A player unhappy for weeks asks to leave.</p>
         <p>Some players have <b>traits</b> — the gold tags by their position: a big jump server, a setter who runs the floor, a libero who digs everything. Each makes him a little better at it.</p>
         <p>The <b>Dressing Room</b> shows who the squad listens to, and how well it holds together. A tight squad plays a little above itself; one full of new faces, or that has just lost a leader, a little below. Pick your captain there.</p>
+        <p>Each player wears his own <b>shirt number</b>: click it in the squad list or on his profile to give him another — one a team-mate wears swaps the two. The shirts in the match wear them.</p>
         <p>The <b>Squad Planner</b> looks two seasons ahead: contracts running out, players who may retire, academy players coming through, and the gaps that leaves at each position. Mark transfer targets against the gaps.</p>
         <p>Turn down a bid one of your players wanted and he comes to see you. Tell him he is too important to sell, that the right offer will see him go, that a better contract is coming, or that he is staying — and be ready to keep your word. Leave him waiting a week and he takes the silence as an answer.</p>
       </>

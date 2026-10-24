@@ -22,7 +22,7 @@ import { TaskWindow } from './taskWindow.tsx';
 import { CLUBLESS_SCREENS, NATIONAL_TEAM_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import { NationalSquadScreen } from './screens/National.tsx';
 import {
-  CreateManager, ClubSelect, LoadGameList, MainMenu, NationSelect, WorldSetup,
+  CreateLook, CreateManager, ClubSelect, LoadGameList, MainMenu, NationSelect, WorldSetup,
 } from './screens/Menu.tsx';
 import { CalendarScreen } from './screens/Calendar.tsx';
 import { CareerScreen, JobCentreScreen } from './screens/Career.tsx';
@@ -298,6 +298,7 @@ function MenuScreen(): JSX.Element {
     case 'main': return <MainMenu />;
     case 'load': return <LoadGameList />;
     case 'createManager': return <CreateManager />;
+    case 'managerLook': return <CreateLook />;
     case 'worldSetup': return <WorldSetup />;
     default: return <MainMenu />;
   }

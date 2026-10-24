@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { DEFAULT_LOOK } from '../coachLook.ts';
+import type { CoachPreviewHandle } from '../coachPreview.tsx';
+import { LookEditor } from '../lookEditor.tsx';
 import logo from '../logo.png';
 import { PlayerFlag } from '../../engine/model/players.ts';
 import {
   pickSquad, secondNation, SQUAD_SIZE, worldRanking, type Tournament,
 } from '../../engine/world/internationals.ts';
 import type { Position } from '../../engine/model/positions.ts';
-import type { Competition, ManagerProfile } from '../../engine/world/world.ts';
+import type { Competition, ManagerLook, ManagerProfile } from '../../engine/world/world.ts';
 import { NATIONS, nationsIn, type Confederation } from '../../engine/world/nations.ts';
 import {
   abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, Segmented, StarMeter,
@@ -110,9 +113,9 @@ export function MainMenu(): JSX.Element {
 
 /** The new-career steps for each kind of career. */
 const STEPS: Readonly<Record<CareerMode, readonly string[]>> = {
-  club: ['Manager', 'World', 'Club'],
-  national: ['Manager', 'World', 'National team'],
-  both: ['Manager', 'World', 'Club', 'National team'],
+  club: ['Manager', 'Look', 'World', 'Club'],
+  national: ['Manager', 'Look', 'World', 'National team'],
+  both: ['Manager', 'Look', 'World', 'Club', 'National team'],
 };
 
 /** The new-career flow's frame: the step you're on, then that step's content. */
@@ -319,6 +322,31 @@ export function CreateManager(): JSX.Element {
   );
 }
 
+/** How the manager looks on the touchline: the outfit, its colours, his face — and a portrait made from it. */
+export function CreateLook(): JSX.Element {
+  const g = useGame();
+  const manager = g.pendingManager;
+  const [look, setLook] = useState<ManagerLook>(manager?.look ?? DEFAULT_LOOK);
+  const preview = useRef<CoachPreviewHandle>(null);
+  const women = manager?.gender === 'female';
+  return (
+    <Wizard
+      step={1}
+      wide
+      title="Your look"
+      subtitle={`How ${manager?.firstName ?? 'you'} will look on the touchline — at the bench in every match, and in ${women ? 'her' : 'his'} portrait. It can be changed later from the profile.`}
+    >
+      <LookEditor look={look} onChange={setLook} women={women} previewRef={preview} />
+      <div className="wizard-actions">
+        <button onClick={() => g.goToMenu('createManager')}><Icon name="back" size={14} /> Back</button>
+        <button className="primary" onClick={() => g.setPendingLook(look, preview.current?.portrait() ?? null)}>
+          Continue <Icon name="forward" size={14} />
+        </button>
+      </div>
+    </Wizard>
+  );
+}
+
 const CAREER_MODES: ReadonlyArray<{ id: CareerMode; title: string; text: string; icon: 'club' | 'world' | 'trophy' }> = [
   { id: 'club', icon: 'club', title: 'Club', text: 'Head coach, general manager and sporting director of a club.' },
   { id: 'national', icon: 'world', title: 'National team', text: 'Name the squads and coach a nation at the Nations League, the continental championships, the Worlds and the Olympics.' },
@@ -349,7 +377,7 @@ export function WorldSetup(): JSX.Element {
   };
 
   return (
-    <Wizard step={1} title="Set up the world" subtitle="Choose what you will manage and how large a world to generate.">
+    <Wizard step={2} title="Set up the world" subtitle="Choose what you will manage and how large a world to generate.">
       <Card title="Your Career" icon="career"
         actions={(
           <span className="game-pick" title={GAMES.find((m) => m.id === gender)?.text}>
@@ -400,7 +428,7 @@ export function WorldSetup(): JSX.Element {
       </Card>
 
       <div className="wizard-actions">
-        <button onClick={() => g.goToMenu('createManager')} disabled={building}>
+        <button onClick={() => g.goToMenu('managerLook')} disabled={building}>
           <Icon name="back" size={14} /> Back
         </button>
         <button className="primary" onClick={start} disabled={building}>
@@ -499,7 +527,7 @@ export function ClubSelect(): JSX.Element {
 
   return (
     <Wizard
-      step={2}
+      step={3}
       wide
       title="Choose a club"
       subtitle={g.careerMode === 'both'
@@ -710,7 +738,7 @@ export function NationSelect(): JSX.Element {
   const tournaments = (world.internationals?.tournaments ?? []).filter((t) => t.status !== 'done');
   const playsIn = (n: number): Tournament[] => tournaments.filter((t) => t.teams.includes(n)).sort((a, b) => a.startDay - b.startDay);
   const team = row !== undefined ? world.nationalTeams.find((t) => t.nation === row.nation) : undefined;
-  const steps = both ? 3 : 2;
+  const steps = both ? 4 : 3;
 
   return (
     <Wizard
