@@ -492,10 +492,12 @@ Before committing a change:
 - [x] Match sounds — the whistle, the ball, the crowd, the timeout hooter —
       made in the browser, with a mute button
 - [x] In-game help, a topic at a time, and a hands-on tutorial for every new
-      career: 34 steps through a first week in charge — the inbox, a player's
-      profile and a talk with him, the dressing room, the team sheet and the
-      instructions, training, transfers and the money, then match day: the
-      team talk, kick off, a timeout, the challenge — each pointing at the one
+      career: 44 steps through a first week in charge — the inbox, a player's
+      profile and a talk with him, the dressing room, the squad planner, the
+      team sheet and the instructions, training, scouting and scout missions,
+      transfers, deadline day, the director and delegation, the staff
+      meeting and the money, then match day: the team talk, kick off, the
+      camera, a timeout, the challenge — each pointing at the one
       thing to use, the rest of the screen held, until the player has done it
 - [x] Every screen fits the window, Football Manager style: the page never
       scrolls, long lists scroll inside their own panels, and the layout

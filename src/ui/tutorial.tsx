@@ -75,7 +75,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'message', chapter: 'The inbox', title: 'Read a message',
-    body: 'Unread ones are in bold. A red dot means Action needed: an offer, a contract, a player asking to leave — something that waits for your answer.',
+    body: 'Unread ones are in bold. A red dot means Action needed: an offer, a contract, a player who wants a word or asks to leave — something that waits for your answer. Before every match, the preview is here too: the odds, the form and what the fans think.',
     todo: 'Click any message to read it.',
     target: '.mail-list',
     needs: (g) => g.screen === 'inbox',
@@ -156,6 +156,22 @@ export const TUTORIAL: readonly TutorialStep[] = [
     needs: (g) => plainScreen(g, 'dressing'),
     backTo: 'dressing',
   },
+  {
+    id: 'planner', chapter: 'Your players', title: 'Planning ahead',
+    body: 'The Squad Planner looks two seasons ahead: who is still under contract, whose deal runs out, who may retire, the academy players coming through — and where that leaves you short.',
+    todo: 'Open the Squad Planner tab — from Squad, if the tab is not showing.',
+    target: ['[data-tour="tab-planner"]', '[data-tour="nav-squad"]'],
+    needs: (g) => g.screen === 'squad' || g.screen === 'dressing' || g.screen === 'planner' || g.selectedPlayer !== null,
+    backTo: 'squad',
+    done: (g) => plainScreen(g, 'planner'),
+  },
+  {
+    id: 'plan', chapter: 'Your players', title: 'Gaps and targets',
+    target: '.plan-grid',
+    body: 'Each season, position by position, against the depth a side needs — a gap shows in red. Mark a transfer target against a gap, from a player\'s profile or from the scouts\' list, and the wage bill for each season stays in view.',
+    needs: (g) => plainScreen(g, 'planner'),
+    backTo: 'planner',
+  },
   // ---- Picking the team ----
   {
     id: 'lineup', chapter: 'Picking the team', title: 'The team sheet',
@@ -217,13 +233,67 @@ export const TUTORIAL: readonly TutorialStep[] = [
     snapshot: (g) => (g.club !== null ? JSON.stringify(planOf(g.club)) : ''),
     done: (g, s) => g.club !== null && JSON.stringify(planOf(g.club)) !== s.snap,
   },
-  // ---- The club ----
+  // ---- Recruitment ----
   {
-    id: 'transfers', chapter: 'The club', title: 'Transfers',
-    body: 'Most moves happen as contracts run out. Your budget is at the top; Scouting finds players, and a player\'s profile has the button to make an offer.',
+    id: 'scouting', chapter: 'Recruitment', title: 'Finding players',
+    body: 'Scouting searches every player your scouts know about, by position, age, height, potential and price. A player\'s profile has the buttons to make an offer or put him on your shortlist.',
+    todo: 'Open Scouting.',
+    target: '[data-tour="nav-scouting"]',
+    done: (g) => plainScreen(g, 'scouting'),
+  },
+  {
+    id: 'missions', chapter: 'Recruitment', title: 'Send the scouts out',
+    body: 'Or give the scouts a brief — "an opposite aged 24 or under, up to €200k" — and they go looking. Every week each mission brings back new names, onto your Shortlist and into the inbox.',
+    todo: 'Open the Scout Missions tab.',
+    target: ['[data-tour="tab-missions"]', '[data-tour="nav-scouting"]'],
+    needs: (g) => g.screen === 'scouting' || g.screen === 'shortlist' || g.screen === 'missions',
+    backTo: 'scouting',
+    done: (g) => plainScreen(g, 'missions'),
+  },
+  {
+    id: 'brief', chapter: 'Recruitment', title: 'A brief',
+    target: '.rc-missions',
+    body: 'Pick a position, an age, a price, a level and a region — or free agents only — and send them. Up to four missions at once; call one off once you have your man. The Shortlist tab keeps everyone they name, and anyone you add yourself.',
+    needs: (g) => plainScreen(g, 'missions'),
+    backTo: 'missions',
+  },
+  {
+    id: 'transfers', chapter: 'Recruitment', title: 'Transfers',
+    body: 'Your budgets, the bids for your players and your own deals. A player with years left on his contract costs more; one whose deal is running out goes cheaply. Turn down a move one of your players wanted, and he will come and ask you why.',
     todo: 'Open Transfers.',
     target: '[data-tour="nav-transfers"]',
     done: (g) => plainScreen(g, 'transfers'),
+  },
+  {
+    id: 'deadline', chapter: 'Recruitment', title: 'Deadline day',
+    target: '[data-tour="tab-deadline"]',
+    body: 'The last day of every window has a screen of its own: a clock running down to midnight, the late deals and rumours as they break, last-minute bids for your players — and whatever you still have open.',
+    needs: (g) => g.screen === 'transfers' || g.screen === 'deadline' || g.screen === 'director',
+    backTo: 'transfers',
+  },
+  {
+    id: 'director', chapter: 'Recruitment', title: 'You don\'t have to do it all',
+    body: 'Some of the job can be handed over.',
+    todo: 'Open the Director & Delegation tab.',
+    target: '[data-tour="tab-director"]',
+    needs: (g) => g.screen === 'transfers' || g.screen === 'deadline' || g.screen === 'director',
+    backTo: 'transfers',
+    done: (g) => plainScreen(g, 'director'),
+  },
+  {
+    id: 'delegate', chapter: 'Recruitment', title: 'The director, and who does what',
+    target: '.rc-director',
+    body: 'Hire a Director of Football (from Staff) and he does deals for you: hand him a signing or a renewal from a player\'s profile, with the most he may pay, and he reports back. Below, choose who handles renewals, friendlies, training and the press — you, your assistant or the director.',
+    needs: (g) => plainScreen(g, 'director'),
+    backTo: 'director',
+  },
+  // ---- The club ----
+  {
+    id: 'meeting', chapter: 'The club', title: 'The staff meeting',
+    body: 'On the 3rd of every month your staff bring their suggestions: a key contract to renew, a position short for next season, a player heading for an injury, a youngster ready for the first team. Take each one, or leave it.',
+    todo: 'Open Staff, then the Staff Meeting tab.',
+    target: ['[data-tour="tab-meeting"]', '[data-tour="nav-staff"]'],
+    done: (g) => plainScreen(g, 'meeting'),
   },
   {
     id: 'finances', chapter: 'The club', title: 'The money',
@@ -270,9 +340,19 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'live', chapter: 'Matchday', title: 'The match',
     target: '.lv-court',
-    body: 'Every rally is played out by the engine: serve, pass, set, attack, block, dig. Beside the court, each player\'s live rating; below, the point by point. 3D or 2D, names or ratings — the buttons on the court.',
+    body: 'Every rally is played out by the engine: serve, pass, set, attack, block, dig. Beside the court, each player\'s live rating; below, the point by point. 3D or 2D, names or ratings, the camera — the buttons on the court.',
     needs: (g) => g.matchday?.stage === 'live',
     backTo: 'to-match',
+  },
+  {
+    id: 'camera', chapter: 'Matchday', title: 'Pick your camera',
+    body: 'Broadcast is the main TV camera. Dynamic follows the ball up close; Professional cuts between shots like a TV director; Sky looks straight down; Behind sits behind your end line; Courtside is down by the court. The menu shows in 3D.',
+    todo: 'Choose a different camera.',
+    target: '.lv-court-tools',
+    needs: (g) => g.matchday?.stage === 'live',
+    backTo: 'to-match',
+    snapshot: (g) => g.courtCamera,
+    done: (g, s) => g.courtCamera !== s.snap,
   },
   {
     id: 'timeout', chapter: 'Matchday', title: 'Timeout',
@@ -320,7 +400,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'done', chapter: 'All set', title: 'Over to you',
-    body: 'That is the job: keep the players happy, pick the team, set the training, win matches — and keep the board on your side. The ? at the top opens the help any time, and this tutorial again.',
+    body: 'That is the job: keep the players happy, pick the team, set the training, plan the squad, win matches — and keep the board on your side. The ? at the top opens the help any time, and this tutorial again.',
   },
 ];
 
