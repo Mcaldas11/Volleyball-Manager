@@ -20,6 +20,7 @@ import { CoachAttributes, coachStrengths } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { EditLookDialog } from '../lookEditor.tsx';
+import { InterviewDialog } from './Insights.tsx';
 import { clubKit } from '../kits.ts';
 import { Dropdown } from '../dropdown.tsx';
 
@@ -123,7 +124,18 @@ export function VacancyAction({ club }: { club: Club }): JSX.Element {
   if (career.applications.some((a) => a.clubId === club.id)) return <span className="faint">Applied</span>;
   const problem = applicationBlock(world, club.id);
   if (problem !== null) return <span className="faint" title={problem}>Unavailable</span>;
-  return <button className="primary sm" onClick={() => g.applyForJob(club.id)}>Apply</button>;
+  return <ApplyButton club={club} />;
+}
+
+/** Apply — the board sits down with you first. */
+function ApplyButton({ club }: { club: Club }): JSX.Element {
+  const [interview, setInterview] = useState(false);
+  return (
+    <>
+      <button className="primary sm" onClick={() => setInterview(true)} title="An interview with the board, then your application">Apply</button>
+      {interview && <InterviewDialog club={club} onClose={() => setInterview(false)} />}
+    </>
+  );
 }
 
 /** One spell in a job — at a club or at the head of a nation — as the history lists it. */

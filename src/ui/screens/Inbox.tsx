@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
+import { MIND_GAME_REPLIES } from '../../engine/world/mindGames.ts';
 import { MeetingSheet } from '../staffMeeting.tsx';
 import { relapseChance, TREATMENT_NAMES, treatmentWeeks, type Treatment } from '../../engine/world/treatment.ts';
 import { INJURY_NAMES } from '../../engine/model/players.ts';
@@ -1221,6 +1222,17 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
         }[approach.status]}
       </span>,
     );
+  }
+  // A rival coach's words before a big match: the reply.
+  if (m.mindGameOf !== undefined) {
+    const mg = world.mindGames?.find((x) => x.fixtureId === m.mindGameOf);
+    if (mg !== undefined && mg.reply === undefined && world.fixtures[mg.fixtureId]?.played !== true) {
+      for (const r of MIND_GAME_REPLIES) {
+        out.push(<button key={`mg-${r.id}`} className={`paper-btn${r.id === 'fire' ? ' primary-dark' : ''}`} title={`${r.line} — ${r.hint}`} onClick={() => g.answerMindGame(mg.fixtureId, r.id)}>{r.name}</button>);
+      }
+    } else if (mg?.reply !== undefined) {
+      out.push(<span key="mg-done" className="paper-note">You replied: {MIND_GAME_REPLIES.find((r) => r.id === mg.reply)?.name.toLowerCase()}.</span>);
+    }
   }
   // A player who wants a word about a move the club blocked: call him in.
   if (m.moveTalkOf !== undefined) {

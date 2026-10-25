@@ -90,6 +90,8 @@ export interface JobApplication {
   clubId: number;
   sentOn: number;
   answerOn: number;
+  /** What the interview did to the board's view of him — added to its chance of offering the job. */
+  interview?: number;
 }
 
 /** A club without a head coach. */
@@ -115,6 +117,8 @@ export interface ManagerCareer {
   warnedOn: number;
   /** Clubs he left on bad terms or turned down, and the day each will consider him again. */
   blockedUntil: Map<number, number>;
+  /** The career began out of work, applying for jobs — see startOutOfWork. */
+  startedOutOfWork?: boolean;
   /** Day a club last approached him unprompted, -1 if never. */
   lastApproach: number;
   /** Days on holiday this season (see holiday.ts). Absent until he first takes one. */
@@ -204,7 +208,32 @@ export function currentJob(world: World): ManagerJob | undefined {
 
 /** Out of work, between jobs — as opposed to not having picked a first club yet. */
 export function isUnemployed(world: World): boolean {
-  return world.userClubId < 0 && world.career.jobs.length > 0;
+  return world.userClubId < 0 && (world.career.jobs.length > 0 || world.career.startedOutOfWork === true);
+}
+
+/**
+ * Begin a career out of work: an unknown name, a few clubs looking for a coach — the smaller ones
+ * likeliest to take a chance on him — and the Job Centre to apply from.
+ */
+export function startOutOfWork(world: World): void {
+  const career = world.career;
+  career.startedOutOfWork = true;
+  ensureManagerAttributes(world);
+  // A handful of vacancies, mostly at modest clubs, open for a while.
+  const modest = world.clubs
+    .filter((c) => c.players.length > 0 && vacancyAt(world, c.id) === undefined)
+    .sort((a, b) => a.reputation - b.reputation);
+  const pick = [...modest.slice(0, Math.max(6, Math.floor(modest.length * 0.35)))];
+  const opened: Club[] = [];
+  for (let k = 0; k < 7 && pick.length > 0; k++) {
+    const club = pick.splice(world.rng.int(0, pick.length - 1), 1)[0];
+    detachHeadCoaches(world, club);
+    world.vacancies.push({ clubId: club.id, since: world.day, fillsOn: world.day + world.rng.int(40, 80) });
+    opened.push(club);
+  }
+  // An unknown name — but one those modest clubs would consider.
+  const typical = opened.reduce((sum, c) => sum + c.reputation, 0) / Math.max(1, opened.length);
+  career.reputation = clampReputation(Math.max(600, typical * 0.9));
 }
 
 /** The day the user's last job ended, -1 if he has never left one. */
@@ -776,10 +805,10 @@ export function applicationBlock(world: World, clubId: number): string | null {
   return null;
 }
 
-/** Apply for a vacancy; the club answers within a week. */
-export function applyForJob(world: World, clubId: number): JobApplication | null {
+/** Apply for a vacancy — `interview`, how the interview with the board went; the club answers within a week. */
+export function applyForJob(world: World, clubId: number, interview?: number): JobApplication | null {
   if (applicationBlock(world, clubId) !== null) return null;
-  const app: JobApplication = { clubId, sentOn: world.day, answerOn: world.day + world.rng.int(3, 7) };
+  const app: JobApplication = { clubId, sentOn: world.day, answerOn: world.day + world.rng.int(3, 7), interview };
   world.career.applications.push(app);
   return app;
 }
@@ -855,7 +884,8 @@ function answerApplications(world: World): void {
     career.applications = career.applications.filter((a) => a !== app);
     const club = world.clubs[app.clubId];
     if (club === undefined) continue;
-    if (vacancyAt(world, club.id) !== undefined && world.rng.chance(hiringChance(world, club))) {
+    const chance = Math.max(0.02, Math.min(0.97, hiringChance(world, club) + (app.interview ?? 0)));
+    if (vacancyAt(world, club.id) !== undefined && world.rng.chance(chance)) {
       makeOffer(world, club, true);
       continue;
     }

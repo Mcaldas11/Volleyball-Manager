@@ -18,6 +18,8 @@ import { recruitmentDay } from '../world/recruitment.ts';
 import { delegationDay } from '../world/delegation.ts';
 import { directorDay } from '../world/director.ts';
 import { blockedMovesDay } from '../world/blockedMoves.ts';
+import { mindGamesDay } from '../world/mindGames.ts';
+import { postMatchReview } from '../world/postMatchReview.ts';
 import { staffMeetingDay } from '../world/staffMeeting.ts';
 import { matchPreviews } from '../world/matchPreview.ts';
 import { campDay } from '../world/camp.ts';
@@ -409,6 +411,8 @@ export function applyMatchResult(
   accumulate(ctx.stats, homeStats, result.setScores.length);
   accumulate(ctx.stats, awayStats, result.setScores.length);
   recordFixture(world, fixture, homeStats, awayStats);
+  // The assistant's notes on it, for the manager.
+  postMatchReview(world, fixture);
   // Who got hurt, and how it ended — off, played on with it, worse.
   applyMatchInjuries(world, result.injuries ?? [], matchInjuryRng(world, fixture.id, fixture.day));
   applyMatchLoad(world.players, homeStats, world.rng);
@@ -574,6 +578,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   // The director's next move wherever an answer has come back — and whatever the delegates have to do.
   directorDay(world);
   blockedMovesDay(world);
+  mindGamesDay(world);
   delegationDay(world);
   // The scouts' missions: a report each week. And the agents' own business.
   recruitmentDay(world);

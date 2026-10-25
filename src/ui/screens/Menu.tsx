@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from '
 import { DEFAULT_LOOK } from '../coachLook.ts';
 import type { CoachPreviewHandle } from '../coachPreview.tsx';
 import { LookEditor } from '../lookEditor.tsx';
+import { CareerStartOptions } from './Insights.tsx';
 import logo from '../logo.png';
 import { PlayerFlag } from '../../engine/model/players.ts';
 import {
@@ -624,6 +625,7 @@ export function ClubSelect(): JSX.Element {
                   </span>
                 </span>
               )}
+            <CareerStartOptions />
             <button
               className="primary lg"
               disabled={club === undefined}

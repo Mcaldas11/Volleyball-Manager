@@ -48,6 +48,7 @@ import { SquadPlannerScreen } from './screens/SquadPlanner.tsx';
 import { DirectorScreen, MissionsScreen, ShortlistScreen } from './screens/Recruitment.tsx';
 import { DeadlineDayScreen } from './screens/DeadlineDay.tsx';
 import { StaffMeetingScreen } from './staffMeeting.tsx';
+import { CoachesScreen, DataHubScreen, DraftScreen, SocialScreen } from './screens/Insights.tsx';
 import { HelpDialog } from './help.tsx';
 import { TutorialOverlay } from './tutorial.tsx';
 import { AffiliatesScreen, OwnerScreen, CommercialScreen, FacilitiesScreen } from './screens/ClubBusiness.tsx';
@@ -109,7 +110,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
       },
       { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Training']] },
-      { id: 'analysis', label: 'Analysis', icon: 'stats', tabs: [['analysis', 'Analysis']] },
+      { id: 'analysis', label: 'Analysis', icon: 'stats', tabs: [['analysis', 'Analysis'], ['datahub', 'Data Hub']] },
       { id: 'academy', label: 'Academy', icon: 'youth', tabs: [['youth', 'Youth Academy']] },
     ],
   },
@@ -138,7 +139,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
     label: 'World',
     sections: [
-      { id: 'news', label: 'News', icon: 'news', tabs: [['news', 'World News']] },
+      { id: 'news', label: 'News', icon: 'news', tabs: [['news', 'World News'], ['social', 'Social']] },
       {
         id: 'calendar',
         label: 'Calendar',
@@ -155,7 +156,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         id: 'stats',
         label: 'Stats',
         icon: 'stats',
-        tabs: [['stats', 'Player Stats'], ['rankings', 'World Rankings'], ['halloffame', 'Hall of Fame']],
+        tabs: [['stats', 'Player Stats'], ['rankings', 'World Rankings'], ['coaches', 'Coaches'], ['halloffame', 'Hall of Fame']],
       },
       { id: 'editor', label: 'Editor', icon: 'gear', tabs: [['editor', 'Editor']] },
     ],
@@ -308,8 +309,13 @@ function Screen(): JSX.Element {
   const g = useGame();
   // Out of work, anything about the club is gone with it — but a national team has a squad and a team sheet too.
   const nationalTeamScreen = g.nationalView() && NATIONAL_TEAM_SCREENS.has(g.screen);
+  // A created club's draft comes before anything else.
+  if (g.world?.draft !== undefined) return <DraftScreen />;
   if (g.club === null && !CLUBLESS_SCREENS.has(g.screen) && !nationalTeamScreen) return <HomeScreen />;
   switch (g.screen) {
+    case 'datahub': return <DataHubScreen />;
+    case 'social': return <SocialScreen />;
+    case 'coaches': return <CoachesScreen />;
     case 'home': return <HomeScreen />;
     case 'inbox': return <InboxScreen />;
     case 'career': return <CareerScreen />;

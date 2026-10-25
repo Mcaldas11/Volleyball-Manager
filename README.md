@@ -382,6 +382,33 @@ Before committing a change:
       a medic running on to an injured player. Two line judges at opposite
       corners flag every ball near their lines: in, out, or off the block; and
       the video replay goes in close, low over the spot where it came down
+- [x] A Data Hub: every side in a league measured — attack efficiency, kill
+      rate, aces, blocks and digs a set, passing, points scored and conceded
+      a set, matches won — on a scatter of any two against the league's
+      average, and in a table; and your six rotations, their side-out, break
+      point and expected points, against your opponents'
+- [x] Any point of a live match played again in 3D: click it in the point by
+      point log
+- [x] The assistant's review after every match: what worked, what went wrong
+      and what he would change for the next one — the opponent's main threat
+      included
+- [x] Job interviews: apply for a job and the board asks what you can achieve,
+      how you would use the budget and how you want to play. Each board wants
+      something of its own, and your answers move its decision
+- [x] A world ranking of head coaches, the manager among them, and each club's
+      and each country's coaching legends
+- [x] Ways to begin: out of work, applying from the Job Centre; with a
+      challenge — keep the weakest side up, win your continent's champions'
+      cup in five seasons, win the cup with an outsider, take a second-division
+      club up — checked every summer; or with a club of your own, named and
+      coloured, in place of a league's weakest, its squad from a fantasy draft
+      of the whole league's players
+- [x] A social feed: the journalists' stories with the fans' replies, your
+      club's results, its players after a big night or a hard one, a new
+      signing's hello
+- [x] Mind games: before a derby, a classic, a final or a top-of-the-table
+      clash the other coach has his say; fire back, play it down or praise
+      them — and a reply that fires back is remembered after the match
 - [x] Squad numbers: every player at a club wears his own, 1 to 99. Pick
       your players' from the squad list or a profile — a grid of every
       number, the ones taken marked; giving a player a team-mate's number

@@ -1676,12 +1676,14 @@ function LiveMatchView(): JSX.Element {
                 const won = r.winner;
                 const d = describeRallyHighlight(r, store);
                 return (
-                  <div key={points.length - i} className={`lv-pbp-row ${won === 0 ? 'home' : 'away'}`}>
+                  <div key={points.length - i} className={`lv-pbp-row clickable ${won === 0 ? 'home' : 'away'}`}
+                    title="Watch this point again" onClick={() => g.replayRally(points.length - 1 - i)}>
                     <span className="lv-pbp-score">{r.scoreBefore[0] + (won === 0 ? 1 : 0)}-{r.scoreBefore[1] + (won === 1 ? 1 : 0)}</span>
                     <span className="lv-pbp-text">
                       {d.before}{d.player !== '' && <strong>{d.player}</strong>}{d.after}
                       {r.overturned === true && <span className="lv-video-tag" title="Turned over on video: the point went the other way">Video: overturned</span>}
                     </span>
+                    <span className="lv-pbp-watch"><Icon name="play" size={11} /></span>
                   </div>
                 );
               })}

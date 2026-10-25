@@ -107,6 +107,7 @@ const TOPICS: readonly HelpTopic[] = [
         <p>Every league, cup and international tournament is played out, whether you watch or not. Open any competition for its table, results and statistics.</p>
         <p>National team jobs come up too: you can manage a nation alongside a club. Its squad, team sheet and tactics are its own.</p>
         <p>Press <b>Ctrl+K</b> anywhere to search for a player, club or nation.</p>
+        <p><b>Social</b>, under News, is the volleyball world's timeline; <b>Coaches</b>, under Stats, ranks the head coaches and keeps each club's and country's coaching legends; the <b>Data Hub</b>, under Analysis, measures every side in a league.</p>
       </>
     ),
   },

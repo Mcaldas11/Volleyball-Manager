@@ -9,6 +9,9 @@
 
 import type { DeadlinePlan } from './deadline.ts';
 import type { MoveGrievance, MovePromise } from './blockedMoves.ts';
+import type { MindGame } from './mindGames.ts';
+import type { Challenge } from './challenges.ts';
+import type { Draft } from './createClub.ts';
 import type { PreContract } from './agents.ts';
 import type { ScoutMission } from './recruitment.ts';
 import type { Delegation } from './delegation.ts';
@@ -415,6 +418,8 @@ export interface GameMessage {
   transferRequestOf?: number;
   /** A player who wants a word about a move the club blocked — the message opens the talk. */
   moveTalkOf?: number;
+  /** A rival coach's words before a big match — the fixture: the message offers the replies. */
+  mindGameOf?: number;
   /** The summer's sponsorship offers — the message leads to them. */
   sponsorOffers?: boolean;
   /** The member of staff a message is about. */
@@ -770,6 +775,12 @@ export interface World {
   predictions?: Prediction[];
   /** Changed by hand in the editor: such a career earns no achievements. */
   edited?: boolean;
+  /** Rival coaches' words before big matches, and the manager's replies — see mindGames.ts. */
+  mindGames?: MindGame[];
+  /** The challenge the career was begun with, if any — see challenges.ts. */
+  challenge?: Challenge;
+  /** A fantasy draft of a league's players, as a created club's career begins — see createClub.ts. */
+  draft?: Draft;
   /** Each player's shirt number at his club — see squadNumbers.ts. */
   shirtNumbers?: Record<number, number>;
   /** The real players written into the game, where each is in the store, by key — see uniquePlayers.ts. */

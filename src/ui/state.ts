@@ -114,12 +114,16 @@ import {
 } from '../engine/world/moves.ts';
 import { NATIONS } from '../engine/world/nations.ts';
 import { isCupFinal, trophyAtStake } from '../engine/season/cups.ts';
+import { answerMindGame, type MindGameReply } from '../engine/world/mindGames.ts';
+import { startChallenge, type ChallengeId } from '../engine/world/challenges.ts';
+import { createClub, draftAutoPick, draftPick, finishDraft, runDraftToUser, startDraft, type NewClub } from '../engine/world/createClub.ts';
+import { rateRally } from '../engine/match/highlights.ts';
 import { clubNumbers, setShirtNumber, shirtNumberOf } from '../engine/world/squadNumbers.ts';
 import {
   boardArrangeFriendly, friendlyBlock, isFriendly, requestFriendly, withdrawFriendlyRequest,
 } from '../engine/season/friendlies.ts';
 import {
-  acceptContractOffer as signContractOffer, acceptJobOffer as takeJobOffer, appointManager, askForContract,
+  acceptContractOffer as signContractOffer, acceptJobOffer as takeJobOffer, appointManager, askForContract, startOutOfWork as startOutOfWorkCareer,
   applyForJob as sendApplication, applicationBlock, declineContractOffer as turnDownContractOffer,
   declineJobOffer as turnDownJobOffer, isUnemployed, resign as resignFromClub,
 } from '../engine/world/career.ts';
@@ -187,13 +191,13 @@ export type ScreenId =
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals'
   | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses' | 'editor'
-  | 'planner' | 'meeting' | 'shortlist' | 'missions' | 'deadline' | 'director';
+  | 'planner' | 'meeting' | 'shortlist' | 'missions' | 'deadline' | 'director' | 'datahub' | 'social' | 'coaches';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
 export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
   'home', 'inbox', 'career', 'jobs', 'competitions', 'stats', 'rankings', 'halloffame', 'news', 'internationals',
-  'achievements', 'courses', 'editor',
+  'achievements', 'courses', 'editor', 'social', 'coaches',
 ]);
 
 /** The team screens a national team has as well as a club: its squad, its team sheet, its instructions, its rotations. */
@@ -1074,6 +1078,105 @@ class Game {
     return this.careerMode === 'national' ? 'nation' : 'club';
   }
 
+  /** Begin the career out of work: no club, the Job Centre to apply from. */
+  startOutOfWork(): void {
+    const world = this.world;
+    if (world === null) return;
+    startOutOfWorkCareer(world);
+    this.screen = 'jobs';
+    this.resetHistory();
+    this.notice = 'You are out of work. Apply for the vacancies here — or wait for a club to call.';
+    this.emit();
+  }
+
+  /** Take charge, with a challenge set for the career. */
+  takeChargeWithChallenge(clubId: number, challenge: ChallengeId): void {
+    if (this.world === null) return;
+    this.takeCharge(clubId);
+    startChallenge(this.world, challenge, clubId);
+    this.emit();
+  }
+
+  /** Make the manager's own club in a league — and, if asked, draft its squad from the league's players. */
+  createOwnClub(spec: NewClub, draft: boolean): void {
+    const world = this.world;
+    if (world === null) return;
+    const id = createClub(world, spec);
+    if (id === undefined) return;
+    this.takeCharge(id);
+    if (draft) {
+      startDraft(world, spec.compId);
+      runDraftToUser(world);
+    }
+    this.emit();
+  }
+
+  /** The manager's pick in the draft — or the assistant's for him, or the rest of it left to him. */
+  draftPick(p: number): void {
+    if (this.world === null) return;
+    draftPick(this.world, p);
+    this.emit();
+  }
+
+  draftAutoPick(): void {
+    if (this.world === null) return;
+    draftAutoPick(this.world);
+    this.emit();
+  }
+
+  draftAutoAll(): void {
+    const world = this.world;
+    const d = world?.draft;
+    if (world === null || d === undefined) return;
+    for (let i = 0; i < 40 && !d.done; i++) draftAutoPick(world);
+    finishDraft(world);
+    this.emit();
+  }
+
+  /** The draft over: on with the career. */
+  closeDraft(): void {
+    const world = this.world;
+    if (world === null) return;
+    world.draft = undefined;
+    this.screen = 'squad';
+    this.emit();
+  }
+
+  /** Reply to a rival coach's words. */
+  answerMindGame(fixtureId: number, reply: MindGameReply): void {
+    if (this.world === null) return;
+    this.notice = answerMindGame(this.world, fixtureId, reply);
+    this.emit();
+  }
+
+  /** A rally of the live match, played again on the court: the point picked from the log. */
+  replayRally(i: number): void {
+    const md = this.matchday;
+    const world = this.world;
+    const l = md?.log[i];
+    if (md == null || world === null || l === undefined) return;
+    const e = l.entry;
+    const rating = rateRally(e.contacts, 0, 0);
+    const best = rating.point ?? rating.play;
+    const last = e.contacts[e.contacts.length - 1];
+    const roles = this.liveRoles();
+    const people = [...l.homeCourt, ...l.awayCourt, l.homeLibero, l.awayLibero].filter((p) => p >= 0);
+    const h: Highlight = {
+      kind: 'point', what: best?.what ?? 'rally', score: 0, set: e.set, scoreBefore: e.scoreBefore, setsBefore: l.setsBefore,
+      setTarget: e.set >= 4 ? 15 : 25, serveTeam: e.serveTeam, winner: e.winner,
+      homeCourt: l.homeCourt, awayCourt: l.awayCourt, homeLibero: l.homeLibero, awayLibero: l.awayLibero,
+      roles: people.map((p) => [p, roles[p] ?? world.players.position[p]] as [number, number]),
+      contacts: e.contacts, star: best?.star ?? last?.player ?? people[0], starTeam: best?.starTeam ?? e.winner,
+      speed: best?.speed, height: best?.height, attacks: rating.attacks, digs: rating.digs, passers: e.passers,
+      fixtureId: md.fixture.id, competitionId: md.fixture.competitionId, day: md.fixture.day,
+      home: md.sides[0].clubId >= 0 ? md.sides[0].clubId : undefined, away: md.sides[1].clubId >= 0 ? md.sides[1].clubId : undefined,
+    };
+    // Play holds while it is shown.
+    if (!md.paused) this.pause();
+    const score = `${e.scoreBefore[0] + (e.winner === 0 ? 1 : 0)}-${e.scoreBefore[1] + (e.winner === 1 ? 1 : 0)}`;
+    this.openReplay(h, `${md.sides[0].shortName} v ${md.sides[1].shortName} · set ${e.set + 1}, ${score}`);
+  }
+
   takeCharge(clubId: number): void {
     if (this.world === null) return;
     appointManager(this.world, clubId);
@@ -1153,11 +1256,11 @@ class Game {
   }
 
   /** Apply for a club's vacant head coach's job. */
-  applyForJob(clubId: number): void {
+  applyForJob(clubId: number, interview?: number): void {
     const world = this.world;
     if (world === null) return;
     const problem = applicationBlock(world, clubId);
-    const app = problem === null ? sendApplication(world, clubId) : null;
+    const app = problem === null ? sendApplication(world, clubId, interview) : null;
     this.notice = app !== null
       ? `Application sent to ${world.clubs[clubId]?.name ?? 'the club'} — expect an answer by ${this.dateLabelForDay(app.answerOn)}.`
       : problem ?? 'You cannot apply for that job.';

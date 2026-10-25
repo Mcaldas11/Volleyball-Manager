@@ -12,6 +12,7 @@
  */
 
 import { growUniquePlayers, MIN_SIGNING_AGE } from '../world/uniquePlayers.ts';
+import { challengeSeasonEnd } from '../world/challenges.ts';
 import { honourPreContract } from '../world/agents.ts';
 import { judgePhilosophy } from '../world/board.ts';
 import { summerPress } from '../world/pressRoom.ts';
@@ -119,6 +120,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   // Every board judges its coach's season — before the summer's contracts
   // run out, so a club that parts with the user renews its own players.
   seasonReckoning(world, record, finishes);
+  // A challenge the career began with: done, failed, or still on.
+  challengeSeasonEnd(world, world.season);
 
   revisePotential(world, ctx.stats);
   applyAgeing(world);
