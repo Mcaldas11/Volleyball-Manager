@@ -464,11 +464,11 @@ function ChallengeDialog({ onClose }: { onClose: () => void }): JSX.Element {
           <span className="hol-crumbs"><Icon name="trophy" size={12} /> <b>Challenges</b></span>
           <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={16} /></button>
         </header>
-        <div className="ch-list">
+        <div className="chal-list">
           {CHALLENGES.map((c) => {
             const possible = challengeClubs(world, c.id).length > 0;
             return (
-              <button key={c.id} className={`ch-item${id === c.id ? ' on' : ''}`} disabled={!possible} onClick={() => { setId(c.id); setClubId(null); }}>
+              <button key={c.id} className={`chal-item${id === c.id ? ' on' : ''}`} disabled={!possible} onClick={() => { setId(c.id); setClubId(null); }}>
                 <b>{c.name}</b>
                 <span>{c.goal}</span>
                 <small className="faint">{possible ? (c.seasons === 1 ? 'One season' : `${c.seasons} seasons`) : 'Not in this world — try a bigger one'}</small>

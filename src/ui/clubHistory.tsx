@@ -1,10 +1,10 @@
-import { useState, type JSX } from 'react';
+import { useLayoutEffect, useRef, useState, type JSX } from 'react';
 import { spellsOf, spellYears, type ClubSpell } from '../engine/world/clubHistory.ts';
 import type { World } from '../engine/world/world.ts';
 import { ClubLink, Flag } from './components.tsx';
 import { Icon } from './icons.tsx';
 
-/** Spells the profile card shows; the rest are a click away. */
+/** Spells the profile card shows where the window gives it no measure; the rest are a click away. */
 const SHOWN = 4;
 
 interface SpellRow extends ClubSpell {
@@ -60,6 +60,25 @@ function SpellHead(): JSX.Element {
 /** Where he has played: his latest clubs, the whole list a click away. */
 export function ClubHistoryCard({ world, p }: { world: World; p: number }): JSX.Element {
   const [open, setOpen] = useState(false);
+  // As many spells as the card has room for — never a list to scroll.
+  const [shown, setShown] = useState(SHOWN);
+  const listRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (el === null) return;
+    const fit = (): void => {
+      const head = el.querySelector('.ch-head')?.getBoundingClientRect().height ?? 26;
+      const row = el.querySelector('.ch-row:not(.ch-head)')?.getBoundingClientRect().height || 34;
+      const pad = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      // Not laid out to the window (a narrow one stacks and scrolls): the usual few.
+      const n = getComputedStyle(el).overflowY === 'visible' ? SHOWN : Math.floor((el.clientHeight - head - pad + 1) / row);
+      setShown(Math.max(1, n));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const rows = spellRows(world, p);
   const store = world.players;
   const nation = store.nation[p];
@@ -69,7 +88,7 @@ export function ClubHistoryCard({ world, p }: { world: World; p: number }): JSX.
       <header className="card-head">
         <Icon name="club" size={15} />
         <h3 className="card-title">Clubs</h3>
-        {rows.length > SHOWN && (
+        {rows.length > shown && (
           <div className="card-actions">
             <button className="link" onClick={() => setOpen(true)}>View all ({rows.length}) <Icon name="arrowRight" size={12} /></button>
           </div>
@@ -78,9 +97,9 @@ export function ClubHistoryCard({ world, p }: { world: World; p: number }): JSX.
       {rows.length === 0
         ? <p className="faint ch-empty">No club yet.</p>
         : (
-          <div className="ch-list">
+          <div className="ch-list" ref={listRef}>
             <SpellHead />
-            {rows.slice(0, SHOWN).map((s) => <SpellLine key={`${s.club}:${s.from}`} world={world} s={s} nation={nation} />)}
+            {rows.slice(0, shown).map((s) => <SpellLine key={`${s.club}:${s.from}`} world={world} s={s} nation={nation} />)}
           </div>
         )}
       {open && (

@@ -605,6 +605,44 @@ export function PlayerDetail(): JSX.Element | null {
             <span className={`profile-rating-num ${abilityClass(pa)}`}>{pa}</span>
           </div>
         </div>
+      </div>
+      {toDirector !== null && <DirectorDialog p={p} kind={toDirector} onClose={() => setToDirector(null)} />}
+
+      <div className="tiles">
+        <StatTile label="Value" value={money(store.value[p])} />
+        <StatTile
+          label="Wage"
+          value={money(store.wage[p])}
+          sub={borrowed ? `you pay ${loanPct} · on loan to ${loanEnds}`
+            : lentOut ? `${club?.shortName ?? 'they'} pay ${loanPct} · back ${loanEnds}`
+              : club !== null ? `per season · to ${contractLabel}` : 'per season'}
+          tone={expiring ? 'warn' : undefined}
+        />
+        <StatTile label="Condition" value={`${store.condition[p]}%`} sub={<Bar value={store.condition[p]} wide />} />
+        <StatTile label="Morale" value={<Morale value={store.morale[p]} />} sub={<Bar value={store.morale[p]} wide />} />
+        <StatTile label="Status" value={<Status store={store} i={p} />}
+          sub={g.atRisk(p) ? <span className="warn-text">rushed back — may break down</span> : undefined} />
+        <StatTile
+          label="Average rating"
+          value={<RatingBadge value={averageRating(season)} size="lg" />}
+          sub={`${season.apps} app${season.apps === 1 ? '' : 's'} this season`}
+        />
+      </div>
+
+      <div className="profile-tabs">
+        <div className="profile-tablist" role="tablist">
+          {PROFILE_TABS.map(([id, label, icon]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              className={`panel-tab${tab === id ? ' active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              <Icon name={icon} size={14} /> {label}
+            </button>
+          ))}
+        </div>
         <div className="profile-actions">
           {/* In a match there is only the reading of him: deals and talks wait for it to end. */}
           {!inMatch && (
@@ -709,42 +747,6 @@ export function PlayerDetail(): JSX.Element | null {
           <button onClick={() => g.select(null)}><Icon name="close" size={14} /> Close</button>
         </div>
       </div>
-      {toDirector !== null && <DirectorDialog p={p} kind={toDirector} onClose={() => setToDirector(null)} />}
-
-      <div className="tiles">
-        <StatTile label="Value" value={money(store.value[p])} />
-        <StatTile
-          label="Wage"
-          value={money(store.wage[p])}
-          sub={borrowed ? `you pay ${loanPct} · on loan to ${loanEnds}`
-            : lentOut ? `${club?.shortName ?? 'they'} pay ${loanPct} · back ${loanEnds}`
-              : club !== null ? `per season · to ${contractLabel}` : 'per season'}
-          tone={expiring ? 'warn' : undefined}
-        />
-        <StatTile label="Condition" value={`${store.condition[p]}%`} sub={<Bar value={store.condition[p]} wide />} />
-        <StatTile label="Morale" value={<Morale value={store.morale[p]} />} sub={<Bar value={store.morale[p]} wide />} />
-        <StatTile label="Status" value={<Status store={store} i={p} />}
-          sub={g.atRisk(p) ? <span className="warn-text">rushed back — may break down</span> : undefined} />
-        <StatTile
-          label="Average rating"
-          value={<RatingBadge value={averageRating(season)} size="lg" />}
-          sub={`${season.apps} app${season.apps === 1 ? '' : 's'} this season`}
-        />
-      </div>
-
-      <div className="profile-tabs" role="tablist">
-        {PROFILE_TABS.map(([id, label, icon]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            className={`panel-tab${tab === id ? ' active' : ''}`}
-            onClick={() => setTab(id)}
-          >
-            <Icon name={icon} size={14} /> {label}
-          </button>
-        ))}
-      </div>
 
       {tab === 'stats' && (
         <div className="profile-stats-grid">
@@ -757,38 +759,48 @@ export function PlayerDetail(): JSX.Element | null {
 
       {tab === 'overview' && (
         <div className="profile-grid">
-          <Card title="Attributes" icon="stats" className="profile-attrs">
+          <Card
+            title="Attributes"
+            icon="stats"
+            className="profile-attrs"
+            actions={(
+              <span
+                className="attr-hidden-hint"
+                title="Hidden attributes — injury proneness, consistency, big-match performance, loyalty, ambition and the rest — are never shown as numbers. They are inferred from scout reports and from how the player actually behaves."
+              >
+                <Icon name="help" size={13} /> Hidden attributes
+              </span>
+            )}
+          >
             <div className="attr-cols">
               {group(TECHNICAL_ATTRS, 'Technical')}
               {group(MENTAL_ATTRS, 'Mental')}
-              {group(PHYSICAL_ATTRS, 'Physical')}
+              <div className="attr-col">
+                {group(PHYSICAL_ATTRS, 'Physical')}
+                <div className="attr-col">
+                  <h4 className="attr-col-title attr-col-sub">Positions</h4>
+                  {POSITIONS.map((pos) => {
+                    const known = store.familiarityWith(p, pos);
+                    const fam = familiarityLabel(known, pos === natural);
+                    const learning = club?.id === world.userClubId ? g.positionTraining(p) === pos : false;
+                    return (
+                      <div className="fam-row" key={pos} title={`${POSITION_NAMES[pos]} — ${known}/100, how much he plays like one${learning ? '. Training there.' : ''}`}>
+                        <Pos pos={pos} />
+                        <span className="fam-learning">{learning ? 'Training' : ''}</span>
+                        <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${known}%` }} /></span>
+                        <span className={`fam-label ${fam.cls}`}>{fam.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <p className="footnote">
-              Hidden attributes — injury proneness, consistency, big-match performance,
-              loyalty, ambition and the rest — are never shown as numbers. They are
-              inferred from scout reports and from how the player actually behaves.
-            </p>
           </Card>
 
           <div className="stack profile-side">
-            <Card title="Attribute Profile" icon="star">
+            <Card title="Attribute Profile" icon="star" className="profile-shape">
               <AttributeRadar store={store} p={p} />
               <ArmsPanel store={store} p={p} />
-            </Card>
-            <Card title="Positions" icon="tactics">
-              {POSITIONS.map((pos) => {
-                const known = store.familiarityWith(p, pos);
-                const fam = familiarityLabel(known, pos === natural);
-                const learning = club?.id === world.userClubId ? g.positionTraining(p) === pos : false;
-                return (
-                  <div className="fam-row" key={pos} title={`${known}/100 — how much he plays like one`}>
-                    <Pos pos={pos} />
-                    <span className="fam-name">{POSITION_NAMES[pos]}{learning && <span className="fam-learning"> · training</span>}</span>
-                    <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${known}%` }} /></span>
-                    <span className={`fam-label ${fam.cls}`}>{fam.label}</span>
-                  </div>
-                );
-              })}
             </Card>
           </div>
         </div>
@@ -1255,20 +1267,28 @@ function InterestedClubs({ p }: { p: number }): JSX.Element {
   );
 }
 
+/** Honours and awards on a profile: the latest few, the rest behind a count. */
+const TAGS_SHOWN = 3;
+
+function MoreTags({ rest }: { rest: string[] }): JSX.Element | null {
+  if (rest.length === 0) return null;
+  return <span className="intl-medal-tag more" title={rest.join('\n')}>+{rest.length} more</span>;
+}
+
 /** A player's individual awards — the players of the year, the teams of the season — newest first. */
 function PlayerAwards({ p }: { p: number }): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
   const awards = playerAccolades(world, p);
   if (awards.length === 0) return null;
+  const label = (a: (typeof awards)[number]): string => `${accoladeTitle(world, a)} ${world.startYear + a.season + 1}`;
   return (
     <KV k="Awards">
       <span className="intl-honours-list">
-        {awards.map((a, i) => (
-          <span key={i} className={`intl-medal-tag ${a.kind === 'team' ? 'silver' : 'gold'}`}>
-            {accoladeTitle(world, a)} {world.startYear + a.season + 1}
-          </span>
+        {awards.slice(0, TAGS_SHOWN).map((a, i) => (
+          <span key={i} className={`intl-medal-tag ${a.kind === 'team' ? 'silver' : 'gold'}`}>{label(a)}</span>
         ))}
+        <MoreTags rest={awards.slice(TAGS_SHOWN).map(label)} />
       </span>
     </KV>
   );
@@ -1293,11 +1313,12 @@ function InternationalHonours({ p }: { p: number }): JSX.Element | null {
       {medals.length > 0 && (
         <KV k="International honours">
           <span className="intl-honours-list">
-            {medals.map((m) => (
+            {medals.slice(0, TAGS_SHOWN).map((m) => (
               <span key={m.name} className={`intl-medal-tag ${m.medal.toLowerCase()}`}>
                 {m.medal} · {m.name}{m.mvp ? ' · MVP' : ''}
               </span>
             ))}
+            <MoreTags rest={medals.slice(TAGS_SHOWN).map((m) => `${m.medal} · ${m.name}${m.mvp ? ' · MVP' : ''}`)} />
           </span>
         </KV>
       )}
