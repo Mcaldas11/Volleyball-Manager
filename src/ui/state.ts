@@ -73,11 +73,10 @@ import type { BallMark } from '../engine/match/landing.ts';
 import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
 import { interestedClubs, type ClubInterest } from '../engine/world/interest.ts';
 import {
-  advanceDay, applyMatchResult, matchPrep, newSeasonContext, oppositionRead, pickLineup, playFixture, toTeamSetup,
-  type SeasonContext,
+  advanceDay, applyMatchResult, forfeitIfShort, isSeasonOver, matchPrep, newSeasonContext, oppositionRead, pickLineup,
+  playFixture, startSeason, toTeamSetup, type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
-import { isSeasonOver, startSeason } from '../engine/season/seasonEngine.ts';
 import { calendarOf } from '../engine/world/calendar.ts';
 import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
@@ -2089,8 +2088,8 @@ class Game {
   }
 
   private showPostMatch(f: Fixture): void {
-    // The press want the manager's reaction — offered from the result screen.
-    if (this.world !== null) generatePostMatchInterview(this.world, f);
+    // The press want the manager's reaction — offered from the result screen; not after a match never played.
+    if (this.world !== null && f.forfeit === undefined) generatePostMatchInterview(this.world, f);
     this.postMatch = f.id;
     this.matchday = null;
     this.liveSim = null;
@@ -2389,6 +2388,13 @@ class Game {
       return;
     }
     if (this.openPendingDecision()) return;
+    // Six to put on the court — either side short, and it is decided by default before it starts.
+    if (forfeitIfShort(world, this.ctx, next)) {
+      this.captureWatched(next);
+      this.checkChampionshipWin(world, next);
+      this.showPostMatch(next);
+      return;
+    }
     // The club's match: its squad, team sheet and instructions are the ones to see.
     this.teamView = 'club';
     // A profile left open goes; one opened during the match shows over it.

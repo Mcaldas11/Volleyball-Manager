@@ -261,7 +261,11 @@ export function CoachesScreen(): JSX.Element {
                 return (
                   <tr key={c.staffId} className={c.staffId === -1 ? 'row-you' : ''}>
                     <td className="num">{i + 1}</td>
-                    <td><span className="rc-club"><Flag nation={c.nation} /> {c.name}{c.staffId === -1 && <span className="your-club-tag">You</span>}</span></td>
+                    <td>
+                      <span className="rc-club player-link" onClick={() => (c.staffId >= 0 ? g.selectCoach(c.staffId) : g.go('career'))}>
+                        <Flag nation={c.nation} /> {c.name}{c.staffId === -1 && <span className="your-club-tag">You</span>}
+                      </span>
+                    </td>
                     <td>{club !== undefined ? <span className="rc-club"><ClubCrest club={club} size={16} />{club.shortName}</span> : <span className="faint">Out of work</span>}</td>
                     <td className="num"><StarMeter value={c.reputation} max={10000} size={11} /></td>
                     <td className="num">{c.titles.length}</td>
@@ -285,7 +289,7 @@ export function CoachesScreen(): JSX.Element {
           {legends.slice(0, 30).map((c, i) => (
             <div key={c.staffId} className="coaches-legend">
               <span className={`coaches-rank${i < 3 ? ` top${i}` : ''}`}>{i + 1}</span>
-              <span className="coaches-legend-main"><b><Flag nation={c.nation} /> {c.name}</b><small className="faint">{c.titles.length} titles in all · {c.won}–{c.lost}</small></span>
+              <span className="coaches-legend-main"><b className="player-link" onClick={() => (c.staffId >= 0 ? g.selectCoach(c.staffId) : g.go('career'))}><Flag nation={c.nation} /> {c.name}</b><small className="faint">{c.titles.length} titles in all · {c.won}–{c.lost}</small></span>
               <span className="coaches-here"><Icon name="trophy" size={13} /> {c.here}</span>
             </div>
           ))}

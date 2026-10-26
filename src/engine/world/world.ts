@@ -203,6 +203,8 @@ export interface Fixture {
   setScores: Array<[number, number]>;
   /** Player index of the match MVP, -1 if not played. */
   mvp: number;
+  /** Club id of the side that could not field six and lost by default; absent when the match was played. */
+  forfeit?: number;
 }
 
 /** A national team squad and its standing. */

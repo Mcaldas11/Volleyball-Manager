@@ -4,8 +4,10 @@ import { aggregateTeam, type PlayerMatchStats } from '../../engine/match/stats.t
 import type { Position } from '../../engine/model/positions.ts';
 import { POSITION_SHORT } from '../../engine/model/positions.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
+import { MIN_PLAYERS } from '../../engine/season/seasonEngine.ts';
+import type { Fixture } from '../../engine/world/world.ts';
 import { userNation } from '../../engine/world/internationals.ts';
-import { ClubCrest, Flag, PlayerFace, RatingBadge } from '../components.tsx';
+import { ClubCrest, Flag, PlayerFace, RatingBadge, Status } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { BoxScore } from './Match.tsx';
@@ -45,6 +47,8 @@ export function MatchResultScreen(): JSX.Element | null {
   const homeWon = result.homeSets > result.awaySets;
   const me = national ? userNation(world) : world.userClubId;
   const userWon = (fixture.home === me) === homeWon;
+  // Not played: one side could not put six on the court.
+  const short = fixture.forfeit === undefined ? undefined : world.clubs[fixture.forfeit];
 
   const mvpHome = result.stats.home.players.get(result.mvp);
   const mvpLine = mvpHome ?? result.stats.away.players.get(result.mvp);
@@ -95,7 +99,7 @@ export function MatchResultScreen(): JSX.Element | null {
         <section className="mr-card mr-score">
           <header className="mr-head">
             <span>{heading}</span>
-            <span className={`mr-final ${userWon ? 'good' : 'bad'}`}><span className="mr-dot" />Final</span>
+            <span className={`mr-final ${userWon ? 'good' : 'bad'}`}><span className="mr-dot" />{short !== undefined ? 'Forfeit' : 'Final'}</span>
           </header>
           {teamRow(fixture.home, result.homeSets, homeWon, 0)}
           {teamRow(fixture.away, result.awaySets, !homeWon, 1)}
@@ -129,6 +133,7 @@ export function MatchResultScreen(): JSX.Element | null {
           </footer>
         </section>
 
+        {short !== undefined ? <ForfeitNote fixture={fixture} short={short.name} winner={homeWon ? watched.homeName : watched.awayName} /> : (
         <section className="mr-card mr-stats">
           <header className="mr-head">
             <span>Match stats</span>
@@ -153,12 +158,68 @@ export function MatchResultScreen(): JSX.Element | null {
           })}
           <div className="mr-crowd">{result.totalRallies} rallies · {result.setScores.length} sets</div>
         </section>
+        )}
       </div>
 
-      <section className="mr-card mr-box">
-        <header className="mr-head"><span>Box score</span></header>
-        <div className="mr-box-body"><BoxScore watched={watched} /></div>
-      </section>
+      {short !== undefined ? <SquadAvailability clubId={short.id} /> : (
+        <section className="mr-card mr-box">
+          <header className="mr-head"><span>Box score</span></header>
+          <div className="mr-box-body"><BoxScore watched={watched} /></div>
+        </section>
+      )}
     </div>
+  );
+}
+
+/** In place of the match stats when it was never played: why, and what it means. */
+function ForfeitNote({ fixture, short, winner }: { fixture: Fixture; short: string; winner: string }): JSX.Element {
+  const sets = fixture.setScores.length;
+  const points = Math.max(...fixture.setScores[0]);
+  return (
+    <section className="mr-card mr-stats">
+      <header className="mr-head">
+        <span>Match not played</span>
+        <span>By default</span>
+      </header>
+      <div className="mr-forfeit">
+        <Icon name="alert" size={30} />
+        <strong>{short} could not put {MIN_PLAYERS} players on the court.</strong>
+        <p>The match is awarded to {winner}: {sets}-0, every set {points}-0. It counts in the table like any other result.</p>
+      </div>
+    </section>
+  );
+}
+
+/** Who the short side had, and why the rest were missing. */
+function SquadAvailability({ clubId }: { clubId: number }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const club = world.clubs[clubId];
+  const fit = club.players.filter((p) => store.isAvailable(p)).length;
+  const rows = [...club.players].sort((a, b) => Number(store.isAvailable(a)) - Number(store.isAvailable(b)));
+  return (
+    <section className="mr-card mr-box">
+      <header className="mr-head">
+        <span>Squad availability · {club.name}</span>
+        <span><b>{fit}</b> fit · {MIN_PLAYERS} needed</span>
+      </header>
+      <div className="mr-box-body">
+        <table className="data-table">
+          <thead>
+            <tr><th>Player</th><th>Pos</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((p) => (
+              <tr key={p}>
+                <td><span className="player-link" onClick={() => g.select(p)}>{store.fullName(p)}</span></td>
+                <td className="dim">{POSITION_SHORT[store.position[p] as Position]}</td>
+                <td><Status store={store} i={p} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

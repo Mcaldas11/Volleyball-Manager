@@ -409,6 +409,10 @@ Before committing a change:
 - [x] Mind games: before a derby, a classic, a final or a top-of-the-table
       clash the other coach has his say; fire back, play it down or praise
       them — and a reply that fires back is remembered after the match
+- [x] Six to take the court: a side with fewer than six fit to play —
+      injured, or away on international duty — loses by default, 3-0 with
+      every set 25-0 (15-0 in a golden set). It counts in the table; the
+      result screen shows who was missing, and there is no press conference
 - [x] Squad numbers: every player at a club wears his own, 1 to 99. Pick
       your players' from the squad list or a profile — a grid of every
       number, the ones taken marked; giving a player a team-mate's number

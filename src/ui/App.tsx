@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import { StaffRole } from '../engine/model/staff.ts';
 import logo from './logo.png';
 import { Splash, splashDue } from './splash.tsx';
 import { EditorScreen } from './screens/Editor.tsx';
@@ -8,7 +9,7 @@ import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
 import {
-  ClubCrest, clubThemeStyle, Flag, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
+  ClubCrest, clubThemeStyle, Flag, initials, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
 } from './components.tsx';
 import { NATIONS } from '../engine/world/nations.ts';
 import { userNation, worldRanking } from '../engine/world/internationals.ts';
@@ -748,13 +749,14 @@ function ContinueButton(): JSX.Element {
 }
 
 interface SearchResult {
-  kind: 'club' | 'player' | 'nation' | 'league';
+  /** A coach is a staff member's id — or -1 for the manager himself. */
+  kind: 'club' | 'player' | 'nation' | 'league' | 'coach';
   id: number;
 }
 
 /**
- * The header's search box: any club, player, national team or league in the
- * world by name — a country's name finds its national team and its leagues —
+ * The header's search box: any club, player, coach, national team or league in
+ * the world by name — a country's name finds its national team and its leagues —
  * opened straight into its page. Results are capped and debounced so typing
  * never stalls even with a large world's full player pool behind it.
  */
@@ -806,6 +808,15 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
       .sort((a, b) => b.reputation - a.reputation)
       .slice(0, 4)
       .map((c): SearchResult => ({ kind: 'club', id: c.id }));
+    // Head coaches, in work or not, and the manager himself — the best known first.
+    const manager = `${world.manager.firstName} ${world.manager.lastName}`;
+    const coaches: SearchResult[] = world.staff
+      .filter((s) => (s.role === StaffRole.HeadCoach || (s.spells?.length ?? 0) > 0) &&
+        `${s.firstName} ${s.lastName}`.toLowerCase().includes(debounced))
+      .sort((a, b) => b.reputation - a.reputation)
+      .slice(0, 4)
+      .map((s) => ({ kind: 'coach', id: s.id }));
+    if (manager.toLowerCase().includes(debounced)) coaches.unshift({ kind: 'coach', id: -1 });
     const players: number[] = [];
     for (let i = 0; i < store.count; i++) {
       if (!store.isActive(i)) continue;
@@ -814,7 +825,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
       players.push(i);
     }
     players.sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
-    return [...nations, ...leagues, ...clubs, ...players.slice(0, 8).map((p): SearchResult => ({ kind: 'player', id: p }))];
+    return [...nations, ...leagues, ...clubs, ...coaches.slice(0, 4), ...players.slice(0, 8).map((p): SearchResult => ({ kind: 'player', id: p }))];
   }, [debounced, world]);
 
   useEffect(() => setHighlight(0), [debounced]);
@@ -823,6 +834,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
     if (r.kind === 'club') g.selectClub(r.id);
     else if (r.kind === 'nation') g.selectNation(r.id);
     else if (r.kind === 'league') g.openCompetition(r.id);
+    else if (r.kind === 'coach') { if (r.id >= 0) g.selectCoach(r.id); else g.go('career'); }
     else g.select(r.id);
     setQuery('');
     setDebounced('');
@@ -835,7 +847,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
       <input
         ref={inputRef}
         className="search-input"
-        placeholder="Search players, clubs, nations & leagues"
+        placeholder="Search players, coaches, clubs, nations & leagues"
         value={query}
         disabled={disabled}
         aria-controls={listId}
@@ -883,6 +895,33 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
                     <strong>{c.name}</strong>
                     <span className="faint"><Flag nation={c.nation} /> League · Tier {c.tier} · {c.participants.length} clubs</span>
                   </span>
+                </button>
+              );
+            }
+            if (r.kind === 'coach') {
+              const s = r.id >= 0 ? world.staff[r.id] : undefined;
+              const name = s !== undefined ? `${s.firstName} ${s.lastName}` : `${world.manager.firstName} ${world.manager.lastName}`;
+              const where = s === undefined
+                ? world.clubs[world.userClubId]
+                : s.role === StaffRole.HeadCoach && s.retired !== true ? world.clubs[s.clubId] : undefined;
+              return (
+                <button
+                  key={`h${r.id}`}
+                  className={`search-row${i === highlight ? ' active' : ''}`}
+                  onMouseEnter={() => setHighlight(i)}
+                  onClick={() => openResult(r)}
+                >
+                  {s === undefined
+                    ? <PersonFace photoUrl={managerPhotoUrl(world.manager)} name={name} size={26} />
+                    : <span className="coach-initials search-coach">{initials(name)}</span>}
+                  <span className="search-row-main">
+                    <strong>{name}</strong>
+                    <span className="faint">
+                      {s === undefined ? 'You · ' : 'Head coach · '}
+                      {where !== undefined ? where.name : s?.retired === true ? 'Retired' : 'Out of work'}
+                    </span>
+                  </span>
+                  <span className="search-coach-tag">Coach</span>
                 </button>
               );
             }

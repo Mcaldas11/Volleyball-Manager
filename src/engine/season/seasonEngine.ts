@@ -36,15 +36,15 @@ import { mentoringWeek } from '../world/mentoring.ts';
 import { ebbLoads, noteMatchLoad, recoveryFactor, travelEve } from '../world/fatigue.ts';
 import { fixtureRivalry } from '../world/rivals.ts';
 import { internationalDay } from '../world/internationals.ts';
-import { keepMatchReport } from '../world/matchReports.ts';
+import { bareResult, keepMatchReport } from '../world/matchReports.ts';
 import { noteAnalysis } from '../world/analysis.ts';
-import { newsDay } from '../world/news.ts';
+import { newsDay, postNews } from '../world/news.ts';
 import type { Rng } from '../core/rng.ts';
 import { selectionScore } from '../model/ability.ts';
 import { awardLeaguePoints, type Club, type LeagueTableRow } from '../model/club.ts';
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { MATCHDAY_SQUAD, Position } from '../model/positions.ts';
-import { simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
+import { MatchFormat, simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
 import { formationOf, lineupSlotPositions, type TeamTactics } from '../match/tactics.ts';
 import { addToSeason, newSeasonLine, type PlayerMatchStats, type SeasonStatLine } from '../match/stats.ts';
 import { DAYS_PER_SEASON, currentPhase, dayOfSeason, SeasonPhase, type Fixture, type World } from '../world/world.ts';
@@ -65,7 +65,7 @@ import { contractNotices } from '../world/contracts.ts';
 import { generateClauseBids, processDeals } from '../world/deals.ts';
 import { payAppearanceBonuses } from '../world/contractTerms.ts';
 import { expireStaleInterviews, generateInterviewSessions, generateNationalInterviewSessions } from '../world/interviews.ts';
-import { monthlyLoanReports, monthlyStatement, recoveryNotice, roundupNotices, tacticReadNotice } from '../world/inbox.ts';
+import { monthlyLoanReports, monthlyStatement, postMessage, recoveryNotice, roundupNotices, tacticReadNotice } from '../world/inbox.ts';
 import { readLevel, studyTactic } from '../model/tacticRead.ts';
 import { recordFixture } from '../world/records.ts';
 import { collectHighlights, inManagersLeague } from '../world/monthAwards.ts';
@@ -289,6 +289,61 @@ export function toTeamSetup(store: PlayerStore, club: Club, mustStart?: Readonly
   };
 }
 
+/** Fewer than this fit to play, and a side can't take the court: it loses the match by default. */
+export const MIN_PLAYERS = 6;
+
+/** How many of a club's players can play today: fit, and not away with their national team. */
+export function playersAvailable(world: World, clubId: number): number {
+  const club = world.clubs[clubId];
+  return club === undefined ? 0 : club.players.filter((p) => world.players.isAvailable(p)).length;
+}
+
+/**
+ * A side without six players to put on the court loses by default: every set it needed to win, 25-0
+ * (15-0 in a golden set) — 3-0 in a best of five. Should neither side have six, the one with more
+ * players takes it; the visitors, if they have as many. The table, the board and the record take it
+ * as any other result; nobody played, so nobody's statistics do. True if the match was decided so.
+ */
+export function forfeitIfShort(world: World, ctx: SeasonContext, fixture: Fixture): boolean {
+  if (fixture.played) return false;
+  const home = playersAvailable(world, fixture.home);
+  const away = playersAvailable(world, fixture.away);
+  if (home >= MIN_PLAYERS && away >= MIN_PLAYERS) return false;
+  const homeLoses = home < MIN_PLAYERS && (away >= MIN_PLAYERS || home <= away);
+  const sets = fixture.format === MatchFormat.BestOf5 ? 3 : fixture.format === MatchFormat.BestOf3 ? 2 : 1;
+  const points = fixture.format === MatchFormat.GoldenSet ? 15 : 25;
+  fixture.played = true;
+  fixture.homeSets = homeLoses ? 0 : sets;
+  fixture.awaySets = homeLoses ? sets : 0;
+  fixture.setScores = Array.from({ length: sets }, (): [number, number] => (homeLoses ? [0, points] : [points, 0]));
+  fixture.mvp = -1;
+  fixture.forfeit = homeLoses ? fixture.home : fixture.away;
+  ctx.detailedResults.set(fixture.id, bareResult(fixture));
+  if (!isFriendly(world, fixture)) updateTable(world, fixture);
+  const loser = world.clubs[homeLoses ? fixture.home : fixture.away];
+  const winner = world.clubs[homeLoses ? fixture.away : fixture.home];
+  if (loser === undefined || winner === undefined) return true;
+  const had = homeLoses ? home : away;
+  const score = `${sets}-0`;
+  postNews(world, {
+    kind: 'result', headline: `${loser.name} can't field a team — ${winner.name} win ${score} by default`,
+    body: `With only ${had} player${had === 1 ? '' : 's'} fit to play, ${loser.name} could not take the court. The match goes to ${winner.name}, ${score}, every set ${points}-0.`,
+    nation: loser.nation, clubId: winner.id, otherClubId: loser.id, competitionId: fixture.competitionId,
+    fans: { story: 'match', club: winner.id, other: loser.id, score },
+  });
+  if (fixture.home === world.userClubId || fixture.away === world.userClubId) {
+    const ours = loser.id === world.userClubId;
+    postMessage(world, {
+      category: 'matchday', from: 'League Office', clubId: ours ? winner.id : loser.id, fixtureId: fixture.id,
+      subject: ours ? `Match lost by default: ${score} to ${winner.shortName}` : `Match won by default: ${score} against ${loser.shortName}`,
+      body: ours
+        ? `You had only ${had} player${had === 1 ? '' : 's'} fit to play — a side needs ${MIN_PLAYERS} to take the court. The match is awarded to ${winner.name}, ${score}, every set ${points}-0. Sign players, or bring youngsters up from the academy, before the next one.`
+        : `${loser.name} had only ${had} player${had === 1 ? '' : 's'} fit to play and could not take the court. The match is yours, ${score}, every set ${points}-0.`,
+    });
+  }
+  return true;
+}
+
 /**
  * Play one fixture.
  *
@@ -305,6 +360,8 @@ export function playFixture(
   const home = world.clubs[fixture.home];
   const away = world.clubs[fixture.away];
   if (home === undefined || away === undefined) return;
+  // Six to put on the court, or the match is lost by default.
+  if (forfeitIfShort(world, ctx, fixture)) return;
 
   // A club that has promised a loanee games gives them.
   const homeOwed = loanStarters(world, home);
