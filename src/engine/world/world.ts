@@ -38,6 +38,7 @@ import type { Formation, TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
 import type { MonthAward } from './monthAwards.ts';
 import type { CompetitionReview, DreamPick } from './competitionReview.ts';
+import type { MatchReviewNote } from './postMatchReview.ts';
 import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
 import type { StaffTalks } from './staffDeals.ts';
@@ -422,6 +423,8 @@ export interface GameMessage {
   moveTalkOf?: number;
   /** A rival coach's words before a big match — the fixture: the message offers the replies. */
   mindGameOf?: number;
+  /** The assistant's review of a match — drawn as a report with the match's charts. */
+  review?: MatchReviewNote;
   /** The summer's sponsorship offers — the message leads to them. */
   sponsorOffers?: boolean;
   /** The member of staff a message is about. */

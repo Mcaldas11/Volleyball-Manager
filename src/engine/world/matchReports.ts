@@ -10,7 +10,7 @@
  * still in memory.
  */
 
-import type { MatchResult } from '../match/engine.ts';
+import type { MatchResult, RallyLogEntry } from '../match/engine.ts';
 import { newPlayerStats, newRotationStats, newTeamStats, type PlayerMatchStats, type TeamMatchStats } from '../match/stats.ts';
 import type { Fixture, World } from './world.ts';
 
@@ -37,6 +37,31 @@ export interface MatchReport {
   opponentErrors: [number, number];
   longestRun: [number, number];
   totalRallies: number;
+  /**
+   * Each set's rallies in order, a letter a rally: who won it — lower case the
+   * home side, upper case the away side — and how: k a kill, a an ace, b a
+   * block, e an error by the other side. Kept from the rally log, when there was one.
+   */
+  flow?: string[];
+}
+
+/** How a point was won, as `MatchReport.flow` writes it. */
+export type PointHow = 'k' | 'a' | 'b' | 'e';
+
+/** A match's rallies, set by set, as `MatchReport.flow` keeps them. */
+export function rallyFlow(log: readonly RallyLogEntry[]): string[] {
+  const sets: string[] = [];
+  for (const r of log) {
+    const last = r.contacts[r.contacts.length - 1];
+    // A call turned over on video ends with the other side's contact: count it as their error.
+    let how: PointHow = 'e';
+    if (last !== undefined) {
+      if ((last.kind === 'kill' || last.kind === 'ace') && last.team === r.winner) how = last.kind === 'kill' ? 'k' : 'a';
+      else if (last.kind === 'blocked' && last.team !== r.winner) how = 'b';
+    }
+    sets[r.set] = (sets[r.set] ?? '') + (r.winner === 0 ? how : how.toUpperCase());
+  }
+  return Array.from(sets, (s) => s ?? '');
 }
 
 /** Keep a finished match's box score, if it was one of the manager's club's. */
@@ -60,6 +85,7 @@ export function keepMatchReport(world: World, fixture: Fixture, result: MatchRes
     opponentErrors: [result.stats.home.opponentErrors, result.stats.away.opponentErrors],
     longestRun: [result.stats.home.longestRun, result.stats.away.longestRun],
     totalRallies: result.totalRallies,
+    ...(result.log !== null ? { flow: rallyFlow(result.log) } : {}),
   });
 }
 

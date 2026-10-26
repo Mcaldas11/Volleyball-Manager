@@ -35,6 +35,12 @@ export interface Review {
   change: string[];
 }
 
+/** The review as its message keeps it: the match, the manager's side in it, and what the assistant said — drawn with the match's charts. */
+export interface MatchReviewNote extends Review {
+  fixtureId: number;
+  side: 0 | 1;
+}
+
 /** The review of one match from the manager's side's box score: `next` is his next opponent, if any. */
 export function reviewMatch(world: World, team: TeamMatchStats, sets: number, next: { name: string; threat: string | null } | null): Review {
   const store = world.players;
@@ -131,5 +137,6 @@ export function postMatchReview(world: World, fixture: Fixture): void {
     clubId: oppId,
     subject: `Match review: ${won ? 'won' : 'lost'} ${score} against ${opp?.shortName ?? 'them'}`,
     body: `What worked\n${list(r.worked)}\n\nWhat went wrong\n${list(r.failed)}\n\nWhat I would change\n${list(r.change)}`,
+    review: { ...r, fixtureId: fixture.id, side: home ? 0 : 1 },
   });
 }

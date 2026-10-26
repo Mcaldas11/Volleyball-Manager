@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { MIND_GAME_REPLIES } from '../../engine/world/mindGames.ts';
+import { MatchReviewSheet } from '../matchReviewSheet.tsx';
 import { MeetingSheet } from '../staffMeeting.tsx';
 import { relapseChance, TREATMENT_NAMES, treatmentWeeks, type Treatment } from '../../engine/world/treatment.ts';
 import { INJURY_NAMES } from '../../engine/model/players.ts';
@@ -292,7 +293,7 @@ function MessageSheet({ message: m }: { message: GameMessage }): JSX.Element {
         {/* A player who means to retire has his own sheet, face and all, below. */}
         {m.intl === undefined && m.retirementOf === undefined && <PlayerContext message={m} />}
         {/* A drawn report says the player-by-player part better than the text. */}
-        <p className="paper-text">{m.intl !== undefined ? intlIntro(m.body) : m.body}</p>
+        {m.review === undefined && <p className="paper-text">{m.intl !== undefined ? intlIntro(m.body) : m.body}</p>}
         <MessageDetail message={m} />
       </div>
 
@@ -367,6 +368,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
   if (m.intl !== undefined) return <IntlReportSheet report={m.intl} />;
 
   if (m.preview !== undefined) return <PreviewSheet preview={m.preview} />;
+
+  if (m.review !== undefined) return <MatchReviewSheet note={m.review} />;
 
   if (m.meetingId !== undefined) {
     const meeting = g.staffMeetings().find((x) => x.id === m.meetingId);
