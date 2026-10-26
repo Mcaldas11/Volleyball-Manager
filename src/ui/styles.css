@@ -7583,17 +7583,35 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .profile-tabs > .profile-actions { margin-left: auto; align-self: center; padding-bottom: 6px; }
 .attr-hidden-hint { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-faint); cursor: help; }
 
-/* Overview: every attribute row gives a little height when the window is short. */
+/* Overview, the FM way: positions on a court | the attributes | their shape. */
+.profile-grid { grid-template-columns: minmax(180px, min(18%, 250px)) minmax(0, 1fr) minmax(230px, min(23%, 330px)); }
+@media (max-width: 1100px) { .profile-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Every attribute row gives a little height when the window is short. */
 .content-fill .profile-attrs > .card-body { display: flex; flex-direction: column; overflow: hidden; }
 .content-fill .profile-attrs .attr-cols { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); }
 .content-fill .profile-attrs .attr-cols > .attr-col { display: flex; flex-direction: column; min-height: 0; }
-.profile-attrs .attr-cols > .attr-col > .attr-col { display: contents; }
 .content-fill .profile-attrs .attr-col-title { flex: none; }
-.content-fill .profile-attrs :is(.attr, .fam-row) { flex: 0 1 28px; min-height: 17px; padding: 0; }
-.attr-col-sub { margin-top: 14px; }
-.profile-attrs .fam-row { grid-template-columns: 40px auto minmax(0, 1fr) 84px; gap: 8px; border-bottom: 1px solid var(--line-soft); }
-.profile-attrs .fam-learning:empty { padding: 0; }
-.profile-attrs .fam-learning { padding: 0 5px; border-radius: 4px; background: var(--gold-soft); font-size: 10.5px; }
+.content-fill .profile-attrs .attr { flex: 0 1 28px; min-height: 17px; padding: 0; }
+.profile-attrs .attr .name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* The positions: a court with a dot for each, and the list beneath it. */
+.profile-positions > .card-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.pos-court { display: block; flex: 1 1 0; min-height: 0; width: 100%; max-height: 250px; }
+.pos-court-floor { fill: hsl(var(--club-h) 30% 16%); stroke: rgba(255, 255, 255, 0.55); stroke-width: 0.8; }
+.pos-court-line { stroke: rgba(255, 255, 255, 0.35); stroke-width: 0.6; }
+.pos-court-net { stroke: #e9e4d8; stroke-width: 2; stroke-linecap: round; }
+.pos-spot circle { fill: currentColor; stroke: rgba(0, 0, 0, 0.45); stroke-width: 0.8; }
+.pos-spot text { fill: #0b1220; font: 800 5.4px var(--font-body); pointer-events: none; }
+.pos-spot.natural circle { stroke: #fff; stroke-width: 1.2; }
+.pos-spot.fam-poor circle { fill: none; stroke: currentColor; stroke-dasharray: 2 1.5; }
+.pos-spot.fam-poor text { fill: currentColor; }
+.fam-list { flex: none; display: flex; flex-direction: column; }
+.profile-positions .fam-row { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 8px; padding: 0; min-height: 24px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; }
+.profile-positions .fam-row:last-child { border-bottom: none; }
+.fam-meter { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fam-meter .fam-bar { flex: 1; min-width: 20px; }
+.fam-meter .fam-learning { flex: none; padding: 0 5px; border-radius: 4px; background: var(--gold-soft); font-size: 10px; }
 
 /* The radar has the side column to itself, and takes the height there is. */
 .content-fill .profile-side { overflow: hidden; }
@@ -7626,14 +7644,42 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .content-fill .profile-details .kv { padding: 3px 0; font-size: 13px; }
   .profile-attrs .attr-val { font-size: 13px; line-height: 1.2; }
   .profile-attrs .attr-col-title { margin-bottom: 3px; padding-bottom: 4px; font-size: 12px; }
-  .attr-col-sub { margin-top: 6px; }
+  .profile-positions > .card-body { gap: 6px; }
+  .profile-positions .fam-row { min-height: 19px; font-size: 12px; }
   .profile .stat-tile .rating-lg { padding: 0 8px; font-size: 17px; }
   .profile-tabs .profile-actions :is(button, .dd-trigger) { padding-top: 5px; padding-bottom: 5px; }
   .profile-shape .arms { margin-top: 6px; padding-top: 6px; }
-  .profile-shape .arm { flex-direction: row; align-items: center; gap: 8px; }
-  .profile-shape .arm-name { flex: none; font-size: 11.5px; }
-  .profile-shape .arm-box { flex: 1; min-width: 0; padding: 3px 8px 4px; font-size: 12.5px; }
+  .profile-shape .arm { gap: 3px; }
+  .profile-shape .arm-name { font-size: 11px; }
+  .profile-shape .arm-box { gap: 3px; padding: 3px 8px 4px; font-size: 12.5px; white-space: nowrap; }
   .profile-shape .radar-label { font-size: 13px; }
   .profile-shape .radar-value { font-size: 13px; }
 }
 .intl-medal-tag.more { color: var(--text-dim); cursor: help; }
+
+/* ---- The squad list: every player in view, no scrolling either way ---- */
+.content-fill > .view-fade > .card.squad-players:has(.table-wrap) { flex: 1 1 0; min-height: 0; }
+.content-fill .squad-players > .card-body > .table-wrap { flex: 1 1 0; overflow-x: hidden; overflow-y: auto; }
+.squad-players .data-table :is(th, td) { padding-left: 7px; padding-right: 7px; }
+.squad-players .data-table tbody td { height: var(--row-h, 39px); padding-top: 0; padding-bottom: 0; }
+.squad-players .face-cell { width: 34px; }
+.squad-players .face-cell .player-face { width: min(28px, calc(var(--row-h, 39px) - 8px)) !important; height: min(28px, calc(var(--row-h, 39px) - 8px)) !important; }
+.squad-players .cond-cell .bar { width: 44px; }
+@media (max-width: 1400px) {
+  .squad-players .col-reach { display: none; }
+}
+@media (max-height: 760px) {
+  .squad-legend { display: none; }
+  .squad-tiles { gap: 10px; margin-bottom: 10px; }
+  .squad-tiles .stat-tile { padding: 6px 10px 6px 13px; }
+  .squad-tiles .stat-tile-value { font-size: 19px; }
+  .squad-tiles .stat-tile-sub { display: none; }
+  .content-fill .squad-players > .card-head { min-height: 36px; padding: 6px 14px 4px; }
+  .squad-players .data-table thead th { padding-top: 5px; padding-bottom: 5px; }
+  /* Rows down to 19px: the faces go, the badges slim down. */
+  .squad-players .data-table tbody td { line-height: 1.25; }
+  .squad-players :is(.face-cell, th:nth-child(2)) { display: none; }
+  .squad-players .shirt-no { height: 18px; min-width: 24px; font-size: 12px; }
+  .squad-players .pos-badge { padding-top: 0; padding-bottom: 0; line-height: 16px; }
+  .squad-players .rating-sm { padding-top: 0; padding-bottom: 0; }
+}

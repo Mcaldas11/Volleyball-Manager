@@ -527,7 +527,7 @@ export function sortBy<T, K extends string>(
 
 /** A clickable table header that drives a {@link useSort} state. */
 export function SortTh<K extends string>({
-  k, sort, onSort, children, num = false, title,
+  k, sort, onSort, children, num = false, title, className,
 }: {
   k: K;
   sort: SortState<K>;
@@ -535,11 +535,12 @@ export function SortTh<K extends string>({
   children: ReactNode;
   num?: boolean;
   title?: string;
+  className?: string;
 }): JSX.Element {
   const active = sort.key === k;
   return (
     <th
-      className={`sortable${num ? ' num' : ''}${active ? ' sorted' : ''}`}
+      className={`sortable${num ? ' num' : ''}${active ? ' sorted' : ''}${className !== undefined ? ` ${className}` : ''}`}
       onClick={() => onSort(k)}
       title={title}
     >

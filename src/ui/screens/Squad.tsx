@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { DirectorDialog } from './Recruitment.tsx';
 import { PlayerCompare } from './Compare.tsx';
 import { AbilityChart } from '../abilityChart.tsx';
@@ -46,6 +46,27 @@ const POSITION_FILTERS: ReadonlyArray<readonly [number, string]> = [
   ...POSITIONS.map((p) => [p, `${POSITION_NAMES[p]}s`] as const),
 ];
 
+/**
+ * Every row of a list in view: the rows take the height the panel has over
+ * them, between a compact and a comfortable height, so the list never scrolls.
+ */
+function useFitRows(wrapRef: RefObject<HTMLDivElement | null>, count: number): void {
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (wrap === null) return;
+    const fit = (): void => {
+      const head = wrap.querySelector('thead')?.getBoundingClientRect().height ?? 30;
+      // A pixel a row for its border.
+      const h = Math.floor((wrap.clientHeight - head) / Math.max(1, count)) - 1;
+      wrap.style.setProperty('--row-h', `${Math.max(19, Math.min(40, h))}px`);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [wrapRef, count]);
+}
+
 export function SquadScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -67,6 +88,9 @@ export function SquadScreen(): JSX.Element {
   const avgRating = (p: number): number => averageRating(totals.get(p)!);
   const [posFilter, setPosFilter] = useState(-1);
   const [sort, onSort] = useSort<SquadSort>('ability');
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const everyone = [...squad, ...awayAt.keys(), ...arrivingAt.keys()];
+  useFitRows(wrapRef, posFilter < 0 ? everyone.length : everyone.filter((p) => store.position[p] === posFilter).length);
 
   if (squad.length === 0) return <Empty>No players under contract.</Empty>;
 
@@ -105,7 +129,7 @@ export function SquadScreen(): JSX.Element {
 
   return (
     <>
-      <div className="tiles">
+      <div className="tiles squad-tiles">
         <StatTile
           label="Squad size"
           value={`${squadSize}/${MAX_SQUAD}`}
@@ -148,7 +172,7 @@ export function SquadScreen(): JSX.Element {
         className="squad-players"
         actions={<Segmented size="sm" options={POSITION_FILTERS} value={posFilter} onChange={setPosFilter} />}
       >
-        <div className="table-wrap">
+        <div className="table-wrap" ref={wrapRef}>
           <table className="data-table">
             <thead>
               <tr>
@@ -159,17 +183,17 @@ export function SquadScreen(): JSX.Element {
                 <SortTh k="age" sort={sort} onSort={onSort} num>Age</SortTh>
                 <th>Nat</th>
                 <SortTh k="height" sort={sort} onSort={onSort} num title="Height (cm)">Ht</SortTh>
-                <SortTh k="spike" sort={sort} onSort={onSort} num title="Spike reach (cm)">Spike</SortTh>
-                <SortTh k="block" sort={sort} onSort={onSort} num title="Block reach (cm)">Block</SortTh>
+                <SortTh k="spike" sort={sort} onSort={onSort} num title="Spike reach (cm)" className="col-reach">Spike</SortTh>
+                <SortTh k="block" sort={sort} onSort={onSort} num title="Block reach (cm)" className="col-reach">Block</SortTh>
                 <SortTh k="ability" sort={sort} onSort={onSort}>Ability</SortTh>
-                <SortTh k="potential" sort={sort} onSort={onSort} num>Potential</SortTh>
-                <SortTh k="condition" sort={sort} onSort={onSort}>Condition</SortTh>
+                <SortTh k="potential" sort={sort} onSort={onSort} num title="Potential ability">Pot</SortTh>
+                <SortTh k="condition" sort={sort} onSort={onSort}>Cond</SortTh>
                 <SortTh k="morale" sort={sort} onSort={onSort}>Morale</SortTh>
                 <th>Status</th>
                 <SortTh k="apps" sort={sort} onSort={onSort} num title="Appearances this season">Apps</SortTh>
                 <SortTh k="rating" sort={sort} onSort={onSort} num title="Average match rating this season">Av Rat</SortTh>
                 <SortTh k="wage" sort={sort} onSort={onSort} num>Wage</SortTh>
-                <SortTh k="contract" sort={sort} onSort={onSort} num title="Contract ends on 30 June of">Contract</SortTh>
+                <SortTh k="contract" sort={sort} onSort={onSort} num title="Contract ends on 30 June of">Ends</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -201,8 +225,8 @@ export function SquadScreen(): JSX.Element {
                     <td className="num">{age(p)}</td>
                     <td><Flag nation={store.nation[p]} /></td>
                     <td className="num dim">{store.heightCm[p]}</td>
-                    <td className="num dim">{store.spikeReachCm[p]}</td>
-                    <td className="num dim">{store.blockReachCm[p]}</td>
+                    <td className="num dim col-reach">{store.spikeReachCm[p]}</td>
+                    <td className="num dim col-reach">{store.blockReachCm[p]}</td>
                     <td>
                       <span className="ability-cell">
                         <StarMeter value={store.currentAbility[p]} size={11} />
@@ -256,7 +280,7 @@ export function SquadScreen(): JSX.Element {
           </table>
         </div>
       </Card>
-      <p className="legend">
+      <p className="legend squad-legend">
         <span className="role-tag starter">XI</span> starting six
         <span className="role-tag libero">L</span> starting libero
         <span className="role-tag libero">DL</span> defensive libero
@@ -319,6 +343,42 @@ function AttributeRadar({ store, p }: { store: PlayerStore; p: number }): JSX.El
             {label}
             <tspan x={x} dy="12" className="radar-value">{values[i].toFixed(0)}</tspan>
           </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+/**
+ * Where each position stands on his side of the net, the net at the top: the
+ * front row in zones 4, 3 and 2, the setter's base in 1, the libero's in 5.
+ */
+const COURT_SPOTS: Readonly<Record<Position, readonly [number, number]>> = {
+  [Position.OutsideHitter]: [20.7, 24.7],
+  [Position.MiddleBlocker]: [50, 24.7],
+  [Position.Opposite]: [79.3, 24.7],
+  [Position.Setter]: [79.3, 68.7],
+  [Position.Libero]: [20.7, 68.7],
+};
+
+/** Positions the FM way: his half of the court, a dot where each position plays, coloured by how well he knows it. */
+function PositionsCourt({ store, p }: { store: PlayerStore; p: number }): JSX.Element {
+  const natural = store.position[p] as Position;
+  return (
+    <svg viewBox="0 0 100 104" className="pos-court" role="img" aria-label="Positions on court">
+      <rect x={6} y={10} width={88} height={88} rx={1.5} className="pos-court-floor" />
+      <line x1={6} y1={39.3} x2={94} y2={39.3} className="pos-court-line" />
+      <line x1={1} y1={10} x2={99} y2={10} className="pos-court-net" />
+      {POSITIONS.map((pos) => {
+        const [x, y] = COURT_SPOTS[pos];
+        const known = store.familiarityWith(p, pos);
+        const fam = familiarityLabel(known, pos === natural);
+        return (
+          <g key={pos} className={`pos-spot ${fam.cls}${pos === natural ? ' natural' : ''}`}>
+            <title>{`${POSITION_NAMES[pos]}: ${fam.label} (${known}/100)`}</title>
+            <circle cx={x} cy={y} r={pos === natural ? 9 : 7.5} />
+            <text x={x} y={y} textAnchor="middle" dominantBaseline="central">{POSITION_SHORT[pos]}</text>
+          </g>
         );
       })}
     </svg>
@@ -759,6 +819,27 @@ export function PlayerDetail(): JSX.Element | null {
 
       {tab === 'overview' && (
         <div className="profile-grid">
+          <Card title="Positions" icon="tactics" className="profile-positions">
+            <PositionsCourt store={store} p={p} />
+            <div className="fam-list">
+              {POSITIONS.map((pos) => {
+                const known = store.familiarityWith(p, pos);
+                const fam = familiarityLabel(known, pos === natural);
+                const learning = club?.id === world.userClubId ? g.positionTraining(p) === pos : false;
+                return (
+                  <div className="fam-row" key={pos} title={`${POSITION_NAMES[pos]}: ${known}/100, how much he plays like one${learning ? ' (training there)' : ''}`}>
+                    <Pos pos={pos} />
+                    <span className="fam-meter">
+                      <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${known}%` }} /></span>
+                      {learning && <span className="fam-learning">Training</span>}
+                    </span>
+                    <span className={`fam-label ${fam.cls}`}>{fam.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
           <Card
             title="Attributes"
             icon="stats"
@@ -775,25 +856,7 @@ export function PlayerDetail(): JSX.Element | null {
             <div className="attr-cols">
               {group(TECHNICAL_ATTRS, 'Technical')}
               {group(MENTAL_ATTRS, 'Mental')}
-              <div className="attr-col">
-                {group(PHYSICAL_ATTRS, 'Physical')}
-                <div className="attr-col">
-                  <h4 className="attr-col-title attr-col-sub">Positions</h4>
-                  {POSITIONS.map((pos) => {
-                    const known = store.familiarityWith(p, pos);
-                    const fam = familiarityLabel(known, pos === natural);
-                    const learning = club?.id === world.userClubId ? g.positionTraining(p) === pos : false;
-                    return (
-                      <div className="fam-row" key={pos} title={`${POSITION_NAMES[pos]} — ${known}/100, how much he plays like one${learning ? '. Training there.' : ''}`}>
-                        <Pos pos={pos} />
-                        <span className="fam-learning">{learning ? 'Training' : ''}</span>
-                        <span className={`fam-bar ${fam.cls}`}><span style={{ width: `${known}%` }} /></span>
-                        <span className={`fam-label ${fam.cls}`}>{fam.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              {group(PHYSICAL_ATTRS, 'Physical')}
             </div>
           </Card>
 
