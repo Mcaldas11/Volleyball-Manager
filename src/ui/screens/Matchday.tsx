@@ -654,6 +654,13 @@ function liveStats(log: readonly MatchdayLogEntry[]): [TeamLiveStats, TeamLiveSt
     s[entry.winner].points++;
     const last = entry.contacts[entry.contacts.length - 1];
     if (last === undefined) continue;
+    if (entry.overturned === true) {
+      // Turned over on video: a kill or an ace out, a stuff block with the blocker in the net —
+      // errors; an attack called out that was in, or off the block, a kill; a blocker in the net, his error.
+      if (last.kind === 'attackError' && entry.doubt !== 'netTouch') s[last.team].kills++;
+      else s[1 - entry.winner].errors++;
+      continue;
+    }
     switch (last.kind) {
       case 'kill': s[last.team].kills++; break;
       case 'ace': s[last.team].aces++; break;
@@ -771,7 +778,6 @@ function SoundToggle(): JSX.Element {
   );
 }
 
-/** Ask for the video on the last point — lit up when it was close and went against you. */
 /**
  * The video check, over the court: who asked and what, the replay running
  * underneath like the television's — then the verdict, stamped.
@@ -864,10 +870,15 @@ const DOUBT_WORDS: Readonly<Record<ChallengeCheck, string>> = {
  * missed, the point is turned over and the challenge kept; anything else, the
  * call stands and the challenge is gone.
  */
-function ChallengeButton({ shown }: { shown: boolean }): JSX.Element {
+function ChallengeButton({ shown, onOpen }: { shown: boolean; onOpen: (open: boolean) => void }): JSX.Element {
   const g = useGame();
   const [open, setOpen] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
+  // While the bench decides what to ask, the referee holds the next serve.
+  useEffect(() => {
+    onOpen(open);
+  }, [open]);
+  useEffect(() => () => onOpen(false), []);
   // Not before the point has been played out on the court: nobody challenges what he hasn't seen.
   const why = shown ? g.challengeError() : 'Wait for the point to finish.';
   const call = g.lastCall();
@@ -1282,7 +1293,8 @@ function LiveMatchView(): JSX.Element {
   const closeQuick = (): void => setQuick(null);
   // The substitutions, a player's options or his profile: while any is open, play holds — and
   // going from one straight to another doesn't let a rally slip through in between.
-  const panelOpen = overlay === 'subs' || quick !== null || g.selectedPlayer !== null;
+  const [challengeOpen, setChallengeOpen] = useState(false);
+  const panelOpen = overlay === 'subs' || quick !== null || g.selectedPlayer !== null || challengeOpen;
   useEffect(() => {
     if (panelOpen) g.openCoachPanel();
     else g.closeCoachPanel();
@@ -1427,6 +1439,8 @@ function LiveMatchView(): JSX.Element {
         setCeremony(Date.now());
         await sleep(6600 / (g.matchday?.speed ?? 1));
       }
+      // A rally left half shown when this view went away: its ball is dead now.
+      if (!cancelled.current && g.matchday?.ballInPlay === true) g.deadBall();
       let stopped = false;
       let fromTimeout = false;
       while (!cancelled.current) {
@@ -1451,6 +1465,26 @@ function LiveMatchView(): JSX.Element {
           stopped = false;
           await sleep((fromTimeout ? 2600 : 1100) / current.speed);
           fromTimeout = false;
+          continue;
+        }
+        // The set's last point: either bench may still ask for the video. Once
+        // the window is over — and any video seen — the referee closes the set.
+        if (current.setEnding === true) {
+          if (Date.now() < (current.setEndsAt ?? 0)) {
+            await sleep(150);
+            continue;
+          }
+          const closed = g.closeDecidedSet();
+          if (closed === 'match') {
+            // Full time: on to the report — or, a final, the trophy first.
+            if (g.matchday?.final != null) g.liftTrophy();
+            else g.completeMatchday();
+            break;
+          }
+          if (closed === 'set') {
+            g.openSetBreak();
+            break;
+          }
           continue;
         }
         // A set won while this view was away (it unmounted mid-pause) still
@@ -1488,25 +1522,16 @@ function LiveMatchView(): JSX.Element {
         }
         // A close call that went against the other bench: they may ask for the video.
         g.aiConsidersChallenge();
-        if (g.matchday?.snapshot?.matchOver === true) {
-          // Full time: let the last point sink in, then on to the report — or, a final, the trophy first.
-          await sleep(2200 / current.speed);
-          if (cancelled.current) break;
-          if (g.matchday?.final != null) g.liftTrophy();
-          else g.completeMatchday();
-          break;
-        }
-        if (g.matchday?.setBreakPending === true) {
-          // Set over: same pause, then the set break's team sheet takes the
-          // screen. Coming back from it mounts this view, and its loop, afresh.
-          await sleep(2200 / current.speed);
-          if (!cancelled.current) g.openSetBreak();
-          break;
-        }
+        // The ball is dead: a timeout asked for during the rally is given now, the other bench makes its changes.
+        g.deadBall();
+        // The set's last point: the top of the loop closes the set once the window for the video is over.
+        if (g.matchday?.setEnding === true) continue;
         // Everyone walks into position for the next serve — rotating on a
-        // side-out — while the referee gives the point and waves the serve on.
+        // side-out — while the referee gives the point and waves the serve on:
+        // a little longer after a close call against the user, for him to ask for the video.
         setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam, store));
-        await sleep(1800 / current.speed);
+        const hot = g.lastCall()?.close === true && g.challengeError() === null;
+        await sleep((hot ? 3600 : 1800) / current.speed);
       }
     };
     void run();
@@ -1810,13 +1835,17 @@ function LiveMatchView(): JSX.Element {
         <span className="lv-coach-label">Coach</span>
         <button
           data-tour="timeout"
-          disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2}
+          className={md.timeoutRequest === userTeamIdx ? 'asked' : ''}
+          disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2 || md.setEnding === true || view.matchOver}
           onClick={() => g.callTimeout()}
-          title="Call a timeout"
+          title={md.timeoutRequest === userTeamIdx
+            ? 'Asked for — the referee gives it at the next dead ball. Click to withdraw it.'
+            : md.ballInPlay === true ? 'The ball is in play: the timeout is given at the next dead ball' : 'Call a timeout'}
         >
-          <Icon name="whistle" size={15} /> Timeout <span className="lv-badge">{2 - md.timeoutsUsed[userTeamIdx]}</span>
+          <Icon name="whistle" size={15} /> {md.timeoutRequest === userTeamIdx ? 'Timeout asked' : 'Timeout'}
+          <span className="lv-badge">{2 - md.timeoutsUsed[userTeamIdx]}</span>
         </button>
-        <ChallengeButton shown={revealed >= md.log.length} />
+        <ChallengeButton shown={revealed >= md.log.length} onOpen={setChallengeOpen} />
         <button data-tour="subs" className={overlay === 'subs' ? 'on' : ''} onClick={() => (overlay === 'subs' ? closeOverlay() : openSubs())}>
           <Icon name="swap" size={15} /> Substitution <span className={`lv-badge${remaining <= 0 ? ' bad' : ''}`}>{remaining}</span>
         </button>

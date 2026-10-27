@@ -7876,3 +7876,8 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .bp3-own { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--gold); background: var(--gold-soft); font-size: 12.5px; line-height: 1.4; }
 .bp3-own b { color: var(--gold-bright); }
 .bp3-own .sm { flex: none; }
+
+/* A timeout asked for with the ball in play: waiting for the next dead ball. */
+.lv-coachbar button.asked { border-color: var(--gold); color: var(--gold-bright); animation: lv-asked 1.2s ease-in-out infinite; }
+@keyframes lv-asked { 50% { box-shadow: 0 0 0 3px rgba(215, 167, 63, 0.25); } }
+@media (prefers-reduced-motion: reduce) { .lv-coachbar button.asked { animation: none; } }

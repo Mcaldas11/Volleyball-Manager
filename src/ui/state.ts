@@ -518,6 +518,14 @@ export interface MatchdayState {
   timeoutsUsed: [number, number];
   /** Which team's timeout is currently open (pausing play for tactics/subs), or null. */
   timeoutActive: 0 | 1 | null;
+  /** A side has asked for a timeout with the ball in play: the referee gives it at the next dead ball. */
+  timeoutRequest?: 0 | 1 | null;
+  /** A rally has been played and is still being shown: the ball is in play. */
+  ballInPlay?: boolean;
+  /** The set's last point has been given: the set is closed once either bench has had the chance to challenge it. */
+  setEnding?: boolean;
+  /** When the referee closes the decided set, wall-clock ms — once its last point has been shown. */
+  setEndsAt?: number | null;
   /** The most recent substitution, either side — drives the live "X off, Y on" banner.
    *  `libero` marks a libero change rather than a regular substitution;
    *  `reason` is set when the AI made it, so the banner can say why. */
@@ -2764,6 +2772,12 @@ class Game {
     if (md === null || this.liveSim === null) return;
     // His own hurt players are his to answer for: the engine waits on him.
     this.liveSim.answerInjuriesFor(md.userIsHome ? 0 : 1, true);
+    // A set's last point can be challenged: the set is closed only once the benches have had their look.
+    this.liveSim.holdSetEnds = true;
+    md.setEnding = false;
+    md.setEndsAt = null;
+    md.timeoutRequest = null;
+    md.ballInPlay = false;
     md.injuryQueue = [];
     md.injury = null;
     md.stage = 'live';
@@ -2858,7 +2872,8 @@ class Game {
   playNextRally(): MatchdayLogEntry | null {
     const md = this.matchday;
     const sim = this.liveSim;
-    if (md === null || sim === null || md.stage !== 'live' || md.setBreakPending) return null;
+    // A decided set is closed first — see closeDecidedSet.
+    if (md === null || sim === null || md.stage !== 'live' || md.setBreakPending || md.setEnding === true) return null;
 
     const preSnap = sim.snapshot();
     const entry = sim.step();
@@ -2875,23 +2890,75 @@ class Game {
     };
     md.log.push(logEntry);
     md.snapshot = sim.snapshot();
+    md.ballInPlay = true;
     this.warmUpBench();
-    // The final point is left for the viewer to play out; it calls
-    // completeMatchday() once it has been shown.
-    if (!md.snapshot.matchOver) {
-      if (md.snapshot.set !== preSnap.set) {
-        // Fresh timeout allowance each set, same as the engine's own
-        // substitution limit — and the viewer opens the set break once this
-        // set's last point has been shown.
-        md.timeoutsUsed = [0, 0];
-        md.setBreakPending = true;
-        this.aiPicksNextSet();
-      } else {
-        this.maybeAIAct();
-      }
-    }
+    // The set's last point: given, but the set — or the match — is closed only
+    // once the point has been shown and either bench has had the chance to ask
+    // for the video on it. The view calls closeDecidedSet then.
+    md.setEnding = sim.setDecided();
+    md.setEndsAt = null;
     this.emit();
     return logEntry;
+  }
+
+  /**
+   * The rally just played has been shown: the ball is dead. A timeout asked
+   * for while it was in play is given now, and the other bench makes its
+   * changes now — never with the ball in the air. On the set's last point,
+   * the window for the video opens instead: longer when the call was close
+   * and went against the user, who may want it looked at.
+   */
+  deadBall(): void {
+    const md = this.matchday;
+    if (md === null || md.ballInPlay !== true) return;
+    md.ballInPlay = false;
+    if (md.setEnding === true) {
+      const call = this.liveSim?.lastCall();
+      const hot = call?.close === true && this.challengeError() === null;
+      md.setEndsAt = Date.now() + (hot ? 4200 : 2600) / md.speed;
+      this.emit();
+      return;
+    }
+    this.grantTimeoutRequest();
+    if (md.timeoutActive === null && md.videoReview == null && md.injury == null) this.maybeAIAct();
+    this.emit();
+  }
+
+  /** A timeout asked for with the ball in play, given now the ball is dead — if nothing else has play stopped. */
+  private grantTimeoutRequest(): void {
+    const md = this.matchday;
+    if (md === null) return;
+    const team = md.timeoutRequest;
+    if (team == null || md.ballInPlay === true || md.videoReview != null || md.injury != null || md.timeoutActive !== null
+      || md.setEnding === true || md.setBreakPending || md.stage !== 'live') return;
+    md.timeoutRequest = null;
+    if (md.timeoutsUsed[team] < 2) this.startTimeout(team);
+  }
+
+  /**
+   * Close the set decided by its last point, the window for the video over:
+   * 'match' at full time, 'set' with the break between sets to come — and
+   * null if there was nothing to close (a challenge turned the point over).
+   */
+  closeDecidedSet(): 'match' | 'set' | null {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || md.setEnding !== true) return null;
+    sim.closeSet();
+    md.setEnding = false;
+    md.setEndsAt = null;
+    md.timeoutRequest = null;
+    md.snapshot = sim.snapshot();
+    if (md.snapshot.matchOver) {
+      this.emit();
+      return 'match';
+    }
+    // Fresh timeouts for the new set — and the other side hands in its line-up for it.
+    md.timeoutsUsed = [0, 0];
+    md.setBreakPending = true;
+    this.aiPicksNextSet();
+    this.emit();
+    return 'set';
   }
 
   // ---- Help ------------------------------------------------------------------------------
@@ -3118,6 +3185,7 @@ class Game {
     } else {
       md.videoCheck = false;
     }
+    this.grantTimeoutRequest();
     this.emit();
   }
 
@@ -3126,7 +3194,6 @@ class Game {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null) return null;
-    const before = md.snapshot;
     const result = sim.challenge(team, check);
     if (!result.ok) {
       this.notice = result.reason ?? 'No challenge.';
@@ -3141,11 +3208,10 @@ class Game {
       md.videoCheck = true;
     }
     md.snapshot = sim.snapshot();
-    if (result.overturned === true && !md.snapshot.matchOver && before !== null && md.snapshot.set !== before.set) {
-      // The point given back ended the set.
-      md.timeoutsUsed = [0, 0];
-      md.setBreakPending = true;
-      this.aiPicksNextSet();
+    if (result.overturned === true) {
+      // Turned over on the set's last point, the set goes on; the point given back may decide it instead.
+      md.setEnding = sim.setDecided();
+      md.setEndsAt = md.setEnding ? Date.now() + 1200 : null;
     }
     this.emit();
     return result;
@@ -3811,6 +3877,7 @@ class Game {
     md.paused = false;
     md.pauseUntil = null;
     if (this.liveSim !== null) md.snapshot = this.liveSim.snapshot();
+    this.grantTimeoutRequest();
     this.emit();
   }
 
@@ -4191,9 +4258,21 @@ class Game {
    */
   callTimeout(): void {
     const md = this.matchday;
-    if (md === null || md.stage !== 'live' || md.setBreakPending || md.timeoutActive !== null) return;
+    if (md === null || md.stage !== 'live' || md.setBreakPending || md.setEnding === true || md.timeoutActive !== null) return;
     const teamIdx = md.userIsHome ? 0 : 1;
     if (md.timeoutsUsed[teamIdx] >= 2) return;
+    // Asked again before it was given: withdrawn.
+    if (md.timeoutRequest === teamIdx) {
+      md.timeoutRequest = null;
+      this.emit();
+      return;
+    }
+    // The ball in play — or the referee busy with the video or someone hurt: given at the next dead ball.
+    if (md.ballInPlay === true || md.videoReview != null || md.injury != null) {
+      md.timeoutRequest = teamIdx;
+      this.emit();
+      return;
+    }
     this.startTimeout(teamIdx);
   }
 

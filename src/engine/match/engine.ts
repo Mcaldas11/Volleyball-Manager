@@ -251,6 +251,8 @@ export interface RallyContact {
   blockers?: number;
   /** Against a pin or the pipe: where the block set up — the coach's plan, or where it ended up when it read it wrong. */
   blockFocus?: 'read' | 'line' | 'cross';
+  /** On an ace: the passer it beat. */
+  passer?: number;
   /** The middle didn't get across in time: one fewer in the block, a seam in it. */
   lateMiddle?: boolean;
   /** The block read it wrong and went the other way. */
@@ -774,7 +776,19 @@ export class MatchSimulator {
     serving: 0 | 1;
     momentum: [number, number];
     runs: [number, number];
+    /** Each side's longest run before the point — it may have lengthened one. */
+    longest: [number, number];
+    /** The match's best point and play before this rally was weighed — it may have become one. */
+    bestBefore: { point: Highlight | null; play: Highlight | null } | null;
   } | null = null;
+  /**
+   * A live match holds the end of a set: its last point is given, but the set
+   * is only closed — see {@link closeSet} — once either bench has had the
+   * chance to ask for the video on it. Off, the set ends with its last point.
+   */
+  holdSetEnds = false;
+  /** The set is decided — its last point given — and waits to be closed. */
+  private setEnding = false;
   /** The rally each engine-coached side last made a change on. */
   private readonly lastAutoSub: [number, number] = [-Infinity, -Infinity];
 
@@ -877,6 +891,8 @@ export class MatchSimulator {
    */
   step(): RallyLogEntry | null {
     this.startIfNeeded();
+    // A set decided and held for the video: closed now, with play going on.
+    if (this.setEnding) this.closeSet();
     if (this.matchOver) return null;
     // Nobody serves with a man down who has to come off: if his coach has not
     // answered for him, the engine does.
@@ -889,9 +905,10 @@ export class MatchSimulator {
     const entry = this.playRally(serving);
     this.hurtInRally();
     const winner = entry.winner;
+    const bestBefore = this.best !== null ? { ...this.best } : null;
     if (before !== null) this.weighHighlight(entry, before.court, before.sets);
 
-    this.noteCall(entry, serving);
+    this.noteCall(entry, serving, bestBefore);
     this.awardPoint(winner);
     // Anyone hurt: the engine's coach answers straight away; the live user's waits for him.
     if (!this.matchOver) for (const t of [0, 1] as const) if (!this.ownInjuries[t]) this.coachInjuries(t);
@@ -928,40 +945,61 @@ export class MatchSimulator {
       // Safety valve: a deuce cannot run forever in a simulation.
       a > this.setTarget + 25 || b > this.setTarget + 25;
 
-    if (setOver) {
-      const setWinner = a > b ? 0 : 1;
-      this.teams[setWinner].setsWon++;
-      this.setScores.push([a, b]);
-      this.teams[0].stats.pointsByset.push(a);
-      this.teams[1].stats.pointsByset.push(b);
-      this.recoverBetweenSets();
-
-      // Serve alternates by set.
-      this.serving = (this.currentSet % 2 === 0 ? 1 : 0) as 0 | 1;
-      this.currentSet++;
-
-      if (
-        this.teams[0].setsWon >= this.setsToWin ||
-        this.teams[1].setsWon >= this.setsToWin ||
-        this.currentSet >= this.maxSets
-      ) {
-        this.teams[0].stats.setsWon = this.teams[0].setsWon;
-        this.teams[1].stats.setsWon = this.teams[1].setsWon;
-        if (this.setup.friendly !== true) this.commitCareerTotals();
-        this.matchOver = true;
-      } else {
-        this.beginSet();
-        for (const t of [0, 1] as const) if (this.autoCoached[t]) this.coachSetBreak(t);
-      }
+    if (setOver && this.holdSetEnds) {
+      this.setEnding = true;
+    } else if (setOver) {
+      this.finishSet();
     } else {
       for (const t of [0, 1] as const) if (this.autoCoached[t]) this.coachRally(t);
+    }
+  }
+
+  /** Whether the set's last point has been given and the set waits to be closed — see {@link holdSetEnds}. */
+  setDecided(): boolean {
+    return this.setEnding;
+  }
+
+  /** Close a set held for the video: the set — or the match — goes to the side that won it. */
+  closeSet(): void {
+    if (!this.setEnding) return;
+    this.setEnding = false;
+    this.finishSet();
+  }
+
+  /** The set is over: the sets, the scores, the break — and the match, if that was it. */
+  private finishSet(): void {
+    const a = this.teams[0].score;
+    const b = this.teams[1].score;
+    const setWinner = a > b ? 0 : 1;
+    this.teams[setWinner].setsWon++;
+    this.setScores.push([a, b]);
+    this.teams[0].stats.pointsByset.push(a);
+    this.teams[1].stats.pointsByset.push(b);
+    this.recoverBetweenSets();
+
+    // Serve alternates by set.
+    this.serving = (this.currentSet % 2 === 0 ? 1 : 0) as 0 | 1;
+    this.currentSet++;
+
+    if (
+      this.teams[0].setsWon >= this.setsToWin ||
+      this.teams[1].setsWon >= this.setsToWin ||
+      this.currentSet >= this.maxSets
+    ) {
+      this.teams[0].stats.setsWon = this.teams[0].setsWon;
+      this.teams[1].stats.setsWon = this.teams[1].setsWon;
+      if (this.setup.friendly !== true) this.commitCareerTotals();
+      this.matchOver = true;
+    } else {
+      this.beginSet();
+      for (const t of [0, 1] as const) if (this.autoCoached[t]) this.coachSetBreak(t);
     }
   }
 
   // ---- The video check -------------------------------------------------------------
 
   /** What the referee gave on the point just played, and whether it was close — kept for a challenge. */
-  private noteCall(entry: RallyLogEntry, serving: 0 | 1): void {
+  private noteCall(entry: RallyLogEntry, serving: 0 | 1, bestBefore: { point: Highlight | null; play: Highlight | null } | null): void {
     this.last = null;
     const end = entry.contacts[entry.contacts.length - 1];
     if (end === undefined || (end.kind !== 'kill' && end.kind !== 'ace' && end.kind !== 'attackError' && end.kind !== 'blocked')) return;
@@ -994,6 +1032,8 @@ export class MatchSimulator {
       serving,
       momentum: [this.teams[0].momentum, this.teams[1].momentum],
       runs: [this.teams[0].currentRun, this.teams[1].currentRun],
+      longest: [this.teams[0].stats.longestRun, this.teams[1].stats.longestRun],
+      bestBefore,
     };
   }
 
@@ -1044,10 +1084,12 @@ export class MatchSimulator {
       this.teams[team].challenges--;
       return { ok: true, overturned: false, verdict: callStands(last.call, check, mark), mark };
     }
-    // Put the point back as it was before it was given...
+    // Put the point back as it was before it was given: the score — and the set, if it decided it —
+    // the serve and the rotation, the momentum and the runs...
     const won = last.call.winner;
     const t = this.teams[won];
     t.score--;
+    this.setEnding = false;
     if (this.serving !== last.serving) {
       unrotate(t.court);
       this.serving = last.serving;
@@ -1056,35 +1098,75 @@ export class MatchSimulator {
     this.teams[1].momentum = last.momentum[1];
     this.teams[0].currentRun = last.runs[0];
     this.teams[1].currentRun = last.runs[1];
+    this.teams[0].stats.longestRun = last.longest[0];
+    this.teams[1].stats.longestRun = last.longest[1];
+    // ...the rotations' side-out and break points the other way...
+    const entry = last.entry;
+    const srv = this.teams[entry.serveTeam].stats.rotations[entry.serveTeam === 0 ? entry.homeRotation : entry.awayRotation];
+    const rcv = this.teams[1 - entry.serveTeam].stats.rotations[entry.serveTeam === 0 ? entry.awayRotation : entry.homeRotation];
+    if (won === entry.serveTeam) {
+      srv.servePointsWon--;
+      rcv.sideOutsWon++;
+    } else {
+      rcv.sideOutsWon--;
+      srv.servePointsWon++;
+    }
+    // ...the best point and play, if it was this one...
+    if (this.best !== null && last.bestBefore !== null) {
+      if (this.best.point?.contacts === entry.contacts) this.best.point = last.bestBefore.point;
+      if (this.best.play?.contacts === entry.contacts) this.best.play = last.bestBefore.play;
+    }
     // ...put the box score right...
     const own = (side: 0 | 1, p: number) => statsFor(this.teams[side].stats, p);
+    const lost = (1 - end.team) as 0 | 1;
+    // Whoever set the attack, for his assist.
+    const setter = [...entry.contacts].reverse().find((c) => c.kind === 'set' && c.team === end.team)?.player;
     let verdict = '';
     if (end.kind === 'kill') {
-      // No point for the hitter: out, into the net, or off nobody's hands.
+      // No point for the hitter, nor an assist for his setter: out, into the net, or off nobody's hands.
       own(end.team, end.player).attackKills--;
       own(end.team, end.player).attackErrors++;
+      if (setter !== undefined) own(end.team, setter).setAssists--;
+      this.teams[lost].stats.opponentErrors++;
       verdict = check === 'netTouch' ? 'The hitter touched the net — the call is overturned.'
         : check === 'blockTouch' ? 'No touch on the block — it was out. The call is overturned.'
           : `Out — ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
     } else if (end.kind === 'ace') {
+      // The serve was out: no ace, and no pass missed — there was nothing to pass.
       own(end.team, end.player).serveAces--;
       own(end.team, end.player).serveErrors++;
+      if (end.passer !== undefined) {
+        own(lost, end.passer).receptionErrors--;
+        own(lost, end.passer).receptionsTotal--;
+      }
+      this.teams[lost].stats.opponentErrors++;
       verdict = `The serve was out — ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
     } else if (end.kind === 'attackError') {
       own(end.team, end.player).attackErrors--;
-      // In, or off the block: his point. A blocker in the net: their fault, not his kill.
-      if (check !== 'netTouch') own(end.team, end.player).attackKills++;
+      this.teams[lost].stats.opponentErrors--;
+      // In, or off the block: his point, and his setter's assist. A blocker in the net: their fault, not his kill.
+      if (check !== 'netTouch') {
+        own(end.team, end.player).attackKills++;
+        if (setter !== undefined) own(end.team, setter).setAssists++;
+      } else {
+        this.teams[end.team].stats.opponentErrors++;
+      }
       verdict = check === 'netTouch' ? 'A blocker touched the net — the call is overturned.'
         : check === 'blockTouch' ? 'Touch off the block — the call is overturned.'
           : `In — ${mark !== undefined ? gapWords(mark.gap) : 'it caught the line'}. The call is overturned.`;
     } else {
+      // The blocker in the net: no stuff block, but a fault — the hitter's side's point.
       own(end.team, end.player).attackBlocked--;
-      if (end.by !== undefined) own(won, end.by).blockPoints--;
+      if (end.by !== undefined) {
+        own(won, end.by).blockPoints--;
+        own(won, end.by).blockErrors++;
+      }
+      this.teams[end.team].stats.opponentErrors++;
       verdict = 'The blocker touched the net — the call is overturned.';
     }
     // ...and give it the other way.
-    last.entry.winner = team;
-    last.entry.overturned = true;
+    entry.winner = team;
+    entry.overturned = true;
     this.last = null;
     this.awardPoint(team);
     return { ok: true, overturned: true, verdict, mark };
@@ -2078,7 +2160,7 @@ export class MatchSimulator {
     if (rng.chance(aceProb)) {
       sStats.serveAces++;
       rStats.receptionErrors++;
-      this.push({ kind: 'ace', team: serving, player: server });
+      this.push({ kind: 'ace', team: serving, player: server, passer: receiver });
       return serving;
     }
 

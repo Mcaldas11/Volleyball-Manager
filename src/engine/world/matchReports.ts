@@ -58,6 +58,8 @@ export function rallyFlow(log: readonly RallyLogEntry[]): string[] {
     if (last !== undefined) {
       if ((last.kind === 'kill' || last.kind === 'ace') && last.team === r.winner) how = last.kind === 'kill' ? 'k' : 'a';
       else if (last.kind === 'blocked' && last.team !== r.winner) how = 'b';
+      // An attack called out, turned over on video as in or off the block: the hitter's kill.
+      else if (r.overturned === true && last.kind === 'attackError' && last.team === r.winner && r.doubt !== 'netTouch') how = 'k';
     }
     sets[r.set] = (sets[r.set] ?? '') + (r.winner === 0 ? how : how.toUpperCase());
   }

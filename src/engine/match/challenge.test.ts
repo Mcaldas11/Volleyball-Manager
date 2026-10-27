@@ -89,3 +89,120 @@ test('a side can only challenge a point it lost, and has two a set', () => {
   if (call !== null) assert.match(m.challengeError(call.winner) ?? '', /won that point/);
   assert.equal(m.challengesLeft(entry.winner), CHALLENGES_PER_SET);
 });
+
+/** A live match: the end of each set held for the video, as the match screen plays it. */
+function live(seed: number, highlights = false): MatchSimulator {
+  const world = generateWorld({ seed: 41, startYear: 2026, scale: 'small', manager: stubManager() });
+  const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
+  const m = new MatchSimulator(world.players, {
+    home: toTeamSetup(world.players, a), away: toTeamSetup(world.players, b),
+    format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: true, seed, highlights,
+  });
+  m.holdSetEnds = true;
+  return m;
+}
+
+test('a set\'s last point can be challenged: the set waits for the video, and a call turned over plays on', () => {
+  let looked = 0;
+  let kept = 0;
+  for (let seed = 30; seed < 70 && kept === 0; seed++) {
+    const m = live(seed);
+    for (let i = 0; i < 400 && !m.snapshot().matchOver; i++) {
+      const entry = m.step();
+      if (entry === null || !m.setDecided()) continue;
+      const before = m.snapshot();
+      const call = m.lastCall();
+      // Decided, but not closed: the same set, its last point on the board.
+      assert.equal(before.set, entry.set);
+      if (call === null || !call.close) {
+        m.closeSet();
+        assert.equal(m.snapshot().set > before.set || m.snapshot().matchOver, true, 'closed, the set is over');
+        continue;
+      }
+      const loser = (1 - call.winner) as 0 | 1;
+      assert.equal(m.challengeError(loser), m.challengesLeft(loser) > 0 ? null : 'No challenges left this set.');
+      if (m.challengesLeft(loser) === 0) {
+        m.closeSet();
+        continue;
+      }
+      looked++;
+      const result = m.challenge(loser, call.doubt!);
+      if (result.overturned === true) {
+        kept++;
+        const now = m.snapshot();
+        assert.equal(now.set, before.set, 'the set goes on');
+        assert.equal(now.matchOver, false);
+        const score = (t: 0 | 1, s: typeof now): number => (t === 0 ? s.homeScore : s.awayScore);
+        assert.equal(score(call.winner, now), score(call.winner, before) - 1);
+        assert.equal(score(loser, now), score(loser, before) + 1);
+        assert.equal(m.setDecided(), false, 'nobody has won it yet');
+      } else {
+        // The call stands: the set is the winner's once it is closed.
+        m.closeSet();
+        assert.ok(m.snapshot().set > before.set || m.snapshot().matchOver);
+      }
+    }
+  }
+  assert.ok(looked > 0, 'set points were challenged');
+  assert.ok(kept > 0, 'and one was turned over, and the set went on');
+});
+
+test('points turned over on video leave the box score as the log has them: kills, aces, every rotation\'s points', () => {
+  let overturned = 0;
+  for (const seed of [71, 72, 73, 74]) {
+    const m = live(seed, true);
+    while (!m.snapshot().matchOver) {
+      if (m.step() === null) break;
+      const call = m.lastCall();
+      // Every close call challenged, on what looked close: plenty are turned over.
+      if (call !== null && call.close) {
+        const loser = (1 - call.winner) as 0 | 1;
+        if (m.challengeError(loser) === null && m.challenge(loser, call.doubt!).overturned === true) overturned++;
+      }
+    }
+    const r = m.buildResult();
+    for (const side of [0, 1] as const) {
+      const team = side === 0 ? r.stats.home : r.stats.away;
+      let kills = 0;
+      let aces = 0;
+      let won = 0;
+      for (const e of r.log!) {
+        if (e.winner === side) won++;
+        const end = e.contacts[e.contacts.length - 1];
+        if (end === undefined || end.team !== side) continue;
+        // What the point really was, after the video.
+        if (e.overturned === true) {
+          if (end.kind === 'attackError' && e.doubt !== 'netTouch') kills++;
+        } else if (end.kind === 'kill') kills++;
+        else if (end.kind === 'ace' || end.kind === 'receptionError') aces++;
+      }
+      // A reception error is the server's ace too — logged by the passer's side.
+      for (const e of r.log!) {
+        const end = e.contacts[e.contacts.length - 1];
+        if (end?.kind === 'receptionError' && end.team !== side && e.serveTeam === side) aces++;
+        if (end?.kind === 'receptionError' && end.team === side) aces--;
+      }
+      const players = [...team.players.values()];
+      assert.equal(players.reduce((n, s) => n + s.attackKills, 0), kills, 'kills');
+      assert.equal(players.reduce((n, s) => n + s.serveAces, 0), aces, 'aces');
+      // Every point won is in exactly one rotation's book: won serving, or sided out.
+      assert.equal(team.rotations.reduce((n, x) => n + x.servePointsWon + x.sideOutsWon, 0), won, 'rotations');
+    }
+    // The match's best point is never one the video took away.
+    const best = r.highlights?.find((h) => h.kind === 'point');
+    if (best !== undefined) {
+      const e = r.log!.find((x) => x.contacts === best.contacts);
+      assert.notEqual(e?.overturned, true, 'the best point stood');
+    }
+  }
+  assert.ok(overturned > 3, `${overturned} turned over`);
+});
+
+test('a simulated match still ends each set on its last point, and a live one only once it is closed', () => {
+  const quick = sim(80).run();
+  assert.ok(quick.setScores.length >= 3);
+  const m = live(80);
+  m.finish();
+  assert.equal(m.snapshot().matchOver, true, 'finished, the held sets are closed as play goes on');
+  assert.deepEqual(m.buildResult().setScores, quick.setScores, 'the same match either way');
+});
