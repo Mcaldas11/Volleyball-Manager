@@ -3,7 +3,7 @@ import { predictionFor } from '../../engine/world/predictions.ts';
 import { RivalTag } from '../components.tsx';
 import { fixtureRivalry, rivalryName } from '../../engine/world/rivals.ts';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
-import type { RallyContact, RallyLogEntry, Shot } from '../../engine/match/engine.ts';
+import { SECOND_BALL, type RallyContact, type RallyLogEntry, type Shot } from '../../engine/match/engine.ts';
 import { PLAY_NAMES } from '../../engine/match/tactics.ts';
 import { monsterSpikeKmh } from '../gameGender.ts';
 import { matchRating } from '../../engine/match/playerRating.ts';
@@ -320,8 +320,21 @@ export function describeRally(r: RallyLogEntry, store: NameLookup): string {
   return text === '' ? 'Rally' : text;
 }
 
+/** What went wrong for the block, when something did: told after the attack. */
+function blockNote(c: RallyContact): string {
+  if (c.lateMiddle === true) return ' — the middle was late';
+  if (c.misread === true) return ' — the block went the wrong way';
+  return '';
+}
+
 function describeContact(c: RallyContact, store: NameLookup): string {
   const who = store.shortName(c.player);
+  if (c.detail === SECOND_BALL && (c.kind === 'attack' || c.kind === 'kill' || c.kind === 'blocked' || c.kind === 'attackError')) {
+    if (c.kind === 'kill') return `KILL ${who} — setter dump on the second ball`;
+    if (c.kind === 'blocked') return `${who} dumps the second ball — STUFFED`;
+    if (c.kind === 'attackError') return `${who} dumps the second ball into the net`;
+    return `${who} dumps the second ball`;
+  }
   switch (c.kind) {
     case 'serve': return `${who} serves (${c.detail})`;
     case 'ace': return `ACE ${who}`;
@@ -329,13 +342,13 @@ function describeContact(c: RallyContact, store: NameLookup): string {
     case 'reception': return `${who} passes ${c.detail}`;
     case 'receptionError': return `${who} shanks the pass`;
     case 'setError': return `${who} setting error`;
-    case 'attack': return `${who} attacks (${c.detail})`;
-    case 'kill': return `KILL ${who} (${c.detail})`;
+    case 'attack': return `${who} attacks (${c.detail})${blockNote(c)}`;
+    case 'kill': return `KILL ${who} (${c.detail})${blockNote(c)}`;
     case 'attackError': return `${who} attack error`;
     case 'blocked': return `${who} STUFFED`;
     case 'blockTouch': return `${who} touch`;
     case 'dig': return `${who} digs`;
-    case 'freeball': return 'free ball over';
+    case 'freeball': return c.detail !== undefined ? `${who} can't swing at it — free ball over` : 'free ball over';
     default: return '';
   }
 }

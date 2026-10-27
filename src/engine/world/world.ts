@@ -423,6 +423,8 @@ export interface GameMessage {
   moveTalkOf?: number;
   /** A rival coach's words before a big match — the fixture: the message offers the replies. */
   mindGameOf?: number;
+  /** The competition a message is about — a cup's draw or its run: the inbox draws the club's way through it. */
+  competitionId?: number;
   /** The assistant's review of a match — drawn as a report with the match's charts. */
   review?: MatchReviewNote;
   /** The summer's sponsorship offers — the message leads to them. */

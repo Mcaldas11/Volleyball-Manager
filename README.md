@@ -84,6 +84,18 @@ Before committing a change:
 - [x] Per-rotation instructions (preferred attacker, serve target, block
       assignment, defensive shape, tempo) and a defensive layout against each
       kind of attack
+- [x] A block plan against the outside, the opposite and the pipe, set over a
+      3D court: read the hitter, take the line or take the cross (the seam or
+      the angle against the pipe), and one, two or three up. It plays out in
+      the engine — a block on the shot a hitter favours closes it, three up
+      blocks more but leaves the tip and slows the counter, one up keeps the
+      diggers back — and however good the plan, the middle can be late across
+      and a blocker can read the hitter the wrong way
+- [x] Out of system: off a poor pass or a poor set a hitter with the head for
+      it plays a free ball over rather than swing into the net; and a
+      front-row setter on a good pass attacks the second ball himself — a
+      dump into the hole behind the block, which a middle watching him can
+      stop
 - [x] A serve-receive line for every rotation: the usual three — the libero
       and both outsides — or two, hiding the weaker-passing outside so he
       attacks the first ball fresher while the others cover more court, or

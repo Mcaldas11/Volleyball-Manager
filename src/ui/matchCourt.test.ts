@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MatchFormat, MatchSimulator } from '../engine/match/engine.ts';
+import { MatchFormat, MatchSimulator, SECOND_BALL } from '../engine/match/engine.ts';
 import { Position } from '../engine/model/positions.ts';
 import { Formation } from '../engine/match/tactics.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
@@ -245,4 +245,34 @@ test('a two- or four-man receive line shows on the court: the passers back, nobo
     }
     assert.ok(checked > 5, `${receivers}: rallies checked ${checked}`);
   }
+});
+
+test('a setter dump is played by the setter at the net, no set before it; a hitter free ball goes to the hitter, then over', () => {
+  let dumps = 0;
+  let frees = 0;
+  for (const seed of [2, 3, 6, 8]) {
+    const { sim, positions } = liveMatch(seed);
+    for (let i = 0; i < 400; i++) {
+      const pre = sim.snapshot();
+      if (pre.matchOver) break;
+      const entry = sim.step();
+      if (entry === null) break;
+      const dump = entry.contacts.find((c) => c.detail === SECOND_BALL);
+      const free = entry.contacts.find((c) => c.kind === 'freeball' && c.detail !== undefined);
+      if (dump === undefined && free === undefined) continue;
+      const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, positions, i, 0);
+      if (dump !== undefined) {
+        dumps++;
+        const hit = beats.find((b) => b.actor === dump.player && b.poses.get(dump.player) === 'spike');
+        assert.ok(hit !== undefined, 'the setter plays the second ball himself');
+        assert.ok(depth(hit.positions.get(dump.player)!.y) < 0.2, 'at the net');
+      }
+      if (free !== undefined) {
+        frees++;
+        assert.ok(beats.some((b) => b.actor === free.player && b.poses.get(free.player) === 'pass'), 'the hitter plays it over');
+      }
+    }
+  }
+  assert.ok(dumps > 0, 'some setter dumps in four matches');
+  assert.ok(frees > 0, 'some free balls in four matches');
 });

@@ -18,7 +18,7 @@ import {
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
-import { TacticsBoard } from '../tacticsBoard.tsx';
+import { BlockPlanCard, TacticsBoard } from '../tacticsBoard.tsx';
 
 export const FORMATION_OPTIONS: Array<[Formation, string]> = [
   [Formation.FiveOne, '5-1 (one setter)'],
@@ -237,11 +237,14 @@ export function RotationsScreen(): JSX.Element {
             options={SERVE_TARGET_OPTIONS}
           />
           <ChoiceField
-            label="Block assignment"
+            label="Block on the quick"
             value={r.blockAssignment}
             onChange={(v) => { r.blockAssignment = v; g.touch(); }}
             options={BLOCK_OPTIONS}
           />
+          <div className="rot-blockplan">
+            <BlockPlanCard tactics={tactics} onChange={() => g.touch()} slim />
+          </div>
           <ChoiceField
             label="Defensive shape"
             value={r.defensiveShape}

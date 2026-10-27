@@ -110,6 +110,50 @@ export enum BlockAssignment {
   ReleaseToLine = 3,
 }
 
+/** The attacks a block plan is drawn up against: the outside at the left pin, the opposite at the right, the pipe from the back row. */
+export type BlockTarget = 'outside' | 'opposite' | 'pipe';
+
+export const BLOCK_TARGETS: readonly BlockTarget[] = ['outside', 'opposite', 'pipe'];
+
+/**
+ * Where the block sets up against an attack: reading the set and going to the
+ * ball, or shifted to take one shot away — the line, down the near sideline,
+ * or the cross, the angle back across the court — and leave the other to the
+ * diggers behind it.
+ */
+export enum BlockFocus {
+  Read = 0,
+  Line = 1,
+  Cross = 2,
+}
+
+/** How many go up against it: one, the others back to dig; the usual two; or all three front-row players. */
+export enum BlockNumbers {
+  Single = 1,
+  Double = 2,
+  Triple = 3,
+}
+
+export interface BlockPlan {
+  focus: BlockFocus;
+  numbers: BlockNumbers;
+}
+
+export type BlockPlans = Record<BlockTarget, BlockPlan>;
+
+export function defaultBlockPlans(): BlockPlans {
+  return {
+    outside: { focus: BlockFocus.Read, numbers: BlockNumbers.Double },
+    opposite: { focus: BlockFocus.Read, numbers: BlockNumbers.Double },
+    pipe: { focus: BlockFocus.Read, numbers: BlockNumbers.Double },
+  };
+}
+
+/** A side's block plans — the usual read block, two up, on saves from before they could be set. */
+export function blockPlansOf(t: Pick<TeamTactics, 'blockPlans'> | undefined): BlockPlans {
+  return t?.blockPlans ?? defaultBlockPlans();
+}
+
 /**
  * What the middle hits: the quick in front of the setter (the "tensa"), the
  * back quick behind him (the "costas"), the slide — off one foot, running
@@ -317,6 +361,8 @@ export interface TeamTactics {
   defence?: DefenceLayouts;
   /** How often combination plays are run — see Combinations. Absent on older saves: now and then. */
   combinations?: Combinations;
+  /** How the block sets up against the outside, the opposite and the pipe — see BlockPlan. Absent: read, two up. */
+  blockPlans?: BlockPlans;
   /** Instructions for rotations P1..P6, indexed 0-5. */
   rotations: RotationTactics[];
 }

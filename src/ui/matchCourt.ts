@@ -27,7 +27,7 @@
  */
 
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
-import type { RallyContact, Shot } from '../engine/match/engine.ts';
+import { SECOND_BALL, type RallyContact, type Shot } from '../engine/match/engine.ts';
 import { passZone, type PlayCall } from '../engine/match/tactics.ts';
 import { shotSpot, type AttackSource, type DefenceLayout, type DefenceLayouts } from '../engine/match/defence.ts';
 import type { Landing } from '../engine/match/landing.ts';
@@ -826,7 +826,13 @@ export function rallyBeats(
         break;
       }
       case 'freeball': {
-        setBall(t);
+        // A hitter who couldn't swing at the set plays it over himself: the set goes to him first.
+        const byHitter = engineSetter !== null && engineSetter !== c.player;
+        setBall(t, byHitter ? c.player : -1);
+        if (byHitter) {
+          const spot = forms[t].get(c.player) ?? { u: 0.5, v: 0.3 };
+          push(air(t, { u: spot.u, v: Math.max(0.12, spot.v) }, 1.5), c.player, 760, 1.2, [[c.player, 'pass']]);
+        }
         forms[t] = defenceFormation(teams[t]);
         const catcher = teams[o].zones.find((p) => teams[o].role(p) === Position.Libero)
           ?? teams[o].passers[0] ?? teams[o].zones[5];
@@ -840,9 +846,18 @@ export function rallyBeats(
       case 'kill':
       case 'attackError':
       case 'blocked': {
-        const { f, hit, setArc } = attackFormation(teams[t], c.player, c.detail, c.play);
+        // The setter's second ball: no set — the pass comes to him at the net and he plays it over.
+        const dump = c.detail === SECOND_BALL;
+        const { f, hit, setArc } = attackFormation(teams[t], c.player, dump ? undefined : c.detail, c.play);
         if (c.decoy !== undefined) decoyNext = c.decoy;
-        if (needsSet) setBall(t, c.player);
+        if (dump) {
+          if (pass !== null) f.set(c.player, { u: pass.spot.at.u, v: 0.06 });
+          if (pass !== null) hit.u = pass.spot.at.u;
+          hit.v = 0.06;
+          needsSet = false;
+          pass = null;
+          engineSetter = null;
+        } else if (needsSet) setBall(t, c.player);
         // The decoy lands where he jumped, out of the hitter's way.
         if (c.decoy !== undefined && c.decoy !== c.player) f.set(c.decoy, { u: DECOY_POINT.u, v: 0.16 });
         // Whoever set stays where they set from, to cover.

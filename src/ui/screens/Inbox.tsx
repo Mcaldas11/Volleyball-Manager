@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { MIND_GAME_REPLIES } from '../../engine/world/mindGames.ts';
 import { MatchReviewSheet } from '../matchReviewSheet.tsx';
+import { ContextSheet, RichBody } from '../inboxSheets.tsx';
 import { MeetingSheet } from '../staffMeeting.tsx';
 import { relapseChance, TREATMENT_NAMES, treatmentWeeks, type Treatment } from '../../engine/world/treatment.ts';
 import { INJURY_NAMES } from '../../engine/model/players.ts';
@@ -293,7 +294,7 @@ function MessageSheet({ message: m }: { message: GameMessage }): JSX.Element {
         {/* A player who means to retire has his own sheet, face and all, below. */}
         {m.intl === undefined && m.retirementOf === undefined && <PlayerContext message={m} />}
         {/* A drawn report says the player-by-player part better than the text. */}
-        {m.review === undefined && <p className="paper-text">{m.intl !== undefined ? intlIntro(m.body) : m.body}</p>}
+        {m.review === undefined && <RichBody text={m.intl !== undefined ? intlIntro(m.body) : m.body} />}
         <MessageDetail message={m} />
       </div>
 
@@ -642,7 +643,7 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     );
   }
 
-  return null;
+  return <ContextSheet message={m} />;
 }
 
 function pct(n: number, of: number): string {

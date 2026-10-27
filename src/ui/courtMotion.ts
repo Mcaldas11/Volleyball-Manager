@@ -44,9 +44,9 @@ import type { Cheer } from './crowd3d.ts';
 
 // ---- Shapes the contacts pass through ----------------------------------------------
 
-const APPROACH = shape(READY, { crouch: 0.1, tilt: 0.3, lean: 0.34, nod: -0.5, stride: 0.14, ...arms(0.35, 0.2, 1.0) });
+export const APPROACH = shape(READY, { crouch: 0.1, tilt: 0.3, lean: 0.34, nod: -0.5, stride: 0.14, ...arms(0.35, 0.2, 1.0) });
 /** The last, long step of a run-up: hips low, both arms thrown back. */
-const LOAD = shape(READY, {
+export const LOAD = shape(READY, {
   crouch: 0.34, hipShift: -0.1, tilt: 0.5, lean: 0.52, nod: -0.8, stance: 0.2, stride: 0.3, ...arms(-1.05, 0.25, 0.25),
 });
 /** Leaving the floor, both arms swinging up. */
@@ -54,12 +54,12 @@ const TAKEOFF = shape(STAND, {
   crouch: 0.02, tilt: 0.1, lean: 0.12, nod: -0.7, stance: 0.14, stride: 0.1, ...arms(2.4, 0.3, 0.5),
 });
 /** Bow and arrow: the other arm up at the ball, the hitting arm drawn back, elbow high. */
-const COCKED = shape(TAKEOFF, {
+export const COCKED = shape(TAKEOFF, {
   lean: -0.28, twist: 0.55, bend: 0.05, nod: -0.5, tuck: 0.32, point: 0.6,
   hFlex: 3.25, hAbd: 0.75, hElbow: 2.1, oFlex: 2.75, oAbd: 0.15, oElbow: 0.15,
 });
 /** The hit: the arm whipped through straight, the trunk snapping forward. */
-const STRIKE = shape(COCKED, {
+export const STRIKE = shape(COCKED, {
   lean: 0.12, twist: -0.3, bend: -0.2, nod: 0.1, tuck: 0.18,
   hFlex: 2.85, hAbd: 0.2, hElbow: 0.08, oFlex: 1.0, oAbd: 0.35, oElbow: 1.3,
 });
@@ -145,13 +145,13 @@ const SET_OUT = shape(SET_PREP, { crouch: 0.02, lean: -0.05, nod: -0.5, tuck: 0.
 const BACK_SET_OUT = shape(SET_OUT, { lean: -0.42, nod: -0.9, ...arms(3.35, 0.3, 0.2) });
 
 /** At the net, hands up at the tape, ready to go. */
-const BLOCK_READY = shape(READY, {
+export const BLOCK_READY = shape(READY, {
   crouch: 0.14, hipShift: 0, tilt: 0.1, lean: 0.05, nod: -0.3, stance: 0.24, stride: 0, ...arms(2.2, 0.38, 1.6),
 });
 const BLOCK_LOAD = shape(BLOCK_READY, { crouch: 0.32, tilt: 0.25, lean: 0.14, ...arms(2.0, 0.4, 1.75) });
 const BLOCK_UP = shape(BLOCK_READY, { crouch: 0.03, tilt: 0.05, lean: 0.1, nod: -0.2, tuck: 0.1, point: 0.5, ...arms(2.65, 0.2, 0.3) });
 /** Hands pressed over the net into the hitter's side. */
-const BLOCK_PEAK = shape(BLOCK_UP, { lean: 0.16, tuck: 0.14, ...arms(2.72, 0.14, 0.05) });
+export const BLOCK_PEAK = shape(BLOCK_UP, { lean: 0.16, tuck: 0.14, ...arms(2.72, 0.14, 0.05) });
 const BLOCK_LAND = shape(BLOCK_READY, { crouch: 0.3, tilt: 0.3, lean: 0.2, ...arms(2.1, 0.4, 1.4) });
 
 /** The toss for a jump serve, thrown high and forward with the hitting hand. */

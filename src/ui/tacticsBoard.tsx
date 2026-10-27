@@ -26,6 +26,9 @@ import {
 } from '../engine/match/defence.ts';
 import type { Shot } from '../engine/match/engine.ts';
 import { Icon } from './icons.tsx';
+import { BlockPlanDialog, blockPlansSummary } from './blockPlan3d.tsx';
+import { clubKit, hueOf, kitFromHue } from './kits.ts';
+import { useGame } from './state.ts';
 import {
   COMBINATION_OPTIONS, DEFENSE_OPTIONS, FORMATION_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS,
 } from './screens/Manage.tsx';
@@ -105,6 +108,45 @@ const C = { line: 'rgba(255,255,255,0.28)', dim: 'rgba(255,255,255,0.14)', lit: 
 /** A strip of net along the top. */
 function Net(): JSX.Element {
   return <line x1="6" y1="7" x2="74" y2="7" stroke={C.line} strokeWidth="2" />;
+}
+
+/** The block plan's card: hands up at the net against a hitter, the shot it leaves him. */
+function blockPlanVisual(): JSX.Element {
+  return (
+    <>
+      <circle cx="62" cy="4" r="3" fill={C.gold} />
+      <Net />
+      <rect x="49" y="9" width="7" height="4" rx="1" fill={C.lit} />
+      <rect x="57" y="9" width="7" height="4" rx="1" fill={C.lit} />
+      <path d="M50 14 L70 14 L76 42 L46 42 Z" fill="rgba(229,72,77,0.35)" />
+      <path d="M58 14 L20 38" stroke="#3dbb5c" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M20 38 L22 32 M20 38 L26 37" stroke="#3dbb5c" strokeWidth="2" strokeLinecap="round" />
+    </>
+  );
+}
+
+/**
+ * The block plan's card and its 3D window: our own kit on the block, the hitter
+ * in a colour opposite ours.
+ */
+export function BlockPlanCard({ tactics: t, onChange, slim = false }: { tactics: TeamTactics; onChange: () => void; slim?: boolean }): JSX.Element {
+  const g = useGame();
+  const [open, setOpen] = useState(false);
+  const club = g.club;
+  const ours = club !== null ? clubKit(club) : kitFromHue(215);
+  const theirs = kitFromHue(((club !== null ? hueOf(club) : 215) + 180) % 360);
+  return (
+    <>
+      {slim
+        ? (
+          <button className="bp3-slim" onClick={() => setOpen(true)} title="Where the block sets up against the outside, the opposite and the pipe — in 3D">
+            <Icon name="tactics" size={14} /> <b>Block plan</b> <span>{blockPlansSummary(t)}</span>
+          </button>
+        )
+        : <InstrCard title="Block plan · 3D" value={blockPlansSummary(t)} visual={blockPlanVisual()} active={open} onClick={() => setOpen(true)} />}
+      {open && <BlockPlanDialog tactics={t} ours={ours} theirs={theirs} onChange={onChange} onClose={() => setOpen(false)} />}
+    </>
+  );
 }
 
 function formationVisual(f: Formation): JSX.Element {
@@ -555,9 +597,15 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
           ) : (
             <>
               <div className="tboard-head">Defence and serve</div>
-              {grid(outKeys)}
+              <div className="icard-grid">
+                {outKeys.map((k) => (
+                  <InstrCard key={k} title={cards[k].title} value={cards[k].value} visual={cards[k].visual} active={open === k}
+                    onClick={() => setOpen(open === k ? null : k)} />
+                ))}
+                <BlockPlanCard tactics={t} onChange={onChange} />
+              </div>
               <p className="tboard-note">
-                Place the defence behind the block on the court, for each kind of attack. The block assignment and where to serve are set rotation by rotation, in Rotations.
+                Place the defence behind the block on the court, for each kind of attack, and set the block against the outside, the opposite and the pipe in the Block plan. The block on the middle's quick and where to serve are set rotation by rotation, in Rotations.
               </p>
             </>
           )}
@@ -594,6 +642,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
             })}
             <Overview title="Out of possession" active={phase === 'out'} onClick={() => setPhase('out')} rows={[
               ...outKeys.map((k) => [cards[k].title, cards[k].value] as [string, string]),
+              ['Block plan', blockPlansSummary(t)],
               ['Behind the block', behindTheBlock(t)],
             ]} />
           </aside>

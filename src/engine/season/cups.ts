@@ -817,6 +817,7 @@ export function entryNotices(world: World): void {
       subject: `${comp.name}: the draw`,
       body,
       from: comp.organizer,
+      competitionId: comp.id,
       clubId: next !== undefined ? opponentOf(next, me) : undefined,
       category: 'matchday',
     });
@@ -836,6 +837,7 @@ function drawNotice(world: World, comp: Competition, roundIdx: number): void {
     subject: round === 'Final' ? `${comp.name}: into the final` : `${comp.name}: ${round.toLowerCase()} draw`,
     body: `${world.clubs[me].name} will play ${opp.name} in the ${round.toLowerCase()} — ${venue(f, me)}, on ${formatDay(world, f.day)}.`,
     from: comp.organizer,
+    competitionId: comp.id,
     clubId: opp.id,
     category: 'matchday',
   });
@@ -860,6 +862,7 @@ function groupStageNotice(world: World, comp: Competition, cup: CupState, tables
       : `${club.name} finished ${ordinal(pos)} in Group ${cup.groups[gi].name} — not enough to go through. ` +
         `The ${comp.name} is over for this season.`,
     from: comp.organizer,
+    competitionId: comp.id,
     clubId: next !== undefined ? opponentOf(next, me) : me,
     category: 'matchday',
   });
@@ -883,6 +886,7 @@ function knockoutNotice(world: World, comp: Competition, tie: PlayoffTie, roundI
     body: `${world.clubs[winner].name} beat ${world.clubs[me].name} ${Math.max(f.homeSets, f.awaySets)}-` +
       `${Math.min(f.homeSets, f.awaySets)} in the ${round}. The ${comp.name} is over for this season.`,
     from: comp.organizer,
+    competitionId: comp.id,
     clubId: winner,
     category: 'matchday',
   });
@@ -905,6 +909,7 @@ function winnerNotice(world: World, comp: Competition, bracket: PlayoffGroup): v
           `${euros(format.prizePool)} in prize money comes with it.`
         : `${world.clubs[winner].name} beat ${world.clubs[me].name} ${score} in the final. So close.`,
       from: comp.organizer,
+      competitionId: comp.id,
       clubId: won ? runnerUp : winner,
       category: 'matchday',
     });
@@ -921,6 +926,7 @@ function winnerNotice(world: World, comp: Competition, bracket: PlayoffGroup): v
     subject: `${world.clubs[winner].name} win the ${comp.name}`,
     body: `${world.clubs[winner].name} beat ${world.clubs[runnerUp].name} ${score} in the final of the ${comp.name}.`,
     from: comp.organizer,
+    competitionId: comp.id,
     clubId: winner,
     category: 'news',
   });

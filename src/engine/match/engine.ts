@@ -44,6 +44,10 @@ import {
   AttackLane,
   lineupSlotPositions,
   BlockAssignment,
+  BlockFocus,
+  BlockNumbers,
+  blockPlansOf,
+  type BlockTarget,
   DEFENSE_PROFILE,
   LANE_NAMES,
   OFFENSE_LANE_WEIGHTS,
@@ -101,6 +105,39 @@ const LEFTY_EDGE = 1.03;
  *  his line he can still swing at, or tip, with the other one. Centred on
  *  the usual weak other hand, so on average it changes nothing. */
 const OFF_HAND_EDGE = 0.06;
+/**
+ * Out of system. A set this far off the net (0-1) can't be swung at: a hitter
+ * with the head for it plays the ball over safe instead — a forearm pass or a
+ * two-handed push deep — rather than hit it into the net or the block. How
+ * often he does is up to his composure; the other side gets an easy ball.
+ */
+const FREE_BALL_SET = 0.46;
+const FREE_BALL_RATE = 0.85;
+/** How a free ball comes down on the other side: easy to pass. */
+const FREE_BALL_PASS = 0.8;
+/**
+ * The setter's second ball: off a pass to the net, a front-row setter can
+ * attack it himself — a tip or a push over into the hole behind the block —
+ * instead of setting. At most this often, for one with the touch for it.
+ */
+const DUMP_RATE = 0.065;
+/** The pass it takes: the setter has to be at the net, on top of the ball. */
+const DUMP_PASS = 0.62;
+/** What a block set up on the shot the hitter favours is worth — and costs, set up on the one he doesn't. */
+const FOCUS_BLOCK = 0.16;
+/**
+ * Against a pin or the pipe, each blocker more or less than the usual two
+ * takes court away from the hitter — or gives it him — for the diggers behind.
+ */
+const CLOSE_COURT = 0.035;
+/** Three up leaves the tip and the roll shot to fewer behind; one up keeps them back. */
+const TRIPLE_DIG = 0.975;
+/** Off a dig, a side that sent one to block has hitters free to attack; one that sent three is still landing. */
+const SINGLE_TRANSITION = 0.04;
+const TRIPLE_TRANSITION = -0.03;
+/** A block that read it wrong, or with its middle late: what is left of it. */
+const MISREAD_BLOCK = 0.84;
+const LATE_MIDDLE_BLOCK = 0.82;
 const OFF_HAND_TYPICAL = 0.25;
 
 export enum MatchFormat {
@@ -211,6 +248,12 @@ export interface RallyContact {
   decoy?: number;
   /** How many went up to block it. */
   blockers?: number;
+  /** Against a pin or the pipe: where the block set up — the coach's plan, or where it ended up when it read it wrong. */
+  blockFocus?: 'read' | 'line' | 'cross';
+  /** The middle didn't get across in time: one fewer in the block, a seam in it. */
+  lateMiddle?: boolean;
+  /** The block read it wrong and went the other way. */
+  misread?: boolean;
   /** Where an attack came down — or, on a close call, an ace — relative to the hitter: see landing.ts. */
   land?: Landing;
 }
@@ -2105,6 +2148,13 @@ export class MatchSimulator {
     const setRatings = atk.rate(setter);
     const setterStats = statsFor(atk.stats, setter);
 
+    // ---- The setter's second ball ----
+    const setterAt = atk.court.indexOf(setter);
+    if (this.roles[setter] === Position.Setter && setterAt >= 1 && setterAt <= 3 && quality >= DUMP_PASS &&
+      rng.chance(DUMP_RATE * (0.45 + setRatings.attackControl / 100) * (transition ? 0.6 : 1))) {
+      return this.setterDump(atk, def, attacking, setter, setRatings);
+    }
+
     // A setter's job is to convert whatever pass they get into a hittable ball.
     // Good setters lose less off a poor pass, which is precisely their value.
     const setSkill = setRatings.setting * setRatings.fatigue * setRatings.confidence;
@@ -2140,7 +2190,6 @@ export class MatchSimulator {
     const attacker = this.laneAttacker[lane];
     const ar = atk.rate(attacker);
     const aStats = statsFor(atk.stats, attacker);
-    aStats.attacksTotal++;
 
     // ---- The play called ----
     // The middle hits the quick in front, the back quick or the slide; a pin
@@ -2157,6 +2206,14 @@ export class MatchSimulator {
     const chem = atk.chemistry(atk.settingIdx(), attacker);
     const understanding = CHEMISTRY_SET * (chem - 0.5) * (lane === AttackLane.QuickMiddle ? 1.5 : 1);
     const setOnIt = clamp(setQuality - timing * (1 - rehearsed) + understanding, 0, 1);
+
+    // ---- Out of system: a free ball ----
+    if (!combo && setOnIt < FREE_BALL_SET &&
+      rng.chance(((FREE_BALL_SET - setOnIt) / FREE_BALL_SET) * FREE_BALL_RATE * (0.5 + ar.composure / 200))) {
+      this.push({ kind: 'freeball', team: attacking, player: attacker, detail: LANE_NAMES[lane] });
+      return { point: -1, nextQuality: clamp(rng.gaussian(FREE_BALL_PASS, 0.08), 0.55, 0.95), toucher: -1 };
+    }
+    aStats.attacksTotal++;
 
     // ---- Attack strength ----
     let attackBase: number;
@@ -2196,16 +2253,55 @@ export class MatchSimulator {
     // ---- Block ----
     // The decoy takes a blocker with him; a slide runs away from the block, a
     // back quick goes up where the middle blocker isn't looking.
-    const blockCount = combo
+    let blockCount = combo
       ? Math.max(1, this.blockersFor(lane, grade, def, rotTac, transition) - 1)
       : this.blockersFor(lane, grade, def, rotTac, transition);
+    // The coach's plan against this attack: how many go up, and which shot the block takes away.
+    const target = blockTargetOf(lane);
+    const bp = target !== null ? blockPlansOf(def.tactics)[target] : null;
+    if (bp !== null && blockCount > 0) {
+      if (bp.numbers === BlockNumbers.Single) blockCount = 1;
+      else if (bp.numbers === BlockNumbers.Triple && blockCount < 3 && rng.chance(transition ? 0.35 : 0.6)) blockCount++;
+    }
+    // However good the plan, the block can get it wrong: the middle late across
+    // to the pin — a fast set, a decoy, tired legs — or the block reading the
+    // hitter wrong and shutting the shot he wasn't going to hit.
+    let lateMiddle = false;
+    let misread = false;
+    if (target !== null && blockCount >= 2) {
+      const mid = def.rate(def.court[2]);
+      const pLate = clamp(
+        0.08 + tempo.blockDelay * 0.5 + (combo ? 0.12 : 0) + (call === 'fastSet' ? 0.08 : 0) +
+          (1 - mid.fatigue) * 0.6 - (mid.block - 50) / 500,
+        0.03,
+        0.35,
+      );
+      if (rng.chance(pLate)) {
+        lateMiddle = true;
+        blockCount--;
+      }
+    }
+    let focus = bp?.focus ?? BlockFocus.Read;
+    if (target !== null && blockCount > 0) {
+      const lead = def.rate(this.pickBlocker(def, lane));
+      const pMis = clamp(0.06 + (combo ? 0.06 : 0) + tempo.blockDelay * 0.2 - (lead.block - 50) / 600 - (lead.concentration - 50) / 800, 0.02, 0.2);
+      if (rng.chance(pMis)) {
+        misread = true;
+        focus = focus === BlockFocus.Line ? BlockFocus.Cross : focus === BlockFocus.Cross ? BlockFocus.Line : focus;
+      }
+    }
+    // A block on the shot the hitter favours closes it; on the other one, it leaves him the court.
+    // His favourite: the line for a hitter of control, the cross for one of power.
+    const favours = clamp((ar.attackControl - ar.attackPower) / 20, -1, 1);
+    const onHisShot = focus === BlockFocus.Line ? favours : focus === BlockFocus.Cross ? -favours : 0;
+    const planEdge = (1 + FOCUS_BLOCK * onHisShot) * (misread ? MISREAD_BLOCK : 1) * (lateMiddle ? LATE_MIDDLE_BLOCK : 1);
     const high = call === undefined && (lane === AttackLane.OutsideHigh || lane === AttackLane.OppositeRight);
     const beaten = combo ? 0.86 - COMBO_BLOCK_EDGE * rehearsed + 0.1 * atk.read : call === 'slide' ? 0.9 : call === 'backQuick' ? 0.95
       : call === 'fastSet' ? FAST_SET_BLOCK : high ? HIGH_BALL_BLOCK : 1;
     // A block that knows the attack's patterns is there before the ball.
     const blockRating =
       this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay) * def.edge * (1 + READ_BLOCK * atk.read) *
-      (1 + PREP_EDGE * def.prep.block) * beaten;
+      (1 + PREP_EDGE * def.prep.block) * beaten * planEdge;
 
     // ---- Dig ----
     // Where the coach has the defence stand against an attack from this side,
@@ -2214,7 +2310,9 @@ export class MatchSimulator {
     const layout = defenceLayoutsOf(def.tactics)[source];
     const digRating =
       this.digStrength(def) * DEFENSE_PROFILE[def.tactics.defense].digCoverage * def.edge * (1 + READ_DIG * atk.read) *
-      coverEdge(layout, source, clamp((ar.attackControl - ar.attackPower) / 20, -1, 1));
+      coverEdge(layout, source, clamp((ar.attackControl - ar.attackPower) / 20, -1, 1)) *
+      (target === null ? 1 : 1 + CLOSE_COURT * (blockCount - 2)) *
+      (bp?.numbers === BlockNumbers.Triple ? TRIPLE_DIG : 1);
     const covered = this.recording ? coverage(layout, source) : undefined;
 
     // ---- Outcome ----
@@ -2232,7 +2330,12 @@ export class MatchSimulator {
       0.30,
     );
     // What every contact of this attack says about it.
-    const tags = { play: call, decoy: decoy >= 0 ? decoy : undefined, blockers: blockCount };
+    const tags = {
+      play: call, decoy: decoy >= 0 ? decoy : undefined, blockers: blockCount,
+      ...(target !== null ? { blockFocus: FOCUS_NAMES[focus] } : {}),
+      ...(lateMiddle ? { lateMiddle: true } : {}),
+      ...(misread ? { misread: true } : {}),
+    };
 
     const remaining = Math.max(0.05, 1 - pBlocked - pError);
     const pKillGivenLive = contest(attackRating + ATTACK_DEFENCE_BALANCE, digRating, 16);
@@ -2308,13 +2411,72 @@ export class MatchSimulator {
       this.push({ kind: 'blockTouch', team: (1 - attacking) as 0 | 1, player: blocker, height: this.blockHeightOf(def, blocker) });
     }
     // Transition balls are messier than serve reception, so the ceiling is lower.
+    const transitionEdge = bp?.numbers === BlockNumbers.Single ? SINGLE_TRANSITION : bp?.numbers === BlockNumbers.Triple ? TRIPLE_TRANSITION : 0;
     const digQuality = clamp(
-      rng.gaussian(0.30 + (dr.dig / 100) * 0.34 + (touched ? 0.08 : 0), 0.17),
+      rng.gaussian(0.30 + (dr.dig / 100) * 0.34 + (touched ? 0.08 : 0) + transitionEdge, 0.17),
       0.05,
       0.95,
     );
     this.push({ kind: 'dig', team: (1 - attacking) as 0 | 1, player: digger, quality: digQuality });
     return { point: -1, nextQuality: digQuality, toucher: digger };
+  }
+
+  /**
+   * The setter attacks the second ball himself. A middle watching him is
+   * there for it — a block, or a touch that lets it be dug; one who went with
+   * a hitter isn't, and it drops.
+   */
+  private setterDump(
+    atk: TeamRuntime,
+    def: TeamRuntime,
+    attacking: 0 | 1,
+    setter: number,
+    sr: PlayerMatchRatings,
+  ): { point: number; nextQuality: number; toucher: number } {
+    const rng = this.rng;
+    const stats = statsFor(atk.stats, setter);
+    stats.attacksTotal++;
+    // The blocker across the net from him — their left side, facing the setter at the right.
+    const blocker = this.pickBlocker(def, AttackLane.OppositeRight);
+    const br = def.rate(blocker);
+    const read = clamp(0.2 + (br.block - 50) / 250 + (br.concentration - 50) / 500 + READ_BLOCK * atk.read, 0.08, 0.45);
+    const pError = clamp(0.09 - (sr.attackControl - 50) / 900, 0.03, 0.12);
+    const pBlocked = read * 0.32;
+    const pKill = (1 - pError - pBlocked) * clamp(0.6 - read * 0.6 + (sr.attackControl - 50) / 300, 0.25, 0.75);
+    const shot: Shot = rng.chance(0.65) ? 'tip' : 'roll';
+    const source: AttackSource = 'opp';
+    const tags = { detail: SECOND_BALL, shot, speed: this.spikeSpeed(sr, AttackLane.OppositeRight, false, shot), height: this.dumpHeight(setter) };
+    const roll = rng.float();
+    if (roll < pBlocked) {
+      stats.attackBlocked++;
+      statsFor(def.stats, blocker).blockPoints++;
+      this.push({ ...tags, kind: 'blocked', team: attacking, player: setter, by: blocker, blockers: 1, blockHeight: this.blockHeightOf(def, blocker) });
+      return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
+    }
+    if (roll < pBlocked + pError) {
+      stats.attackErrors++;
+      def.stats.opponentErrors++;
+      this.push({ ...tags, kind: 'attackError', team: attacking, player: setter, shot: 'net' });
+      return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
+    }
+    if (roll < pBlocked + pError + pKill) {
+      stats.attackKills++;
+      this.push({ ...tags, kind: 'kill', team: attacking, player: setter, blockers: 0, land: this.landing(shot, source) });
+      return { point: attacking, nextQuality: 0, toucher: -1 };
+    }
+    // Read and dug — a soft ball, easy enough to play.
+    this.push({ ...tags, kind: 'attack', team: attacking, player: setter, blockers: 0, land: this.landing(shot, source) });
+    const digger = this.pickDigger(def);
+    statsFor(def.stats, digger).digsTotal++;
+    const q = clamp(rng.gaussian(0.5 + (def.rate(digger).dig / 100) * 0.25, 0.14), 0.15, 0.95);
+    this.push({ kind: 'dig', team: (1 - attacking) as 0 | 1, player: digger, quality: q });
+    return { point: -1, nextQuality: q, toucher: digger };
+  }
+
+  /** How high the setter plays his second ball, m: at the top of his reach, on the jump. */
+  private dumpHeight(setter: number): number | undefined {
+    if (!this.recording) return undefined;
+    return round2(this.store.spikeReachCm[setter] / 100 - 0.12);
   }
 
   // ---- Selection helpers --------------------------------------------------
@@ -2793,6 +2955,21 @@ export class MatchSimulator {
 }
 
 // ---- Free functions -------------------------------------------------------
+
+/** What the log calls a setter's attack on the second ball. */
+export const SECOND_BALL = 'Second ball';
+
+const FOCUS_NAMES: Readonly<Record<BlockFocus, 'read' | 'line' | 'cross'>> = {
+  [BlockFocus.Read]: 'read', [BlockFocus.Line]: 'line', [BlockFocus.Cross]: 'cross',
+};
+
+/** The attack a block plan covers, for a lane — none for the quick, which the rotation's block assignment sees to. */
+function blockTargetOf(lane: number): BlockTarget | null {
+  if (lane === AttackLane.OutsideHigh || lane === AttackLane.SecondTempoOutside) return 'outside';
+  if (lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight) return 'opposite';
+  if (lane === AttackLane.Pipe) return 'pipe';
+  return null;
+}
 
 /** Which side of the court an attack in a lane comes from, for the defence. */
 function sourceOf(lane: number): AttackSource {

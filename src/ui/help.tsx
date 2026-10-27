@@ -45,7 +45,7 @@ const TOPICS: readonly HelpTopic[] = [
     body: (
       <>
         <p>The <b>Team Sheet</b> is your six, your liberos and your bench. Drag players into their places.</p>
-        <p><b>Instructions</b> set how you play: the system (5-1 or 4-2), tempo, combinations, serving and the block. <b>Rotations</b> fine-tune each of the six rotations.</p>
+        <p><b>Instructions</b> set how you play: the system (5-1 or 4-2), tempo, combinations, serving and the block. <b>Rotations</b> fine-tune each of the six rotations. The <b>Block plan</b> (Out of Possession, or from Rotations) sets, over a 3D court, where the block goes against the outside, the opposite and the pipe — and how many go up.</p>
         <p>The opposition learns your tactics as you use them — change them now and then.</p>
       </>
     ),
