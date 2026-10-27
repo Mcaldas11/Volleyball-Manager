@@ -44,8 +44,9 @@ import {
   AttackLane,
   lineupSlotPositions,
   BlockAssignment,
-  BlockFocus,
   BlockNumbers,
+  blockGap,
+  blockLean,
   blockPlansOf,
   type BlockTarget,
   DEFENSE_PROFILE,
@@ -2281,20 +2282,24 @@ export class MatchSimulator {
         blockCount--;
       }
     }
-    let focus = bp?.focus ?? BlockFocus.Read;
+    // How far the block leans onto the line (+) or the cross (-): a preset all the way, a block the coach dragged as far as he put it.
+    let lean = bp !== null && target !== null ? blockLean(bp, target) : 0;
     if (target !== null && blockCount > 0) {
       const lead = def.rate(this.pickBlocker(def, lane));
       const pMis = clamp(0.06 + (combo ? 0.06 : 0) + tempo.blockDelay * 0.2 - (lead.block - 50) / 600 - (lead.concentration - 50) / 800, 0.02, 0.2);
       if (rng.chance(pMis)) {
         misread = true;
-        focus = focus === BlockFocus.Line ? BlockFocus.Cross : focus === BlockFocus.Cross ? BlockFocus.Line : focus;
+        if (Math.abs(lean) >= 0.2) lean = -lean;
       }
     }
     // A block on the shot the hitter favours closes it; on the other one, it leaves him the court.
     // His favourite: the line for a hitter of control, the cross for one of power.
     const favours = clamp((ar.attackControl - ar.attackPower) / 20, -1, 1);
-    const onHisShot = focus === BlockFocus.Line ? favours : focus === BlockFocus.Cross ? -favours : 0;
-    const planEdge = (1 + FOCUS_BLOCK * onHisShot) * (misread ? MISREAD_BLOCK : 1) * (lateMiddle ? LATE_MIDDLE_BLOCK : 1);
+    const onHisShot = lean * favours;
+    // Blockers dragged too far apart leave a seam between their hands; too close, they are in each other's way.
+    const gap = bp !== null && blockCount >= 2 ? blockGap(bp) : 0.72;
+    const spacing = gap > 0.9 ? Math.max(0.7, 1 - 0.35 * (gap - 0.9)) : gap < 0.5 ? 1 - 0.3 * (0.5 - gap) : 1;
+    const planEdge = (1 + FOCUS_BLOCK * onHisShot) * spacing * (misread ? MISREAD_BLOCK : 1) * (lateMiddle ? LATE_MIDDLE_BLOCK : 1);
     const high = call === undefined && (lane === AttackLane.OutsideHigh || lane === AttackLane.OppositeRight);
     const beaten = combo ? 0.86 - COMBO_BLOCK_EDGE * rehearsed + 0.1 * atk.read : call === 'slide' ? 0.9 : call === 'backQuick' ? 0.95
       : call === 'fastSet' ? FAST_SET_BLOCK : high ? HIGH_BALL_BLOCK : 1;
@@ -2332,7 +2337,7 @@ export class MatchSimulator {
     // What every contact of this attack says about it.
     const tags = {
       play: call, decoy: decoy >= 0 ? decoy : undefined, blockers: blockCount,
-      ...(target !== null ? { blockFocus: FOCUS_NAMES[focus] } : {}),
+      ...(target !== null ? { blockFocus: lean > 0.33 ? 'line' as const : lean < -0.33 ? 'cross' as const : 'read' as const } : {}),
       ...(lateMiddle ? { lateMiddle: true } : {}),
       ...(misread ? { misread: true } : {}),
     };
@@ -2958,10 +2963,6 @@ export class MatchSimulator {
 
 /** What the log calls a setter's attack on the second ball. */
 export const SECOND_BALL = 'Second ball';
-
-const FOCUS_NAMES: Readonly<Record<BlockFocus, 'read' | 'line' | 'cross'>> = {
-  [BlockFocus.Read]: 'read', [BlockFocus.Line]: 'line', [BlockFocus.Cross]: 'cross',
-};
 
 /** The attack a block plan covers, for a lane — none for the quick, which the rotation's block assignment sees to. */
 function blockTargetOf(lane: number): BlockTarget | null {

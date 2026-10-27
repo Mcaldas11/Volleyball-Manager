@@ -51,9 +51,10 @@ test('two passers hide the weaker-passing outside — who then attacks the first
   const store = two.store;
   const whoTwo = receivers(two.results);
   const whoThree = receivers(three.results);
-  // The outsides who passed with three, and the one hidden with two.
+  // The outsides who passed with three, and the one hidden with two — the weaker passer on the day, so
+  // now and then, his confidence up or the other's down, he swaps with the other and takes one.
   const outsides = [...whoThree.keys()].filter((p) => store.position[p] === Position.OutsideHitter);
-  const hidden = outsides.filter((p) => !whoTwo.has(p));
+  const hidden = outsides.filter((p) => (whoTwo.get(p) ?? 0) < whoThree.get(p)! * 0.1);
   assert.ok(hidden.length >= 1, 'an outside spared the serve');
   assert.ok(two.results.some((r) => r.log!.some((e) => e.passers?.length === 2)));
 

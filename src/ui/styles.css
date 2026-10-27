@@ -7873,3 +7873,6 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
   .rot-blockplan .bp3-slim { padding-top: 5px; padding-bottom: 5px; }
   .rot-layout .slider-ends { display: none; }
 }
+.bp3-own { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--gold); background: var(--gold-soft); font-size: 12.5px; line-height: 1.4; }
+.bp3-own b { color: var(--gold-bright); }
+.bp3-own .sm { flex: none; }

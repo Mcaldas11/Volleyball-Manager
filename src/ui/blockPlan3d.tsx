@@ -11,12 +11,13 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import {
   CylinderGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  NeutralToneMapping, PerspectiveCamera, PlaneGeometry, Scene, Shape, ShapeGeometry, SphereGeometry, SRGBColorSpace,
-  WebGLRenderer,
+  NeutralToneMapping, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, RingGeometry, Scene, Shape, ShapeGeometry,
+  SphereGeometry, SRGBColorSpace, Vector2, Vector3, WebGLRenderer,
 } from 'three';
-import { defenceLayoutsOf, type AttackSource, type DefenceLayout } from '../engine/match/defence.ts';
+import { defenceLayoutsOf, type AttackSource, type DefenceLayout, type DefenceLayouts } from '../engine/match/defence.ts';
 import {
-  BLOCK_TARGETS, BlockFocus, BlockNumbers, blockPlansOf, defaultBlockPlans, type BlockPlan, type BlockTarget, type TeamTactics,
+  BLOCK_TARGETS, BlockFocus, BlockNumbers, blockGap, blockLean, blockPlansOf, blockSpotsOf, defaultBlockPlans,
+  type BlockPlan, type BlockTarget, type TeamTactics,
 } from '../engine/match/tactics.ts';
 import { APPROACH, BLOCK_PEAK, BLOCK_READY, COCKED, LOAD, STRIKE } from './courtMotion.ts';
 import { Figure, type Kit, type Look } from './figure3d.ts';
@@ -48,10 +49,28 @@ const NUMBER_OPTIONS: Array<[BlockNumbers, string, string]> = [
 
 const FOCUS_SHORT: Readonly<Record<BlockFocus, string>> = { [BlockFocus.Read]: 'Read', [BlockFocus.Line]: 'Line', [BlockFocus.Cross]: 'Cross' };
 
-/** A plan in a few words: "Line · 2 up". */
+/** A plan in a few words: "Line · 2 up" — "Own" for a block the coach dragged into place. */
 export function blockPlanLabel(p: BlockPlan, t: BlockTarget): string {
-  const f = t === 'pipe' ? (p.focus === BlockFocus.Line ? 'Seam' : p.focus === BlockFocus.Cross ? 'Angle' : 'Read') : FOCUS_SHORT[p.focus];
+  const f = p.spots !== undefined ? 'Own'
+    : t === 'pipe' ? (p.focus === BlockFocus.Line ? 'Seam' : p.focus === BlockFocus.Cross ? 'Angle' : 'Read') : FOCUS_SHORT[p.focus];
   return `${f} · ${p.numbers} up`;
+}
+
+/** A dragged block, in words: which shot it leans on, and how its hands are spaced. */
+function ownBlockWords(p: BlockPlan, t: BlockTarget): string {
+  const lean = blockLean(p, t);
+  const on = t === 'pipe'
+    ? (lean < -0.33 ? 'shutting an angle' : 'on the seam')
+    : lean > 0.66 ? 'shutting the line' : lean > 0.33 ? 'leaning on the line'
+      : lean < -0.66 ? 'shutting the cross' : lean < -0.33 ? 'leaning on the cross' : 'reading the hitter';
+  const gap = blockGap(p);
+  const hands = p.numbers === BlockNumbers.Single ? '' : gap > 0.9 ? ' — a gap between their hands he can hit through' : gap < 0.5 ? ' — squeezed into each other' : ', hands together';
+  return `${on}${hands}`;
+}
+
+/** Where their hitter attacks from across the court, and which way is his antenna: +x for the outside, our right. */
+function hitterOf(target: BlockTarget): { xh: number; out: number } {
+  return { xh: target === 'outside' ? 3.65 : target === 'opposite' ? -3.65 : 0, out: target === 'opposite' ? -1 : 1 };
 }
 
 /** All three plans in one line, for a tactics card. */
@@ -87,66 +106,74 @@ function stagingFor(target: BlockTarget, plan: BlockPlan, scenario: Scenario, la
   blockers: Array<{ from: Spot2; to: Spot2; late: boolean }>;
   free: Spot2[];
   back: Spot2[];
-  shadow: [number, number];
+  shadow: number[];
   open: Array<{ to: Spot2; main: boolean }>;
 } {
   const pipe = target === 'pipe';
-  const xh = target === 'outside' ? 3.65 : target === 'opposite' ? -3.65 : 0;
-  // Towards the antenna, from the hitter: +x for their outside (our right), -x for their opposite.
-  const out = target === 'outside' ? 1 : target === 'opposite' ? -1 : 1;
-  let focus = plan.focus;
-  if (scenario === 'misread') focus = focus === BlockFocus.Line ? BlockFocus.Cross : focus === BlockFocus.Cross ? BlockFocus.Line : BlockFocus.Cross;
-  const shift = pipe
-    ? (focus === BlockFocus.Cross ? 0.55 : 0)
-    : focus === BlockFocus.Line ? 0.38 : focus === BlockFocus.Cross ? -0.55 : -0.1;
-  const centre = xh + out * shift;
+  const { xh, out } = hitterOf(target);
   const n = plan.numbers;
-  // Our front row: zone 4 on our left (-x), 3 in the middle, 2 on our right.
-  const home = { left: -3, mid: 0, right: 3 };
-  const pin = target === 'opposite' ? home.left : home.right;
-  const far = target === 'opposite' ? home.right : home.left;
-  const net = -0.42;
-  const spots: Array<{ from: Spot2; to: Spot2; late: boolean }> = [];
-  if (pipe) {
-    spots.push({ from: { x: home.mid, y: net }, to: { x: centre, y: net }, late: false });
-    if (n >= 2) spots.push({ from: { x: home.right, y: net }, to: { x: centre + 0.72, y: net }, late: scenario === 'late' });
-    if (n >= 3) spots.push({ from: { x: home.left, y: net }, to: { x: centre - 0.72, y: net }, late: false });
-  } else {
-    if (n === 1) {
-      spots.push({ from: { x: pin, y: net }, to: { x: centre, y: net }, late: false });
+  // Where each blocker goes — dragged there, or the preset's; read wrong, the block goes the other way.
+  let spots = blockSpotsOf(plan, target).slice(0, n);
+  let lean = blockLean(plan, target);
+  const seam = pipe && plan.spots === undefined && plan.focus === BlockFocus.Line;
+  if (scenario === 'misread') {
+    // Read wrong, the block slides a metre or so the wrong way — off the shot it meant to take, onto the other.
+    if (pipe) {
+      const centre = spots.reduce((a, x) => a + x, 0) / spots.length;
+      const by = Math.abs(lean) < 0.2 || seam ? 0.55 : -(Math.sign(centre) || 1) * 0.9;
+      spots = spots.map((x) => x + by);
     } else {
-      spots.push({ from: { x: pin, y: net }, to: { x: centre + out * 0.36, y: net }, late: false });
-      spots.push({ from: { x: home.mid, y: net }, to: { x: centre - out * 0.36, y: net }, late: scenario === 'late' });
-      if (n >= 3) spots.push({ from: { x: far, y: net }, to: { x: centre - out * 1.08, y: net }, late: false });
+      const by = Math.abs(lean) < 0.2 ? -0.55 : -Math.sign(lean) * 0.9;
+      spots = spots.map((x) => x + by);
     }
+    lean = Math.abs(lean) < 0.2 ? -0.9 : -lean;
   }
+  // Our front row: zone 4 on our left (-x), 3 in the middle, 2 on our right — against the pipe the middle leads.
+  const home = { left: -3, mid: 0, right: 3 };
+  const order = pipe ? [home.mid, home.right, home.left]
+    : target === 'opposite' ? [home.left, home.mid, home.right] : [home.right, home.mid, home.left];
+  const net = -0.42;
+  const blockers = spots.map((x, i) => ({
+    from: { x: order[i], y: net },
+    to: { x: Math.max(-HALF + 0.2, Math.min(HALF - 0.2, xh + out * x)), y: net },
+    late: scenario === 'late' && i === 1,
+  }));
   // The front-row players who don't block, and the back three, where the coach has them.
-  const at = (s: { u: number; v: number }): Spot2 => ({ x: (s.u - 0.5) * 9, y: -s.v * 9 });
+  const at = (sp: { u: number; v: number }): Spot2 => ({ x: (sp.u - 0.5) * 9, y: -sp.v * 9 });
   const free: Spot2[] = [];
-  const frontLeft = [pin, home.mid, far].filter((x) => !spots.some((b) => b.from.x === x));
-  if (frontLeft.length >= 1) free.push(at(layout.free));
-  if (frontLeft.length >= 2) free.push(at({ u: 1 - layout.free.u, v: layout.free.v }));
-  // The block's hands, edge to edge, and the court behind it they take away.
-  const xs = spots.map((b) => (b.late ? b.from.x + (b.to.x - b.from.x) * 0.55 : b.to.x));
+  if (n <= 2) free.push(at(layout.free));
+  if (n <= 1) free.push(at({ u: 1 - layout.free.u, v: layout.free.v }));
+  // Each blocker's hands, and the court behind them they take away.
+  const xs = blockers.map((b) => (b.late ? b.from.x + (b.to.x - b.from.x) * 0.55 : b.to.x));
   const hands: [number, number] = [Math.min(...xs) - 0.32, Math.max(...xs) + 0.32];
+  // Hands far enough apart for the ball to go between them: the seam is open.
+  const sorted = [...xs].sort((a, b) => a - b);
+  let seamAt: number | null = null;
+  for (let i = 1; i < sorted.length; i++) if (sorted[i] - sorted[i - 1] > 0.9) seamAt = (sorted[i] + sorted[i - 1]) / 2;
   // What it leaves him: the shot the block isn't on.
   const lineTo = { x: xh - out * 0.5, y: -8.2 };
   const crossTo = { x: -out * 2.6, y: -6.4 };
-  const open: Array<{ to: Spot2; main: boolean }> = pipe
-    ? focus === BlockFocus.Line
+  let open: Array<{ to: Spot2; main: boolean }>;
+  if (pipe) {
+    const centre = spots.reduce((a, x) => a + x, 0) / spots.length;
+    const shut = Math.sign(centre) || 1;
+    open = seam && scenario !== 'misread'
       ? [{ to: { x: 3.2, y: -6.6 }, main: true }, { to: { x: -3.2, y: -6.6 }, main: true }]
-      : focus === BlockFocus.Cross ? [{ to: { x: 0, y: -8 }, main: true }, { to: { x: -3.2, y: -6.6 }, main: false }]
-        : [{ to: { x: 0, y: -8 }, main: false }, { to: { x: 3.2, y: -6.6 }, main: false }, { to: { x: -3.2, y: -6.6 }, main: false }]
-    : focus === BlockFocus.Line ? [{ to: crossTo, main: true }]
-      : focus === BlockFocus.Cross ? [{ to: lineTo, main: true }]
+      : lean < -0.33 ? [{ to: { x: 0, y: -8 }, main: true }, { to: { x: -shut * 3.2, y: -6.6 }, main: false }]
+        : [{ to: { x: 0, y: -8 }, main: false }, { to: { x: 3.2, y: -6.6 }, main: false }, { to: { x: -3.2, y: -6.6 }, main: false }];
+  } else {
+    open = lean > 0.33 ? [{ to: crossTo, main: true }]
+      : lean < -0.33 ? [{ to: lineTo, main: true }]
         : [{ to: lineTo, main: false }, { to: crossTo, main: false }];
+  }
   if (scenario === 'late') open.unshift({ to: { x: (hands[0] + hands[1]) / 2 + out * 0.2, y: -5 }, main: true });
+  else if (seamAt !== null) open.unshift({ to: { x: xh + (seamAt - xh) * 2.4, y: -5.6 }, main: true });
   return {
     hitter: pipe ? { from: { x: xh + 0.4, y: 6.6 }, jump: { x: xh, y: 3.4 } } : { from: { x: xh + out * 0.9, y: 4.6 }, jump: { x: xh, y: 0.75 } },
-    blockers: spots,
+    blockers,
     free,
     back: [at(layout.lb), at(layout.mb), at(layout.rb)],
-    shadow: hands,
+    shadow: xs,
     open,
   };
 }
@@ -233,19 +260,24 @@ function hall(): Group {
   return g;
 }
 
-function BlockScene({ target, plan, layout, ours, theirs, onScenario }: {
+/** Who can be dragged: a blocker along the net, a front-row player who doesn't block, one of the back three. */
+type Draggable = 'block' | 'free' | 'back';
+
+function BlockScene({ target, plan, layout, ours, theirs, onScenario, onDrag, onDrop }: {
   target: BlockTarget;
   plan: BlockPlan;
   layout: DefenceLayout;
   ours: Kit;
   theirs: Kit;
   onScenario: (s: Scenario) => void;
+  onDrag: (kind: Draggable, i: number, at: Spot2) => void;
+  onDrop: () => void;
 }): JSX.Element {
   const wrap = useRef<HTMLDivElement>(null);
   const live = useRef({ target, plan, layout });
   live.current = { target, plan, layout };
-  const tell = useRef(onScenario);
-  tell.current = onScenario;
+  const tell = useRef({ onScenario, onDrag, onDrop });
+  tell.current = { onScenario, onDrag, onDrop };
 
   useEffect(() => {
     const box = wrap.current;
@@ -290,6 +322,11 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario }: {
     const blockers = [figure(look(ours, 2)), figure(look(ours, 12)), figure(look(ours, 9))];
     const free = [figure(look(ours, 4)), figure(look(ours, 15))];
     const back = [figure(look(ours, 1, true)), figure(look(ours, 6)), figure(look(ours, 11))];
+    // A gold ring on the floor under whoever is under the pointer, or being dragged.
+    const ring = new Mesh(new RingGeometry(0.42, 0.56, 40), new MeshBasicMaterial({ color: '#f0c35a', transparent: true, opacity: 0.9, depthWrite: false }));
+    ring.position.z = 0.02;
+    ring.visible = false;
+    scene.add(ring);
 
     let size: [number, number] = [1, 1];
     const resize = (): void => {
@@ -302,20 +339,76 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario }: {
     const observer = new ResizeObserver(resize);
     observer.observe(box);
 
-    // Turned by dragging, a little either way.
+    // A player picked up and moved — or, off the players, the court turned a little either way.
+    const ray = new Raycaster();
+    const floor = new Plane(new Vector3(0, 0, 1), 0);
+    const aimAt = (e: PointerEvent): void => {
+      const r = el.getBoundingClientRect();
+      ray.setFromCamera(new Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+    };
+    // The nearest player to the pointer on the screen, within a finger's width of his body — easier to catch on the move than his limbs.
+    const pick = (e: PointerEvent): { kind: Draggable; i: number; f: Figure } | null => {
+      const r = el.getBoundingClientRect();
+      const px = e.clientX - r.left;
+      const py = e.clientY - r.top;
+      let best: { kind: Draggable; i: number; f: Figure; d: number } | null = null;
+      const test = (list: Figure[], kind: Draggable): void => list.forEach((f, i) => {
+        if (!f.root.visible) return;
+        for (const z of [0.4, 1.0, 1.6]) {
+          const v = new Vector3(f.root.position.x, f.root.position.y, f.root.position.z + z).project(camera);
+          const d = Math.hypot((v.x + 1) / 2 * r.width - px, (1 - v.y) / 2 * r.height - py);
+          if (d < 38 && (best === null || d < best.d)) best = { kind, i, f, d };
+        }
+      });
+      test(blockers, 'block');
+      test(free, 'free');
+      test(back, 'back');
+      return best;
+    };
+    const floorAt = (e: PointerEvent): Spot2 | null => {
+      aimAt(e);
+      const p = ray.ray.intersectPlane(floor, new Vector3());
+      return p === null ? null : { x: p.x, y: p.y };
+    };
     let yaw = 0;
     let dragging: number | null = null;
-    const down = (e: PointerEvent): void => { dragging = e.clientX; el.setPointerCapture(e.pointerId); };
-    const move = (e: PointerEvent): void => {
-      if (dragging === null) return;
-      yaw = Math.max(-0.95, Math.min(0.95, yaw - (e.clientX - dragging) * 0.006));
-      dragging = e.clientX;
+    let held: { kind: Draggable; i: number; f: Figure } | null = null;
+    let hover: Figure | null = null;
+    const down = (e: PointerEvent): void => {
+      el.setPointerCapture(e.pointerId);
+      held = pick(e);
+      if (held === null) dragging = e.clientX;
+      else hover = held.f;
     };
-    const up = (): void => { dragging = null; };
+    const move = (e: PointerEvent): void => {
+      if (held !== null) {
+        const at = floorAt(e);
+        if (at !== null) tell.current.onDrag(held.kind, held.i, at);
+        return;
+      }
+      if (dragging !== null) {
+        yaw = Math.max(-0.95, Math.min(0.95, yaw - (e.clientX - dragging) * 0.006));
+        dragging = e.clientX;
+        return;
+      }
+      hover = pick(e)?.f ?? null;
+      el.style.cursor = hover !== null ? 'move' : '';
+    };
+    const up = (e: PointerEvent): void => {
+      if (held !== null) tell.current.onDrop();
+      held = null;
+      dragging = null;
+      hover = pick(e)?.f ?? null;
+    };
+    const leave = (): void => {
+      hover = null;
+      el.style.cursor = '';
+    };
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', leave);
 
     const put = (f: Figure, p: Spot2, lift: number, facing: number, pose: Pose, height: number): void => {
       f.root.visible = true;
@@ -324,25 +417,31 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario }: {
     const lerp = (a: Spot2, b: Spot2, t: number): Spot2 => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
     let markKey = '';
-    let loop = -1;
+    let frozen: number | null = null;
+    let told: Scenario | null = null;
     let raf = 0;
     const start = performance.now();
     const frame = (now: number): void => {
       const { target: tg, plan: pl, layout: ly } = live.current;
       const elapsed = (now - start) / 1000;
       const n = Math.floor(elapsed / PERIOD);
-      const p = (elapsed / PERIOD) - n;
+      // A player under the pointer: the play stops where it is, to be caught. In hand: the block held
+      // formed, just before it goes up, as planned, with him where he is put.
+      const still = held !== null || hover !== null;
+      if (hover === null) frozen = null;
+      else frozen ??= (elapsed / PERIOD) - n;
+      const p = held !== null ? 0.4 : frozen ?? (elapsed / PERIOD) - n;
       // One up has no middle to be late.
       const drawn = SCENARIOS[n % SCENARIOS.length];
-      const scenario: Scenario = drawn === 'late' && pl.numbers === BlockNumbers.Single ? 'plan' : drawn;
-      if (n !== loop) {
-        loop = n;
-        tell.current(scenario);
+      const scenario: Scenario = still || (drawn === 'late' && pl.numbers === BlockNumbers.Single) ? 'plan' : drawn;
+      if (scenario !== told) {
+        told = scenario;
+        tell.current.onScenario(scenario);
       }
       const st = stagingFor(tg, pl, scenario, ly);
 
       // The floor markings, redrawn when the plan or what goes wrong changes.
-      const k = `${tg}|${pl.focus}|${pl.numbers}|${scenario}|${JSON.stringify(ly)}`;
+      const k = `${tg}|${pl.focus}|${pl.numbers}|${JSON.stringify(pl.spots ?? null)}|${scenario}|${JSON.stringify(ly)}`;
       if (k !== markKey) {
         markKey = k;
         for (const c of [...marks.children]) {
@@ -354,8 +453,11 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario }: {
         const xh = st.hitter.jump.x;
         const ye = tg === 'pipe' ? 6.5 : 3.6;
         const proj = (x: number): number => Math.max(-HALF, Math.min(HALF, xh + (x - xh) * ((ye + 9) / ye)));
-        const [a, b] = st.shadow;
-        marks.add(floorPoly([{ x: a, y: 0 }, { x: b, y: 0 }, { x: proj(b), y: -9 }, { x: proj(a), y: -9 }], '#e5484d', 0.3));
+        for (const x of st.shadow) {
+          const a = x - 0.32;
+          const b = x + 0.32;
+          marks.add(floorPoly([{ x: a, y: 0 }, { x: b, y: 0 }, { x: proj(b), y: -9 }, { x: proj(a), y: -9 }], '#e5484d', 0.24));
+        }
         const from = { x: xh, y: -0.6 };
         for (const o of st.open) marks.add(floorArrow(from, o.to, o.main ? '#3dbb5c' : '#e3c02b', o.main ? 0.85 : 0.6, o.main ? 0.36 : 0.26));
       }
@@ -388,9 +490,13 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario }: {
       });
       back.forEach((f, i) => put(f, st.back[i], 0, 0, COVER, i === 0 ? 1.84 : 1.9));
 
+      const ringOn = held?.f ?? hover;
+      ring.visible = ringOn !== null && ringOn.root.visible;
+      if (ringOn !== null) ring.position.set(ringOn.root.position.x, ringOn.root.position.y, 0.02);
+
       // The ball: struck at the top of the jump, down the shot the block left him.
       const shot = st.open.find((o) => o.main) ?? st.open[0];
-      if (p >= 0.5 && p < 0.96) {
+      if (!still && p >= 0.5 && p < 0.96) {
         const hand = { x: st.hitter.jump.x - 0.15, y: st.hitter.jump.y - 0.2, z: 3.25 };
         const f = span(p, 0.52, 0.64);
         const to = shot.to;
@@ -420,6 +526,7 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario }: {
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
       el.removeEventListener('pointercancel', up);
+      el.removeEventListener('pointerleave', leave);
       for (const f of figures) f.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
@@ -447,10 +554,34 @@ export function BlockPlanDialog({ tactics: t, ours, theirs, onChange, onClose, s
   const plans = blockPlansOf(t);
   const plan = plans[target];
   const layout = defenceLayoutsOf(t)[SOURCE[target]];
-  const set = (patch: Partial<BlockPlan>): void => {
+  const set = (patch: Partial<BlockPlan>, save = true): void => {
     const own = t.blockPlans ?? defaultBlockPlans();
     t.blockPlans = { ...own, [target]: { ...own[target], ...patch } };
-    onChange();
+    if (save) onChange();
+    redraw((n) => n + 1);
+  };
+  /** The side's own defence layouts, made the first time one is dragged. */
+  const ownDefence = (): DefenceLayouts => {
+    if (t.defence === undefined) {
+      const all = defenceLayoutsOf(t);
+      const c = (l: DefenceLayout): DefenceLayout => ({ lb: { ...l.lb }, mb: { ...l.mb }, rb: { ...l.rb }, free: { ...l.free } });
+      t.defence = { oh: c(all.oh), mb: c(all.mb), opp: c(all.opp) };
+    }
+    return t.defence;
+  };
+  const drag = (kind: Draggable, i: number, at: Spot2): void => {
+    if (kind === 'block') {
+      // Along the net only, kept on the court: his spot from the hitter, towards the antenna.
+      const { xh, out } = hitterOf(target);
+      const spots = [...blockSpotsOf(plan, target)];
+      spots[i] = Math.round(((Math.max(-HALF + 0.2, Math.min(HALF - 0.2, at.x)) - xh) * out) * 100) / 100;
+      set({ spots }, false);
+      return;
+    }
+    const spot = { u: Math.min(0.97, Math.max(0.03, at.x / 9 + 0.5)), v: Math.min(1, Math.max(0.04, -at.y / 9)) };
+    const l = ownDefence()[SOURCE[target]];
+    if (kind === 'back') l[(['lb', 'mb', 'rb'] as const)[i]] = spot;
+    else l.free = i === 0 ? spot : { u: 1 - spot.u, v: spot.v };
     redraw((n) => n + 1);
   };
   useEffect(() => {
@@ -468,7 +599,8 @@ export function BlockPlanDialog({ tactics: t, ours, theirs, onChange, onClose, s
         </header>
         <div className="bp3-body">
           <div className="bp3-stage">
-            <BlockScene target={target} plan={plan} layout={layout} ours={ours} theirs={theirs} onScenario={setScenario} />
+            <BlockScene target={target} plan={plan} layout={layout} ours={ours} theirs={theirs} onScenario={setScenario}
+              onDrag={drag} onDrop={onChange} />
             <div className={`bp3-caption ${scenario}`}>
               {scenario !== 'plan' && <Icon name="alert" size={14} />} {SCENARIO_TEXT[scenario]}
             </div>
@@ -476,7 +608,7 @@ export function BlockPlanDialog({ tactics: t, ours, theirs, onChange, onClose, s
               <span><i className="red" /> Taken away by the block</span>
               <span><i className="green" /> Left open</span>
               <span><i className="yellow" /> Either way</span>
-              <span className="faint">Drag to turn</span>
+              <span className="faint">Drag a blocker along the net, a defender on the floor — or the court, to turn it</span>
             </div>
           </div>
           <div className="bp3-side">
@@ -490,9 +622,15 @@ export function BlockPlanDialog({ tactics: t, ours, theirs, onChange, onClose, s
             </div>
             <div className="bp3-group">
               <h4>Where the block sets up</h4>
+              {plan.spots !== undefined && (
+                <div className="bp3-own">
+                  <span><b>Your own block</b> — {ownBlockWords(plan, target)}.</span>
+                  <button className="sm" onClick={() => set({ spots: undefined })} title="Back to the preset">Reset</button>
+                </div>
+              )}
               {focusOptions(target).map(([v, name, hint]) => (
-                <button key={v} className={`bp3-opt${plan.focus === v ? ' active' : ''}`} onClick={() => set({ focus: v })}>
-                  <b>{plan.focus === v && <Icon name="check" size={13} />} {name}</b>
+                <button key={v} className={`bp3-opt${plan.spots === undefined && plan.focus === v ? ' active' : ''}`} onClick={() => set({ focus: v, spots: undefined })}>
+                  <b>{plan.spots === undefined && plan.focus === v && <Icon name="check" size={13} />} {name}</b>
                   <span>{hint}</span>
                 </button>
               ))}

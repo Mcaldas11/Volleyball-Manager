@@ -137,6 +137,61 @@ export enum BlockNumbers {
 export interface BlockPlan {
   focus: BlockFocus;
   numbers: BlockNumbers;
+  /**
+   * The block as the coach dragged it, instead of a preset: each blocker's
+   * spot along the net, m from the hitter — towards his antenna +, inside -
+   * (against the pipe, towards our right +) — the pin blocker, the middle and
+   * the far one (against the pipe: the middle, then right, then left). The
+   * first `numbers` of them go up. Absent: the preset's.
+   */
+  spots?: number[];
+}
+
+/** A read block's centre, m from the hitter towards his antenna: a touch inside, on his hitting arm. */
+export const READ_CENTRE = -0.1;
+/** How far off the read the block's centre has to go to take a shot away completely, m. */
+const LEAN_FULL = 0.45;
+/** The usual gap between two blockers' centres, m: hands together, no seam. */
+export const BLOCK_GAP = 0.72;
+
+/** Where each blocker stands for a preset — see BlockPlan.spots. */
+export function presetBlockSpots(target: BlockTarget, focus: BlockFocus, numbers: BlockNumbers): number[] {
+  if (target === 'pipe') {
+    const c = focus === BlockFocus.Cross ? 0.55 : 0;
+    return [c, c + BLOCK_GAP, c - BLOCK_GAP];
+  }
+  const c = focus === BlockFocus.Line ? 0.38 : focus === BlockFocus.Cross ? -0.55 : READ_CENTRE;
+  return numbers === BlockNumbers.Single
+    ? [c, c - BLOCK_GAP, c - 2 * BLOCK_GAP]
+    : [c + BLOCK_GAP / 2, c - BLOCK_GAP / 2, c - BLOCK_GAP * 1.5];
+}
+
+/** Where the blockers stand: dragged there, or the preset's spots. */
+export function blockSpotsOf(plan: BlockPlan, target: BlockTarget): number[] {
+  return plan.spots ?? presetBlockSpots(target, plan.focus, plan.numbers);
+}
+
+/**
+ * How far the block leans onto one shot, -1 to 1: + the line (against the
+ * pipe, the seam), - the cross (against the pipe, an angle), 0 reading the
+ * hitter. A preset leans all the way; a dragged block as far as its centre is
+ * off the read.
+ */
+export function blockLean(plan: BlockPlan, target: BlockTarget): number {
+  if (plan.spots === undefined) return plan.focus === BlockFocus.Line ? 1 : plan.focus === BlockFocus.Cross ? -1 : 0;
+  const up = plan.spots.slice(0, plan.numbers);
+  const centre = up.reduce((s, x) => s + x, 0) / up.length;
+  if (target === 'pipe') return -Math.min(1, Math.abs(centre) / 0.55);
+  return Math.max(-1, Math.min(1, (centre - READ_CENTRE) / LEAN_FULL));
+}
+
+/** The average gap between neighbouring blockers' centres, m — BLOCK_GAP for one up, or a preset. */
+export function blockGap(plan: BlockPlan): number {
+  if (plan.spots === undefined || plan.numbers === BlockNumbers.Single) return BLOCK_GAP;
+  const up = plan.spots.slice(0, plan.numbers).sort((a, b) => a - b);
+  let gap = 0;
+  for (let i = 1; i < up.length; i++) gap += up[i] - up[i - 1];
+  return gap / (up.length - 1);
 }
 
 export type BlockPlans = Record<BlockTarget, BlockPlan>;

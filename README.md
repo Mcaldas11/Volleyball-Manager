@@ -86,7 +86,10 @@ Before committing a change:
       kind of attack
 - [x] A block plan against the outside, the opposite and the pipe, set over a
       3D court: read the hitter, take the line or take the cross (the seam or
-      the angle against the pipe), and one, two or three up. It plays out in
+      the angle against the pipe), and one, two or three up — or drag the
+      blockers along the net and the defenders on the floor where you want
+      them: a block dragged off the read leans on that shot, and blockers
+      dragged apart leave a seam between their hands. It plays out in
       the engine — a block on the shot a hitter favours closes it, three up
       blocks more but leaves the tip and slows the counter, one up keeps the
       diggers back — and however good the plan, the middle can be late across

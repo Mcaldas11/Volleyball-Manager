@@ -248,11 +248,12 @@ export class Cameraman {
 
   private courtsideShot(motion: CourtMotion, now: number, dt: number): Shot {
     // Sliding along the side of the court, turning and tilting after the ball wherever it goes.
-    const f = this.follow(this.play(motion, now), dt, 2.6, 9.5);
+    // Quick enough after a spike, and tilting up far enough for a high set, to keep the ball in the frame.
+    const f = this.follow(this.play(motion, now), dt, 4.2, 9.5);
     return {
       position: { x: 7.1, y: clamp(f.y * 0.7, -6.5, 6.5) - 1.5, z: 1.9 },
-      target: { x: f.x * 0.3 - 1.0, y: f.y, z: 0.6 + 0.62 * f.z },
-      hfov: 74,
+      target: { x: f.x * 0.3 - 1.0, y: f.y, z: 0.6 + 0.72 * f.z },
+      hfov: 78,
     };
   }
 
