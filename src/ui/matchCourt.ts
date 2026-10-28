@@ -670,6 +670,8 @@ export function rallyBeats(
   // Who the engine says set the ball — the setter, the other setter in a 4-2,
   // or the libero when the setter played the first ball or couldn't reach it.
   let engineSetter: number | null = null;
+  /** How the libero played the second ball inside the 3 m line, when he did: 'bump' or 'jump'. */
+  let engineSetHow: string | undefined;
   // The setter takes the second ball, unless they made the first touch: then
   // the libero, or failing that the opposite, steps in.
   const setterFor = (t: 0 | 1, busy: number[]): number => {
@@ -682,9 +684,15 @@ export function rallyBeats(
   const setBall = (t: 0 | 1, attacker = -1): void => {
     const before = forms[t];
     forms[t] = offenceFormation(teams[t]);
-    const { spot, ms } = pass ?? { spot: passSpot(1, 0), ms: 680 };
+    const { spot: passed, ms } = pass ?? { spot: passSpot(1, 0), ms: 680 };
     const setter = engineSetter ?? setterFor(t, [firstTouch, attacker]);
     engineSetter = null;
+    // The libero inside the 3 m line: a bump set off a ball taken low — or a jump set, taking off behind the line.
+    const how = engineSetHow;
+    engineSetHow = undefined;
+    const spot = how === 'bump' ? { ...passed, z: Math.min(passed.z, 0.95) }
+      : how === 'jump' ? { ...passed, at: { ...passed.at, v: Math.max(passed.at.v, 0.37) }, z: Math.max(passed.z, 3.0) }
+        : passed;
     // A setter who dug the ball stays down where they dug it.
     const own = teams[t].setter;
     if (own >= 0 && own !== setter) forms[t].set(own, before.get(own) ?? { u: 0.5, v: 0.5 });
@@ -817,9 +825,11 @@ export function rallyBeats(
       }
       case 'set':
         engineSetter = c.player;
+        engineSetHow = c.detail;
         break;
       case 'setError': {
         engineSetter = c.player;
+        engineSetHow = c.detail;
         setBall(t);
         const from = setFrom?.at ?? TARGET;
         push(air(t, { u: from.u, v: Math.max(0.3, from.v + 0.15) }, 0), null, 460, 0.4);

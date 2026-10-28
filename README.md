@@ -99,6 +99,10 @@ Before committing a change:
       front-row setter on a good pass attacks the second ball himself — a
       dump into the hole behind the block, which a middle watching him can
       stop
+- [x] The libero's second ball by the rules: inside the 3 m line he may not
+      set it overhead for an attack, so he bumps it — a slower, less accurate
+      ball, no quick or combination off it — or, with the ball by the line,
+      takes off behind it and jump-sets; beyond the line he sets as he likes
 - [x] A serve-receive line for every rotation: the usual three — the libero
       and both outsides — or two, hiding the weaker-passing outside so he
       attacks the first ball fresher while the others cover more court, or

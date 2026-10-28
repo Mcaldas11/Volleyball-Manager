@@ -68,8 +68,20 @@ test('a block dragged into place plays as it stands: its lean from where its cen
   // Half way to the line, half the lean; hands two metres apart, a gap.
   assert.ok(Math.abs(blockLean({ focus: BlockFocus.Read, numbers: BlockNumbers.Single, spots: [0.125, -0.6, -1.3] }, 'outside') - 0.5) < 1e-9);
   assert.equal(blockGap({ focus: BlockFocus.Read, numbers: BlockNumbers.Double, spots: [1, -1, -2] }), 2);
-  // In play: a block with a hole in it stuffs fewer than the same block with hands together.
-  const stuffs = (spots: number[]): number => play({ focus: BlockFocus.Read, numbers: BlockNumbers.Double, spots }, [7, 8, 9])
-    .reduce((n, r) => n + r.log!.reduce((m, x) => m + x.contacts.filter((c) => c.kind === 'blocked' && c.team === 0 && c.blockFocus !== undefined).length, 0), 0);
-  assert.ok(stuffs([1.2, -1.4, -2]) < stuffs([0.26, -0.46, -1.18]), 'the seam lets the ball through');
+  // In play: a block with a hole in it stuffs a smaller share of the attacks than the same block with
+  // hands together — over enough matches for the difference to be more than the dice.
+  const seeds = Array.from({ length: 16 }, (_, i) => 100 + i);
+  const stuffRate = (spots: number[]): number => {
+    let stuffed = 0;
+    let attacks = 0;
+    for (const r of play({ focus: BlockFocus.Read, numbers: BlockNumbers.Double, spots }, seeds)) {
+      for (const x of r.log!) for (const c of x.contacts) {
+        if (c.team !== 0 || c.blockFocus === undefined) continue;
+        attacks++;
+        if (c.kind === 'blocked') stuffed++;
+      }
+    }
+    return stuffed / attacks;
+  };
+  assert.ok(stuffRate([1.2, -1.4, -2]) < stuffRate([0.26, -0.46, -1.18]), 'the seam lets the ball through');
 });

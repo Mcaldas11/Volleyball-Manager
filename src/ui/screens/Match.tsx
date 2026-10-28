@@ -341,7 +341,8 @@ function describeContact(c: RallyContact, store: NameLookup): string {
     case 'serveError': return `${who} serve error`;
     case 'reception': return `${who} passes ${c.detail}`;
     case 'receptionError': return `${who} shanks the pass`;
-    case 'setError': return `${who} setting error`;
+    case 'set': return c.detail === 'bump' ? `${who} bump-sets it (inside the 3 m)` : c.detail === 'jump' ? `${who} jump-sets from behind the 3 m line` : '';
+    case 'setError': return c.detail === 'bump' ? `${who} bump set goes astray` : `${who} setting error`;
     case 'attack': return `${who} attacks (${c.detail})${blockNote(c)}`;
     case 'kill': return `KILL ${who} (${c.detail})${blockNote(c)}`;
     case 'attackError': return `${who} attack error`;

@@ -276,3 +276,32 @@ test('a setter dump is played by the setter at the net, no set before it; a hitt
   assert.ok(dumps > 0, 'some setter dumps in four matches');
   assert.ok(frees > 0, 'some free balls in four matches');
 });
+
+test('the libero inside the 3 m line bumps the second ball, or jump-sets it from behind the line', () => {
+  let bumps = 0;
+  let jumps = 0;
+  for (const seed of [2, 3, 6, 8, 9, 10]) {
+    const { sim, positions } = liveMatch(seed);
+    for (let i = 0; i < 400; i++) {
+      const pre = sim.snapshot();
+      if (pre.matchOver) break;
+      const entry = sim.step();
+      if (entry === null) break;
+      const set = entry.contacts.find((c) => c.kind === 'set' && (c.detail === 'bump' || c.detail === 'jump'));
+      if (set === undefined) continue;
+      const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, positions, i, 0);
+      const touch = beats.find((b) => b.actor === set.player && b.ball !== null && (b.poses.get(set.player) === 'pass' || b.poses.get(set.player) === 'set'));
+      assert.ok(touch !== undefined, 'the libero plays it');
+      if (set.detail === 'bump') {
+        bumps++;
+        assert.equal(touch.poses.get(set.player), 'pass', 'a bump: forearms');
+      } else {
+        jumps++;
+        assert.equal(touch.poses.get(set.player), 'set', 'a jump set: overhead');
+        assert.ok(depth(touch.positions.get(set.player)!.y) > 1 / 3, 'from behind the 3 m line');
+        assert.ok(touch.ball!.z >= 2.9, 'up in the air');
+      }
+    }
+  }
+  assert.ok(bumps > 0 && jumps > 0, `${bumps} bumps, ${jumps} jump sets`);
+});

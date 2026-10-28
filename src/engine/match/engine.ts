@@ -124,6 +124,14 @@ const FREE_BALL_PASS = 0.8;
 const DUMP_RATE = 0.065;
 /** The pass it takes: the setter has to be at the net, on top of the ball. */
 const DUMP_PASS = 0.62;
+/**
+ * The libero's second ball inside the 3 m line, where the rules don't let him
+ * set it overhead for an attack above the net: a forearm set is less
+ * accurate, and too slow for a quick or a combination; a jump set, taking off
+ * behind the line, a little harder than one with his feet on the floor.
+ */
+const BUMP_SET = 0.1;
+const JUMP_SET = 0.04;
 /** What a block set up on the shot the hitter favours is worth — and costs, set up on the one he doesn't. */
 const FOCUS_BLOCK = 0.16;
 /**
@@ -2238,27 +2246,41 @@ export class MatchSimulator {
       return this.setterDump(atk, def, attacking, setter, setRatings);
     }
 
+    // The libero inside the 3 m line may not set the ball overhead for an attack
+    // above the net: he bumps it — or, the ball by the line, takes off behind it
+    // and sets it in the air. A ball beyond the line he sets as he likes.
+    const hand = this.roles[setter] === Position.Libero ? liberoSet(quality, rng) : null;
+
     // A setter's job is to convert whatever pass they get into a hittable ball.
     // Good setters lose less off a poor pass, which is precisely their value.
-    const setSkill = setRatings.setting * setRatings.fatigue * setRatings.confidence;
+    // A bump set is a passer's touch, not a setter's.
+    const setSkill = (hand === 'bump' ? setRatings.reception * 0.6 + setRatings.setting * 0.4 : setRatings.setting) *
+      setRatings.fatigue * setRatings.confidence;
     const setQuality = clamp(
-      quality * 0.55 + (setSkill / 100) * 0.45 + rng.gaussian(0, 0.07) - (transition ? 0.06 : 0),
+      quality * 0.55 + (setSkill / 100) * 0.45 + rng.gaussian(0, 0.07) - (transition ? 0.06 : 0) -
+        (hand === 'bump' ? BUMP_SET : hand === 'jump' ? JUMP_SET : 0),
       0,
       1,
     );
+    const how = hand !== null ? { detail: hand } : {};
 
-    const setErrorProb = clamp(0.012 - (setSkill - 55) * 0.00018 + (1 - quality) * 0.02, 0.002, 0.06);
+    const setErrorProb = clamp(0.012 - (setSkill - 55) * 0.00018 + (1 - quality) * 0.02, 0.002, 0.06) *
+      (hand === 'bump' ? 1.3 : hand === 'jump' ? 1.15 : 1);
     if (rng.chance(setErrorProb * tempo.executionDifficulty)) {
       setterStats.setErrors++;
-      this.push({ kind: 'setError', team: attacking, player: setter });
+      this.push({ kind: 'setError', team: attacking, player: setter, ...how });
       return { point: 1 - attacking, nextQuality: 0, toucher: -1 };
     }
     setterStats.setsMade++;
-    this.push({ kind: 'set', team: attacking, player: setter });
+    this.push({ kind: 'set', team: attacking, player: setter, ...how });
 
     // ---- Attack lane selection ----
     // What the setter may run depends on where the pass came down, and the coach's plan for that zone.
-    const plan = zonePlansOf(atk.tactics)[passZone(quality)];
+    // Off a bump set, nothing fast: no quick, no combination — a high ball to the pins.
+    const zonePlan = zonePlansOf(atk.tactics)[passZone(quality)];
+    const plan: ZonePlan = hand === 'bump'
+      ? { ...zonePlan, middle: MiddleOption.None, middleBack: MiddleOption.None, combos: false, pins: PinSet.High }
+      : zonePlan;
     // The setter setting it from the net (zones 2-4, P2-P4) leaves the right
     // side free behind him — for the slide. Not anyone else who has to set it.
     const setterZone = atk.court.indexOf(setter);
@@ -3042,6 +3064,18 @@ export class MatchSimulator {
 }
 
 // ---- Free functions -------------------------------------------------------
+
+/**
+ * How the libero plays the second ball: within the 3 m line — a pass in zone
+ * A — he bumps it, or, the nearer the ball to the line the likelier, takes off
+ * behind it and jump-sets; beyond the line (null), he sets it overhead.
+ */
+function liberoSet(quality: number, rng: Rng): 'bump' | 'jump' | null {
+  if (passZone(quality) !== 'A') return null;
+  // 0 with the ball at the net (a perfect pass), 1 with it on the 3 m line.
+  const byLine = clamp((1 - quality) / (1 - 0.58), 0, 1);
+  return byLine > 0.5 && rng.chance(((byLine - 0.5) / 0.5) * 0.85) ? 'jump' : 'bump';
+}
 
 /** What the log calls a setter's attack on the second ball. */
 export const SECOND_BALL = 'Second ball';
