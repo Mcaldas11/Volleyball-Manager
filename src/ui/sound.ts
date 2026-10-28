@@ -2,12 +2,16 @@
  * The match's sounds, made on the spot with the Web Audio API — no files to
  * load: the referee's whistle before each serve, the ball off the hand, the
  * crowd for a point (louder when the home side wins it), and the hooter for a
- * timeout. Quiet by design, and off with one click — remembered per browser.
+ * timeout. Quiet by design, and off with one click — remembered per browser,
+ * as is how loud they are.
  */
 
 const KEY = 'vm.sound';
+const VOLUME_KEY = 'vm.soundVolume';
 let ctx: AudioContext | null = null;
 let noise: AudioBuffer | null = null;
+/** Every sound goes out through this, at the volume chosen. */
+let master: GainNode | null = null;
 
 export function soundOn(): boolean {
   try {
@@ -23,6 +27,26 @@ export function setSoundOn(on: boolean): void {
   } catch {
     // Without storage it simply isn't remembered.
   }
+}
+
+/** How loud the sounds are, 0 to 1. */
+export function soundVolume(): number {
+  try {
+    const v = Number(window.localStorage.getItem(VOLUME_KEY) ?? '1');
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export function setSoundVolume(v: number): void {
+  const level = Math.max(0, Math.min(1, v));
+  try {
+    window.localStorage.setItem(VOLUME_KEY, String(level));
+  } catch {
+    // Without storage it simply isn't remembered.
+  }
+  if (master !== null) master.gain.value = level;
 }
 
 /** The audio context, made on first use — and only with sound on, and a browser that has one. */
@@ -57,7 +81,12 @@ function envelope(a: AudioContext, peak: number, attack: number, length: number)
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + length);
-  g.connect(a.destination);
+  if (master === null) {
+    master = a.createGain();
+    master.gain.value = soundVolume();
+    master.connect(a.destination);
+  }
+  g.connect(master);
   return g;
 }
 

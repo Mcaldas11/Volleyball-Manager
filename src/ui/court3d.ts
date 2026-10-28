@@ -33,6 +33,7 @@ import { buildTrophy, Confetti } from './trophy3d.ts';
 import { REFEREE_STAND, SIDELINE, TROPHY_HAND_AT, TROPHY_OFFICIAL_AT, type CourtMotion } from './courtMotion.ts';
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
 import { Figure, type Kit, type Look } from './figure3d.ts';
+import { graphics, renderPixelRatio, SHADOW_MAP } from './preferences.ts';
 
 export type { Kit, Look } from './figure3d.ts';
 
@@ -313,12 +314,15 @@ export class Court3D {
   private readonly landing: Mesh;
   private width = 1;
   private height = 1;
+  /** The light that casts the shadows, and the graphics last set up — see applyGraphics. */
+  private readonly keyLight: DirectionalLight;
+  private graphicsKey = '';
   private readonly spinAxis = new Vector3();
   private readonly tmp = new Vector3();
 
   /** Throws if the browser can't give us WebGL. */
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
+    this.renderer = new WebGLRenderer({ canvas, antialias: graphics().antialias, alpha: true });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
@@ -361,6 +365,7 @@ export class Court3D {
     key.shadow.normalBias = 0.02;
     key.shadow.radius = 3;
     this.scene.add(key, key.target);
+    this.keyLight = key;
     const fill = new DirectionalLight('#dfe6f5', 0.4);
     fill.position.set(14, -3, 6);
     this.scene.add(fill);
@@ -405,12 +410,12 @@ export class Court3D {
     this.scene.add(this.landing);
   }
 
-  resize(width: number, height: number, dpr: number): void {
+  resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    // Past one and a half pixels per CSS pixel the court looks no sharper,
-    // and every frame costs half as much again — or more.
-    this.renderer.setPixelRatio(Math.min(dpr, 1.5));
+    // As sharp as the graphics preferences ask — the high preset stops at one and a half pixels per
+    // CSS pixel: past that the court looks no sharper, and every frame costs half as much again.
+    this.renderer.setPixelRatio(renderPixelRatio());
     this.renderer.setSize(width, height, false);
     courtCamera(width, height, this.camera);
     // Whichever camera is chosen, aimed again for the new box on the next frame.
@@ -457,9 +462,34 @@ export class Court3D {
     this.scene.add(this.benches);
   }
 
+  /** The graphics preferences, as they stand: how sharp, and the shadows — none, or from a map this fine. */
+  private applyGraphics(): void {
+    const g = graphics();
+    const ratio = renderPixelRatio();
+    const key = `${ratio}|${g.shadows}`;
+    if (key === this.graphicsKey) return;
+    this.graphicsKey = key;
+    if (this.renderer.getPixelRatio() !== ratio) this.renderer.setPixelRatio(ratio);
+    const size = SHADOW_MAP[g.shadows];
+    if (this.renderer.shadowMap.enabled !== size > 0) {
+      this.renderer.shadowMap.enabled = size > 0;
+      // Every surface's shading made again, with shadows or without.
+      this.scene.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) (m as Material).needsUpdate = true;
+      });
+    }
+    if (size > 0 && this.keyLight.shadow.mapSize.x !== size) {
+      this.keyLight.shadow.mapSize.set(size, size);
+      this.keyLight.shadow.map?.dispose();
+      this.keyLight.shadow.map = null;
+    }
+  }
+
   /** Draw the court at `now`; `look` says how each player looks — and, for
    *  `coachLook(t)`, each side's coach. */
   render(motion: CourtMotion, now: number, dt: number, look: (p: number) => Look, coachLook?: (t: 0 | 1) => Look): void {
+    this.applyGraphics();
     if (coachLook !== undefined) {
       if (this.coaches === null) {
         this.coaches = [new Figure(coachLook(0)), new Figure(coachLook(1))];

@@ -3,7 +3,8 @@ import { StaffRole } from '../engine/model/staff.ts';
 import logo from './logo.png';
 import { Splash, splashDue } from './splash.tsx';
 import { EditorScreen } from './screens/Editor.tsx';
-import { SettingsDialog } from './settingsDialog.tsx';
+import { PreferencesDialog } from './settingsDialog.tsx';
+import { FpsCounter } from './fpsCounter.tsx';
 import { AchievementsScreen, CoursesScreen } from './screens/Milestones.tsx';
 import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
@@ -198,7 +199,8 @@ export function App(): JSX.Element {
     <>
       <AppBody />
       <TaskWindow />
-      {g.settingsOpen && <SettingsDialog />}
+      {g.settingsOpen && <PreferencesDialog />}
+      {g.prefs.showFps && <FpsCounter />}
       {splash && <Splash onDone={() => setSplash(false)} />}
     </>
   );
@@ -505,7 +507,7 @@ function ManagerMenu({ name, photo }: { name: string; photo: string }): JSX.Elem
             <Icon name="download" size={16} /> Export career file
           </button>
           <button onClick={() => { setOpen(false); g.openSettings(); }}>
-            <Icon name="gear" size={16} /> Settings
+            <Icon name="gear" size={16} /> Preferences
           </button>
           <button disabled={g.busy} onClick={() => { setOpen(false); void g.exitToMenu(); }}>
             <Icon name="exit" size={16} /> Save &amp; exit to menu

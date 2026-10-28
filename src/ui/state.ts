@@ -24,6 +24,7 @@ import {
 } from '../engine/world/squadPlanner.ts';
 import { acceptSuggestion, declineSuggestion, meetingsOf, type StaffMeeting } from '../engine/world/staffMeeting.ts';
 import { applyPreferences, loadPreferences, savePreferences, type Preferences } from './preferences.ts';
+import { loadManagerProfile, saveManagerProfile } from './managerProfile.ts';
 import { playAroundTheLeague, type AroundTheLeague } from '../engine/season/aroundTheLeague.ts';
 import { bookCamp, type CampKind } from '../engine/world/camp.ts';
 import { requestLowerTarget, requestWages } from '../engine/world/board.ts';
@@ -693,6 +694,8 @@ class Game {
   /** With a club and a country, which of the two the team screens are about. */
   teamView: TeamView = 'club';
   pendingManager: ManagerProfile | null = null;
+  /** The manager profile kept in this browser, made from the main menu — see managerProfile.ts. */
+  managerProfile: ManagerProfile | null = loadManagerProfile();
   currentScale: WorldScale | null = null;
   saves: SaveMeta[] = [];
   currentSaveId: string | null = null;
@@ -783,6 +786,22 @@ class Game {
 
   goToMenu(stage: MenuStage): void {
     this.menuStage = stage;
+    this.emit();
+  }
+
+  /** The manager profile made from the main menu: kept, and every new career starts from it. */
+  setManagerProfile(profile: ManagerProfile): void {
+    this.managerProfile = profile;
+    saveManagerProfile(profile);
+    this.emit();
+  }
+
+  /** A new career of this kind straight away: with the saved manager profile, on to the world — or, with none, to making one. */
+  quickStart(mode: CareerMode): void {
+    this.careerMode = mode;
+    const saved = this.managerProfile;
+    this.pendingManager = saved !== null ? { ...saved } : null;
+    this.menuStage = saved !== null ? 'worldSetup' : 'createManager';
     this.emit();
   }
 

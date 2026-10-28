@@ -21,7 +21,9 @@ import {
 } from '../engine/match/tactics.ts';
 import { APPROACH, BLOCK_PEAK, BLOCK_READY, COCKED, LOAD, STRIKE } from './courtMotion.ts';
 import { Figure, type Kit, type Look } from './figure3d.ts';
+import { FramePacer, noteFrame } from './frames.ts';
 import { Icon } from './icons.tsx';
+import { graphics, renderPixelRatio } from './preferences.ts';
 import { buildRig, COVER, mixShape, READY, REF_HEIGHT, STILL, type Shape as Pose } from './playerRig.ts';
 
 export const BLOCK_TARGET_NAMES: Readonly<Record<BlockTarget, string>> = { outside: 'Outside', opposite: 'Opposite', pipe: 'Pipe' };
@@ -288,14 +290,14 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario, onDrag, on
     box.prepend(el);
     let renderer: WebGLRenderer;
     try {
-      renderer = new WebGLRenderer({ canvas: el, antialias: true, alpha: true });
+      renderer = new WebGLRenderer({ canvas: el, antialias: graphics().antialias, alpha: true });
     } catch {
       el.remove();
       return;
     }
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.toneMapping = NeutralToneMapping;
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.setPixelRatio(renderPixelRatio());
     const scene = new Scene();
     const sky = new HemisphereLight('#e8eeff', '#3a3028', 1.1);
     sky.position.set(0, 0, 1);
@@ -421,7 +423,15 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario, onDrag, on
     let told: Scenario | null = null;
     let raf = 0;
     const start = performance.now();
+    const pacer = new FramePacer();
     const frame = (now: number): void => {
+      // No more frames than the preferences' limit; as sharp as they ask.
+      if (!pacer.due(now)) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      noteFrame(pacer, now);
+      if (renderer.getPixelRatio() !== renderPixelRatio()) renderer.setPixelRatio(renderPixelRatio());
       const { target: tg, plan: pl, layout: ly } = live.current;
       const elapsed = (now - start) / 1000;
       const n = Math.floor(elapsed / PERIOD);

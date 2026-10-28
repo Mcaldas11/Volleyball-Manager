@@ -11,7 +11,9 @@ import {
   PerspectiveCamera, PMREMGenerator, Scene, SRGBColorSpace, Vector3, WebGLRenderer,
 } from 'three';
 import { Figure, type Look } from './figure3d.ts';
+import { FramePacer, noteFrame } from './frames.ts';
 import { arms, buildRig, REF_HEIGHT, shape, STAND, STILL } from './playerRig.ts';
+import { graphics, renderPixelRatio } from './preferences.ts';
 
 export interface CoachPreviewHandle {
   /** Head and shoulders, as a JPEG data URL — null without WebGL. */
@@ -38,7 +40,11 @@ function floorShadow(): Mesh {
   return new Mesh(new CircleGeometry(0.55, 32), new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
 }
 
-export const CoachPreview = forwardRef<CoachPreviewHandle, { look: Look }>(function CoachPreview({ look }, ref): JSX.Element {
+export const CoachPreview = forwardRef<CoachPreviewHandle, {
+  look: Look;
+  /** Turning slowly on his own — or, false, standing a little turned to the side until turned by hand. */
+  turning?: boolean;
+}>(function CoachPreview({ look, turning = true }, ref): JSX.Element {
   const wrap = useRef<HTMLDivElement>(null);
   const view = useRef<{
     renderer: WebGLRenderer; scene: Scene; camera: PerspectiveCamera; figure: Figure | null; yaw: number; size: [number, number];
@@ -55,7 +61,7 @@ export const CoachPreview = forwardRef<CoachPreviewHandle, { look: Look }>(funct
     box.prepend(el);
     let renderer: WebGLRenderer;
     try {
-      renderer = new WebGLRenderer({ canvas: el, antialias: true, alpha: true, preserveDrawingBuffer: true });
+      renderer = new WebGLRenderer({ canvas: el, antialias: graphics().antialias, alpha: true, preserveDrawingBuffer: true });
     } catch {
       el.remove();
       return;
@@ -63,7 +69,7 @@ export const CoachPreview = forwardRef<CoachPreviewHandle, { look: Look }>(funct
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.toneMapping = NeutralToneMapping;
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.setPixelRatio(renderPixelRatio());
     const scene = new Scene();
     const pmrem = new PMREMGenerator(renderer);
     const room = new RoomEnvironment();
@@ -81,7 +87,7 @@ export const CoachPreview = forwardRef<CoachPreviewHandle, { look: Look }>(funct
     scene.add(sky, key, rim, floorShadow());
     const camera = new PerspectiveCamera(24, 1, 0.1, 50);
     camera.up.set(0, 0, 1);
-    view.current = { renderer, scene, camera, figure: null, yaw: 0.35, size: [1, 1] };
+    view.current = { renderer, scene, camera, figure: null, yaw: turning ? 0.35 : 0.22, size: [1, 1] };
 
     const resize = (): void => {
       const w = Math.max(1, box.clientWidth);
@@ -109,12 +115,20 @@ export const CoachPreview = forwardRef<CoachPreviewHandle, { look: Look }>(funct
 
     let raf = 0;
     let last = performance.now();
+    const pacer = new FramePacer();
     const frame = (now: number): void => {
       const v = view.current;
       if (v === null) return;
+      // No more frames than the preferences' limit; as sharp as they ask.
+      if (!pacer.due(now)) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      noteFrame(pacer, now);
+      if (renderer.getPixelRatio() !== renderPixelRatio()) renderer.setPixelRatio(renderPixelRatio());
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      if (dragging === null) v.yaw += dt * 0.45;
+      if (dragging === null && turning) v.yaw += dt * 0.45;
       if (v.figure !== null) pose(v.figure, v.yaw);
       // Full length, a little below eye level.
       const [w, h] = v.size;

@@ -30,6 +30,7 @@ import { PlayerFlag, type PlayerStore } from '../engine/model/players.ts';
 import { Position } from '../engine/model/positions.ts';
 import { RATING_BANDS } from '../engine/match/playerRating.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
+import { FramePacer, noteFrame } from './frames.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
 import type { CameraMode } from './courtCameras.ts';
 import { BOARD_HEIGHT, BOARD_TEXT, BOARD_X, END_BOARD_Y, FLOOR } from './hall3d.ts';
@@ -270,7 +271,7 @@ export function LiveCourt({
       }
       top.setTransform(dpr, 0, 0, dpr, 0, 0);
       project = buildProjector(cssW, cssH);
-      court?.resize(cssW, cssH, dpr);
+      court?.resize(cssW, cssH);
       paintHall();
     };
     // The video's close-up: every layer scaled about the spot alike, so the
@@ -306,7 +307,14 @@ export function LiveCourt({
 
     let raf = 0;
     let last = performance.now();
+    // No more frames than the preferences' limit — the time between two drawn is what the motion moves on by.
+    const pacer = new FramePacer();
     const frame = (now: number): void => {
+      if (!pacer.due(now)) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      noteFrame(pacer, now);
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
       if (JSON.stringify([props.current.kits, props.current.nearTeam]) !== hallKits) {

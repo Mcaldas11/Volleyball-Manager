@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
-import { DEFAULT_LOOK } from '../coachLook.ts';
-import type { CoachPreviewHandle } from '../coachPreview.tsx';
+import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
+import { CoachPreview, type CoachPreviewHandle } from '../coachPreview.tsx';
+import type { Kit } from '../figure3d.ts';
 import { LookEditor } from '../lookEditor.tsx';
+import arena from '../menu-arena.jpg';
+import hall from '../menu-hall.jpg';
 import { CareerStartOptions } from './Insights.tsx';
 import logo from '../logo.png';
 import { PlayerFlag } from '../../engine/model/players.ts';
@@ -33,80 +36,217 @@ function Wordmark(): JSX.Element {
   );
 }
 
+/** A date of birth for the date field, from a profile's year and day of the year. */
+function birthDateOf(p: { birthYear: number; birthDay: number } | null): string {
+  if (p === null) return '1985-01-01';
+  const d = new Date(Date.UTC(p.birthYear, 0, 1));
+  d.setUTCDate(d.getUTCDate() + p.birthDay);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The date field's date as a year and day of the year — null if it is no date, or out of range. */
+function parseBirthDate(birthDate: string): { birthYear: number; birthDay: number } | null {
+  if (birthDate < MIN_BIRTH_DATE || birthDate > MAX_BIRTH_DATE) return null;
+  const d = new Date(`${birthDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  const birthYear = d.getUTCFullYear();
+  const birthDay = Math.round((d.getTime() - Date.UTC(birthYear, 0, 1)) / 86_400_000);
+  return { birthYear, birthDay };
+}
+
+/** The game's own colours, for a manager dressed in "the club's" before there is a club. */
+const MENU_KIT: Kit = { shirt: '#1f3a66', shorts: '#d7a73f', libero: '#d7a73f' };
+
+/**
+ * The main menu, laid out as Football Manager's: the system bar along the top — the preferences,
+ * the manager profile — the ways into a career as tiles down the left, a new career the big one
+ * over the hall, and the manager himself standing on the right, in 3D, as he is dressed, with his
+ * profile a click away.
+ */
 export function MainMenu(): JSX.Element {
   const g = useGame();
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     void g.refreshSaves();
   }, []);
 
-  const mostRecent = g.saves[0];
+  const recent = g.saves[0];
+  const profile = g.managerProfile;
+  const women = profile?.gender === 'female';
+  const look = figureLook(profile?.look ?? DEFAULT_LOOK, MENU_KIT, women);
 
   return (
-    <div className="start">
-      <div className="start-panel">
-        <Wordmark />
-        <p className="start-tagline">Rally-by-rally management sim for professional indoor volleyball.</p>
+    <div className="mm">
+      <div className="mm-backdrop" style={{ backgroundImage: `url(${hall})` }} />
 
-        <nav className="start-menu">
-          {mostRecent !== undefined && (
-            <button className="start-item start-continue" onClick={() => { void g.loadGame(mostRecent.id); }}>
-              <span className="start-item-icon"><Icon name="play" size={22} /></span>
-              <span className="start-item-text">
-                <span className="start-item-kicker">Continue career</span>
-                <span className="start-item-title">
-                  <FlagByCode code={mostRecent.clubNationCode} /> {mostRecent.clubName}
-                </span>
-                <span className="start-item-meta">
-                  {mostRecent.managerName} · {mostRecent.inGameDate} · saved {new Date(mostRecent.updatedAt).toLocaleString()}
-                </span>
-              </span>
-              <Icon name="chevronRight" size={20} className="start-item-chev" />
-            </button>
-          )}
-          <button className="start-item" onClick={() => g.goToMenu('createManager')}>
-            <span className="start-item-icon"><Icon name="ball" size={22} /></span>
-            <span className="start-item-text">
-              <span className="start-item-title">Start New Career</span>
-              <span className="start-item-meta">Create a manager and take charge of a club, a national team, or both.</span>
-            </span>
-            <Icon name="chevronRight" size={20} className="start-item-chev" />
-          </button>
-          <button className="start-item" onClick={() => g.openSettings()}>
-            <span className="start-item-icon"><Icon name="gear" size={22} /></span>
-            <span className="start-item-text">
-              <span className="start-item-title">Settings</span>
-              <span className="start-item-meta">Text size, colour-blind friendly colours, less motion.</span>
-            </span>
-            <Icon name="chevronRight" size={20} className="start-item-chev" />
-          </button>
-          <button className="start-item" onClick={() => g.goToMenu('load')}>
-            <span className="start-item-icon"><Icon name="save" size={22} /></span>
-            <span className="start-item-text">
-              <span className="start-item-title">Load Game</span>
-              <span className="start-item-meta">
-                {g.saves.length === 0
-                  ? 'No saved careers yet.'
-                  : `${g.saves.length} saved career${g.saves.length === 1 ? '' : 's'}.`}
-              </span>
-            </span>
-            <Icon name="chevronRight" size={20} className="start-item-chev" />
-          </button>
-        </nav>
-
-        <p className="start-footer">© 2026 Miguel Caldas. All rights reserved.</p>
-      </div>
-
-      <div className="start-hero">
-        <div className="start-hero-court" />
-        <img className="hero-volleyball" src={logo} alt="" />
-        {mostRecent !== undefined && mostRecent.clubNationCode !== '' && (
-          <span className="hero-flag"><FlagByCode code={mostRecent.clubNationCode} /></span>
-        )}
-        <div className="start-hero-caption">
-          <span>Every set score is simulated</span>
-          <strong>serve · pass · set · attack · block · dig</strong>
+      <header className="mm-bar">
+        <div className="mm-mark">
+          <img src={logo} alt="" />
+          <span>Volleyball <b>Manager</b></span>
         </div>
+        <nav className="mm-pills">
+          <button className="mm-pill on" onClick={() => g.openSettings()}><Icon name="gear" size={14} /> Preferences</button>
+          <button className="mm-pill" onClick={() => setEditing(true)}><Icon name="user" size={14} /> Manager Profile</button>
+        </nav>
+      </header>
+
+      <section className="mm-tiles">
+        <button className="mm-tile mm-tile-hero" onClick={() => g.goToMenu('createManager')}>
+          <span className="mm-tile-title">Start New Career</span>
+          <span className="mm-tile-text">Take charge of a club, a national team, or both — your way, rally by rally.</span>
+          <img className="mm-tile-art" src={arena} alt="" />
+        </button>
+
+        {recent !== undefined ? (
+          <button className="mm-tile mm-tile-continue" onClick={() => { void g.loadGame(recent.id); }}>
+            <span className="mm-tile-kicker">Continue career</span>
+            <span className="mm-tile-title"><FlagByCode code={recent.clubNationCode} /> {recent.clubName}</span>
+            <span className="mm-tile-text">{recent.managerName} · {recent.inGameDate}</span>
+          </button>
+        ) : (
+          <label className={`mm-tile${g.busy ? ' disabled' : ''}`} title="Bring in a career exported from this game">
+            <span className="mm-tile-title">Import Career</span>
+            <span className="mm-tile-text">Carry on a career from a file exported from this game.</span>
+            <input type="file" accept=".vmcareer,.json,application/gzip" hidden disabled={g.busy}
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f !== undefined) void g.importCareerFile(f); }} />
+          </label>
+        )}
+        <button className="mm-tile" onClick={() => g.goToMenu('load')}>
+          <span className="mm-tile-title">Load Game</span>
+          <span className="mm-tile-text">
+            {g.saves.length === 0 ? 'No saved careers yet.' : `Pick up one of your ${g.saves.length} saved career${g.saves.length === 1 ? '' : 's'}.`}
+          </span>
+        </button>
+
+        <button className="mm-tile mm-tile-quick mm-quick-nation" onClick={() => g.quickStart('national')}>
+          <span className="mm-tile-title">Manage a National Team</span>
+          <span className="mm-tile-text">Pick the squads and take a nation to the Worlds.</span>
+          <span className="mm-tile-go">Quick Start <Icon name="chevronRight" size={14} /></span>
+          <Icon name="world" size={62} className="mm-tile-icon" />
+        </button>
+        <button className="mm-tile mm-tile-quick mm-quick-both" onClick={() => g.quickStart('both')}>
+          <span className="mm-tile-title">Club &amp; Country</span>
+          <span className="mm-tile-text">Your club in the season, your nation in the summer.</span>
+          <span className="mm-tile-go">Quick Start <Icon name="chevronRight" size={14} /></span>
+          <Icon name="trophy" size={62} className="mm-tile-icon" />
+        </button>
+
+        <div className="mm-banner">
+          <img src={logo} alt="" />
+          <span className="mm-banner-text">
+            <small>Every set score is simulated</small>
+            <b>serve · pass · set · attack · block · dig</b>
+          </span>
+        </div>
+        {g.notice !== '' && <p className="menu-notice mm-notice">{g.notice}</p>}
+      </section>
+
+      <section className="mm-stage">
+        {!editing && <CoachPreview look={look} turning={false} />}
+        <div className="mm-who">
+          {profile !== null ? (
+            <>
+              <span className="mm-who-name"><Flag nation={profile.nation} /> {profile.firstName} {profile.lastName}</span>
+              <span className="mm-who-sub">Your manager · every new career starts from this profile</span>
+            </>
+          ) : (
+            <>
+              <span className="mm-who-name">Your manager</span>
+              <span className="mm-who-sub">Make a profile once — every new career starts from it</span>
+            </>
+          )}
+          <button className="mm-profile-btn" onClick={() => setEditing(true)}>
+            <Icon name="user" size={14} /> {profile !== null ? 'Manager Profile' : 'Create Manager Profile'} <Icon name="chevronRight" size={14} />
+          </button>
+        </div>
+      </section>
+
+      <p className="mm-foot">© 2026 Miguel Caldas. All rights reserved.</p>
+      {editing && <ManagerProfileDialog onClose={() => setEditing(false)} />}
+    </div>
+  );
+}
+
+/**
+ * The manager profile, from the main menu: who you are — name, date of birth, gender, nation — and
+ * how you look on the touchline, with your portrait made from it. Kept in this browser; every new
+ * career starts from it, and a quick start takes it as it is.
+ */
+function ManagerProfileDialog({ onClose }: { onClose: () => void }): JSX.Element {
+  const g = useGame();
+  const saved = g.managerProfile;
+  const [tab, setTab] = useState<'details' | 'look'>(saved === null ? 'details' : 'look');
+  const [firstName, setFirstName] = useState(saved?.firstName ?? '');
+  const [lastName, setLastName] = useState(saved?.lastName ?? '');
+  const [birthDate, setBirthDate] = useState(() => birthDateOf(saved));
+  const [gender, setGender] = useState<'male' | 'female'>(saved?.gender ?? 'male');
+  const [nation, setNation] = useState(saved?.nation ?? 0);
+  const [look, setLook] = useState<ManagerLook>(saved?.look ?? DEFAULT_LOOK);
+  const preview = useRef<CoachPreviewHandle>(null);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, []);
+  const birth = parseBirthDate(birthDate);
+  const valid = firstName.trim() !== '' && lastName.trim() !== '' && birth !== null;
+  const save = (): void => {
+    if (birth === null || !valid) {
+      setTab('details');
+      return;
+    }
+    g.setManagerProfile({
+      firstName: firstName.trim(), lastName: lastName.trim(), ...birth, gender, nation, look,
+      portrait: preview.current?.portrait() ?? saved?.portrait,
+    });
+    onClose();
+  };
+  return (
+    <div className="hol-overlay" onClick={onClose}>
+      <div className="hol-card look-dialog mm-profile" role="dialog" aria-label="Manager profile" onClick={(e) => e.stopPropagation()}>
+        <header className="hol-top">
+          <span className="hol-crumbs"><Icon name="user" size={12} /> <b>Manager Profile</b></span>
+          <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={16} /></button>
+        </header>
+        <div className="mm-profile-tabs">
+          <Segmented size="sm" value={tab} onChange={setTab} options={[['details', 'Details'], ['look', 'Look']]} />
+          <span className="faint">Every new career starts from your profile — a Quick Start takes it as it is.</span>
+        </div>
+        <div className="mm-profile-details" hidden={tab !== 'details'}>
+          <Card title="Who you are" icon="user">
+            <div className="form-grid">
+              <label className="form-field">
+                <span>First name</span>
+                <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="e.g. Ana" />
+              </label>
+              <label className="form-field">
+                <span>Last name</span>
+                <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="e.g. Silva" />
+              </label>
+              <label className="form-field">
+                <span>Date of birth</span>
+                <input type="date" value={birthDate} min={MIN_BIRTH_DATE} max={MAX_BIRTH_DATE} onChange={(e) => setBirthDate(e.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Gender</span>
+                <Dropdown value={gender} onChange={setGender} options={[{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]} />
+              </label>
+              <label className="form-field form-field-wide">
+                <span>Nation</span>
+                <Dropdown value={nation} onChange={setNation} options={NATIONS.map((n, i) => ({ value: i, label: n.name, icon: <Flag nation={i} /> }))} />
+              </label>
+            </div>
+          </Card>
+        </div>
+        <div className="mm-profile-look" hidden={tab !== 'look'}>
+          <LookEditor look={look} onChange={setLook} women={gender === 'female'} kit={MENU_KIT} previewRef={preview} />
+        </div>
+        <footer className="look-dialog-foot">
+          {!valid && <span className="mm-profile-warn">A first and last name, and a date of birth between 1946 and 2008, are needed.</span>}
+          <button onClick={onClose}>Cancel</button>
+          <button className="primary" onClick={save} disabled={!valid}><Icon name="check" size={14} /> Save profile</button>
+        </footer>
       </div>
     </div>
   );
@@ -230,29 +370,16 @@ export function LoadGameList(): JSX.Element {
 
 export function CreateManager(): JSX.Element {
   const g = useGame();
-  const existing = g.pendingManager;
+  // Filled in from the manager profile made on the main menu, if there is one.
+  const existing = g.pendingManager ?? g.managerProfile;
 
   const [firstName, setFirstName] = useState(existing?.firstName ?? '');
   const [lastName, setLastName] = useState(existing?.lastName ?? '');
-  const [birthDate, setBirthDate] = useState(() => {
-    if (existing === null) return '1985-01-01';
-    const d = new Date(Date.UTC(existing.birthYear, 0, 1));
-    d.setUTCDate(d.getUTCDate() + existing.birthDay);
-    return d.toISOString().slice(0, 10);
-  });
+  const [birthDate, setBirthDate] = useState(() => birthDateOf(existing));
   const [gender, setGender] = useState<'male' | 'female'>(existing?.gender ?? 'male');
   const [nation, setNation] = useState(existing?.nation ?? 0);
 
-  const parsedBirth = (): { birthYear: number; birthDay: number } | null => {
-    if (birthDate < MIN_BIRTH_DATE || birthDate > MAX_BIRTH_DATE) return null;
-    const d = new Date(`${birthDate}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return null;
-    const birthYear = d.getUTCFullYear();
-    const birthDay = Math.round((d.getTime() - Date.UTC(birthYear, 0, 1)) / 86_400_000);
-    return { birthYear, birthDay };
-  };
-
-  const birth = parsedBirth();
+  const birth = parseBirthDate(birthDate);
   const valid = firstName.trim() !== '' && lastName.trim() !== '' && birth !== null;
 
   const submit = (): void => {
@@ -327,7 +454,7 @@ export function CreateManager(): JSX.Element {
 export function CreateLook(): JSX.Element {
   const g = useGame();
   const manager = g.pendingManager;
-  const [look, setLook] = useState<ManagerLook>(manager?.look ?? DEFAULT_LOOK);
+  const [look, setLook] = useState<ManagerLook>(manager?.look ?? g.managerProfile?.look ?? DEFAULT_LOOK);
   const preview = useRef<CoachPreviewHandle>(null);
   const women = manager?.gender === 'female';
   return (
