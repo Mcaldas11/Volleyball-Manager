@@ -34,7 +34,7 @@
  */
 
 import {
-  ballAlong, COURT_HALF_LENGTH, flightBulge, NET_HEIGHT, tossesWithBothHands, type Ball3, type Pose, type Scene,
+  ballAlong, COURT_HALF_LENGTH, COURT_HALF_WIDTH, flightBulge, NET_HEIGHT, tossesWithBothHands, type Ball3, type Pose, type Scene,
 } from './matchCourt.ts';
 import {
   arms, buildRig, COVER, HOLD, jointPositions, mixShape, READY, REF_HEIGHT, shape, SHAPE_KEYS, STAND, STILL, strideLength,
@@ -279,6 +279,207 @@ export function lineCall(to: { x: number; y: number }, out: boolean): 'in' | 'ou
   return toLine < 1.1 ? 'in' : null;
 }
 
+// ---- The ball kids ----------------------------------------------------------------------
+
+/** Bent down over a ball on the floor, both hands to it. */
+const PICK = shape(STAND, { crouch: 0.35, tilt: 0.7, lean: 0.7, nod: -0.5, stance: 0.3, stride: 0.3, ...arms(1.15, -0.15, 0.08) });
+/** An underhand throw with both hands: the ball swung down… */
+const THROW_BACK = shape(STAND, { crouch: 0.24, tilt: 0.34, lean: 0.36, nod: -0.25, stance: 0.22, stride: 0.24, ...arms(0.42, -0.2, 0.12) });
+/** …and up and away, the arms following it. */
+const THROW_OUT = shape(STAND, { crouch: 0.04, lean: -0.02, nod: -0.3, stance: 0.2, stride: 0.26, ...arms(1.35, -0.2, 0.12) });
+/** A ball rolled along the floor to someone: down low, swung back and through. */
+const ROLL_BACK = shape(PICK, { crouch: 0.4, ...arms(0.55, -0.15, 0.1) });
+const ROLL_OUT = shape(PICK, { crouch: 0.32, tilt: 0.6, lean: 0.62, ...arms(1.45, -0.15, 0.06) });
+
+/** What a ball kid is there for: to give the server at his end his ball ('feed'), to keep a ball
+ *  by along the side for him ('keep'), or to go for the balls that come down near him ('catch'). */
+export type KidRole = 'feed' | 'keep' | 'catch';
+
+/**
+ * Where the ball kids stand: behind each end line, by the corner the server stands at and at the
+ * other one, and along the side across from the benches, one by each half — the near half's first.
+ */
+export const BALL_KIDS: ReadonlyArray<{ x: number; y: number; role: KidRole }> = [
+  { x: 3.9, y: -11.25, role: 'feed' },
+  { x: -4.1, y: -11.5, role: 'catch' },
+  { x: 5.5, y: -4.6, role: 'keep' },
+  { x: 5.5, y: 4.6, role: 'keep' },
+  { x: 3.3, y: 11.5, role: 'catch' },
+  { x: -3.9, y: 11.25, role: 'feed' },
+];
+const KID_HEIGHTS = [1.58, 1.66, 1.62, 1.7, 1.6, 1.64];
+
+/** The balls the kids keep going: one in play, the others in their hands. */
+const BALLS = 4;
+const BALL_R = 0.13;
+
+type XY = { x: number; y: number };
+
+/** The court the kids keep off — a little inside its lines — and the corners they go round it by. */
+const KEEP_OFF = { x: COURT_HALF_WIDTH - 0.1, y: COURT_HALF_LENGTH - 0.1 };
+const ROUND: readonly XY[] = [{ x: 5.4, y: 10.6 }, { x: -5.4, y: 10.6 }, { x: -5.4, y: -10.6 }, { x: 5.4, y: -10.6 }];
+
+/** Whether the straight way from `a` to `b` crosses the court. */
+export function crossesCourt(a: XY, b: XY): boolean {
+  // Clipped to the court (Liang–Barsky): anything of it left inside crosses it.
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [[-dx, a.x + KEEP_OFF.x], [dx, KEEP_OFF.x - a.x], [-dy, a.y + KEEP_OFF.y], [dy, KEEP_OFF.y - a.y]]) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const r = q / p;
+    if (p < 0) t0 = Math.max(t0, r);
+    else t1 = Math.min(t1, r);
+    if (t0 > t1) return false;
+  }
+  return t1 - t0 > 1e-6;
+}
+
+/** Inside the part of the court the kids keep off. */
+function offLimits(at: XY): boolean {
+  return Math.abs(at.x) < KEEP_OFF.x && Math.abs(at.y) < KEEP_OFF.y;
+}
+
+/** The nearest way off the court from `at`: straight out over the nearest line. */
+function wayOff(at: XY): XY {
+  const out = 0.6;
+  const toSide = KEEP_OFF.x - Math.abs(at.x);
+  const toEnd = KEEP_OFF.y - Math.abs(at.y);
+  return toSide < toEnd
+    ? { x: (Math.sign(at.x) || 1) * (KEEP_OFF.x + out), y: at.y }
+    : { x: at.x, y: (Math.sign(at.y) || 1) * (KEEP_OFF.y + out) };
+}
+
+/**
+ * The way from `a` to `b` round the court, never across it: the corners to pass, then `b`. From
+ * on it, the nearest way off first; to a spot just on it, round to the nearest way on.
+ */
+function route(a: XY, b: XY): XY[] {
+  if (offLimits(a)) {
+    const off = wayOff(a);
+    return [off, ...route(off, b)];
+  }
+  if (offLimits(b)) {
+    const on = wayOff(b);
+    return [...route(a, on), b];
+  }
+  if (!crossesCourt(a, b)) return [b];
+  let best: XY[] = [b];
+  let shortest = Infinity;
+  const consider = (via: XY[]): void => {
+    const pts = [a, ...via, b];
+    let length = 0;
+    for (let i = 1; i < pts.length; i++) {
+      if (crossesCourt(pts[i - 1], pts[i])) return;
+      length += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    }
+    if (length < shortest) {
+      shortest = length;
+      best = [...via, b];
+    }
+  };
+  ROUND.forEach((c, i) => {
+    consider([c]);
+    consider([c, ROUND[(i + 1) % 4]]);
+    consider([c, ROUND[(i + 3) % 4]]);
+  });
+  return best;
+}
+
+function pathLength(a: XY, path: readonly XY[]): number {
+  let length = 0;
+  let at = a;
+  for (const p of path) {
+    length += Math.hypot(p.x - at.x, p.y - at.y);
+    at = p;
+  }
+  return length;
+}
+
+/** On the court — or within `margin` of its lines. */
+function inCourt(at: XY, margin = 0.05): boolean {
+  return Math.abs(at.x) < COURT_HALF_WIDTH + margin && Math.abs(at.y) < COURT_HALF_LENGTH + margin;
+}
+
+/** Along the floor: to someone's feet, or rolling on to a stop. */
+interface Roll {
+  from: Ball3;
+  to: Ball3;
+  t0: number;
+  ms: number;
+  stop: boolean;
+}
+
+function rollAt(r: Roll, now: number): Ball3 {
+  const u = Math.min(1, Math.max(0, (now - r.t0) / Math.max(1, r.ms)));
+  // Slowing all the way to a stop — or, rolled to someone, still going a little as it gets to him.
+  const e = r.stop ? u * (2 - u) : u * (1.6 - 0.6 * u);
+  return {
+    x: r.from.x + (r.to.x - r.from.x) * e,
+    y: r.from.y + (r.to.y - r.from.y) * e,
+    z: BALL_R + Math.max(0, r.from.z - BALL_R) * Math.max(0, 1 - u * 6),
+  };
+}
+
+/** A ball off the rally: in someone's hands, thrown or rolled to someone, or on the floor. */
+interface Spare {
+  id: number;
+  holder: Body | null;
+  /** Thrown — to someone, or, with nobody, loose: down to the floor, where it rolls to a stop. */
+  flight: Flight | null;
+  roll: Roll | null;
+  /** Whom it is on its way to. */
+  to: Body | null;
+  /** Lying still on the floor, here. */
+  at: Ball3;
+  /** Who is going to pick it up. */
+  fetcher: Body | null;
+}
+
+/** A throw or a roll under way, until the ball leaves the hands: to whom, where to, how long it flies and how high. */
+interface Throw {
+  by: Body;
+  ball: Spare;
+  to: Body;
+  at: number;
+  roll: boolean;
+  end: Ball3;
+  ms: number;
+  arc: number;
+}
+
+/** A ball kid: where he stands and faces, and what he is about — going for a ball, or taking one to someone. */
+interface Kid {
+  body: Body;
+  post: { x: number; y: number; role: KidRole };
+  face: number;
+  /** The half he is by: -1 the near one. */
+  half: number;
+  task: { kind: 'fetch'; ball: Spare; spot: XY & { face: number } }
+    | { kind: 'give'; ball: Spare; to: Body; toss: boolean; stop?: XY }
+    | null;
+  /** The corners still to go round, on his way. */
+  path: XY[];
+}
+
+/** Where something held in both hands is, this frame, in court metres. */
+function heldAt(b: Body): Ball3 {
+  const j = jointPositions(b.rig).hands;
+  const o = toCourt(b.yaw, ((j[0][0] + j[1][0]) / 2) * b.scale, ((j[0][1] + j[1][1]) / 2) * b.scale);
+  return { x: b.x + o.x, y: b.y + o.y, z: b.lift + ((j[0][2] + j[1][2]) / 2) * b.scale };
+}
+
+/** Where to stand, facing `face`, to bend down and have both hands on a ball on the floor at `at`. */
+function pickSpot(b: Body, at: XY, face: number): XY {
+  const h = reach(PICK, b.hand, 'both', b.scale);
+  const o = toCourt(face, h[0], h[1]);
+  return { x: at.x - o.x, y: at.y - o.y };
+}
+
 /** The posture each pose settles into between contacts. */
 function postureOf(pose: Pose): Shape {
   switch (pose) {
@@ -483,6 +684,11 @@ export interface Body {
   via: { x: number; y: number } | null;
   /** Their place by the bench, that a substitute warming up runs from and back to. */
   home: { x: number; y: number } | null;
+  /** Something to see to before anything else, and the way to face there: a ball on the court to
+   *  pick up and throw to a ball kid — or, for a ball kid, wherever his job takes him. */
+  errand?: Spot | null;
+  /** Hands empty, though the pose would have the ball in them: a server still waiting for his. */
+  empty?: boolean;
 }
 
 /** A place a body is to be, the way it faces there, and from when until when, ms on the animation clock. */
@@ -873,6 +1079,28 @@ export class CourtMotion {
   private serveTeam: 0 | 1 | null = null;
   private stoppage: { timeout: 0 | 1 | null; paused: boolean } = { timeout: null, paused: false };
 
+  /** The ball kids round the court, once the live match has them out — see callKids. */
+  readonly ballKids: Body[] = [];
+  private readonly kids: Kid[] = [];
+  /** Every ball but the one in play: in someone's hands, on its way to someone, or on the floor. */
+  private spares: Spare[] = [];
+  private nextBall = 1;
+  /** Throws and rolls under way until the ball leaves the hands, and hands on their way down to a ball on the floor. */
+  private throws: Throw[] = [];
+  private picks: Array<{ by: Body; ball: Spare; at: number }> = [];
+  /** The kids give the server his ball: a serve in the live match is set up — not the video's replay of one. */
+  private kidsLive = false;
+  /** The ball in play came from them, and goes back to them once it is down. */
+  private gameLive = false;
+  /** Who is to serve next, waiting on his ball. */
+  private serverId: number | null = null;
+  /** No ball is given before then: a moment first, for the warm-up before the first serve. */
+  private kidsFrom = 0;
+  /** The ball everyone watches between rallies: the one just down, then the server's. */
+  private focus: Spare | null = null;
+  /** The time at the last step. */
+  private clock = 0;
+
   constructor(
     private readonly figure: (p: number) => Figure,
     private readonly teamOf: (p: number) => 0 | 1,
@@ -1158,14 +1386,17 @@ export class CourtMotion {
 
   /**
    * Whether the server, ball in hand, is behind the end line and stood still — no serve is tossed
-   * from inside the court. Nobody holding the ball: nothing to wait on.
+   * from inside the court. Nobody holding the ball: nothing to wait on. With the ball kids out, the
+   * ball has to be in his hands, given him by one of them, and no other left on the court.
    */
   serverReady(): boolean {
     for (const b of this.bodies.values()) {
       if (b.pose !== 'hold' || b.leaving || b.side !== null) continue;
       // Behind the line by his spot — a stride's grace short of it is near enough to stop at.
       const behind = Math.abs(b.y) >= Math.min(COURT_HALF_LENGTH + 0.3, Math.abs(b.ty) - 0.2);
-      return behind && Math.hypot(b.vx, b.vy) < 1.2;
+      const set = behind && Math.hypot(b.vx, b.vy) < 1.2;
+      if (!this.kidsLive) return set;
+      return set && b.action === null && this.ballOf(b) !== undefined && this.courtClear(b);
     }
     return true;
   }
@@ -1174,8 +1405,19 @@ export class CourtMotion {
   scene(sc: Scene, now: number): void {
     if (this.trophy !== null) return;
     const struck = this.actorPose;
-    const from = this.flight !== null ? flightAt(this.flight, now) : sc.ball;
-    if (sc.ball !== null && from !== null) {
+    const setup = [...sc.poses.values()].includes('hold');
+    if (setup) this.setUpBalls(sc, now);
+    const opening = sc.actor !== null ? sc.poses.get(sc.actor) : undefined;
+    let from = this.flight !== null ? flightAt(this.flight, now) : sc.ball;
+    // The serve: the ball the kids gave him, from his hands.
+    if ((opening === 'serve' || opening === 'float') && this.flight === null && this.kidsLive && sc.actor !== null) {
+      from = this.serveBall(sc.actor, now) ?? from;
+    }
+    if (!setup && this.kids.length > 0) this.callOffErrands(now);
+    if (sc.ballKids === true) {
+      // Set up for a serve in the live match: no ball flies to the server — a ball kid gives him one.
+      this.flight = null;
+    } else if (sc.ball !== null && from !== null) {
       // A ball still in the server's hands leaves them only at the toss.
       const held = Math.min(sc.release ?? 0, sc.ms * 0.8);
       this.flight = {
@@ -1645,6 +1887,10 @@ export class CourtMotion {
     this.serveDue = null;
     this.signal = null;
     this.injury = null;
+    // Nobody serves again: the ball kids stay where they are.
+    this.kidsLive = false;
+    this.gameLive = false;
+    this.serverId = null;
     const side = this.sides[winner];
     const ours = [...this.bodies].filter(([p, b]) => !b.leaving && this.teamOf(p) === winner);
     const cap = captain !== null && ours.some(([p]) => p === captain)
@@ -1831,13 +2077,25 @@ export class CourtMotion {
     });
   }
 
-  /** The ball, where it is now. */
+  /** The ball, where it is now: the one in play — or, between rallies, the one just down, then the server's. */
   ballAt(now: number): Ball3 | null {
-    return this.flight !== null ? flightAt(this.flight, now) : null;
+    if (this.flight !== null) return flightAt(this.flight, now);
+    return this.focus !== null ? this.spareAt(this.focus, now) : null;
+  }
+
+  /** Every other ball — the kids', and any on the floor — where it is now. */
+  spareBalls(now: number): Array<Ball3 & { id: number }> {
+    const out: Array<Ball3 & { id: number }> = [];
+    for (const s of this.spares) {
+      if (this.flight === null && s === this.focus) continue;
+      out.push({ ...this.spareAt(s, now), id: s.id });
+    }
+    return out;
   }
 
   /** Move everyone on by `dt` seconds, to the moment `now`. */
   step(dt: number, now: number): void {
+    this.clock = now;
     if (this.point !== null && now >= this.point.at) {
       // Where it came down, and the line judge's flag for it.
       const landing = this.flight?.to;
@@ -1850,6 +2108,12 @@ export class CourtMotion {
       this.needServe = true;
       this.serveDue = null;
       this.point = null;
+      // The ball is dead: it rolls on to a stop, for a ball kid — or, on the court, a player — to pick up.
+      if (this.gameLive && this.flight !== null) {
+        this.focus = this.loose(this.flight);
+        this.flight = null;
+        this.gameLive = false;
+      }
     }
     if (!this.live && this.refereeFree(now)) {
       const next = this.calls.shift();
@@ -1862,6 +2126,7 @@ export class CourtMotion {
     }
     if (this.signal !== null && now > this.signal.end) this.signal = null;
     this.stepTrophy(now);
+    this.stepBalls(now);
     const ball = this.ballAt(now);
     this.stepReferee(dt, now, ball);
     for (const c of this.coaches) this.stepStill(c, dt, now, ball);
@@ -1873,9 +2138,578 @@ export class CourtMotion {
       this.stepBody(b, dt, now, ball);
       if (b.leaving && b.alpha < 0.02) this.bodies.delete(p);
     }
+    for (const k of this.ballKids) this.stepBody(k, dt, now, ball);
     if (ball !== null) {
       this.trail.push(ball);
       if (this.trail.length > 7) this.trail.shift();
+    }
+  }
+
+  // ---- The ball kids ----
+  //
+  // Six of them round the court, and four balls. Before each serve the one by the server's spot
+  // throws him a ball; the one along the side of that half rolls his own over to take its place.
+  // A ball that comes down off the court the nearest kid with his hands free runs to and picks up;
+  // one on it, a player picks up and throws to a kid. The kids in the other corners, and those
+  // along the side, roll on what they have to whichever kid by a server's spot, or along the side,
+  // is without one — round the court, never across it.
+
+  /** The ball kids out at their places, a ball in the hands of each but those in the far corners. */
+  private callKids(now: number): void {
+    BALL_KIDS.forEach((post, i) => {
+      const face = post.role === 'keep' ? yawTo(-1, 0) : yawTo(-post.x * 0.15, -post.y);
+      const body: Body = {
+        x: post.x, y: post.y, tx: post.x, ty: post.y, ox: 0, oy: 0, vx: 0, vy: 0, yaw: face, lift: 0, vz: 0,
+        pose: 'stand', posture: STAND, shape: STAND, gait: 0, running: 0, action: null, reaction: null,
+        alpha: 1, leaving: false, scale: KID_HEIGHTS[i] / REF_HEIGHT, hand: 1, seed: 51 + i,
+        rig: buildRig(STAND, STILL), side: null, via: null, home: null,
+      };
+      this.ballKids.push(body);
+      this.kids.push({ body, post, face, half: Math.sign(post.y), task: null, path: [] });
+      if (post.role !== 'catch' && this.spares.length < BALLS) {
+        this.spares.push({ id: this.nextBall++, holder: body, flight: null, roll: null, to: null, at: { ...post, z: BALL_R }, fetcher: null });
+      }
+    });
+    this.kidsFrom = now + 1500 / this.quick();
+  }
+
+  /** How much quicker than life the kids go about it, the match shown faster. */
+  private quick(): number {
+    return Math.min(2, Math.max(1, this.pace));
+  }
+
+  private kidOf(b: Body): Kid | undefined {
+    return this.kids.find((k) => k.body === b);
+  }
+
+  private serverBody(): Body | null {
+    return this.serverId !== null ? this.bodies.get(this.serverId) ?? null : null;
+  }
+
+  /** The ball in someone's hands. */
+  private ballOf(b: Body): Spare | undefined {
+    return this.spares.find((s) => s.holder === b);
+  }
+
+  /** A ball on its way to someone, thrown or rolled — or about to be. */
+  private incoming(b: Body): boolean {
+    return this.spares.some((s) => s.to === b) || this.throws.some((t) => t.to === b);
+  }
+
+  private throwing(b: Body): boolean {
+    return this.throws.some((t) => t.by === b);
+  }
+
+  private spareAt(s: Spare, now: number): Ball3 {
+    if (s.holder !== null) return heldAt(s.holder);
+    if (s.flight !== null) {
+      const at = flightAt(s.flight, now);
+      if (s.to !== null) {
+        // Into the hands, wherever they have got to by now.
+        const h = heldAt(s.to);
+        const dx = h.x - s.flight.to.x;
+        const dy = h.y - s.flight.to.y;
+        const dz = h.z - s.flight.to.z;
+        if (Math.hypot(dx, dy, dz) < 1) {
+          const t = Math.min(1, Math.max(0, (now - s.flight.t0) / Math.max(1, s.flight.ms)));
+          at.x += dx * t * t;
+          at.y += dy * t * t;
+          at.z += dz * t * t;
+        }
+      }
+      return at;
+    }
+    if (s.roll !== null) return rollAt(s.roll, now);
+    return s.at;
+  }
+
+  /** A ball nobody is to catch, from its flight: down to the floor, where it rolls to a stop. */
+  private loose(f: Flight): Spare {
+    const s: Spare = { id: this.nextBall++, holder: null, flight: f, roll: null, to: null, at: { ...f.to }, fetcher: null };
+    this.spares.push(s);
+    return s;
+  }
+
+  /** Let go: a ball in someone's hands drops to the floor at his feet. */
+  private drop(s: Spare, now: number): void {
+    const from = this.spareAt(s, now);
+    s.holder = null;
+    s.to = null;
+    s.flight = { from, to: { x: from.x, y: from.y, z: BALL_R }, bulge: 0, t0: now, ms: 150 + 250 * Math.sqrt(Math.max(0, from.z)), spin: 0 };
+  }
+
+  /** Done with a ball — served: off the kids' hands, and out of their errands. */
+  private forget(s: Spare): void {
+    this.spares = this.spares.filter((x) => x !== s);
+    this.throws = this.throws.filter((t) => t.ball !== s);
+    this.picks = this.picks.filter((p) => p.ball !== s);
+    for (const kid of this.kids) {
+      if (kid.task !== null && kid.task.ball === s) {
+        kid.task = null;
+        kid.path = [];
+      }
+    }
+    if (s.fetcher !== null && this.kidOf(s.fetcher) === undefined) {
+      s.fetcher.errand = null;
+      s.fetcher.pace = undefined;
+    }
+    if (this.focus === s) this.focus = null;
+  }
+
+  /**
+   * A serve set up: the live match's has the kids give the server his ball (and, the first time,
+   * brings them out); the video's replay of one has them stand by, the balls left where they are —
+   * but none in a player's hands, the replay taking the players where it will.
+   */
+  private setUpBalls(sc: Scene, now: number): void {
+    const live = sc.ballKids === true;
+    if (live && this.kids.length === 0) this.callKids(now);
+    if (this.kids.length === 0) return;
+    this.kidsLive = live;
+    this.serverId = null;
+    if (live) for (const [p, pose] of sc.poses) if (pose === 'hold') this.serverId = p;
+    // The ball from the rally before, should it not be down yet: loose now, for the kids to fetch.
+    if (this.flight !== null && this.gameLive) {
+      this.focus = this.loose(this.flight);
+      this.flight = null;
+    }
+    this.gameLive = false;
+    if (!live) this.callOffErrands(now);
+  }
+
+  /** The ball the server serves: the one in his hands — or on its way to them. */
+  private serveBall(p: number, now: number): Ball3 | null {
+    const b = this.bodies.get(p);
+    if (b === undefined) return null;
+    let s = this.spares.find((x) => x.holder === b) ?? this.spares.find((x) => x.to === b);
+    const at = s !== undefined ? this.spareAt(s, now) : null;
+    if (s === undefined) {
+      // Not got to him in time: he serves another, and the ball nearest him is out of play.
+      let near = Infinity;
+      for (const x of this.spares) {
+        const d = Math.hypot(this.spareAt(x, now).x - b.x, this.spareAt(x, now).y - b.y);
+        if (d < near) {
+          near = d;
+          s = x;
+        }
+      }
+    }
+    if (s !== undefined) this.forget(s);
+    this.focus = null;
+    this.gameLive = true;
+    this.serverId = null;
+    return at;
+  }
+
+  /** Play is on: the players leave the balls be — one still in a player's hands drops at his feet. */
+  private callOffErrands(now: number): void {
+    for (const b of this.bodies.values()) {
+      if (b.errand == null) continue;
+      b.errand = null;
+      b.pace = undefined;
+    }
+    for (const s of this.spares) {
+      if (s.fetcher !== null && this.kidOf(s.fetcher) === undefined) s.fetcher = null;
+      if (s.holder !== null && this.kidOf(s.holder) === undefined) this.drop(s, now);
+    }
+    this.picks = this.picks.filter((p) => this.kidOf(p.by) !== undefined);
+    this.throws = this.throws.filter((t) => this.kidOf(t.by) !== undefined);
+  }
+
+  /** Nothing in the way of a serve: every ball in a kid's hands or the server's, or off the court. */
+  private courtClear(server: Body): boolean {
+    return this.spares.every((s) => {
+      if (s.holder !== null) return s.holder === server || this.kidOf(s.holder) !== undefined;
+      return !inCourt(this.spareAt(s, this.clock), 0.2) && (s.fetcher === null || this.kidOf(s.fetcher) !== undefined);
+    });
+  }
+
+  /** The kids and their balls, a frame on. */
+  private stepBalls(now: number): void {
+    if (this.kids.length === 0) return;
+    for (const s of this.spares) this.moveSpare(s, now);
+    // Throws and rolls leaving the hands; hands getting down to a ball.
+    const due = this.throws.filter((t) => now >= t.at);
+    this.throws = this.throws.filter((t) => now < t.at);
+    for (const t of due) this.release(t, now);
+    const picked = this.picks.filter((p) => now >= p.at);
+    this.picks = this.picks.filter((p) => now < p.at);
+    for (const p of picked) this.pickUp(p.by, p.ball);
+    this.handOff(now);
+    this.fetch(now);
+    this.feedServer(now);
+    this.circulate();
+    this.walkKids(now);
+    const server = this.serverBody();
+    for (const b of this.bodies.values()) b.empty = this.kidsLive && b === server && this.ballOf(b) === undefined && !this.incoming(b);
+    // Everyone's eyes: on the ball for the server, once it is on its way to him.
+    if (server !== null && this.kidsLive) {
+      const his = this.spares.find((s) => s.holder === server || s.to === server)
+        ?? this.kids.find((k) => k.task?.kind === 'give' && k.task.to === server)?.task?.ball;
+      if (his !== undefined) this.focus = his;
+    }
+    if (this.focus !== null && !this.spares.includes(this.focus)) this.focus = null;
+  }
+
+  /** A ball on its way gets there: into the hands it was for — or down, and rolling to a stop. */
+  private moveSpare(s: Spare, now: number): void {
+    const f = s.flight;
+    if (f !== null && now >= f.t0 + f.ms) {
+      s.flight = null;
+      const to = s.to;
+      s.to = null;
+      if (to !== null) {
+        const h = heldAt(to);
+        if (Math.hypot(h.x - f.to.x, h.y - f.to.y, h.z - f.to.z) < 1) {
+          s.holder = to;
+          return;
+        }
+      }
+      const dx = f.to.x - f.from.x;
+      const dy = f.to.y - f.from.y;
+      const d = Math.hypot(dx, dy);
+      if (f.to.z > 0.35) {
+        // Still up — in the net: it drops to the floor, back the way it came.
+        const back = d > 1e-3 ? 0.3 / d : 0;
+        s.flight = {
+          from: f.to, to: { x: f.to.x - dx * back, y: f.to.y - dy * back, z: BALL_R }, bulge: 0, t0: now,
+          ms: 120 + 260 * Math.sqrt(f.to.z), spin: 0,
+        };
+        return;
+      }
+      // Down: on a little the way it was going, slowing to a stop — inside the hall.
+      const speed = d / Math.max(0.05, f.ms / 1000);
+      const run = d > 1e-3 ? Math.min(2.6, Math.max(0.4, speed * 0.16)) / d : 0;
+      const end = {
+        x: Math.max(-6.9, Math.min(6.9, f.to.x + dx * run)),
+        y: Math.max(-12.1, Math.min(12.1, f.to.y + dy * run)),
+        z: BALL_R,
+      };
+      s.roll = { from: { ...f.to, z: Math.max(BALL_R, f.to.z) }, to: end, t0: now, ms: 500 + Math.hypot(end.x - f.to.x, end.y - f.to.y) * 380, stop: true };
+      return;
+    }
+    const r = s.roll;
+    if (r !== null && now >= r.t0 + r.ms) {
+      s.roll = null;
+      s.at = { ...r.to };
+      const to = s.to;
+      s.to = null;
+      // Rolled to someone: down for it as it gets to him, it is his.
+      if (to !== null) {
+        const h = heldAt(to);
+        if (Math.hypot(h.x - r.to.x, h.y - r.to.y) < 0.8) s.holder = to;
+      }
+    }
+  }
+
+  /**
+   * Throw a ball — underhand, both hands — or roll it along the floor, to someone: he turns to it,
+   * a kid stood at his place, a server turning to take it.
+   */
+  private throwTo(by: Body, ball: Spare, to: Body, roll: boolean, now: number): void {
+    const k = 1 / this.quick();
+    const lead = (roll ? 560 : 500) * k;
+    const kid = this.kidOf(to);
+    const at = kid !== undefined ? kid.post : to;
+    const toThem = yawTo(at.x - by.x, at.y - by.y);
+    const facing = yawTo(by.x - at.x, by.y - at.y);
+    const h = reach(roll ? PICK : HOLD, to.hand, 'both', to.scale);
+    const o = toCourt(facing, h[0], h[1]);
+    const end = { x: at.x + o.x, y: at.y + o.y, z: roll ? BALL_R : h[2] };
+    const d = Math.hypot(end.x - by.x, end.y - by.y);
+    const ms = (480 + 75 * d) * k;
+    this.throws.push({ by, ball, to, at: now + lead, roll, end, ms, arc: 0.45 + 0.07 * d });
+    const keys = roll
+      ? timeline(lead, [[-lead, by.shape], [-lead * 0.5, ROLL_BACK], [0, ROLL_OUT, 'whip'], [260 * k, ROLL_OUT], [700 * k, STAND]])
+      : timeline(lead, [[-lead, by.shape], [-lead * 0.5, THROW_BACK], [0, THROW_OUT, 'whip'], [260 * k, THROW_OUT], [640 * k, STAND]]);
+    by.action = { kind: 'stand', t0: now, tc: now + lead, keys, jump: null, yaw: toThem, path: null, end: (roll ? 760 : 700) * k };
+    if (by.errand != null) by.errand = { ...by.errand, face: toThem };
+    if (!roll && kid === undefined) {
+      // The server: turned to it, hands out for it, until it is in them.
+      const until = lead + ms + 200;
+      const hold = timeline(0, [[0, to.shape], [Math.min(380, lead), HOLD], [until, HOLD]]);
+      to.action = { kind: 'hold', t0: now, tc: now, keys: hold, jump: null, yaw: facing, path: null, end: until + 60 };
+    }
+  }
+
+  /** The ball leaves the hands. */
+  private release(t: Throw, now: number): void {
+    const s = t.ball;
+    const kid = this.kidOf(t.by);
+    if (kid?.task?.kind === 'give') {
+      kid.task = null;
+      kid.path = [];
+    }
+    if (kid === undefined) {
+      t.by.errand = null;
+      t.by.pace = undefined;
+    }
+    if (s.holder !== t.by || !this.spares.includes(s)) return;
+    const from = heldAt(t.by);
+    s.holder = null;
+    s.to = t.to;
+    if (t.roll) {
+      const d = Math.hypot(t.end.x - from.x, t.end.y - from.y);
+      const ms = (180 + (d / 4.2) * 1000) / this.quick();
+      s.roll = { from, to: t.end, t0: now, ms, stop: false };
+      this.bend(t.to, now + ms, now);
+    } else {
+      s.flight = { from, to: t.end, bulge: flightBulge(from, t.end, t.arc), t0: now, ms: t.ms, spin: 3 };
+    }
+  }
+
+  /** Down for a ball on the floor, the hands on it at `tc`, and back up with it. */
+  private bend(b: Body, tc: number, now: number): void {
+    const k = 1 / this.quick();
+    const pre = Math.max(1, tc - now);
+    const down = Math.min(pre, 440 * k);
+    const keys = timeline(pre, [[-pre, b.shape], [-down, b.shape], [-down * 0.25, PICK], [0, PICK], [700 * k, HOLD]]);
+    b.action = { kind: 'stand', t0: now, tc, keys, jump: null, yaw: null, path: null, end: 760 * k };
+  }
+
+  /** The hands get down to the ball: it is his — if it is still there. */
+  private pickUp(b: Body, s: Spare): void {
+    if (!this.spares.includes(s)) return;
+    s.fetcher = null;
+    const kid = this.kidOf(b);
+    if (kid?.task?.kind === 'fetch') {
+      kid.task = null;
+      kid.path = [];
+    }
+    const h = heldAt(b);
+    if (s.holder === null && s.flight === null && s.roll === null && Math.hypot(h.x - s.at.x, h.y - s.at.y) < 0.9) {
+      s.holder = b;
+    } else if (kid === undefined) {
+      b.errand = null;
+      b.pace = undefined;
+    }
+  }
+
+  /** The kid nearest `b` with his hands free — no ball, none coming, nothing else to do. */
+  private freeKid(b: XY): Kid | undefined {
+    let best: Kid | undefined;
+    let near = Infinity;
+    for (const kid of this.kids) {
+      if (kid.task !== null || this.ballOf(kid.body) !== undefined || this.incoming(kid.body) || this.throwing(kid.body)) continue;
+      if (this.picks.some((p) => p.by === kid.body)) continue;
+      const d = Math.hypot(kid.body.x - b.x, kid.body.y - b.y);
+      if (d < near) {
+        near = d;
+        best = kid;
+      }
+    }
+    return best;
+  }
+
+  /** A player with a ball that isn't his to serve — one he picked up off the court, or the server called away — throws it to a kid. */
+  private handOff(now: number): void {
+    const server = this.serverBody();
+    for (const s of this.spares) {
+      const b = s.holder;
+      if (b === null || b.action !== null || this.kidOf(b) !== undefined || this.throwing(b)) continue;
+      if (this.kidsLive && b === server && spotFor(b, now) === null && !b.leaving && b.side === null) continue;
+      const to = this.freeKid(b);
+      if (to !== undefined) this.throwTo(b, s, to.body, false, now);
+    }
+  }
+
+  /** Balls on the floor: on the court, a player on that side goes for it; off it, the nearest kid with his hands free, round the court. */
+  private fetch(now: number): void {
+    const server = this.serverBody();
+    for (const s of this.spares) {
+      if (s.holder !== null || s.flight !== null || s.roll !== null || s.fetcher !== null) continue;
+      if (inCourt(s.at)) {
+        // Not while the ball is in play, nor in the video's replay.
+        if (!this.kidsLive || this.live) continue;
+        let best: Body | undefined;
+        let near = Infinity;
+        for (const [p, b] of this.bodies) {
+          if (!this.onCourt.has(p) || b === server || b.side !== null || b.leaving || (b.hurtGoal ?? 0) > 0 || b.errand != null) continue;
+          if (Math.abs(s.at.y) > 0.4 && Math.sign(b.y) !== Math.sign(s.at.y)) continue;
+          if (this.ballOf(b) !== undefined) continue;
+          const d = Math.hypot(b.x - s.at.x, b.y - s.at.y);
+          if (d < near) {
+            near = d;
+            best = b;
+          }
+        }
+        if (best === undefined) continue;
+        const face = yawTo(s.at.x - best.x, s.at.y - best.y);
+        best.errand = { ...pickSpot(best, s.at, face), face, from: -Infinity, until: Infinity };
+        best.pace = 3.4 * this.quick();
+        s.fetcher = best;
+        continue;
+      }
+      let best: Kid | undefined;
+      let way: XY[] = [];
+      let near = Infinity;
+      for (const kid of this.kids) {
+        if (kid.task !== null || this.ballOf(kid.body) !== undefined || this.incoming(kid.body) || this.throwing(kid.body)) continue;
+        const path = route(kid.body, s.at);
+        const d = pathLength(kid.body, path);
+        if (d < near) {
+          near = d;
+          best = kid;
+          way = path;
+        }
+      }
+      if (best === undefined) continue;
+      const last = way.length > 1 ? way[way.length - 2] : best.body;
+      const face = yawTo(s.at.x - last.x, s.at.y - last.y);
+      best.task = { kind: 'fetch', ball: s, spot: { ...pickSpot(best.body, s.at, face), face } };
+      best.path = way.slice(0, -1);
+      s.fetcher = best.body;
+    }
+    // Got there: down for it.
+    for (const s of this.spares) {
+      const b = s.fetcher;
+      if (b === null || this.picks.some((p) => p.ball === s)) continue;
+      const kid = this.kidOf(b);
+      const spot = kid !== undefined ? (kid.task?.kind === 'fetch' && kid.path.length === 0 ? kid.task.spot : null) : b.errand ?? null;
+      if (spot === null || Math.hypot(spot.x - b.x, spot.y - b.y) > 0.2 || Math.hypot(b.vx, b.vy) > 0.5) continue;
+      const tc = now + 420 / this.quick();
+      this.bend(b, tc, now);
+      this.picks.push({ by: b, ball: s, at: tc });
+    }
+  }
+
+  /** Where a kid gives the server his ball from: a step behind him, on the kid's side, off the court. */
+  private handOffSpot(kid: Kid, server: Body): XY {
+    const mark = { x: server.tx + server.ox, y: server.ty + server.oy };
+    const side = Math.sign(mark.y) || 1;
+    return { x: mark.x + (kid.post.x >= mark.x ? 0.9 : -0.9), y: side * Math.min(12.1, Math.abs(mark.y) + 0.85) };
+  }
+
+  /**
+   * The server without a ball: the nearest kid with one — on that half, if any there has —
+   * takes it round to him and, once he is at his spot and still, throws it to him.
+   */
+  private feedServer(now: number): void {
+    const sv = this.serverBody();
+    if (sv === null || !this.kidsLive || now < this.kidsFrom) return;
+    if (this.ballOf(sv) !== undefined || this.incoming(sv)) return;
+    let giver = this.kids.find((k) => k.task?.kind === 'give' && k.task.to === sv);
+    if (giver === undefined || !this.throwing(giver.body)) {
+      // The nearest — and, until the ball is on its way, whoever has become much the nearer since.
+      const cost = (kid: Kid): number =>
+        pathLength(kid.body, route(kid.body, this.handOffSpot(kid, sv))) + (kid.half === Math.sign(sv.ty) ? 0 : 30);
+      let best = giver;
+      let near = giver !== undefined ? cost(giver) - 2 : Infinity;
+      for (const kid of this.kids) {
+        if (kid.task !== null || this.throwing(kid.body) || this.ballOf(kid.body) === undefined) continue;
+        const d = cost(kid);
+        if (d < near) {
+          near = d;
+          best = kid;
+        }
+      }
+      if (best === undefined) return;
+      if (best !== giver) {
+        if (giver !== undefined) {
+          giver.task = null;
+          giver.path = [];
+        }
+        giver = best;
+        giver.task = { kind: 'give', ball: this.ballOf(giver.body)!, to: sv, toss: true };
+        giver.path = route(giver.body, this.handOffSpot(giver, sv)).slice(0, -1);
+      }
+    }
+    const task = giver.task;
+    const at = this.handOffSpot(giver, sv);
+    const g = giver.body;
+    if (task?.kind !== 'give' || giver.path.length > 0 || g.action !== null) return;
+    if (Math.hypot(at.x - g.x, at.y - g.y) > 0.35 || Math.hypot(g.vx, g.vy) > 0.7) return;
+    // He is at his spot, and still: the ball to him.
+    const mark = { x: sv.tx + sv.ox, y: sv.ty + sv.oy };
+    const settled = spotFor(sv, now) === null && sv.action === null && !sv.leaving
+      && Math.hypot(mark.x - sv.x, mark.y - sv.y) < 0.5 && Math.hypot(sv.vx, sv.vy) < 0.8;
+    if (settled) this.throwTo(g, task.ball, sv, false, now);
+  }
+
+  /**
+   * The balls round the court: a kid by a server's spot, or along the side, without one is rolled
+   * one — from a kid in a far corner, or, for the one by a server's spot, from along the side.
+   */
+  private circulate(): void {
+    const order: KidRole[] = ['feed', 'keep'];
+    for (const role of order) {
+      for (const need of this.kids) {
+        if (need.post.role !== role || need.task !== null || this.ballOf(need.body) !== undefined || this.incoming(need.body)) continue;
+        if (this.kids.some((k) => k.task?.kind === 'give' && k.task.to === need.body)) continue;
+        let best: Kid | undefined;
+        let near = Infinity;
+        for (const kid of this.kids) {
+          if (kid === need || kid.task !== null || kid.post.role === 'feed' || this.throwing(kid.body)) continue;
+          // One along the side gives up his ball only to a server's kid.
+          if (kid.post.role === 'keep' && role !== 'feed') continue;
+          if (this.ballOf(kid.body) === undefined) continue;
+          const d = pathLength(kid.body, route(kid.body, need.body)) + (kid.post.role === 'keep' ? 12 : 0);
+          if (d < near) {
+            near = d;
+            best = kid;
+          }
+        }
+        if (best === undefined) continue;
+        best.task = { kind: 'give', ball: this.ballOf(best.body)!, to: need.body, toss: false };
+        best.path = [];
+      }
+    }
+  }
+
+  /** Each kid where his job takes him — round the court — or back at his place, turned to any ball coming his way. */
+  private walkKids(now: number): void {
+    const sv = this.serverBody();
+    const q = this.quick();
+    for (const kid of this.kids) {
+      const b = kid.body;
+      const t = kid.task;
+      // A ball to give that is his no longer, or to someone who no longer wants it: back to his place.
+      if (t?.kind === 'give' && !this.throwing(b)) {
+        const stale = t.ball.holder !== b || (t.toss
+          ? t.to !== sv || !this.kidsLive
+          : this.ballOf(t.to) !== undefined || this.incoming(t.to) || this.kidOf(t.to)?.task != null);
+        if (stale) {
+          kid.task = null;
+          kid.path = [];
+        }
+      }
+      while (kid.path.length > 0 && Math.hypot(kid.path[0].x - b.x, kid.path[0].y - b.y) < 0.6) kid.path.shift();
+      const task = kid.task;
+      let goal: XY & { face: number };
+      if (kid.path.length > 0 && !(task?.kind === 'give' && task.stop !== undefined)) {
+        goal = { ...kid.path[0], face: b.yaw };
+      } else if (task?.kind === 'fetch') {
+        goal = task.spot;
+      } else if (task?.kind === 'give' && task.toss && sv !== null) {
+        const at = this.handOffSpot(kid, sv);
+        goal = { ...at, face: yawTo(sv.x - at.x, sv.y - at.y) };
+      } else if (task?.kind === 'give') {
+        // Rolled once the way to him is clear and not too long; until then, on round towards him.
+        const to = task.to;
+        const clear = !crossesCourt(b, to) && Math.hypot(to.x - b.x, to.y - b.y) <= 9.5;
+        if (clear || task.stop !== undefined) {
+          task.stop ??= { x: b.x, y: b.y };
+          goal = { ...task.stop, face: yawTo(to.x - b.x, to.y - b.y) };
+          if (Math.hypot(b.vx, b.vy) < 0.6 && b.action === null && !this.throwing(b)) this.throwTo(b, task.ball, to, true, now);
+        } else {
+          goal = { x: to.x, y: to.y, face: b.yaw };
+        }
+      } else {
+        const coming = this.spares.find((s) => s.to === b);
+        const from = coming !== undefined ? this.spareAt(coming, now) : this.throws.find((x) => x.to === b)?.by;
+        goal = { ...kid.post, face: from !== undefined ? yawTo(from.x - kid.post.x, from.y - kid.post.y) : kid.face };
+      }
+      // Never across the court: round it, by its corners.
+      if (kid.path.length === 0 && Math.hypot(goal.x - b.x, goal.y - b.y) > 0.6 && (offLimits(b) || crossesCourt(b, goal))) {
+        kid.path = route(b, goal).slice(0, -1);
+        if (kid.path.length > 0) goal = { ...kid.path[0], face: b.yaw };
+      }
+      b.errand = { x: goal.x, y: goal.y, face: goal.face, from: -Infinity, until: Infinity };
+      b.tx = goal.x;
+      b.ty = goal.y;
+      b.pace = (task !== null ? 4.6 : 3.0) * q;
+      const tossed = this.spares.some((s) => s.to === b && s.flight !== null) || this.throws.some((x) => x.to === b && !x.roll);
+      b.pose = this.ballOf(b) !== undefined || tossed ? 'hold' : 'stand';
     }
   }
 
@@ -2092,7 +2926,7 @@ export class CourtMotion {
     const sn = Math.sin(b.yaw);
     const moveX = b.vx * c + b.vy * sn;
     const moveY = -b.vx * sn + b.vy * c;
-    b.posture = mixShape(b.posture, postureOf(b.pose), 1 - Math.exp(-dt / 0.18));
+    b.posture = mixShape(b.posture, postureOf(b.pose === 'hold' && b.empty === true ? 'stand' : b.pose), 1 - Math.exp(-dt / 0.18));
     let s = b.posture;
     // Properly on the move forwards they run tall; shuffles and backpedals stay low.
     b.running += (smooth((moveY - 1.8) / 2.2) - b.running) * (1 - Math.exp(-dt / 0.12));
@@ -2144,8 +2978,9 @@ export class CourtMotion {
   }
 }
 
-/** Where a body is to be just now, if anywhere in particular: its huddle, or the step under way. */
+/** Where a body is to be just now, if anywhere in particular: its errand, its huddle, or the step under way. */
 function spotFor(b: Body, now: number): Spot | null {
+  if (b.errand != null) return b.errand;
   if (b.huddle != null && now >= b.huddle.from && now < b.huddle.until) return b.huddle;
   return b.steps?.find((s) => now >= s.from && now < s.until) ?? null;
 }

@@ -34,7 +34,7 @@ import { buildProjector, type Projector } from './courtCamera.ts';
 import type { CameraMode } from './courtCameras.ts';
 import { BOARD_HEIGHT, BOARD_TEXT, BOARD_X, END_BOARD_Y, FLOOR } from './hall3d.ts';
 import {
-  type Body, CourtMotion, type CourtInjury, type CourtSideline, flightAt, showCourt, SIDELINE,
+  type Body, CourtMotion, type CourtInjury, type CourtSideline, showCourt, SIDELINE,
 } from './courtMotion.ts';
 import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, NET_HEIGHT, type Ball3, type Scene } from './matchCourt.ts';
 
@@ -455,7 +455,7 @@ function drawTopFloor(ctx: CanvasRenderingContext2D, P: TopProjector, kits: [Kit
 
 /** The players and the ball from above: a disc in the kit's colour for each, their name beneath. */
 function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMotion, props: CourtProps, now: number): void {
-  const ball = m.flight !== null ? flightAt(m.flight, now) : null;
+  const ball = m.ballAt(now);
   // Where the ball will come down, while it is on its way.
   if (m.flight !== null && m.flight.to.z < 1.3) {
     const t = Math.min(1, (now - m.flight.t0) / Math.max(1, m.flight.ms));
@@ -502,6 +502,16 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
       ctx.fillStyle = '#e8c547';
       ctx.fillRect(X + r * 0.95, Y - r * 1.6, r * 0.45, r * 0.35);
     }
+  }
+  // The ball kids round the court, in their teal.
+  for (const k of m.ballKids) {
+    ctx.beginPath();
+    ctx.arc(P.X(k.x), P.Y(k.y), r * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#2f8f83';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.stroke();
   }
   // The physio: white, with a red cross.
   if (m.medic !== null) {
@@ -576,6 +586,18 @@ function drawTopDown(ctx: CanvasRenderingContext2D, P: TopProjector, m: CourtMot
       ctx.fillText(text, X, by + 2);
     }
     ctx.restore();
+  }
+
+  // The other balls: in the kids' hands, rolling between them, on the floor.
+  for (const s of m.spareBalls(now)) {
+    const br = Math.max(3, P.s * 0.13);
+    ctx.beginPath();
+    ctx.arc(P.X(s.x), P.Y(s.y) - s.z * P.s * 0.28, br, 0, Math.PI * 2);
+    ctx.fillStyle = '#fbf8ec';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, br * 0.3);
+    ctx.strokeStyle = 'rgba(59, 99, 214, 0.8)';
+    ctx.stroke();
   }
 
   if (ball !== null) {
@@ -941,10 +963,13 @@ function drawCall(
 
 function drawFlat(ctx: CanvasRenderingContext2D, project: Projector, m: CourtMotion, props: CourtProps, now: number): void {
   // ---- Shadows and floor markers ----
-  const ball = m.flight !== null ? flightAt(m.flight, now) : null;
+  const ball = m.ballAt(now);
+  const spares = m.spareBalls(now);
   for (const b of m.bodies.values()) {
     floorCircle(ctx, project, b.x, b.y, 0.36 * (1 - Math.min(0.5, b.lift * 0.5)), `rgba(0,0,0,${0.32 * b.alpha})`, null);
   }
+  for (const k of m.ballKids) floorCircle(ctx, project, k.x, k.y, 0.28, 'rgba(0,0,0,0.28)', null);
+  for (const s of spares) floorCircle(ctx, project, s.x, s.y, 0.12, 'rgba(0,0,0,0.3)', null);
   if (m.actor !== null) {
     const a = m.bodies.get(m.actor);
     if (a !== undefined) floorCircle(ctx, project, a.x, a.y, 0.58, null, 'rgba(255,199,44,0.95)', 2);
@@ -966,6 +991,8 @@ function drawFlat(ctx: CanvasRenderingContext2D, project: Projector, m: CourtMot
   for (const [p, b] of m.bodies) {
     items.push({ d: project(b.x, b.y, 0).d, draw: () => drawPlayer(ctx, project, p, b, props, m.actor === p) });
   }
+  for (const k of m.ballKids) items.push({ d: project(k.x, k.y, 0).d, draw: () => drawKid(ctx, project, k) });
+  for (const s of spares) items.push({ d: project(s.x, s.y, s.z).d - 0.01, draw: () => drawBall(ctx, project, s, []) });
   // The net in strips, so a player on the camera's side of it stands in front
   // of the stretch nearest them and behind the rest.
   const postX = COURT_HALF_WIDTH + 0.6;
@@ -983,6 +1010,32 @@ function drawFlat(ctx: CanvasRenderingContext2D, project: Projector, m: CourtMot
   }
   items.sort((a, b) => b.d - a.d);
   for (const it of items) it.draw();
+}
+
+/** A ball kid drawn flat: a small figure in a teal tracksuit. */
+function drawKid(ctx: CanvasRenderingContext2D, project: Projector, b: Body): void {
+  const foot = project(b.x, b.y, 0);
+  const hip = project(b.x, b.y, 0.78);
+  const neck = project(b.x, b.y, 1.32);
+  const head = project(b.x, b.y, 1.5);
+  const w = Math.max(2, 0.16 * foot.s);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#1d2633';
+  ctx.lineWidth = w;
+  ctx.beginPath();
+  ctx.moveTo(foot.X, foot.Y);
+  ctx.lineTo(hip.X, hip.Y);
+  ctx.stroke();
+  ctx.strokeStyle = '#2f8f83';
+  ctx.lineWidth = w * 1.5;
+  ctx.beginPath();
+  ctx.moveTo(hip.X, hip.Y);
+  ctx.lineTo(neck.X, neck.Y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(head.X, head.Y, Math.max(2, 0.11 * foot.s), 0, Math.PI * 2);
+  ctx.fillStyle = '#d9a97c';
+  ctx.fill();
 }
 
 function drawPost(ctx: CanvasRenderingContext2D, project: Projector, x: number): void {

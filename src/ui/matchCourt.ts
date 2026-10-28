@@ -96,6 +96,8 @@ export interface Scene {
   /** How the rally was won, on its last beat — and who won it: the hitter, the blocker, the server. */
   how?: 'kill' | 'block' | 'ace' | 'error';
   hero?: number;
+  /** A serve set up in the live match: no ball flies to the server — a ball kid gives him one. */
+  ballKids?: boolean;
 }
 
 /** One step of a scripted rally. */

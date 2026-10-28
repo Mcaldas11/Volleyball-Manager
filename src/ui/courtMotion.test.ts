@@ -4,9 +4,9 @@ import { MatchFormat, MatchSimulator } from '../engine/match/engine.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
-import { CourtMotion, LINE_JUDGES, lineCall, REFEREE_STAND, TROPHY_HAND_AT, TROPHY_LIFT_AT, type Body, type Signal } from './courtMotion.ts';
+import { CourtMotion, crossesCourt, LINE_JUDGES, lineCall, REFEREE_STAND, TROPHY_HAND_AT, TROPHY_LIFT_AT, type Body, type Signal } from './courtMotion.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
-import { rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
+import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
 import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL } from './playerRig.ts';
 
 function liveMatch(seed: number) {
@@ -494,6 +494,118 @@ test('the serve waits for the server: the ball is tossed only from behind the en
     }
   }
   assert.ok(heldUp > 0, 'some serves had to wait for the server');
+});
+
+/**
+ * The live match, the ball kids out: each serve set up as the match screen does, the server waited
+ * on as it waits, the rally played — calling `check` on every frame.
+ */
+function playWithKids(seed: number, rallies: number, check: (m: CourtMotion, now: number, phase: 'setup' | 'rally') => void): CourtMotion {
+  const { sim, store, teamOf } = liveMatch(seed);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  let now = 0;
+  let phase: 'setup' | 'rally' = 'setup';
+  const run = (ms: number): void => {
+    for (const end = now + ms; now < end - 1e-6;) {
+      const dt = Math.min(1000 / 60, end - now);
+      now += dt;
+      m.step(dt / 1000, now);
+      check(m, now, phase);
+    }
+  };
+  for (let i = 0; i < rallies; i++) {
+    const pre = sim.snapshot();
+    phase = 'setup';
+    m.scene({ ...setupScene(pre, pre.serving, store.position, 0), ballKids: true }, now);
+    run(1800);
+    for (let waited = 0; waited < 9000 && !m.serverReady(); waited += 100) run(100);
+    assert.ok(m.serverReady(), `rally ${i}: the server has his ball`);
+    const entry = sim.step();
+    if (entry === null) break;
+    phase = 'rally';
+    for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner)) {
+      m.scene(beat, now);
+      run(beat.ms);
+    }
+  }
+  return m;
+}
+
+/** Where a ball held in both hands would be. */
+function heldBy(b: Body): Ball3 {
+  const [l, r] = handsOf(b);
+  return { x: (l.x + r.x) / 2, y: (l.y + r.y) / 2, z: (l.z + r.z) / 2 };
+}
+
+test('the ball kids keep four balls going, none ever left in the air: in someone\'s hands, on its way, or on the floor', () => {
+  for (const seed of [5, 23]) {
+    const still = new Map<number, { at: Ball3; frames: number }>();
+    let kidsSeen = 0;
+    playWithKids(seed, 14, (m, now) => {
+      const spares = m.spareBalls(now);
+      const ball = m.ballAt(now);
+      assert.equal(spares.length + (ball !== null ? 1 : 0), 4, 'four balls, all the time');
+      const everyone = [...m.bodies.values(), ...m.ballKids];
+      for (const s of spares) {
+        // A ball that isn't moving is on the floor, or in someone's hands.
+        const was = still.get(s.id);
+        const frames = was !== undefined && dist(was.at, s) < 1e-3 ? was.frames + 1 : 0;
+        still.set(s.id, { at: s, frames });
+        if (frames < 10 || s.z < 0.16) continue;
+        const near = Math.min(...everyone.map((b) => dist(heldBy(b), s)));
+        assert.ok(near < 0.35, `seed ${seed}: ball ${s.id} still at ${s.z.toFixed(2)} m up, ${near.toFixed(2)} m from any hands`);
+      }
+      // Round the court, never across it.
+      for (const k of m.ballKids) {
+        kidsSeen++;
+        assert.ok(Math.abs(k.x) > COURT_HALF_WIDTH - 0.2 || Math.abs(k.y) > COURT_HALF_LENGTH - 0.2, `seed ${seed}: a ball kid on the court at ${k.x.toFixed(2)}, ${k.y.toFixed(2)}`);
+      }
+    });
+    assert.ok(kidsSeen > 0, 'the ball kids are out');
+  }
+});
+
+test('before the first serve the server waits empty-handed — no ball hangs at his spot — until a ball kid throws him one', () => {
+  let first = true;
+  let fromKid = false;
+  const m = playWithKids(11, 3, (m, now, phase) => {
+    if (!first || phase !== 'setup') return;
+    const server = [...m.bodies.values()].find((b) => b.pose === 'hold')!;
+    const ball = m.ballAt(now);
+    if (ball !== null && dist(heldBy(server), ball) < 0.3) {
+      first = false;
+      return;
+    }
+    // Until it is his, every ball is a kid's, or on its way to him from one.
+    for (const s of m.spareBalls(now)) assert.ok(Math.min(...m.ballKids.map((k) => dist(heldBy(k), s))) < 0.35 || s.z > 0.3, 'in a kid\'s hands');
+    if (ball !== null && Math.min(...m.ballKids.map((k) => dist(heldBy(k), ball))) < 0.35) fromKid = true;
+  });
+  assert.ok(!first && fromKid, 'a kid had it, and then the server');
+  assert.equal(m.ballKids.length, 6);
+});
+
+test('a ball down on the court is picked up by a player and thrown to a ball kid before the next serve', () => {
+  let pickedByPlayer = 0;
+  let onCourtAtServe = 0;
+  playWithKids(7, 16, (m, now, phase) => {
+    const balls = m.spareBalls(now);
+    const focus = m.flight === null ? m.ballAt(now) : null;
+    if (focus !== null) balls.push({ ...focus, id: 0 });
+    for (const s of balls) {
+      if (Math.abs(s.x) > COURT_HALF_WIDTH || Math.abs(s.y) > COURT_HALF_LENGTH || s.z > 0.2) continue;
+      if (phase === 'rally' && m.serverReady() && m.flight !== null && now < m.flight.t0) onCourtAtServe++;
+      for (const b of m.bodies.values()) if (dist(heldBy(b), s) < 0.25) pickedByPlayer++;
+    }
+  });
+  assert.ok(pickedByPlayer > 0, 'a player bent down for a ball on the court');
+  assert.equal(onCourtAtServe, 0, 'none left on the court at a serve');
+});
+
+test('the ball kids go round the court: no way of theirs crosses it', () => {
+  assert.ok(crossesCourt({ x: 4.1, y: -11.7 }, { x: -4.1, y: 11.7 }));
+  assert.ok(!crossesCourt({ x: 4.1, y: -11.7 }, { x: -4.1, y: -11.7 }), 'behind the end line');
+  assert.ok(!crossesCourt({ x: 6.1, y: -4.6 }, { x: 6.1, y: 4.6 }), 'along the side');
+  assert.ok(!crossesCourt({ x: 4.1, y: -11.7 }, { x: 6.1, y: -4.6 }), 'round the corner');
 });
 
 test('a final won: the winners celebrate together, the federation hands their captain the cup, and he lifts it over his head', () => {

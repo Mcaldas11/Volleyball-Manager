@@ -79,10 +79,10 @@ function SideCrest({ side, size }: { side: MatchSide; size: number }): JSX.Eleme
 }
 
 /** Both sides set up for the next serve, from the live snapshot — the
- *  server where his own serve, jump or float, starts. */
+ *  server where his own serve, jump or float, starts, given his ball by a ball kid. */
 function sceneFor(snap: MatchdaySnapshot | null, roles: Uint8Array, nearTeam: 0 | 1, store: PlayerStore): Scene {
   if (snap === null) return { positions: new Map(), poses: new Map(), ball: null, arc: 0, actor: null, ms: 400 };
-  return setupScene(snap, snap.serving, roles, nearTeam, (p) => (servesJump(store, p) ? 'jump' : 'float'));
+  return { ...setupScene(snap, snap.serving, roles, nearTeam, (p) => (servesJump(store, p) ? 'jump' : 'float')), ballKids: true };
 }
 
 /**
@@ -1493,9 +1493,10 @@ function LiveMatchView(): JSX.Element {
           g.openSetBreak();
           break;
         }
-        // The server takes the ball to his spot behind the end line before the referee waves him
-        // on — never a serve from inside the court. (A court not being drawn holds nobody up.)
-        for (let waited = 0; waited < 4000 && !cancelled.current && !document.hidden && !serverReadyOnCourt(); waited += 100) {
+        // The server goes to his spot behind the end line, and a ball kid gives him the ball, before
+        // the referee waves him on — never a serve from inside the court, nor with a ball still on
+        // it. (A court not being drawn holds nobody up.)
+        for (let waited = 0; waited < 9000 && !cancelled.current && !document.hidden && !serverReadyOnCourt(); waited += 100) {
           await sleep(100);
         }
         if (cancelled.current) break;

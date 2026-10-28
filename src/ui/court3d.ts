@@ -14,7 +14,8 @@
  * camera is chosen (courtCameras.ts), when the hall itself is built in 3D
  * (hall3d.ts) and the painted one is put away. On the bench
  * side: each team's bench along the boards, in its colours, with the water
- * bottles on the floor in front of it, and its coach.
+ * bottles on the floor in front of it, and its coach. Round the court, the
+ * ball kids, and the balls they keep going.
  */
 
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -58,6 +59,14 @@ const MEDIC_LOOK: Look = {
   kit: { shirt: '#f4f6f8', shorts: '#2a3140', libero: '#f4f6f8' },
   libero: false, trim: '#d63a3a', number: 0, skin: '#c99a73', hair: '#3a2a1e', hairStyle: 1, trousers: true,
 };
+
+/** The ball kids: a teal tracksuit, zipped, long trousers — each his own face and hair. */
+const KID_LOOKS: readonly Look[] = (
+  [['#eac29d', '#3a2a1c', 0], ['#c18a60', '#1a1410', 2], ['#f3d4b8', '#8a5a2b', 1], ['#99653f', '#1a1410', 0], ['#dcaa80', '#2b1d14', 1], ['#f3d4b8', '#c9a15a', 0]] as const
+).map(([skin, hair, hairStyle]) => ({
+  kit: { shirt: '#2f8f83', shorts: '#1d2633', libero: '#2f8f83' },
+  libero: false, trim: '#f4f6f8', number: 0, skin, hair, hairStyle, trousers: true, longSleeves: true, front: { kind: 'zip' as const },
+}));
 
 /** A perspective camera that sees exactly what the painted hall's projector
  *  does for a `width` × `height` box. */
@@ -296,6 +305,9 @@ export class Court3D {
   private readonly handA = new Vector3();
   private readonly handB = new Vector3();
   private readonly ball: Mesh;
+  /** The ball kids, and the other balls — in their hands, rolling between them, on the floor — by ball. */
+  private readonly kids: Figure[] = [];
+  private readonly spares = new Map<number, Mesh>();
   private readonly trail: Mesh[] = [];
   private readonly actorRing: Mesh;
   private readonly landing: Mesh;
@@ -502,6 +514,42 @@ export class Court3D {
         }
       }
     }
+    // The ball kids, and every other ball: turning over as it rolls along the floor.
+    motion.ballKids.forEach((b, i) => {
+      let f = this.kids[i];
+      if (f === undefined) {
+        f = new Figure(KID_LOOKS[i % KID_LOOKS.length]);
+        this.kids.push(f);
+        this.scene.add(f.root);
+      }
+      f.pose(b);
+    });
+    const shown = new Set<number>();
+    for (const s of motion.spareBalls(now)) {
+      shown.add(s.id);
+      let m = this.spares.get(s.id);
+      if (m === undefined) {
+        m = new Mesh(this.ball.geometry, this.ball.material);
+        m.castShadow = true;
+        m.position.set(s.x, s.y, Math.max(0.13, s.z));
+        this.spares.set(s.id, m);
+        this.scene.add(m);
+      }
+      const dx = s.x - m.position.x;
+      const dy = s.y - m.position.y;
+      const d = Math.hypot(dx, dy);
+      if (s.z < 0.2 && d > 1e-4) {
+        this.spinAxis.set(-dy / d, dx / d, 0);
+        m.rotateOnWorldAxis(this.spinAxis, d / 0.13);
+      }
+      m.position.set(s.x, s.y, Math.max(0.13, s.z));
+    }
+    for (const [id, m] of this.spares) {
+      if (shown.has(id)) continue;
+      this.scene.remove(m);
+      this.spares.delete(id);
+    }
+
     // A streak behind a hard-hit ball — down off a block as much as across the court.
     const fast = flight !== null && flight.ms > 0 && now >= flight.t0 && now < flight.t0 + flight.ms
       && Math.hypot(flight.to.x - flight.from.x, flight.to.y - flight.from.y, flight.to.z - flight.from.z) / flight.ms > 0.012;
@@ -604,6 +652,7 @@ export class Court3D {
     for (const f of this.figures.values()) f.dispose();
     this.referee.dispose();
     this.official?.dispose();
+    for (const f of this.kids) f.dispose();
     for (const f of this.coaches ?? []) f.dispose();
     this.figures.clear();
     this.scene.traverse((o) => {
