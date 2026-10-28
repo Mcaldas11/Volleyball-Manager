@@ -3,6 +3,7 @@ import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { CoachPreview, type CoachPreviewHandle } from '../coachPreview.tsx';
 import type { Kit } from '../figure3d.ts';
 import { LookEditor } from '../lookEditor.tsx';
+import { splashDue } from '../splash.tsx';
 import arena from '../menu-arena.jpg';
 import hall from '../menu-hall.jpg';
 import { CareerStartOptions } from './Insights.tsx';
@@ -143,7 +144,9 @@ export function MainMenu(): JSX.Element {
       </section>
 
       <section className="mm-stage">
-        {!editing && <CoachPreview look={look} turning={false} />}
+        {/* Made only once the splash has gone: building him in 3D ties the browser up for a moment, and
+            the splash's lights and its fade-in would wait on it. */}
+        {!editing && !splashDue() && <CoachPreview look={look} turning={false} />}
         <div className="mm-who">
           {profile !== null ? (
             <>
