@@ -177,8 +177,51 @@ input:focus, select:focus {
   box-shadow: 0 0 0 3px var(--gold-soft);
 }
 input::placeholder { color: var(--text-faint); }
-input[type="checkbox"] { accent-color: var(--gold); width: 15px; height: 15px; padding: 0; }
-input[type="radio"] { accent-color: var(--gold); width: 15px; height: 15px; padding: 0; margin: 0; }
+/* Ticks and radio buttons drawn by the game, not the browser: every browser — and the desktop app —
+   shows the same dark box, gold when it is on, instead of whatever its own form controls look like. */
+input:is([type="checkbox"], [type="radio"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  vertical-align: middle;
+  background: var(--bg-deep);
+  border: 1.5px solid #4a5a72;
+  cursor: pointer;
+}
+input[type="checkbox"] { border-radius: 4px; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background: #1a1306;
+  clip-path: polygon(12% 50%, 0 64%, 40% 100%, 100% 22%, 87% 9%, 39% 72%);
+  transform: scale(0);
+  transition: transform 0.12s ease;
+}
+input[type="radio"]::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  transform: scale(0);
+  transition: transform 0.12s ease;
+}
+input[type="checkbox"]:checked { background: var(--gold); border-color: var(--gold); }
+input[type="radio"]:checked { border-color: var(--gold); }
+input:is([type="checkbox"], [type="radio"]):checked::before { transform: scale(1); }
+input:is([type="checkbox"], [type="radio"]):hover:not(:disabled):not(:focus) { border-color: var(--gold-deep); }
+input[type="checkbox"]:checked:hover:not(:disabled) { background: var(--gold-bright); border-color: var(--gold-bright); }
+input:is([type="checkbox"], [type="radio"]):focus { box-shadow: none; }
+input:is([type="checkbox"], [type="radio"]):focus-visible { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }
+input:is([type="checkbox"], [type="radio"]):disabled { opacity: 0.4; cursor: default; }
 input[type="date"] { color-scheme: dark; }
 
 /* A plain chevron in the theme's own colour rather than the OS arrow glyph,
@@ -7881,3 +7924,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .lv-coachbar button.asked { border-color: var(--gold); color: var(--gold-bright); animation: lv-asked 1.2s ease-in-out infinite; }
 @keyframes lv-asked { 50% { box-shadow: 0 0 0 3px rgba(215, 167, 63, 0.25); } }
 @media (prefers-reduced-motion: reduce) { .lv-coachbar button.asked { animation: none; } }
+
+/* The ticks' and radio buttons' size has the last word over any panel's rule for its inputs — a
+   filter's `width: auto`, a form's `width: 100%` — so they never stretch or collapse. */
+input:is([type="checkbox"], [type="radio"]) { width: 16px; height: 16px; min-width: 16px; padding: 0; flex: none; }
