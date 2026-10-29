@@ -447,3 +447,4 @@ export class PlayerView {
     return this.store.ageOn(this.index, year, dayOfYear);
   }
 }
+
