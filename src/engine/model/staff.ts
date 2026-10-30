@@ -154,6 +154,22 @@ export function staffRating(s: Staff): number {
   }
 }
 
+/** The attributes staffRating weighs for each role — what a profile shows up as important for it. */
+export const ROLE_KEY_ATTRIBUTES: Readonly<Record<StaffRole, ReadonlyArray<keyof StaffAttributes>>> = {
+  [StaffRole.HeadCoach]: ['coachAttacking', 'coachBlocking', 'coachServing', 'coachReception', 'coachSetting', 'coachTactical', 'manManagement', 'motivating'],
+  [StaffRole.AssistantCoach]: ['coachAttacking', 'coachBlocking', 'coachServing', 'coachReception', 'coachSetting', 'coachTactical', 'manManagement', 'motivating'],
+  [StaffRole.Scout]: ['judgingAbility', 'potentialAssessment'],
+  [StaffRole.HeadScout]: ['judgingAbility', 'potentialAssessment'],
+  [StaffRole.RecruitmentAnalyst]: ['judgingAbility', 'potentialAssessment'],
+  [StaffRole.PerformanceAnalyst]: ['coachTactical', 'judgingAbility', 'sportsScience'],
+  [StaffRole.SportsPsychologist]: ['coachMental', 'manManagement', 'motivating'],
+  [StaffRole.StrengthCoach]: ['coachFitness', 'sportsScience', 'physiotherapy'],
+  [StaffRole.Doctor]: ['sportsScience', 'physiotherapy'],
+  [StaffRole.Physiotherapist]: ['physiotherapy', 'sportsScience'],
+  [StaffRole.YouthCoach]: ['workingWithYouth', 'coachTactical', 'motivating'],
+  [StaffRole.DirectorOfFootball]: ['manManagement', 'judgingAbility', 'discipline'],
+};
+
 /** How well someone does a deal, 1-20: how he handles people across a table, how he judges a player's worth, and his nerve. */
 export function negotiatingRating(a: StaffAttributes): number {
   return (a.manManagement * 2 + a.judgingAbility * 1.5 + a.discipline) / 4.5;

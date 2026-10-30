@@ -3447,6 +3447,111 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 }
 .coach-initials.lg { width: 84px; height: 84px; font-size: 30px; border: 3px solid rgba(255, 255, 255, 0.3); background: rgba(0, 0, 0, 0.25); color: #fff; }
 .coach-hero-plain { background: linear-gradient(100deg, #1b2533, #111a26 60%, #0c131c); }
+
+/* ---- A coach's profile, laid out as Football Manager lays out a member of staff: the strip along the top,
+   the roles down the side, the attributes by side of the job, what stands out about him, and his clubs along the foot. ---- */
+.cp { gap: 10px; }
+.cp-head {
+  display: grid; grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.9fr) auto; align-items: center; gap: 18px;
+  padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--line);
+  background: linear-gradient(100deg, var(--club-deep), var(--surface) 58%);
+}
+.cp-face.coach-initials { width: 58px; height: 58px; font-size: 21px; border: 2px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.3); color: #fff; }
+.cp-who, .cp-contract { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 12.5px; color: var(--text-dim); }
+.cp-who h2 { margin: 0 0 2px; font: 800 26px/1 var(--font-display); letter-spacing: 0.01em; color: #fff; }
+.cp-who span, .cp-contract span { display: inline-flex; align-items: center; gap: 6px; }
+.cp-contract b { font-size: 15px; color: var(--text); }
+.cp-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.cp-contract .club-link { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--text); }
+.cp-rep { display: flex; align-items: center; gap: 10px; color: var(--gold); }
+.cp-rep > span { display: flex; flex-direction: column; gap: 3px; }
+.cp-rep small { font-size: 12px; color: var(--text-dim); }
+.cp-actions { display: flex; gap: 8px; }
+
+.cp-body { display: grid; grid-template-columns: 236px minmax(0, 1fr) 300px; gap: 10px; flex: 1 1 0; min-height: 0; }
+.cp-panel {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 12px 14px; overflow: hidden;
+  border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface);
+}
+.cp-title {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 8px;
+  font: 700 12px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold);
+}
+
+/* The roles: a pie by each, filled as far as he would suit it — green for one he was made for. */
+.cp-role-list { display: flex; flex-direction: column; gap: 2px; flex: 1 1 0; min-height: 0; }
+.cp-role {
+  display: flex; align-items: center; justify-content: flex-start; gap: 9px; flex: 1 1 0; min-height: 20px; max-height: 31px;
+  width: 100%; padding: 0 8px; text-align: left; font-size: 12.5px; color: var(--text);
+  border-radius: 6px; border: 1px solid transparent; background: none;
+}
+.cp-role:hover:not(:disabled) { background: var(--surface-2); border-color: transparent; }
+.cp-role.on, .cp-role.on:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line-strong); }
+.cp-role small { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--good); }
+.cp-dot {
+  --dot: var(--text-faint);
+  flex: none; width: 14px; height: 14px; border-radius: 50%;
+  background: conic-gradient(var(--dot) calc(var(--fill) * 1turn), rgba(255, 255, 255, 0.1) 0);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.cp-dot.good { --dot: var(--warn); }
+.cp-dot.top { --dot: var(--good); }
+.cp-roles-foot {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
+  margin-top: 8px; padding-top: 9px; border-top: 1px solid var(--line); font-size: 13px;
+}
+.cp-roles-foot .cp-kicker { grid-column: 1 / -1; }
+
+/* The attributes: by side of the job, a tab each; those that matter for the role picked shown up in green. */
+.cp-tabs { display: flex; gap: 2px; margin: -4px 0 12px; border-bottom: 1px solid var(--line); }
+.cp-tabs button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; margin-bottom: -1px; font-size: 13px; color: var(--text-dim);
+  background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+}
+.cp-tabs button:hover:not(:disabled) { background: none; color: var(--text); }
+.cp-tabs button.on { color: var(--text); border-bottom-color: var(--gold); }
+.cp-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 270px)); align-content: start; gap: 20px; flex: 1 1 0; min-height: 0; }
+.cp-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp-col-title { margin: 0 0 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.cp-attr {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 4px 8px;
+  border-radius: 4px; font-size: 12.5px;
+}
+.cp-attr > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cp-attr > b { flex: none; font-variant-numeric: tabular-nums; }
+.cp-attr.key { background: rgba(63, 189, 95, 0.16); box-shadow: inset 2px 0 var(--good); }
+.cp-none { padding: 4px 8px; font-size: 12.5px; }
+.cp-formations { display: flex; gap: 28px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); }
+.cp-formations span { display: flex; flex-direction: column; gap: 3px; }
+.cp-formations small { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.cp-formations b { font-size: 13px; }
+
+.cp-side { gap: 14px; }
+.cp-block { flex: none; }
+.cp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-chip { padding: 3px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600; color: var(--gold-bright); background: var(--gold-soft); }
+.cp-bio { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.cp-bio p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
+
+.cp-foot { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 10px; flex: none; height: clamp(104px, calc(var(--app-h, 100vh) * 0.17), 160px); }
+.cp-hist { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: hidden; }
+.cp-hist-row {
+  display: grid; grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.2fr) 82px 64px; align-items: center; gap: 10px;
+  flex: none; padding: 5px 8px; border-radius: 6px; font-size: 12.5px;
+}
+.cp-hist-row.clickable { cursor: pointer; }
+.cp-hist-row.clickable:hover { background: var(--surface-2); }
+.cp-hist-club { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-honours > :not(.cp-title) { min-height: 0; overflow: hidden; }
+/* A short window: the roles closer together, so all twelve fit. */
+.short-window .cp-panel { padding: 9px 12px; }
+.short-window .cp-title { margin-bottom: 6px; }
+.short-window .cp-role-list { gap: 1px; }
+.short-window .cp-role { min-height: 16px; font-size: 12px; }
+.short-window .cp-roles-foot { margin-top: 5px; padding-top: 6px; }
+.short-window .cp-roles-foot .cp-kicker { display: none; }
+/* …and his best attributes left to the columns beside them: the biography has the room. */
+.short-window .cp-best { display: none; }
 .club-squad { flex: 1 1 0; min-height: 0; }
 .club-squad-own { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
 .club-squad-own > .card { flex: 1 1 0; min-height: 220px; }
