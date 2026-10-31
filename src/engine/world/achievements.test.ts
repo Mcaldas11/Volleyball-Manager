@@ -31,6 +31,24 @@ test('achievements unlock the day they are reached, once, with a word in the inb
   assert.ok(achievementList(world).find((a) => a.id === 'promotion')!.day !== null);
 });
 
+test('a national team\'s medals count: a podium, then each title by its tournament — and club and country at once', () => {
+  const world = generateWorld({ seed: 163, startYear: 2026, scale: 'small', manager: stubManager() });
+  const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12)!;
+  appointManager(world, club.id);
+  const got = (): string[] => achievementList(world).filter((a) => a.day !== null).map((a) => a.id).sort();
+  achievementsDay(world);
+  assert.deepEqual(got(), []);
+
+  world.career.nationalTeam = club.nation;
+  world.career.nationalMedals = [{ nation: club.nation, kind: 'worlds', year: 2027, place: 2 }];
+  achievementsDay(world);
+  assert.deepEqual(got(), ['clubAndCountry', 'intlMedal'], 'bronze: a podium, not a title');
+
+  world.career.nationalMedals.push({ nation: club.nation, kind: 'olympics', year: 2028, place: 0 });
+  achievementsDay(world);
+  assert.deepEqual(got(), ['clubAndCountry', 'intlMedal', 'summerGold']);
+});
+
 test('coaching courses: the licences in order, clinics once a season, the club pays — and the coach gets better', () => {
   const world = generateWorld({ seed: 162, startYear: 2026, scale: 'small', manager: stubManager() });
   const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12)!;

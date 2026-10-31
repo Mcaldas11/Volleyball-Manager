@@ -9,6 +9,7 @@ import { Position } from '../model/positions.ts';
 import { agentOf } from './contractTerms.ts';
 import { contractDemands } from './negotiation.ts';
 import { agentPitch, agentPoaching, agentProfile, honourPreContract, preContractOf } from './agents.ts';
+import { squadPlan } from './squadPlanner.ts';
 
 function career() {
   const world = generateWorld({ seed: 84, startYear: 2026, scale: 'small', manager: stubManager() });
@@ -47,9 +48,12 @@ test('an agent offers the manager a client who would fill a gap', () => {
   const store = world.players;
   // No liberos next season: a gap an agent can fill.
   for (const p of club.players) if (store.position[p] === Position.Libero) store.contractUntil[p] = seasonEndDay(world.season);
+  const short = new Set(squadPlan(world, club).cells.filter((row) => row[0].gaps > 0 || row[1].gaps > 0).map((row) => row[0].position));
+  assert.ok(short.has(Position.Libero), 'the squad is short of a libero');
   const p = agentPitch(world);
   assert.ok(p !== null, 'someone offered');
-  assert.equal(store.position[p!], Position.Libero);
+  // A player for a position the squad is short of — the libero, or another gap it has.
+  assert.ok(short.has(store.position[p!]), `a ${store.position[p!]} for a squad short of ${[...short].join(', ')}`);
   assert.notEqual(store.clubId[p!], club.id);
   const m = world.messages.at(-1)!;
   assert.match(m.subject, /^Agent offers you/);

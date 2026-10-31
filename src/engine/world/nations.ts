@@ -138,8 +138,8 @@ export function nationsIn(conf: Confederation): number[] {
 
 /**
  * FIVB/IOC-style codes used throughout this file aren't ISO 3166-1 (GER not
- * DEU, NED not NLD, RSA not ZAF...), so flag images — served by flagcdn.com
- * keyed on ISO alpha-2 — need this table to find the right one.
+ * DEU, NED not NLD, RSA not ZAF...), so flag images — named by ISO alpha-2
+ * — need this table to find the right one.
  */
 const ISO2_BY_CODE: Readonly<Record<string, string>> = {
   POL: 'PL', ITA: 'IT', FRA: 'FR', SLO: 'SI', SRB: 'RS', NED: 'NL', GER: 'DE',
@@ -155,16 +155,17 @@ const ISO2_BY_CODE: Readonly<Record<string, string>> = {
 };
 
 /**
- * Flag *image* URLs from flagcdn.com (free, no API key). Windows doesn't ship
- * pictorial glyphs for Unicode flag emoji — Chromium falls back to plain
- * two-letter codes there — so real UI chrome needs an actual image instead.
+ * Flag *images*, shipped with the game (public/flags, taken once from flagcdn.com — national flags
+ * are in the public domain): nothing fetched while playing. Windows doesn't ship pictorial glyphs for
+ * Unicode flag emoji — Chromium falls back to plain two-letter codes there — so real UI chrome needs
+ * an actual image instead. The path is relative, so the game runs from any folder.
  */
-const FLAG_CDN = 'https://flagcdn.com';
+const FLAG_DIR = 'flags';
 
 /** SVG flag image URL for a nation's FIVB code, or null if the code is unmapped. */
 export function flagImageUrlForCode(code: string): string | null {
   const iso2 = ISO2_BY_CODE[code];
-  return iso2 !== undefined ? `${FLAG_CDN}/${iso2.toLowerCase()}.svg` : null;
+  return iso2 !== undefined ? `${FLAG_DIR}/${iso2.toLowerCase()}.svg` : null;
 }
 
 /** SVG flag image URL for a nation, given its index into NATIONS. */

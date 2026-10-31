@@ -1,0 +1,12 @@
+The match sounds are cut from recordings on Freesound (https://freesound.org), every one of them
+released under Creative Commons 0 (CC0 1.0, public domain: https://creativecommons.org/publicdomain/zero/1.0/).
+No attribution is required; it is given here with thanks.
+
+spike-1.wav    "volleyball spike" by Luisa_Sanchez                      https://freesound.org/s/816991/
+spike-2.wav    "Volleyball spike" by Luisa_Sanchez                      https://freesound.org/s/813420/
+touch-1/2/3    "Volleyball.wav" by 13FPanska_Marval_Lukas                https://freesound.org/s/379337/
+whistle.wav    "Referee whistle blow, gymnasium.wav" by SpliceSound      https://freesound.org/s/218318/
+buzzer.wav     "buzzer et sifflet volleyball.wav" by Naïma               https://freesound.org/s/510029/
+crowd.wav      "Hockey arena pregame applause.wav" by SEF7               https://freesound.org/s/706732/
+
+Each was trimmed, faded and levelled for the game.

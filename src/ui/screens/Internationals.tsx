@@ -61,7 +61,7 @@ function qualificationRule(t: Tournament): string {
     worlds: 'The hosts, the holders, the top three of each continental championship the year before, and the rest by world ranking — 32 nations.',
     olympics: 'The hosts, the champions of each continental championship two years before, the best three at the World Championship the year before not yet in, and the rest by world ranking — 12 nations.',
     continental: t.confederation === 'CEV'
-      ? 'The hosts, the top eight of the last EuroVolley, and the nations through the qualifiers the summer before — 24 nations.'
+      ? 'The hosts, the top eight of the last European Championship, and the nations through the qualifiers the summer before — 24 nations.'
       : 'Every nation of the confederation plays.',
     nationsLeague: 'The same eighteen every year, bar one: the last-placed nation goes down, and the best-ranked nation outside the league comes up.',
     qualifier: `Pools of four: the winners, the runners-up and the best third-placed teams take the ${t.places ?? 0} places at the championship.`,

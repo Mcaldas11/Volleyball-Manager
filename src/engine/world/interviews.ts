@@ -361,7 +361,7 @@ function contextFor(world: World, f: Fixture, kind: InterviewKind): { ctx: Ctx; 
     tags.add('derby');
     occasions.push(`${city} derby`);
   }
-  if (tags.has('clubworld') && occasions.length === 0) occasions.push('Club World Championship');
+  if (tags.has('clubworld') && occasions.length === 0) occasions.push('World Club Cup');
   if (tags.has('continental') && occasions.length === 0) occasions.push(compName);
 
   // Who is expected to win.
@@ -806,7 +806,7 @@ const PRE: readonly Archetype[] = [
   },
   {
     kind: 'pre', needs: ['clubworld'], weight: 5,
-    prompt: () => 'The Club World Championship — the whole world is watching. Can you go all the way?',
+    prompt: () => 'The World Club Cup — the whole world is watching. Can you go all the way?',
     answers: () => [
       "It's an honour to be here. We want to make the club proud.",
       'Only the best clubs in the world are here. We respect them all.',

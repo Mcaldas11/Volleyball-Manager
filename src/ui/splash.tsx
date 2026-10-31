@@ -152,7 +152,7 @@ export function Splash({ onDone }: { onDone: () => void }): JSX.Element {
               <i key={i} style={{ animationDelay: `${1550 + i * 45}ms, ${4300 + i * 70}ms` }}>{c}</i>
             ))}
           </span>
-          <span className="splash-bottom">Manager</span>
+          <span className="splash-bottom" translate="no">Manager</span>
         </h1>
         <span className="splash-rule" />
         <p className="splash-tagline">Every rally. Every decision. Your club.</p>

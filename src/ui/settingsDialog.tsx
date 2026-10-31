@@ -1,7 +1,7 @@
 /**
  * Preferences: how the game looks, sounds and draws, in this browser — tab by tab, down the side as
  * Football Manager has them. The interface: text size, colours a colour-blind eye can tell apart,
- * less motion. The graphics: a quality preset and its details — sharpness, smoothing, shadows —
+ * less motion, the language. The graphics: a quality preset and its details — sharpness, smoothing, shadows —
  * the most frames a second, and a counter of them. The match: the view and the camera it opens
  * with. The sound: on or off, and how loud.
  */
@@ -10,6 +10,7 @@ import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { CAMERA_MODES, type CameraMode } from './courtCameras.ts';
 import { Dropdown } from './dropdown.tsx';
 import { Icon, type IconName } from './icons.tsx';
+import { LANGUAGES, language, setLanguage, type Language } from './language.ts';
 import {
   QUALITY, qualityOf, type FrameCap, type Graphics, type Preferences, type Quality, type Shadows, type TextScale,
 } from './preferences.ts';
@@ -24,7 +25,7 @@ const CAPS: ReadonlyArray<[FrameCap, string]> = [[30, '30'], [60, '60'], [120, '
 
 type Tab = 'interface' | 'graphics' | 'match' | 'sound';
 const TABS: ReadonlyArray<{ id: Tab; label: string; icon: IconName; hint: string }> = [
-  { id: 'interface', label: 'Interface', icon: 'menu', hint: 'Text, colours and motion' },
+  { id: 'interface', label: 'Interface', icon: 'menu', hint: 'Text, colours, motion and language' },
   { id: 'graphics', label: 'Graphics', icon: 'camera', hint: 'Quality and frame rate' },
   { id: 'match', label: 'Match', icon: 'whistle', hint: 'How matches are watched' },
   { id: 'sound', label: 'Sound', icon: 'sound', hint: 'Match sounds' },
@@ -58,6 +59,7 @@ export function PreferencesDialog(): JSX.Element | null {
   const [tab, setTab] = useState<Tab>('interface');
   const [sound, setSound] = useState(soundOn);
   const [volume, setVolume] = useState(soundVolume);
+  const [lang, setLang] = useState<Language>(language);
   useEffect(() => {
     const esc = (e: KeyboardEvent): void => { if (e.key === 'Escape') g.closeSettings(); };
     window.addEventListener('keydown', esc);
@@ -101,6 +103,11 @@ export function PreferencesDialog(): JSX.Element | null {
                 </Row>
                 <Row check label="Less motion" hint="Stills the interface's animations.">
                   <input type="checkbox" checked={p.reducedMotion} onChange={(e) => set({ ...p, reducedMotion: e.target.checked })} />
+                </Row>
+                <Row label="Language" hint="The menus, the navigation, the buttons and the match controls. Messages, news and reports are still written in English.">
+                  <span translate="no">
+                    <Seg value={lang} options={LANGUAGES.map((l) => [l.id, l.name] as const)} onChange={(v) => { setLanguage(v); setLang(v); }} />
+                  </span>
                 </Row>
               </div>
             )}

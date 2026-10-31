@@ -289,7 +289,7 @@ export function CompetitionDetail(): JSX.Element | null {
       {cup === undefined && !league && (
         <Empty>
           {comp.kind === 'clubworld'
-            ? `The Club World Championship is played every four years — the next one is in December ${nextClubWorldYear(world.startYear + world.season)}.`
+            ? `The World Club Cup is played every four years — the next one is in December ${nextClubWorldYear(world.startYear + world.season)}.`
             : 'This competition is not being played this season — it starts with the next one.'}
         </Empty>
       )}

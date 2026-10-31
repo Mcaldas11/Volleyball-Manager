@@ -83,7 +83,7 @@ export function NationProfile(): JSX.Element | null {
           <KV k="Olympic gold"><b className="gold-text">{team?.olympicGolds ?? 0}</b></KV>
           <KV k="World champions"><b className="gold-text">{team?.worldTitles ?? 0}</b></KV>
           <KV k="Continental champions"><b>{team?.continentalTitles ?? 0}</b></KV>
-          <KV k="Nations League"><b>{team?.nationsLeagueTitles ?? 0}</b></KV>
+          <KV k="Nations Cup"><b>{team?.nationsLeagueTitles ?? 0}</b></KV>
           <div className="nation-medals">
             {medals.map((count, i) => (
               <span key={i} className={`nation-medal ${MEDAL[i + 1]}`} title={`${['Gold', 'Silver', 'Bronze'][i]} medals`}>

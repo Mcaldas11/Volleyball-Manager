@@ -53,7 +53,7 @@ test('the summer of 2026 is the continental championships, and every season ends
   const continental = byKind(world, 'continental');
   assert.equal(continental.length, 5, 'one per confederation');
   const euro = continental.find((t) => t.confederation === 'CEV')!;
-  assert.equal(euro.name, 'EuroVolley 2026');
+  assert.equal(euro.name, 'European Championship 2026');
   assert.equal(euro.teams.length, 24);
   assert.ok(euro.teams.every((n) => NATIONS[n].confederation === 'CEV'));
   const vnl = byKind(world, 'nationsLeague')[0];
@@ -77,7 +77,7 @@ test('a tournament plays out: pools, a bracket to a final and a bronze match, me
   assert.equal(new Set(euro.placings).size, euro.teams.length, 'every nation placed once');
   assert.ok(euro.mvp >= 0);
   assert.equal(world.players.nation[euro.mvp], euro.placings[0], 'the MVP is one of the champions');
-  const record = internationals(world).history.find((h) => h.name === 'EuroVolley 2026')!;
+  const record = internationals(world).history.find((h) => h.name === 'European Championship 2026')!;
   assert.deepEqual(record.podium.slice(0, 3), euro.placings.slice(0, 3));
   const store = world.players;
   for (let i = 0; i < store.count; i++) assert.ok(!store.hasFlag(i, PlayerFlag.OnDuty), 'nobody is left away');
@@ -149,7 +149,7 @@ test('the FIVB cycle: a World Championship in 2027, then in 2028 the Olympic Gam
   // In August, the EuroVolley 2028 qualifiers: pools of four for the places the hosts and the top eight leave.
   const qualifiers = byKind(world, 'qualifier').find((t) => t.year === 2028)!;
   assert.ok(qualifiers !== undefined, 'EuroVolley 2028 qualifiers');
-  assert.equal(qualifiers.name, 'EuroVolley 2028 Qualifiers');
+  assert.equal(qualifiers.name, 'European Championship 2028 Qualifiers');
   assert.ok(qualifiers.startDay > Math.max(...vnl2027.knockoutDays) && Math.max(...qualifiers.knockoutDays) < worlds.startDay,
     'between the Nations League and the World Championship');
   assert.ok(qualifiers.pools.every((p) => p.teams.length <= 4));
@@ -163,7 +163,7 @@ test('the FIVB cycle: a World Championship in 2027, then in 2028 the Olympic Gam
   // 2028: the Olympic Games — the hosts and the 2026 continental champions among them — then EuroVolley.
   runTo(world, ctx, 2 * 365 + 1);
   const olympics = byKind(world, 'olympics')[0];
-  assert.equal(olympics.name, 'Olympic Games 2028');
+  assert.equal(olympics.name, 'Summer Games 2028');
   assert.equal(olympics.teams.length, 12);
   for (const conf of ['CEV', 'CSV', 'NORCECA', 'AVC', 'CAVB'] as const) {
     const champion = edition('continental', conf, 2026).podium[0];
@@ -407,10 +407,10 @@ test("a nation's record: its matches won and lost over a spell, the tournaments 
   const all = nationalRecord(world, champion, 0, -1);
   assert.equal(all.won, won);
   assert.equal(all.lost, played.length - won);
-  assert.ok(all.titles.some((t) => t.name === 'EuroVolley 2026'));
+  assert.ok(all.titles.some((t) => t.name === 'European Championship 2026'));
   // A spell that ended before the final has no title in it.
   const before = nationalRecord(world, champion, 0, euro.knockoutDays[euro.knockoutDays.length - 1] - 1);
-  assert.ok(!before.titles.some((t) => t.name === 'EuroVolley 2026'));
+  assert.ok(!before.titles.some((t) => t.name === 'European Championship 2026'));
 
   assert.equal(nationTournaments(world, champion).find((x) => x.t.id === euro.id)?.place, 1);
   const latest = nationResults(world, champion, 3);
@@ -421,10 +421,10 @@ test('the road ahead: what is drawn this season, then what the cycle brings, in 
   const { world } = start(46);
   const road = internationalCalendar(world, 'CEV');
   for (let i = 1; i < road.length; i++) assert.ok(road[i - 1].startDay <= road[i].startDay);
-  assert.equal(road[0].name, 'EuroVolley 2026');
+  assert.equal(road[0].name, 'European Championship 2026');
   assert.ok(road[0].tournament !== undefined, 'this summer is drawn');
   const names = road.map((e) => e.name);
-  for (const n of ['Nations League 2027', 'World Championship 2027', 'EuroVolley 2028 Qualifiers', 'Olympic Games 2028', 'EuroVolley 2028']) {
+  for (const n of ['Nations Cup 2027', 'World Championship 2027', 'European Championship 2028 Qualifiers', 'Summer Games 2028', 'European Championship 2028']) {
     assert.ok(names.includes(n), `${n} on the road`);
   }
   const worlds = road.find((e) => e.name === 'World Championship 2027')!;

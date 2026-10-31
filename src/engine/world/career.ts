@@ -127,6 +127,8 @@ export interface ManagerCareer {
   nationalTeam?: number;
   /** Every spell in charge of a national team, oldest first; endDay -1 while current. */
   nationalJobs?: Array<{ nation: number; startDay: number; endDay: number; exit?: 'sacked' | 'resigned' }>;
+  /** The medals his national teams won with him in charge: the tournament's kind (see internationals.ts), its year, 0 gold to 2 bronze. */
+  nationalMedals?: Array<{ nation: number; kind: string; year: number; place: number }>;
   /** The board's offer of a new contract, while it stands. */
   contractOffer?: ContractOffer | null;
   nextContractOfferId?: number;

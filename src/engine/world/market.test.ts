@@ -34,13 +34,19 @@ test('a rival\'s formal bid for the manager\'s target: beat it, or lose him', ()
   const { world, club } = setup(172);
   world.day = 10;
   const seller = world.clubs.find((c) => c.id !== club.id && c.players.length >= 12)!;
-  const p = seller.players[1];
   const rival = world.clubs.find((c) => c.id !== club.id && c.id !== seller.id && c.players.length > 0)!;
   rival.finances.balance = 50_000_000;
-  const t = openTalks(world, club, p, 'transfer');
-  t.rivals = [{ clubId: rival.id, wage: world.players.wage[p] }];
-  for (let d = 0; d < 200 && t.rivalBid === undefined && world.talks.includes(t); d++) { world.day++; processDeals(world); }
-  assert.ok(t.rivalBid !== undefined, 'a rival tables a bid');
+  // A rival may just as well sign him outright before it ever bids: then it is his team-mate's turn.
+  let p = -1;
+  let t: ReturnType<typeof openTalks> | undefined;
+  for (const candidate of seller.players.slice(1, 6)) {
+    p = candidate;
+    t = openTalks(world, club, p, 'transfer');
+    t.rivals = [{ clubId: rival.id, wage: world.players.wage[p] }];
+    for (let d = 0; d < 200 && t.rivalBid === undefined && world.talks.includes(t); d++) { world.day++; processDeals(world); }
+    if (t.rivalBid !== undefined) break;
+  }
+  assert.ok(t !== undefined && t.rivalBid !== undefined, 'a rival tables a bid');
   assert.ok(world.messages.some((m) => m.subject === `Rival bid for ${world.players.fullName(p)}`));
   // Under it: no.
   submitOffer(world, t, { ...t.lastOffer, fee: t.rivalBid!.fee - 1000 });
@@ -54,7 +60,7 @@ test('a rival\'s formal bid for the manager\'s target: beat it, or lose him', ()
   assert.equal(t.rivalBid, undefined);
 
   // Left unanswered, the rival gets him.
-  const q = seller.players[2];
+  const q = seller.players.find((x) => x !== p)!;
   const t2 = openTalks(world, club, q, 'transfer');
   t2.rivals = [{ clubId: rival.id, wage: world.players.wage[q] }];
   t2.rivalBid = { clubId: rival.id, fee: world.players.value[q], until: world.day + 1 };

@@ -204,8 +204,8 @@ export function CalendarScreen(): JSX.Element {
           <span className="cal-card-title">Legend</span>
           <span><b className="lg-league">League</b>: domestic match</span>
           <span><b className="lg-cup">Cup</b>: national cup and super cup</span>
-          <span><b className="lg-continental">Continental</b>: Champions League and the like</span>
-          <span><b className="lg-world">World</b>: Club World Championship</span>
+          <span><b className="lg-continental">Continental</b>: Champions Cup and the like</span>
+          <span><b className="lg-world">World</b>: World Club Cup</span>
           <span><b className="lg-friendly">Friendly</b>: pre-season friendly</span>
           <span><b className="lg-deadline">Deadline</b>: transfer window closes</span>
           <span><b className="lg-result">W / L</b>: final result</span>
@@ -219,7 +219,7 @@ export function CalendarScreen(): JSX.Element {
 export function shortCompName(comp: Competition | undefined): string {
   if (comp === undefined || comp.kind === 'league') return '';
   if (comp.key === 'cont:CEV:1') return 'CL';
-  if (comp.key === 'cont:CEV:2') return 'CEV Cup';
+  if (comp.key === 'cont:CEV:2') return 'Continental Cup';
   if (comp.kind === 'clubworld') return 'CWC';
   if (comp.kind === 'friendly') return 'Friendly';
   if (comp.kind === 'supercup') return 'Super Cup';

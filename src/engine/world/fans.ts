@@ -455,8 +455,8 @@ const COMMENTS: Readonly<Record<FanStory, number>> = {
 const GENERIC = new Set(['VC', 'Volley', 'Volleyball', 'Volleyball Club', 'Sport', 'Sports', 'VB', 'Volley-Ball', 'Pallavolo', 'Club']);
 
 /**
- * A club the way its fans say it: the name without the city — "Resovia",
- * "Thunders", "Sir Safety" — or the city, when the rest is only "Volley".
+ * A club the way its fans say it: the name without the city — "Sokół",
+ * "Cranes", "Virtus" — or the city, when the rest is only "Volley".
  */
 export function fanName(club: Club): string {
   const def = NATIONS[club.nation];
@@ -493,7 +493,7 @@ function fill(world: World, b: FanBrief, text: string): string {
     .replaceAll('{comp}', b.comp ?? 'League');
 }
 
-/** A fan's name online, from the names of his country: "kamil_resovia", "Marta88", "TrueSkra". */
+/** A fan's name online, from the names of his country: "kamil_sokol", "Marta88", "TrueIskra". */
 export function handle(rng: Rng, nation: number, club: Club | undefined): string {
   const bank = bankFor(NATIONS[nation]?.nameGroup ?? '');
   const first = rng.pick(bank.first);

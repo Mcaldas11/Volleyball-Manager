@@ -4,6 +4,7 @@ import { CoachPreview, type CoachPreviewHandle } from '../coachPreview.tsx';
 import type { Kit } from '../figure3d.ts';
 import { LookEditor } from '../lookEditor.tsx';
 import { splashDue } from '../splash.tsx';
+import { GAME_VERSION, WhatsNewDialog } from '../whatsNew.tsx';
 import arena from '../menu-arena.jpg';
 import hall from '../menu-hall.jpg';
 import { CareerStartOptions } from './Insights.tsx';
@@ -27,7 +28,7 @@ const MAX_BIRTH_DATE = '2008-07-01';
 
 function Wordmark(): JSX.Element {
   return (
-    <div className="wordmark">
+    <div className="wordmark" translate="no">
       <img className="brand-logo brand-logo-lg" src={logo} alt="" />
       <div className="wordmark-text">
         <span className="wordmark-top">Volleyball</span>
@@ -67,6 +68,7 @@ const MENU_KIT: Kit = { shirt: '#1f3a66', shorts: '#d7a73f', libero: '#d7a73f' }
 export function MainMenu(): JSX.Element {
   const g = useGame();
   const [editing, setEditing] = useState(false);
+  const [news, setNews] = useState(false);
 
   useEffect(() => {
     void g.refreshSaves();
@@ -84,9 +86,11 @@ export function MainMenu(): JSX.Element {
       <header className="mm-bar">
         <div className="mm-mark">
           <img src={logo} alt="" />
-          <span>Volleyball <b>Manager</b></span>
+          <span translate="no">Volleyball <b>Manager</b></span>
+          <small className="mm-version">v{GAME_VERSION}</small>
         </div>
         <nav className="mm-pills">
+          <button className="mm-pill" onClick={() => setNews(true)}><Icon name="star" size={14} /> What's New?</button>
           <button className="mm-pill on" onClick={() => g.openSettings()}><Icon name="gear" size={14} /> Preferences</button>
           <button className="mm-pill" onClick={() => setEditing(true)}><Icon name="user" size={14} /> Manager Profile</button>
         </nav>
@@ -167,6 +171,7 @@ export function MainMenu(): JSX.Element {
 
       <p className="mm-foot">© 2026 Miguel Caldas. All rights reserved.</p>
       {editing && <ManagerProfileDialog onClose={() => setEditing(false)} />}
+      {news && <WhatsNewDialog onClose={() => setNews(false)} />}
     </div>
   );
 }
@@ -480,7 +485,7 @@ export function CreateLook(): JSX.Element {
 
 const CAREER_MODES: ReadonlyArray<{ id: CareerMode; title: string; text: string; icon: 'club' | 'world' | 'trophy' }> = [
   { id: 'club', icon: 'club', title: 'Club', text: 'Head coach, general manager and sporting director of a club.' },
-  { id: 'national', icon: 'world', title: 'National team', text: 'Name the squads and coach a nation at the Nations League, the continental championships, the Worlds and the Olympics.' },
+  { id: 'national', icon: 'world', title: 'National team', text: 'Name the squads and coach a nation at the Nations Cup, the continental championships, the Worlds and the Summer Games.' },
   { id: 'both', icon: 'trophy', title: 'Club & national team', text: 'Both at once: the club through the season, the nation in the summer and the spring.' },
 ];
 
@@ -879,7 +884,7 @@ export function NationSelect(): JSX.Element {
       title="Choose a national team"
       subtitle={both
         ? 'Your club is set — now the country. You name the squad for every tournament and coach its matches yourself, in the summer and the spring.'
-        : 'You name the squad for every tournament — the Nations League, the continental championships, the World Championship and the Olympic Games — and coach its matches yourself.'}
+        : 'You name the squad for every tournament — the Nations Cup, the continental championships, the World Championship and the Summer Games — and coach its matches yourself.'}
     >
       <div className="club-select">
         <section className="card club-browser">

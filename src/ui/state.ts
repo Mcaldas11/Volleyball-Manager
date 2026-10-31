@@ -633,6 +633,38 @@ function readCourtView(): '3d' | '2d' {
   }
 }
 
+const EXPORTED_KEY = 'vm.exported';
+const BACKUP_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** When each career was last exported as a file, by save id. */
+function exportedTimes(): Record<string, number> {
+  try {
+    return JSON.parse(window.localStorage.getItem(EXPORTED_KEY) ?? '{}') as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+function noteExported(id: string): void {
+  try {
+    window.localStorage.setItem(EXPORTED_KEY, JSON.stringify({ ...exportedTimes(), [id]: Date.now() }));
+  } catch {
+    // Storage blocked: the reminder simply comes again.
+  }
+}
+
+/** A week or more since this career was exported — or it never has been, and it is a week old. */
+function backupDue(id: string): boolean {
+  const times = exportedTimes();
+  const last = times[id];
+  if (last === undefined) {
+    // First seen now: the week counts from here, rather than nagging a brand-new career.
+    noteExported(id);
+    return false;
+  }
+  return Date.now() - last > BACKUP_EVERY_MS;
+}
+
 /** Rallies between one shout from the touchline and the next. */
 export const SHOUT_COOLDOWN = 6;
 
@@ -1026,6 +1058,7 @@ class Game {
     const season = this.ctx;
     const meta = this.currentMeta(world, this.currentSaveId ?? newSaveId());
     await this.exportTo(meta, ['Writing the file'], async () => ({ world, season }));
+    noteExported(meta.id);
   }
 
   /** A saved career, straight from the list, as a file. */
@@ -1033,6 +1066,7 @@ class Game {
     const meta = this.saves.find((s) => s.id === id);
     if (meta === undefined) return;
     await this.exportTo(meta, ['Reading the save', 'Setting up the world', 'Writing the file'], () => readSaveWorld(id, () => this.taskStep(1)));
+    noteExported(id);
     // Reading a save sets its game up: back to the one in play.
     if (this.world !== null) {
       setUiGame(this.world.gender ?? 'men');
@@ -1067,7 +1101,10 @@ class Game {
   private async writeCurrentSave(world: World, meta: SaveMeta): Promise<boolean> {
     try {
       await writeSaveWorld(meta.id, meta, world, this.ctx);
-      this.notice = 'Game saved.';
+      // A save lives in this browser only: now and then, a word about keeping a copy outside it.
+      this.notice = backupDue(meta.id)
+        ? 'Game saved. It is a week since this career was last exported — keep a copy outside the browser: Export career file, in the menu by your name.'
+        : 'Game saved.';
       return true;
     } catch (err) {
       this.notice = err instanceof Error ? err.message : 'Could not save this career.';
@@ -3685,6 +3722,11 @@ class Game {
   /** The world changed by hand in the editor: marked, and shown again. */
   markEdited(): void {
     if (this.world !== null) this.world.edited = true;
+    this.emit();
+  }
+
+  /** A club's colours changed in the kit designer: shown again — but no advantage gained, so the career still earns achievements. */
+  markKitChanged(): void {
     this.emit();
   }
 

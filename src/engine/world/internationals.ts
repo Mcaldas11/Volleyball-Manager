@@ -266,7 +266,7 @@ export const SQUAD_SHAPE: Readonly<Record<number, number>> = {
 };
 
 const CONTINENTAL: Readonly<Record<Confederation, { name: string; champions: string }>> = {
-  CEV: { name: 'EuroVolley', champions: 'European champions' },
+  CEV: { name: 'European Championship', champions: 'European champions' },
   CSV: { name: 'South American Championship', champions: 'South American champions' },
   NORCECA: { name: 'NORCECA Championship', champions: 'NORCECA champions' },
   AVC: { name: 'Asian Championship', champions: 'Asian champions' },
@@ -325,7 +325,7 @@ export function userNation(world: World): number {
 export function championsTitle(t: Pick<Tournament, 'kind' | 'confederation'>): string {
   if (t.kind === 'worlds') return 'world champions';
   if (t.kind === 'olympics') return 'Olympic champions';
-  if (t.kind === 'nationsLeague') return 'Nations League winners';
+  if (t.kind === 'nationsLeague') return 'Nations Cup winners';
   if (t.kind === 'friendly') return 'winners';
   return CONTINENTAL[t.confederation ?? 'CEV'].champions;
 }
@@ -349,9 +349,9 @@ function competitionFor(world: World, kind: TournamentKind, conf: Confederation 
   const key = `intl:${kind}${conf !== null ? `:${conf}` : ''}`;
   const found = world.competitions.find((c) => c.key === key);
   if (found !== undefined) return found;
-  const name = kind === 'worlds' ? 'World Championship' : kind === 'olympics' ? 'Olympic Games'
+  const name = kind === 'worlds' ? 'World Championship' : kind === 'olympics' ? 'Summer Games'
     : kind === 'friendly' ? 'International friendly'
-    : kind === 'nationsLeague' ? 'Nations League'
+    : kind === 'nationsLeague' ? 'Nations Cup'
       : kind === 'qualifier' ? `${CONTINENTAL[conf ?? 'CEV'].name} Qualifiers` : CONTINENTAL[conf ?? 'CEV'].name;
   const comp: Competition = {
     id: world.competitions.length,
@@ -823,14 +823,14 @@ export function internationalCalendar(world: World, home: Confederation, seasons
         drawDay: base,
       });
     };
-    if (year % 4 === 0) add('olympics', null, `Olympic Games ${year}`, year);
+    if (year % 4 === 0) add('olympics', null, `Summer Games ${year}`, year);
     else if (year % 2 === 1) add('worlds', null, `World Championship ${year}`, year);
     if (year % 2 === 0) {
       add('continental', home, `${CONTINENTAL[home].name} ${year}`, year);
     } else if (NATIONS.filter((n) => n.confederation === home).length > CONTINENTAL_SIZE[home]) {
       add('qualifier', home, `${CONTINENTAL[home].name} ${year + 1} Qualifiers`, year + 1, year);
     }
-    add('nationsLeague', null, `Nations League ${year + 1}`, year + 1);
+    add('nationsLeague', null, `Nations Cup ${year + 1}`, year + 1);
   }
   return out.filter((e) => e.endDay >= world.day).sort((a, b) => a.startDay - b.startDay);
 }
@@ -1407,6 +1407,10 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
   const place = t.placings.indexOf(mine);
   if (place >= 0 && place < 3) {
     world.career.reputation = Math.min(10000, Math.round(world.career.reputation * (place === 0 ? 1.06 : 1.03) + 50));
+    // A medal of his own, for the record — and his achievements (achievements.ts).
+    if (t.kind !== 'qualifier' && t.kind !== 'friendly') {
+      (world.career.nationalMedals ??= []).push({ nation: mine, kind: t.kind, year: t.year, place });
+    }
   }
 
   internationals(world).history.push({
@@ -1449,7 +1453,7 @@ function turnOverNationsLeague(world: World, t: Tournament): void {
   if (down === undefined || up === undefined) return;
   postNews(world, {
     kind: 'result',
-    headline: `${nationName(down)} relegated from the Nations League`,
+    headline: `${nationName(down)} relegated from the Nations Cup`,
     body: `${nationName(down)} finished last in the ${t.name} and lose their place. ` +
       `${nationName(up)}, the best-ranked nation outside the league, take it next year.`,
     nation: down,

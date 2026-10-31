@@ -222,7 +222,7 @@ export function RankingsScreen(): JSX.Element {
                 <th className="num">#</th><th>Nation</th><th>Confederation</th><th className="num">Points</th>
                 <th>Squad strength</th><th>Best player</th>
                 <th className="num">Olympic golds</th><th className="num">World titles</th>
-                <th className="num">Continental</th><th className="num">Nations League</th>
+                <th className="num">Continental</th><th className="num">Nations Cup</th>
               </tr>
             </thead>
             <tbody>

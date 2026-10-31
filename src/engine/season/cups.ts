@@ -53,8 +53,8 @@ interface CupFormat {
 const CONFEDERATIONS: readonly Confederation[] = ['CEV', 'CSV', 'NORCECA', 'AVC', 'CAVB'];
 
 const CONTINENTAL_NAMES: Readonly<Record<string, string>> = {
-  'CEV:1': 'Champions League',
-  'CEV:2': 'CEV Cup',
+  'CEV:1': 'Champions Cup',
+  'CEV:2': 'Continental Cup',
   'CSV:1': 'South American Club Championship',
   'NORCECA:1': 'NORCECA Club Championship',
   'AVC:1': 'Asian Club Championship',
@@ -284,7 +284,7 @@ export function ensureCupCompetitions(world: World): void {
 
   if (!byKey.has('clubworld')) {
     const f = formatFor({ key: 'clubworld', kind: 'clubworld' } as Competition, 0);
-    created.push(newCupCompetition(world, 'clubworld', 'Club World Championship', 'clubworld', -1, 'FIVB', f.reputation, f.prizePool));
+    created.push(newCupCompetition(world, 'clubworld', 'World Club Cup', 'clubworld', -1, 'FIVB', f.reputation, f.prizePool));
   }
 
   // The newcomers' first entrants, by reputation — no season has been played for them yet.

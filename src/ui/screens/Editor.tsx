@@ -205,7 +205,8 @@ function Jersey({ shirt, shorts, label }: { shirt: string; shorts: string; label
 function KitDesigner({ club }: { club: Club }): JSX.Element {
   const g = useGame();
   const kit = club.kit ?? designFrom(club);
-  const set = (next: ClubKit): void => { club.kit = next; g.markEdited(); };
+  // Colours change nothing on the court: the career keeps its achievements.
+  const set = (next: ClubKit): void => { club.kit = next; g.markKitChanged(); };
   const colour = (label: string, key: 'shirt' | 'shorts' | 'libero'): JSX.Element => (
     <label className="ed-colour">
       <span>{label}</span>
@@ -228,7 +229,7 @@ function KitDesigner({ club }: { club: Club }): JSX.Element {
           {colour('Shirt', 'shirt')}
           {colour('Shorts', 'shorts')}
           {colour('Libero shirt', 'libero')}
-          <button className="sm" disabled={club.kit === undefined} onClick={() => { club.kit = undefined; g.markEdited(); }}>
+          <button className="sm" disabled={club.kit === undefined} onClick={() => { club.kit = undefined; g.markKitChanged(); }}>
             <Icon name="swap" size={13} /> Back to the club's own
           </button>
           <p className="faint ed-note">Worn in every match, on the 2D court and in 3D. When two sides' kits are too alike, the away side changes.</p>
@@ -269,7 +270,9 @@ export function EditorScreen(): JSX.Element {
         <Icon name="alert" size={13} />
         {world.edited === true
           ? 'This career has been edited: it earns no achievements.'
-          : 'Changes are made at once, to this career only — and an edited career earns no achievements.'}
+          : tab === 'kits'
+            ? 'Changes are made at once, to this career only — new colours keep its achievements.'
+            : 'Changes are made at once, to this career only — and an edited career earns no achievements (the kit designer excepted).'}
       </p>
       {tab === 'clubs' && club !== undefined && <ClubEditor key={club.id} club={club} />}
       {tab === 'kits' && club !== undefined && <KitDesigner key={club.id} club={club} />}

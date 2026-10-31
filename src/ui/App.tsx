@@ -5,6 +5,7 @@ import { Splash, splashDue } from './splash.tsx';
 import { EditorScreen } from './screens/Editor.tsx';
 import { PreferencesDialog } from './settingsDialog.tsx';
 import { FpsCounter } from './fpsCounter.tsx';
+import { ErrorScreen } from './errorScreen.tsx';
 import { AchievementsScreen, CoursesScreen } from './screens/Milestones.tsx';
 import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
@@ -197,7 +198,7 @@ export function App(): JSX.Element {
   const [splash, setSplash] = useState(() => g.world === null && splashDue());
   return (
     <>
-      <AppBody />
+      <ErrorScreen><AppBody /></ErrorScreen>
       <TaskWindow />
       {g.settingsOpen && <PreferencesDialog />}
       {g.prefs.showFps && <FpsCounter />}
@@ -409,7 +410,7 @@ function Sidebar({
     <aside className="sidebar">
       <div className="side-brand">
         <img className="brand-logo" src={logo} alt="" />
-        <span className="side-brand-text">Volleyball<small>Manager</small></span>
+        <span className="side-brand-text" translate="no">Volleyball<small>Manager</small></span>
         <button
           className="side-collapse"
           onClick={onToggle}

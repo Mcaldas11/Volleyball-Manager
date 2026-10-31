@@ -146,7 +146,7 @@ function seasonLine(world: World, p: number): string {
     : ` He has played ${matches} this season, averaging a rating of ${rating}.`;
 }
 
-/** "Wolfdogs'" or "Skra's". */
+/** "Cranes'" or "Iskra's". */
 function poss(name: string): string {
   return name.endsWith('s') ? `${name}'` : `${name}'s`;
 }
