@@ -10,6 +10,7 @@ import type { RallyContact, Shot } from '../engine/match/engine.ts';
 import type { PlayCall } from '../engine/match/tactics.ts';
 import { monsterSpikeKmh } from './gameGender.ts';
 import type { Beat, Radar, Scene } from './matchCourt.ts';
+import type { Stinger } from './sound.ts';
 
 /** A callout over the court: what happened, whose good news it is, and the radar's reading. */
 export interface BigPlay {
@@ -89,6 +90,17 @@ export function bigPlayFor(callout: Beat['callout']): BigPlay | null {
   if (kind === 'ace') return { text: pick(options), team, reading: 'strike', speed, height };
   if (kind === 'blocked') return { text: pick(options), team, reading: 'block', height };
   return { text: pick(options), team };
+}
+
+/** The arena's stinger for a beat, if it earns one: a monster spike, a stuff block, an ace. */
+export function stingerFor(callout: Beat['callout']): Stinger | null {
+  if (callout === null) return null;
+  const { kind, speed, shot } = callout;
+  if (kind === 'ace') return 'ace';
+  if (kind === 'blocked') return 'block';
+  const power = shot !== 'tip' && shot !== 'roll' && shot !== 'recycle';
+  if (kind === 'kill' && power && speed !== undefined && speed >= monsterSpikeKmh()) return 'monster-spike';
+  return null;
 }
 
 /** How long a callout stays up: longer when there is a reading to take in. */

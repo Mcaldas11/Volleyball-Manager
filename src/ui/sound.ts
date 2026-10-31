@@ -81,8 +81,26 @@ const RECORDINGS = ['whistle', 'buzzer', 'spike-1', 'spike-2', 'touch-1', 'touch
 type Recording = (typeof RECORDINGS)[number];
 const recordings = new Map<Recording, AudioBuffer>();
 
+/**
+ * The arena's stingers: a monster spike, a stuff block, an ace. The game ships none of its own — a
+ * file of the player's, put in public/sounds as monster-spike.mp3, block.mp3 or ace.mp3, is played if
+ * it is there; otherwise the crowd erupts.
+ */
+export type Stinger = 'monster-spike' | 'block' | 'ace';
+const STINGERS: readonly Stinger[] = ['monster-spike', 'block', 'ace'];
+const stingers = new Map<Stinger, AudioBuffer>();
+
 /** Fetches the recordings, once, as the first sound is played — the game's own files, next to the page. */
 function loadRecordings(a: AudioContext): void {
+  for (const name of STINGERS) {
+    void fetch(`sounds/${name}.mp3`)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status}`))))
+      .then((data) => a.decodeAudioData(data))
+      .then((buffer) => { stingers.set(name, buffer); })
+      .catch(() => {
+        // None of the player's: the crowd it is.
+      });
+  }
   for (const name of RECORDINGS) {
     void fetch(`sounds/${name}.wav`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status}`))))
@@ -211,6 +229,23 @@ export function playCrowd(loud: number): void {
   src.connect(low).connect(envelope(a, 0.02 + 0.05 * level, 0.18, 1.5));
   src.start();
   src.stop(a.currentTime + 1.6);
+}
+
+/** A big moment's stinger — the player's own file for it, or the crowd erupting. */
+export function playStinger(kind: Stinger): void {
+  const a = audio();
+  if (a === null) return;
+  const buffer = stingers.get(kind);
+  if (buffer === undefined) {
+    playCrowd(1);
+    return;
+  }
+  const src = a.createBufferSource();
+  src.buffer = buffer;
+  const g = a.createGain();
+  g.gain.value = 0.35;
+  src.connect(g).connect(output(a));
+  src.start();
 }
 
 /** The hooter for a timeout: the scorer's buzzer. */

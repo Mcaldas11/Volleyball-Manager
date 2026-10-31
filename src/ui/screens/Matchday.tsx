@@ -20,7 +20,7 @@ import { Icon } from '../icons.tsx';
 import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { serverReadyOnCourt, TROPHY_LIFT_AT } from '../courtMotion.ts';
 import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
-import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
+import { bigPlayMs, playBeats, RADAR_MS, sleep, stingerFor, type BigPlay } from '../rallyPlayer.ts';
 import type { Kit } from '../court3d.ts';
 import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
@@ -40,7 +40,7 @@ import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
 import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
-import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn } from '../sound.ts';
+import { playCrowd, playHit, playHooter, playStinger, playWhistle, setSoundOn, soundOn } from '../sound.ts';
 
 /** National teams play in something like their flag's colour. */
 const NATION_HUES: Readonly<Record<string, number>> = {
@@ -107,6 +107,8 @@ async function animateRally(
   const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf, entry.passers);
   await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar, (beat) => {
     if (beat.actor !== null) playHit(beat.callout !== null || beat.radar !== undefined);
+    const stinger = stingerFor(beat.callout);
+    if (stinger !== null) playStinger(stinger);
   });
   // The crowd for the point — the home crowd louder for the home side's.
   playCrowd(entry.winner === 0 ? 0.9 : 0.35);

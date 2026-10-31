@@ -10,3 +10,7 @@ buzzer.wav     "buzzer et sifflet volleyball.wav" by Naïma               https:
 crowd.wav      "Hockey arena pregame applause.wav" by SEF7               https://freesound.org/s/706732/
 
 Each was trimmed, faded and levelled for the game.
+
+Stingers for the big moments are optional, and not part of the game: put your own files here as
+monster-spike.mp3, block.mp3 and ace.mp3 and they play on a monster spike, a stuff block and an ace.
+Without them the crowd erupts instead. Only ship files you have the right to use.
