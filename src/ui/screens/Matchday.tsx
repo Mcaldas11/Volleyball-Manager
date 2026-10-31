@@ -1367,8 +1367,11 @@ function LiveMatchView(): JSX.Element {
     const teamName = md.sides[sub.team].shortName;
     const text = sub.libero !== undefined
       ? `${teamName}: ${store.shortName(sub.inPlayerIdx)} in as ${sub.libero === 'reception' ? 'reception' : 'defensive'} libero`
-      : `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}${
-        sub.reason === 'fatigue' ? ' (tired)' : sub.reason === 'form' ? ' (struggling)' : ''}`;
+      : sub.plan !== undefined
+        ? `${teamName} · ${sub.plan}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}${
+          sub.also !== undefined ? `, ${store.shortName(sub.also.inPlayerIdx)} ON for ${store.shortName(sub.also.outPlayerIdx)}` : ''}`
+        : `${teamName}: ${store.shortName(sub.inPlayerIdx)} ON for ${store.shortName(sub.outPlayerIdx)}${
+          sub.reason === 'fatigue' ? ' (tired)' : sub.reason === 'form' ? ' (struggling)' : ''}`;
     setSubAnnouncement({ text, team: sub.team, key: sub.seq });
     if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
@@ -2042,6 +2045,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
   const spareLiberos = squad.filter((p) =>
     named.has(p) && g.matchAvailable(p) && !onCourt.includes(p) && p !== liberos.reception && p !== liberos.defence);
   const [liberoDragOver, setLiberoDragOver] = useState<'reception' | 'defence' | null>(null);
+  const [mode, setMode] = useState<'now' | 'planned'>('now');
   // Reads the engine's own per-set counter — it resets every set, unlike a
   // UI-tracked total would (that used to be the bug here: it never reset).
   const remaining = g.subsRemaining();
@@ -2083,12 +2087,22 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
       <div className="subs-scroll">
         <div className="subs-top">
           <span className={`count-chip${remaining <= 0 ? ' bad' : ''}`}>{remaining} left this set</span>
+          {userSide && (
+            <span className="subs-mode">
+              <button className={mode === 'now' ? 'on' : ''} onClick={() => setMode('now')}>Now</button>
+              <button className={mode === 'planned' ? 'on' : ''} onClick={() => setMode('planned')}>
+                Planned{plannedCount(md) > 0 && <span className="subs-mode-count">{plannedCount(md)}</span>}
+              </button>
+            </span>
+          )}
           <p className="field-hint">
-            Drag a bench player onto someone on court, or pick both and confirm. A player who comes off can
-            only return for whoever replaced them.
+            {mode === 'planned'
+              ? 'Set a change up once — it is made by itself the moment its rotation comes round.'
+              : 'Drag a bench player onto someone on court, or pick both and confirm. A player who comes off can only return for whoever replaced them.'}
           </p>
         </div>
 
+        {mode === 'planned' && userSide ? <PlannedSubs bench={bench} roles={roles} /> : (<>
         <div className="sub-cols">
           <div className="sub-col">
             <div className="section-label">On court — pick who comes off</div>
@@ -2187,9 +2201,10 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
             <p className="field-hint">No other libero available on the bench.</p>
           )}
         </div>
+        </>)}
       </div>
 
-      <div className="sub-confirm">
+      {mode === 'now' && <div className="sub-confirm">
         <span className="sub-summary">
           {outPlayer !== null
             ? <><span className="bad">▼ {store.shortName(outPlayer)}</span> off</>
@@ -2207,7 +2222,106 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
         >
           Confirm
         </button>
-      </div>
+      </div>}
+    </div>
+  );
+}
+
+/** How many planned substitutions are set up, armed or on. */
+function plannedCount(md: { subPlans?: { doubleSwitch: unknown; serveSub: unknown } }): number {
+  return Number(md.subPlans?.doubleSwitch != null) + Number(md.subPlans?.serveSub != null);
+}
+
+/** A bench player's serve, 1-20: his best kind of serve, with its accuracy and power. */
+function serveRating(store: PlayerStore, p: number): number {
+  const best = Math.max(store.getAttr(p, 'floatServe'), store.getAttr(p, 'jumpServe'), store.getAttr(p, 'powerServe'));
+  return Math.round((best * 2 + store.getAttr(p, 'servingAccuracy') + store.getAttr(p, 'servingPower')) / 4);
+}
+
+/**
+ * The planned substitutions: a double switch, and a serving specialist for the middles — each picked
+ * once, and made by itself when its moment comes, as a coach has them ready on his clipboard.
+ */
+function PlannedSubs({ bench, roles }: { bench: number[]; roles: Uint8Array }): JSX.Element {
+  const g = useGame();
+  const md = g.matchday!;
+  const store = g.world!.players;
+  const ds = md.subPlans?.doubleSwitch ?? null;
+  const ss = md.subPlans?.serveSub ?? null;
+  // A player can be in one plan only: each leaves out whoever the other has planned.
+  const inSwitch = new Set(ds !== null ? [ds.setter, ds.opposite] : []);
+  const setters = bench.filter((p) => roles[p] === Position.Setter && p !== ss?.server);
+  const opposites = bench.filter((p) => roles[p] === Position.Opposite && p !== ss?.server);
+  const [setter, setSetter] = useState<number | null>(ds?.setter ?? setters[0] ?? null);
+  const [opposite, setOpposite] = useState<number | null>(ds?.opposite ?? opposites[0] ?? null);
+  const picked = new Set(ds !== null ? inSwitch : [setter, opposite]);
+  const servers = bench.filter((p) => !picked.has(p) || p === ss?.server).sort((a, b) => serveRating(store, b) - serveRating(store, a));
+  const [server, setServer] = useState<number | null>(ss?.server ?? null);
+  const serverPick = server !== null && servers.includes(server) ? server : servers[0] ?? null;
+  const who = (p: number, extra?: string): { value: number; label: string } => ({
+    value: p, label: `${store.shortName(p)} · ${POSITION_SHORT[roles[p] as Position]}${extra ?? ''}`,
+  });
+  const state = (plan: { armed: boolean; on: unknown } | null): JSX.Element => (
+    <span className={`subplan-state${plan === null ? '' : plan.on !== null ? ' on' : ' armed'}`}>
+      {plan === null ? 'Off' : plan.on !== null ? 'On court' : 'Armed'}
+    </span>
+  );
+  return (
+    <div className="subplans">
+      <section className="subplan-card" title="Setter in zone 4, opposite in zone 1: a bench setter on for the opposite, a bench opposite on for the setter — back three rotations later.">
+        <header className="subplan-head">
+          <Icon name="swap" size={15} /> <b>Double switch</b>{state(ds)}
+          {ds?.armed === true
+            ? <button className="sm" onClick={() => g.planDoubleSwitch(null, null)}>Call off</button>
+            : <button className="sm primary" disabled={setter === null || opposite === null} onClick={() => g.planDoubleSwitch(setter, opposite)}>
+              <Icon name="check" size={13} /> Plan it
+            </button>}
+        </header>
+        <p className="field-hint" title="Three hitters at the net, the new setter setting from the back row; three rotations later the two who went off come back.">
+          Setter in zone 4, opposite in zone 1: a bench setter on for the opposite, a bench opposite on for the setter — back
+          three rotations later. Four substitutions.
+        </p>
+        <div className="subplan-picks">
+          <label className="subplan-pick">
+            <span>Setter on</span>
+            {setters.length === 0 ? <span className="faint">No setter on the bench</span> : (
+              <Dropdown size="sm" value={setter} onChange={setSetter} disabled={ds?.armed === true} options={setters.map((p) => who(p))} />
+            )}
+          </label>
+          <label className="subplan-pick">
+            <span>Opposite on</span>
+            {opposites.length === 0 ? <span className="faint">No opposite on the bench</span> : (
+              <Dropdown size="sm" value={opposite} onChange={setOpposite} disabled={ds?.armed === true} options={opposites.map((p) => who(p))} />
+            )}
+          </label>
+        </div>
+        <footer className="subplan-foot faint">{g.subPlanStatus('doubleSwitch')}</footer>
+      </section>
+
+      <section className="subplan-card" title="A middle blocker goes back to serve: a serving specialist on for him, the middle back once the serve is lost.">
+        <header className="subplan-head">
+          <Icon name="ball" size={15} /> <b>Serving sub for the middles</b>{state(ss)}
+          {ss?.armed === true
+            ? <button className="sm" onClick={() => g.planServeSub(null)}>Call off</button>
+            : <button className="sm primary" disabled={serverPick === null} onClick={() => g.planServeSub(serverPick)}>
+              <Icon name="check" size={13} /> Plan it
+            </button>}
+        </header>
+        <p className="field-hint" title="Two substitutions each time.">
+          A middle blocker goes back to serve: a serving specialist on for him, the middle back once the serve is lost. Two
+          substitutions each time.
+        </p>
+        <div className="subplan-picks">
+          <label className="subplan-pick">
+            <span>Server on</span>
+            {servers.length === 0 ? <span className="faint">Nobody on the bench</span> : (
+              <Dropdown size="sm" value={serverPick} onChange={setServer} disabled={ss?.armed === true}
+                options={servers.map((p) => who(p, ` · serve ${serveRating(store, p)}`))} />
+            )}
+          </label>
+        </div>
+        <footer className="subplan-foot faint">{g.subPlanStatus('serveSub')}</footer>
+      </section>
     </div>
   );
 }

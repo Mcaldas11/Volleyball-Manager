@@ -1,8 +1,8 @@
-import { useState, type CSSProperties, type JSX } from 'react';
+import { useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import {
-  ROLE_KEY_ATTRIBUTES, STAFF_ROLE_NAMES, StaffRole, staffRating, type Staff, type StaffAttributes,
+  ROLE_KEY_ATTRIBUTES, roleRating, STAFF_ROLE_NAMES, StaffRole, type Staff, type StaffAttributes,
 } from '../../engine/model/staff.ts';
-import { Formation } from '../../engine/match/tactics.ts';
+import { Formation, type TeamTactics } from '../../engine/match/tactics.ts';
 import { coachSpells, spellTrophies } from '../../engine/world/career.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import { contractEndSeason } from '../../engine/world/world.ts';
@@ -169,6 +169,119 @@ function biography(world: NonNullable<ReturnType<typeof useGame>['world']>, coac
 }
 
 /**
+ * The roles down the side and the attributes beside them, by side of the job — a coach's, or the
+ * manager's own. Every role in a backroom has a pie by it, filled as far as he would suit it; picking
+ * one shows up in green the attributes that matter for it. `record` is what goes beside the people
+ * on the managerial tab, `scouting` a scout's knowledge of the world, `style` how his team plays.
+ */
+export function StaffSheet({ attributes: a, current, record, scouting, style }: {
+  attributes: StaffAttributes;
+  current: StaffRole;
+  record: ReadonlyArray<readonly [string, ReactNode]>;
+  scouting?: { regions: Readonly<Record<Confederation, number>>; knows: ReadonlyArray<readonly [number, number]> };
+  style?: ReactNode;
+}): JSX.Element {
+  const [role, setRole] = useState<StaffRole | null>(null);
+  const [tab, setTab] = useState<CoachTab | null>(null);
+  const picked = role ?? current;
+  const shown = tab ?? tabFor(current);
+  const keys = new Set<Attr>(ROLE_KEY_ATTRIBUTES[picked]);
+  return (
+    <>
+      <section className="cp-panel cp-roles">
+        <h3 className="cp-title">Staff Roles</h3>
+        <div className="cp-role-list">
+          {ROLE_ORDER.map((r) => (
+            <button key={r} className={`cp-role${picked === r ? ' on' : ''}${current === r ? ' his' : ''}`} onClick={() => setRole(r)}>
+              <RoleDot rating={roleRating(a, r)} />
+              <span>{STAFF_ROLE_NAMES[r]}</span>
+              {current === r && <small>Current</small>}
+            </button>
+          ))}
+        </div>
+        <div className="cp-roles-foot">
+          <span className="cp-kicker">Important attributes for</span>
+          <b>{STAFF_ROLE_NAMES[picked]}</b>
+          <span className={`attr-val ${attrClass(Math.round(roleRating(a, picked)))}`}>{roleRating(a, picked).toFixed(1)}</span>
+        </div>
+      </section>
+
+      <section className="cp-panel cp-attrs">
+        <nav className="cp-tabs">
+          {TABS.map(([id, text, icon]) => (
+            <button key={id} className={shown === id ? 'on' : ''} onClick={() => setTab(id)}><Icon name={icon} size={14} /> {text}</button>
+          ))}
+        </nav>
+        <div className="cp-cols">
+          {shown === 'coaching' && (
+            <>
+              <AttrColumn title="Coaching" rows={COACHING} attributes={a} keys={keys} />
+              <AttrColumn title="People" rows={PEOPLE} attributes={a} keys={keys} />
+              <AttrColumn title="Knowledge" rows={KNOWLEDGE} attributes={a} keys={keys} />
+            </>
+          )}
+          {shown === 'managerial' && (
+            <>
+              <AttrColumn title="People" rows={PEOPLE} attributes={a} keys={keys} />
+              <AttrColumn title="Tactical" rows={[['coachTactical', 'Tactical'], ['coachMental', 'Mental'], ['judgingAbility', 'Judging ability']]} attributes={a} keys={keys} />
+              <div className="cp-col">
+                <h4 className="cp-col-title">Record as head coach</h4>
+                {record.map(([k, v]) => <div className="cp-attr" key={k}><span>{k}</span><b>{v}</b></div>)}
+              </div>
+            </>
+          )}
+          {shown === 'scouting' && (
+            <>
+              <AttrColumn title="Scouting" rows={[['judgingAbility', 'Judging ability'], ['potentialAssessment', 'Judging potential']]} attributes={a} keys={keys} />
+              {scouting !== undefined && (
+                <>
+                  <div className="cp-col">
+                    <h4 className="cp-col-title">Knowledge of the world</h4>
+                    {CONFEDERATIONS.map((c) => (
+                      <div className="cp-attr" key={c}>
+                        <span>{REGION_NAMES[c]}</span>
+                        <b className={`attr-val ${attrClass(scouting.regions[c] ?? 5)}`}>{scouting.regions[c] ?? 5}</b>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="cp-col">
+                    <h4 className="cp-col-title">Knows best</h4>
+                    {scouting.knows.length === 0 ? <span className="faint cp-none">No country in particular.</span> : scouting.knows.map(([n, v]) => (
+                      <div className="cp-attr" key={n}>
+                        <span><Flag nation={n} /> {NATIONS[n]?.name ?? '—'}</span>
+                        <b className={`attr-val ${attrClass(v)}`}>{v}</b>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+          {shown === 'medical' && (
+            <>
+              <AttrColumn title="Medical" rows={[['physiotherapy', 'Physiotherapy'], ['sportsScience', 'Sports science']]} attributes={a} keys={keys} />
+              <AttrColumn title="Conditioning" rows={[['coachFitness', 'Fitness'], ['coachMental', 'Mental']]} attributes={a} keys={keys} />
+            </>
+          )}
+        </div>
+        {style !== undefined && <div className="cp-formations">{style}</div>}
+      </section>
+    </>
+  );
+}
+
+/** Three things about how a head coach's team plays — or, with no team, none. */
+export function TeamStyle({ tactics }: { tactics: TeamTactics }): JSX.Element {
+  return (
+    <>
+      <span><small>Preferred system</small><b>{label(FORMATION_OPTIONS, tactics.formation ?? Formation.FiveOne)}</b></span>
+      <span><small>Offence</small><b>{label(OFFENSE_OPTIONS, tactics.offense)}</b></span>
+      <span><small>Tempo</small><b>{label(TEMPO_OPTIONS, tactics.tempo)}</b></span>
+    </>
+  );
+}
+
+/**
  * A coach's profile, laid out as Football Manager's staff profile: who he is, his contract and his
  * reputation along the top; down the side every role in a backroom, with how well he would do
  * each; his attributes by side of the job, those that matter for the role picked in green; what
@@ -179,8 +292,6 @@ export function CoachProfile(): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
   const coach = g.selectedCoach !== null ? world.staff[g.selectedCoach] : undefined;
-  const [role, setRole] = useState<StaffRole | null>(null);
-  const [tab, setTab] = useState<CoachTab | null>(null);
   if (coach === undefined) return null;
 
   const name = `${coach.firstName} ${coach.lastName}`;
@@ -195,10 +306,6 @@ export function CoachProfile(): JSX.Element | null {
     .filter((h): h is Honour => h !== null);
   const accolades = coachAccolades(world, coach.id);
   const a = coach.attributes;
-  const picked = role ?? coach.role;
-  const shown = tab ?? tabFor(coach.role);
-  const keys = new Set<Attr>(ROLE_KEY_ATTRIBUTES[picked]);
-  const ratingFor = (r: StaffRole): number => staffRating({ ...coach, role: r });
   const best = [...COACHING, ...PEOPLE, ...KNOWLEDGE].sort((x, y) => a[y[0]] - a[x[0]]).slice(0, 3);
   const tactics = club?.tactics;
   const knows = [...coach.nationKnowledge].sort((x, y) => y[1] - x[1]).slice(0, 3);
@@ -252,90 +359,19 @@ export function CoachProfile(): JSX.Element | null {
       </header>
 
       <div className="cp-body">
-        <section className="cp-panel cp-roles">
-          <h3 className="cp-title">Staff Roles</h3>
-          <div className="cp-role-list">
-            {ROLE_ORDER.map((r) => (
-              <button key={r} className={`cp-role${picked === r ? ' on' : ''}${coach.role === r ? ' his' : ''}`} onClick={() => setRole(r)}>
-                <RoleDot rating={ratingFor(r)} />
-                <span>{STAFF_ROLE_NAMES[r]}</span>
-                {coach.role === r && <small>Current</small>}
-              </button>
-            ))}
-          </div>
-          <div className="cp-roles-foot">
-            <span className="cp-kicker">Important attributes for</span>
-            <b>{STAFF_ROLE_NAMES[picked]}</b>
-            <span className={`attr-val ${attrClass(Math.round(ratingFor(picked)))}`}>{ratingFor(picked).toFixed(1)}</span>
-          </div>
-        </section>
-
-        <section className="cp-panel cp-attrs">
-          <nav className="cp-tabs">
-            {TABS.map(([id, text, icon]) => (
-              <button key={id} className={shown === id ? 'on' : ''} onClick={() => setTab(id)}><Icon name={icon} size={14} /> {text}</button>
-            ))}
-          </nav>
-          <div className="cp-cols">
-            {shown === 'coaching' && (
-              <>
-                <AttrColumn title="Coaching" rows={COACHING} attributes={a} keys={keys} />
-                <AttrColumn title="People" rows={PEOPLE} attributes={a} keys={keys} />
-                <AttrColumn title="Knowledge" rows={KNOWLEDGE} attributes={a} keys={keys} />
-              </>
-            )}
-            {shown === 'managerial' && (
-              <>
-                <AttrColumn title="People" rows={PEOPLE} attributes={a} keys={keys} />
-                <AttrColumn title="Tactical" rows={[['coachTactical', 'Tactical'], ['coachMental', 'Mental'], ['judgingAbility', 'Judging ability']]} attributes={a} keys={keys} />
-                <div className="cp-col">
-                  <h4 className="cp-col-title">Record as head coach</h4>
-                  <div className="cp-attr"><span>Clubs coached</span><b>{new Set(spells.map((s) => s.clubId)).size}</b></div>
-                  <div className="cp-attr"><span>Matches</span><b>{won + lost}</b></div>
-                  <div className="cp-attr"><span>Won – lost</span><b>{won}–{lost}</b></div>
-                  <div className="cp-attr"><span>Win rate</span><b>{won + lost === 0 ? '—' : `${Math.round((won / (won + lost)) * 100)}%`}</b></div>
-                  <div className="cp-attr"><span>Trophies</span><b className={honours.length > 0 ? 'gold-text' : ''}>{honours.length}</b></div>
-                </div>
-              </>
-            )}
-            {shown === 'scouting' && (
-              <>
-                <AttrColumn title="Scouting" rows={[['judgingAbility', 'Judging ability'], ['potentialAssessment', 'Judging potential']]} attributes={a} keys={keys} />
-                <div className="cp-col">
-                  <h4 className="cp-col-title">Knowledge of the world</h4>
-                  {CONFEDERATIONS.map((c) => (
-                    <div className="cp-attr" key={c}>
-                      <span>{REGION_NAMES[c]}</span>
-                      <b className={`attr-val ${attrClass(coach.regionKnowledge[c] ?? 5)}`}>{coach.regionKnowledge[c] ?? 5}</b>
-                    </div>
-                  ))}
-                </div>
-                <div className="cp-col">
-                  <h4 className="cp-col-title">Knows best</h4>
-                  {knows.length === 0 ? <span className="faint cp-none">No country in particular.</span> : knows.map(([n, v]) => (
-                    <div className="cp-attr" key={n}>
-                      <span><Flag nation={n} /> {NATIONS[n]?.name ?? '—'}</span>
-                      <b className={`attr-val ${attrClass(v)}`}>{v}</b>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-            {shown === 'medical' && (
-              <>
-                <AttrColumn title="Medical" rows={[['physiotherapy', 'Physiotherapy'], ['sportsScience', 'Sports science']]} attributes={a} keys={keys} />
-                <AttrColumn title="Conditioning" rows={[['coachFitness', 'Fitness'], ['coachMental', 'Mental']]} attributes={a} keys={keys} />
-              </>
-            )}
-          </div>
-          {tactics !== undefined && coach.role === StaffRole.HeadCoach && (
-            <div className="cp-formations">
-              <span><small>Preferred system</small><b>{label(FORMATION_OPTIONS, tactics.formation ?? Formation.FiveOne)}</b></span>
-              <span><small>Offence</small><b>{label(OFFENSE_OPTIONS, tactics.offense)}</b></span>
-              <span><small>Tempo</small><b>{label(TEMPO_OPTIONS, tactics.tempo)}</b></span>
-            </div>
-          )}
-        </section>
+        <StaffSheet
+          attributes={a}
+          current={coach.role}
+          record={[
+            ['Clubs coached', new Set(spells.map((x) => x.clubId)).size],
+            ['Matches', won + lost],
+            ['Won – lost', `${won}–${lost}`],
+            ['Win rate', won + lost === 0 ? '—' : `${Math.round((won / (won + lost)) * 100)}%`],
+            ['Trophies', <span className={honours.length > 0 ? 'gold-text' : ''}>{honours.length}</span>],
+          ]}
+          scouting={{ regions: coach.regionKnowledge, knows }}
+          style={tactics !== undefined && coach.role === StaffRole.HeadCoach ? <TeamStyle tactics={tactics} /> : undefined}
+        />
 
         <section className="cp-panel cp-side">
           <div className="cp-block">

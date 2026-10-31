@@ -11,12 +11,12 @@ import {
 import type { World } from '../../engine/world/world.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import {
-  Bar, Card, ClubCrest, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter, StatTile,
+  Bar, Card, ClubCrest, clubThemeStyle, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter,
 } from '../components.tsx';
-import { coachingRating } from '../../engine/model/staff.ts';
+import { StaffRole } from '../../engine/model/staff.ts';
 import { AccoladeList, HonourList, honourOf, type Honour } from '../honours.tsx';
 import { coachAccolades } from '../../engine/world/accolades.ts';
-import { CoachAttributes, coachStrengths } from './CoachProfile.tsx';
+import { StaffSheet, TeamStyle } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { EditLookDialog } from '../lookEditor.tsx';
@@ -241,12 +241,44 @@ function HistoryTable({ limit }: { limit?: number }): JSX.Element {
   );
 }
 
+/** Every club and nation the manager has coached, most recent first, as rows along the foot of his profile. */
+function HistoryRows(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const spells = careerSpells(world);
+  if (spells.length === 0) return <Empty>No jobs yet.</Empty>;
+  return (
+    <div className="cp-hist">
+      {spells.map((s) => {
+        const n = s.won + s.lost;
+        const open = (): void => {
+          if (s.club !== undefined) g.selectClub(s.club.id);
+          else if (s.nation !== undefined) g.selectNation(s.nation);
+        };
+        return (
+          <div key={s.key} className="cp-hist-row clickable" onClick={open}>
+            <span className="dim">{g.dateLabelForDay(s.from)} – {s.to < 0 ? 'present' : g.dateLabelForDay(s.to)}</span>
+            <span className="cp-hist-club">
+              {s.club !== undefined && <><ClubCrest club={s.club} size={18} /> {s.club.name}</>}
+              {s.nation !== undefined && <><Flag nation={s.nation} /> {NATIONS[s.nation]?.name ?? '—'} <span className="role-tag national">National team</span></>}
+            </span>
+            <span className="dim">Head Coach · {s.won}W {s.lost}L{n > 0 ? ` (${Math.round((s.won / n) * 100)}%)` : ''}</span>
+            <span className={s.trophies > 0 ? 'gold-text' : 'dim'}>{s.trophies > 0 ? `${s.trophies} trophies` : ''}</span>
+            <span className={s.exit === null ? 'good' : s.sacked ? 'bad' : 'dim'}>{s.exit ?? 'Current'}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---- Profile ---------------------------------------------------------------------
 
 /**
- * The manager's own page: who he is, what his name is worth, the job he holds
- * (and the door out of it), the offers on the table and every club he has
- * coached.
+ * The manager's own page, laid out as Football Manager lays out a member of staff — the same as any
+ * coach's profile: who he is, his contract and his reputation along the top; the roles and his
+ * attributes; the job he holds (and the door out of it), the offers on the table; and along the foot
+ * every club and nation he has coached, and what he has won.
  */
 export function CareerScreen(): JSX.Element {
   const g = useGame();
@@ -262,9 +294,21 @@ export function CareerScreen(): JSX.Element {
   const lost = spells.reduce((s, j) => s + j.lost, 0);
   const trophies = jobs.flatMap((j) => j.trophies.map((t) => ({ ...t, clubId: j.clubId })));
   const titles = nationalTitles(world);
+  const honours = [
+    ...trophies
+      .map((t) => honourOf(
+        world, t.competitionId, world.startYear + t.season + 1,
+        new Set(jobs.map((j) => j.clubId)).size > 1 || titles.length > 0 ? world.clubs[t.clubId]?.shortName : undefined,
+      ))
+      .filter((h): h is Honour => h !== null),
+    ...titles,
+  ];
+  const accolades = coachAccolades(world, -1);
+  const contract = currentJob(world)?.contract;
+  const nationalTeam = career.nationalTeam;
 
   return (
-    <div className="club-profile">
+    <div className="club-profile cp" data-pronouns="keep">
       {editingLook && (
         <EditLookDialog
           initial={m.look}
@@ -274,91 +318,84 @@ export function CareerScreen(): JSX.Element {
           onClose={() => setEditingLook(false)}
         />
       )}
-      <div className="club-hero career-hero">
-        <span className="career-face">
-          <PersonFace photoUrl={managerPhotoUrl(m)} name={name} size={84} />
-          <button className="sm career-look-btn" onClick={() => setEditingLook(true)} title="Change how you look on the touchline">
-            <Icon name="user" size={12} /> Your look
-          </button>
-        </span>
-        <div className="club-hero-text">
-          <span className="club-hero-kicker"><Flag nation={m.nation} /> {NATIONS[m.nation]?.name ?? '—'} · Age {world.year - m.birthYear}</span>
-          <h2 className="club-hero-name">{name}</h2>
-          <span className="club-hero-sub">
-            {club !== null
-              ? <><span className="your-club-tag">Head coach</span><span>{club.name}</span></>
-              : career.nationalTeam === undefined
-                ? <><span className="career-out-tag">Out of work</span><span>since {g.dateLabelForDay(lastJobEnded(world))}</span></>
-                : null}
-            {career.nationalTeam !== undefined && (
-              <><span className="your-club-tag">National coach</span><span><Flag nation={career.nationalTeam} /> {NATIONS[career.nationalTeam]?.name}</span></>
-            )}
+      <header className="cp-head" style={club !== null ? clubThemeStyle(club) : undefined}>
+        <span className="cp-photo"><PersonFace photoUrl={managerPhotoUrl(m)} name={name} size={58} /></span>
+        <div className="cp-who">
+          <h2>{name}</h2>
+          <span>{world.year - m.birthYear} years old (born {m.birthYear})</span>
+          <span><Flag nation={m.nation} /> {NATIONS[m.nation]?.name ?? '—'}</span>
+        </div>
+        <div className="cp-contract">
+          {club !== null ? (
+            <>
+              <span className="cp-kicker">Contracted to <span className="club-link" onClick={() => g.selectClub(club.id)}><ClubCrest club={club} size={16} /> {club.name}</span></span>
+              <b>Head Coach{nationalTeam !== undefined ? ` · ${NATIONS[nationalTeam]?.name ?? ''} national team` : ''}</b>
+              <span>{contract !== undefined ? `${money(contract.wage)} a season until 30 June ${contractEndYear(world, contract)}` : 'No contract on record'}</span>
+            </>
+          ) : nationalTeam !== undefined ? (
+            <>
+              <span className="cp-kicker">National team</span>
+              <b><Flag nation={nationalTeam} /> {NATIONS[nationalTeam]?.name ?? '—'}</b>
+              <span>Head coach — no club job alongside it</span>
+            </>
+          ) : (
+            <>
+              <span className="cp-kicker">Out of work</span>
+              <b>Free agent</b>
+              <span>Since {g.dateLabelForDay(lastJobEnded(world))}</span>
+            </>
+          )}
+        </div>
+        <div className="cp-rep">
+          <Icon name="star" size={18} />
+          <span>
+            <span className="cp-kicker">Reputation</span>
+            <StarMeter value={career.reputation} max={10000} size={15} />
+            <small>{career.reputation.toLocaleString()}</small>
           </span>
         </div>
-        <div className="club-hero-rep">
-          <span className="profile-rating-label">Reputation</span>
-          <StarMeter value={career.reputation} max={10000} size={20} />
-          <span className="dim">{career.reputation.toLocaleString()}</span>
+        <div className="cp-actions">
+          <button onClick={() => setEditingLook(true)} title="Change how you look on the touchline"><Icon name="user" size={14} /> Your look</button>
         </div>
-      </div>
+      </header>
 
-      <div className="tiles">
-        <StatTile label="Clubs coached" value={new Set(jobs.map((j) => j.clubId)).size} />
-        <StatTile label="Matches" value={won + lost} sub={`${won}W ${lost}L`} />
-        <StatTile label="Win rate" value={won + lost === 0 ? '—' : `${Math.round((won / (won + lost)) * 100)}%`} />
-        <StatTile label="Trophies" value={trophies.length + titles.length} tone={trophies.length + titles.length > 0 ? 'gold' : undefined} />
-        <StatTile label="Sackings" value={jobs.filter((j) => j.exit === 'sacked').length} />
-        {career.attributes !== undefined && (
-          <StatTile
-            label="Coaching"
-            value={coachingRating(career.attributes).toFixed(1)}
-            sub={<Bar value={coachingRating(career.attributes)} max={20} />}
+      <div className="cp-body">
+        {career.attributes !== undefined ? (
+          <StaffSheet
+            attributes={career.attributes}
+            current={StaffRole.HeadCoach}
+            record={[
+              ['Clubs coached', new Set(jobs.map((j) => j.clubId)).size],
+              ['Matches', won + lost],
+              ['Won – lost', `${won}–${lost}`],
+              ['Win rate', won + lost === 0 ? '—' : `${Math.round((won / (won + lost)) * 100)}%`],
+              ['Trophies', <span className={honours.length > 0 ? 'gold-text' : ''}>{honours.length}</span>],
+              ['Sackings', jobs.filter((j) => j.exit === 'sacked').length],
+            ]}
+            style={club !== null ? <TeamStyle tactics={club.tactics} /> : undefined}
           />
+        ) : (
+          <section className="cp-panel cp-noattrs"><Empty>No attributes on record for this career.</Empty></section>
         )}
-      </div>
-
-      <div className="club-grid">
-        <div className="stack club-main">
-          {career.attributes !== undefined && (
-            <Card
-              title="Attributes"
-              icon="stats"
-              actions={<span className="faint">Best at {coachStrengths(career.attributes).join(' & ').toLowerCase()}</span>}
-            >
-              <CoachAttributes attributes={career.attributes} />
-            </Card>
-          )}
-          <Card title="Career History" icon="career" flush>
-            <HistoryTable />
-          </Card>
-        </div>
-
-        <div className="stack club-side">
+        <div className="cp-side-stack">
           <CurrentJobCard />
           <Card title={`Job Offers (${career.offers.length})`} icon="offer"><OffersList /></Card>
           {career.applications.length > 0 && (
             <Card title="Applications" icon="contract"><ApplicationsList /></Card>
           )}
-          <Card title={`Trophies (${trophies.length + titles.length})`} icon="trophy">
-            <HonourList
-              empty="No trophies yet."
-              honours={[
-                ...trophies
-                  .map((t) => honourOf(
-                    world, t.competitionId, world.startYear + t.season + 1,
-                    new Set(jobs.map((j) => j.clubId)).size > 1 || titles.length > 0 ? world.clubs[t.clubId]?.shortName : undefined,
-                  ))
-                  .filter((h): h is Honour => h !== null),
-                ...titles,
-              ]}
-            />
-          </Card>
-          {coachAccolades(world, -1).length > 0 && (
-            <Card title="Awards" icon="star">
-              <AccoladeList accolades={coachAccolades(world, -1)} world={world} />
-            </Card>
-          )}
         </div>
+      </div>
+
+      <div className="cp-foot">
+        <section className="cp-panel cp-history">
+          <h3 className="cp-title"><Icon name="career" size={14} /> History</h3>
+          <HistoryRows />
+        </section>
+        <section className="cp-panel cp-honours">
+          <h3 className="cp-title"><Icon name="trophy" size={14} /> Trophies ({honours.length})</h3>
+          <HonourList honours={honours} empty="No trophies yet." />
+          {accolades.length > 0 && <AccoladeList accolades={accolades} world={world} />}
+        </section>
       </div>
     </div>
   );

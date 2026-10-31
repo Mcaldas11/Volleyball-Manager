@@ -126,8 +126,12 @@ export function staffName(s: Staff): string {
  * Used for hiring AI, the staff screen, and development calculations.
  */
 export function staffRating(s: Staff): number {
-  const a = s.attributes;
-  switch (s.role) {
+  return roleRating(s.attributes, s.role);
+}
+
+/** How good someone with these attributes would be in a role, 1-20 — the same measure, for any role. */
+export function roleRating(a: StaffAttributes, role: StaffRole): number {
+  switch (role) {
     case StaffRole.HeadCoach:
     case StaffRole.AssistantCoach:
       return coachingRating(a);

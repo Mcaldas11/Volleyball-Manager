@@ -3138,6 +3138,29 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .subs-top { display: flex; align-items: flex-start; gap: 10px; }
 .subs-top .count-chip { flex: none; }
 .subs-top .field-hint { margin: 0; }
+/* Changes to make now, or planned ones made by themselves when their rotation comes round. */
+.subs-mode { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); }
+.subs-mode button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; font-size: 12px; border: none; border-radius: 6px; background: none; color: var(--text-dim); }
+.subs-mode button:hover:not(:disabled) { background: none; color: var(--text); }
+.subs-mode button.on, .subs-mode button.on:hover:not(:disabled) { background: var(--gold-soft); color: var(--gold-bright); }
+.subs-mode-count { padding: 0 6px; border-radius: 8px; font-size: 10.5px; font-weight: 800; color: #1a1306; background: var(--gold); }
+.subplans { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; gap: 10px; margin-top: 10px; }
+.subplan-card { display: flex; flex-direction: column; gap: 8px; padding: 11px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-2); }
+.subplan-card .field-hint { margin: 0; }
+.subplan-head { display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text); }
+.subplan-head svg { color: var(--gold); }
+.subplan-state {
+  margin-left: auto; margin-right: 4px; padding: 2px 8px; border-radius: 10px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint); background: var(--surface-3);
+}
+.subplan-state.armed { color: #1a1306; background: var(--gold); }
+.subplan-state.on { color: #06210f; background: var(--good); }
+.subplan-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 12px; }
+.subplan-pick { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 11.5px; color: var(--text-dim); }
+.subplan-pick .dd { width: 100%; }
+.subplan-foot { font-size: 12px; }
+.short-window .subplan-card { gap: 6px; padding: 8px 11px; }
+.short-window .subplan-card .field-hint { display: none; }
 .sub-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 14px; align-items: start; }
 .sub-col .section-label { margin: 12px 0 6px; }
 .sub-list { display: flex; flex-direction: column; gap: 5px; }
@@ -3543,6 +3566,11 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .cp-hist-row.clickable:hover { background: var(--surface-2); }
 .cp-hist-club { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cp-honours > :not(.cp-title) { min-height: 0; overflow: hidden; }
+/* The manager's own profile: his portrait in the strip, and his job, offers and applications down the right. */
+.cp-photo { display: inline-flex; flex: none; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25); }
+.cp-side-stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; overflow-y: auto; }
+.cp-side-stack > .card { flex: none; }
+.cp-noattrs { grid-column: span 2; justify-content: center; }
 /* A short window: the roles closer together, so all twelve fit. */
 .short-window .cp-panel { padding: 9px 12px; }
 .short-window .cp-title { margin-bottom: 6px; }
@@ -3552,6 +3580,12 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .short-window .cp-roles-foot .cp-kicker { display: none; }
 /* …and his best attributes left to the columns beside them: the biography has the room. */
 .short-window .cp-best { display: none; }
+.short-window .cp-head { padding: 8px 14px; }
+.short-window .cp-who h2 { font-size: 22px; }
+.short-window .cp-foot { height: 88px; }
+.short-window .cp-attr { padding: 3px 8px; }
+.short-window .cp-tabs { margin-bottom: 8px; }
+.short-window .cp-tabs button { padding: 5px 10px; }
 .club-squad { flex: 1 1 0; min-height: 0; }
 .club-squad-own { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
 .club-squad-own > .card { flex: 1 1 0; min-height: 220px; }

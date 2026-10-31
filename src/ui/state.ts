@@ -49,7 +49,7 @@ import {
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
 import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
-import { MATCHDAY_SQUAD, type Position } from '../engine/model/positions.ts';
+import { MATCHDAY_SQUAD, Position } from '../engine/model/positions.ts';
 import { StaffRole, staffName, type Staff } from '../engine/model/staff.ts';
 import {
   backroomOf, compensationFor, longestContract, releaseStaff, roleCount, severanceFor, STAFF_SLOTS, staffBudgetRoom,
@@ -474,6 +474,36 @@ export interface MatchdayLogEntry {
   setsBefore: [number, number];
 }
 
+/**
+ * A double switch, planned: as the setter reaches zone 4 with the opposite in zone 1, a setter from the
+ * bench comes on for the opposite and an opposite for the setter — three hitters at the net, the new
+ * setter setting from the back row — and three rotations later, as the setter who came on reaches
+ * zone 4 in his turn, the two who went off come back.
+ */
+export interface DoubleSwitchPlan {
+  /** The bench setter and the bench opposite who come on. */
+  setter: number;
+  opposite: number;
+  /** Made whenever its moment comes — or, called off, only the switch back still to make. */
+  armed: boolean;
+  /** While they are on: the setter and the opposite they replaced, and the set it was made in. */
+  on: { setter: number; opposite: number; set: number } | null;
+}
+
+/** A serving specialist, planned: on for a middle blocker as he goes back to serve, and the middle back on once the serve is lost. */
+export interface ServeSubPlan {
+  server: number;
+  armed: boolean;
+  /** While he is on: the middle he replaced, and the set. */
+  on: { middle: number; set: number } | null;
+}
+
+/** The user's planned substitutions — set up in the Substitutions panel, made by themselves when their moment comes. */
+export interface SubPlans {
+  doubleSwitch: DoubleSwitchPlan | null;
+  serveSub: ServeSubPlan | null;
+}
+
 export interface MatchdayState {
   fixture: Fixture;
   /** The rest of the round in the competition, played at kick-off to unfold alongside — see aroundTheLeague.ts. */
@@ -537,7 +567,12 @@ export interface MatchdayState {
     seq: number;
     libero?: 'reception' | 'defence';
     reason?: SubstitutionReason;
+    /** A planned substitution, by name — and, for a double switch, the second change made with it. */
+    plan?: string;
+    also?: { outPlayerIdx: number; inPlayerIdx: number };
   } | null;
+  /** The user's planned substitutions — see SubPlans. */
+  subPlans?: SubPlans;
   /** The user's last shout from the touchline and how it landed, for the banner;
    *  `rally` is the log length it was made at, for the wait before the next. */
   lastShout?: { kind: ShoutKind; effect: 'lifted' | 'flat' | 'tense'; seq: number; rally: number } | null;
@@ -2939,6 +2974,8 @@ class Game {
       return;
     }
     this.grantTimeoutRequest();
+    // Planned changes are made at the dead ball they are due — a time-out at it too, as the rules allow.
+    if (md.videoReview == null && md.injury == null) this.runSubPlans();
     if (md.timeoutActive === null && md.videoReview == null && md.injury == null) this.maybeAIAct();
     this.emit();
   }
@@ -4066,6 +4103,155 @@ class Game {
       md.lastSubstitution = { team, outPlayerIdx, inPlayerIdx, seq: ++this.subSeq, reason: why };
     }
     return result;
+  }
+
+  // ---- Planned substitutions ---------------------------------------------------------
+
+  /** Plan a double switch — the bench setter and opposite to bring on — or, with null, call it off. */
+  planDoubleSwitch(setter: number | null, opposite: number | null): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.subPlans ??= { doubleSwitch: null, serveSub: null };
+    const was = md.subPlans.doubleSwitch;
+    if (setter === null || opposite === null) {
+      // Called off: anything still on comes back as planned, nothing new is made.
+      md.subPlans.doubleSwitch = was?.on != null ? { ...was, armed: false } : null;
+    } else {
+      md.subPlans.doubleSwitch = was?.on != null ? { ...was, armed: true } : { setter, opposite, armed: true, on: null };
+      this.warmUpForPlan([setter, opposite]);
+    }
+    this.emit();
+  }
+
+  /** Plan a serving sub for the middles — the server to bring on — or, with null, call it off. */
+  planServeSub(server: number | null): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.subPlans ??= { doubleSwitch: null, serveSub: null };
+    const was = md.subPlans.serveSub;
+    if (server === null) {
+      md.subPlans.serveSub = was?.on != null ? { ...was, armed: false } : null;
+    } else {
+      md.subPlans.serveSub = was?.on != null ? { ...was, armed: true } : { server, armed: true, on: null };
+      this.warmUpForPlan([server]);
+    }
+    this.emit();
+  }
+
+  /** Those a plan will bring on are sent to warm up, as far as there is room. */
+  private warmUpForPlan(players: number[]): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.warming ??= new Set();
+    for (const p of players) {
+      if (this.warmthOf(p) >= 1 || md.warming.has(p) || md.warming.size >= MAX_WARMING) continue;
+      md.warming.add(p);
+    }
+  }
+
+  /** Where a planned substitution stands, in a few words, for the panel. */
+  subPlanStatus(kind: keyof SubPlans): string {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    const plan = md?.subPlans?.[kind] ?? null;
+    if (md === null || sim === null || plan === null) return 'Not planned';
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const store = this.world!.players;
+    if (kind === 'doubleSwitch') {
+      const ds = plan as DoubleSwitchPlan;
+      if (ds.on !== null) return `On — ${store.shortName(ds.on.setter)} and ${store.shortName(ds.on.opposite)} come back as ${store.shortName(ds.setter)} reaches zone 4`;
+      if (sim.subsRemaining(team) < 4) return 'Waiting — it needs 4 substitutions left this set, to switch back';
+      return 'Armed — made as your setter reaches zone 4 with the opposite in zone 1';
+    }
+    const ss = plan as ServeSubPlan;
+    if (ss.on !== null) return `On — ${store.shortName(ss.on.middle)} comes back once you lose the serve`;
+    if (sim.subsRemaining(team) < 2) return 'Waiting — it needs 2 substitutions left this set';
+    return 'Armed — made as a middle blocker goes back to serve';
+  }
+
+  /** The planned substitutions whose moment has come, made at the dead ball before the serve. */
+  private runSubPlans(): void {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    const plans = md?.subPlans;
+    const snap = md?.snapshot;
+    if (md == null || sim === null || plans == null || snap == null || snap.matchOver || md.stage !== 'live' || md.setBreakPending) return;
+    const team: 0 | 1 = md.userIsHome ? 0 : 1;
+    const court = team === 0 ? snap.homeCourt : snap.awayCourt;
+    // A new set starts from its team sheet: nothing planned is on any more.
+    const ds = plans.doubleSwitch;
+    const ss = plans.serveSub;
+    if (ds?.on != null && ds.on.set !== snap.set) ds.on = null;
+    if (ss?.on != null && ss.on.set !== snap.set) ss.on = null;
+
+    if (ds != null) {
+      if (ds.on !== null) {
+        // Three rotations on, the setter who came on is in zone 4 and the opposite who came on in 1: the two who went off come back.
+        if (court[3] === ds.setter && court[0] === ds.opposite &&
+          this.planSwaps(team, [[ds.opposite, ds.on.setter, Position.Setter], [ds.setter, ds.on.opposite, Position.Opposite]], 'Double switch back')) {
+          ds.on = null;
+          if (!ds.armed) plans.doubleSwitch = null;
+        }
+      } else if (ds.armed) {
+        const setter = court[3];
+        const opposite = court[0];
+        // Four to make it and switch back — and one kept for a serving sub to come off, if one is on.
+        if (sim.roles[setter] === Position.Setter && sim.roles[opposite] === Position.Opposite &&
+          sim.subsRemaining(team) >= 4 + (ss?.on != null ? 1 : 0) &&
+          this.planSwaps(team, [[opposite, ds.setter, Position.Setter], [setter, ds.opposite, Position.Opposite]], 'Double switch')) {
+          ds.on = { setter, opposite, set: snap.set };
+        }
+      }
+    }
+
+    if (ss != null) {
+      const now = md.snapshot!;
+      const courtNow = team === 0 ? now.homeCourt : now.awayCourt;
+      if (ss.on !== null) {
+        // The serve lost: the middle back on for him.
+        if (now.serving !== team && courtNow.includes(ss.server) &&
+          this.planSwaps(team, [[ss.server, ss.on.middle, Position.MiddleBlocker]], 'Serving sub — back on')) {
+          ss.on = null;
+          if (!ss.armed) plans.serveSub = null;
+        }
+      } else if (ss.armed) {
+        const middle = courtNow[0];
+        // Two to bring him on and off — and two kept for a double switch on court to switch back.
+        if (now.serving === team && sim.roles[middle] === Position.MiddleBlocker &&
+          sim.subsRemaining(team) >= 2 + (plans.doubleSwitch?.on != null ? 2 : 0) &&
+          this.planSwaps(team, [[middle, ss.server, Position.MiddleBlocker]], 'Serving sub')) {
+          ss.on = { middle, set: now.set };
+        }
+      }
+    }
+  }
+
+  /**
+   * Make one or two changes of a plan together — all of them, or, should any not be allowed (a player
+   * not fit, a pairing broken), none — each played in the position given, the banner naming the plan.
+   * One who hasn't warmed up risks a strain, as on any change.
+   */
+  private planSwaps(team: 0 | 1, swaps: ReadonlyArray<readonly [number, number, Position]>, plan: string): boolean {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null || sim.subsRemaining(team) < swaps.length) return false;
+    const snap = md.snapshot;
+    const court = new Set((team === 0 ? snap?.homeCourt : snap?.awayCourt) ?? []);
+    for (const [out, inc] of swaps) {
+      if (!court.has(out) || court.has(inc) || !this.matchAvailable(inc) || sim.isOutHurt(team, inc)) return false;
+      if (sim.substitutionCheck(team, out, inc) !== null) return false;
+    }
+    for (const [out, inc, role] of swaps) {
+      const warmth = this.warmthOf(inc);
+      if (!this.performSubstitution(team, out, inc, undefined, role).ok) return false;
+      if (warmth < WARM_READY && Math.random() < ((WARM_READY - warmth) / WARM_READY) * COLD_STRAIN) this.coldStrain(team, inc);
+    }
+    const [first, second] = swaps;
+    md.lastSubstitution = {
+      team, outPlayerIdx: first[0], inPlayerIdx: first[1], seq: ++this.subSeq, plan,
+      also: second !== undefined ? { outPlayerIdx: second[0], inPlayerIdx: second[1] } : undefined,
+    };
+    return true;
   }
 
   /** Bring on a bench player for the user's own side, mid-match — one who
