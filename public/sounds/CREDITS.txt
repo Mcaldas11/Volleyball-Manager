@@ -8,9 +8,14 @@ touch-1/2/3    "Volleyball.wav" by 13FPanska_Marval_Lukas                https:/
 whistle.wav    "Referee whistle blow, gymnasium.wav" by SpliceSound      https://freesound.org/s/218318/
 buzzer.wav     "buzzer et sifflet volleyball.wav" by Naïma               https://freesound.org/s/510029/
 crowd.wav      "Hockey arena pregame applause.wav" by SEF7               https://freesound.org/s/706732/
+arena.wav      "Volleyball_game_and_crowd.WAV" by ivolipa                https://freesound.org/s/343159/
+cheer-1…5.wav  "Volleyball_game_and_crowd.WAV" by ivolipa                https://freesound.org/s/343159/
+boo-1.wav      "JM_AMB_INT_Crowd Sport 01 - Booing.wav" by Julien_Matthey https://freesound.org/s/557189/
+boo-2.wav      "CRWDAngr_Booing, Angry…" by ShangusBurger                https://freesound.org/s/763807/
+chant.wav      "stadium crowd sing" by AxelTheCocker02                   https://freesound.org/s/733614/
 
 Each was trimmed, faded and levelled for the game.
 
 Stingers for the big moments are optional, and not part of the game: put your own files here as
 monster-spike.mp3, block.mp3 and ace.mp3 and they play on a monster spike, a stuff block and an ace.
-Without them the crowd erupts instead. Only ship files you have the right to use.
+Without them the crowd's roar for the point is the sound of the moment. Only ship files you have the right to use.

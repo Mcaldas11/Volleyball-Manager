@@ -963,6 +963,18 @@ export function rallyBeats(
           arc = 1.3;
           z = 0.55;
           callout = { kind: 'dig', team: t, shot: 'recycle' };
+        } else if (contacts[i - 1]?.kind === 'blockTouch') {
+          // Off the block's fingers: the ball pops up, slowed, into the blockers' own court — and a
+          // defender gets under it there, to play it on.
+          const target = {
+            u: Math.min(0.92, Math.max(0.08, spot.u + wobble(seed, i + 5) * 0.18)),
+            v: 0.3 + (wobble(seed, i + 9) + 1) * 0.16,
+          };
+          spot = { u: spot.u + (target.u - spot.u) * 0.85, v: spot.v + (target.v - spot.v) * 0.85 };
+          forms[t].set(c.player, spot);
+          ms = 680;
+          arc = 1.5;
+          z = 0.6;
         } else if (shot !== undefined && lastAttack !== null) {
           // The defender reads it and gets to it: all the way to a tip or a roll
           // shot, most of the way across to a ball hit hard.
