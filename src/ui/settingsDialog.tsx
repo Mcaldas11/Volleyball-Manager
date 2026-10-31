@@ -104,7 +104,7 @@ export function PreferencesDialog(): JSX.Element | null {
                 <Row check label="Less motion" hint="Stills the interface's animations.">
                   <input type="checkbox" checked={p.reducedMotion} onChange={(e) => set({ ...p, reducedMotion: e.target.checked })} />
                 </Row>
-                <Row label="Language" hint="The menus, the navigation, the buttons and the match controls. Messages, news and reports are still written in English.">
+                <Row label="Language" hint="Every screen, button and tooltip. The text of messages, news and the fans' posts is still written in English.">
                   <span translate="no">
                     <Seg value={lang} options={LANGUAGES.map((l) => [l.id, l.name] as const)} onChange={(v) => { setLanguage(v); setLang(v); }} />
                   </span>

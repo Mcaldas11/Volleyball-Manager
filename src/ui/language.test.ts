@@ -12,6 +12,12 @@ test('the game in Portuguese and Spanish: whole pieces of text, their spacing ke
   assert.equal(translate('Setter:'), 'Distribuidor:');
   // An achievement reached: its hint, without the full stop, and the day.
   assert.equal(translate('Win a match · 12 Oct 2026'), 'Ganha um jogo · 12 Out 2026');
+  // Holes, filled with what stands there — and a sentence written in pieces looked up whole.
+  assert.equal(translate('Finish 3rd or better'), 'Terminar em 3.º ou melhor');
+  assert.equal(translate('Season 2'), 'Época 2');
+  assert.equal(translate('2026/27 · this season'), '2026/27 · esta época');
+  assert.equal(translate('In 3 months'), 'Daqui a 3 meses');
+  assert.equal(translate('9 Sept 2026'), '9 Set 2026');
   // A name, or a sentence nobody has translated yet, is as it was.
   assert.equal(translate('Kamil Sokół'), 'Kamil Sokół');
   assert.equal(translate('Continue to the next round'), 'Continue to the next round');

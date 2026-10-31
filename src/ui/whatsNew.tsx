@@ -14,7 +14,7 @@ interface Note {
 }
 
 const NOTES: readonly Note[] = [
-  { icon: 'sound', title: 'Real sounds and two more languages', text: 'Recorded whistles, spikes, touches, the buzzer and the crowd; and the menus, navigation and match controls in Portuguese and Spanish — in Preferences.' },
+  { icon: 'sound', title: 'Real sounds and two more languages', text: 'Recorded whistles, spikes, touches, the buzzer and the crowd; and every screen in Portuguese and Spanish — in Preferences.' },
   { icon: 'trophy', title: 'Achievements for the kit designer', text: "A club's colours can be changed in the editor without the career losing its achievements — any other edit still turns them off." },
   { icon: 'swap', title: 'Planned substitutions', text: 'Set up a double switch or a serving specialist for the middles once — the change is made by itself when its rotation comes round, and undone when it should be.' },
   { icon: 'user', title: 'Staff and manager profiles', text: 'Every coach, scout and physio — and you — on one page: how suited they are to each role, their attributes by side of the job, their record and their history.' },

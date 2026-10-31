@@ -3,10 +3,12 @@
  *
  * The screens are written in English, and the words are turned as they appear — as the women's game
  * turns its pronouns (pronouns.ts): each piece of text on the page, and each tooltip, is looked up in
- * the dictionary (translations.ts) and replaced when it is there. What is not there stays in English:
- * the menus, the navigation, the preferences, the headings, the buttons and the match controls are
- * translated; the generated text — messages, news, reports — is not yet. Names never are: a name is
- * not in the dictionary, and anything inside an element marked `translate="no"` is left alone.
+ * the dictionary (translations.ts) and replaced when it is there. A row can have holes — "{0} players",
+ * "Finish {0} or better" — filled with whatever stands there, itself translated if it can be (a
+ * number stays a number, a name a name). A sentence the page writes in pieces, a number or a name
+ * in the middle, is put together and looked up whole. Names never are translated: a name is not in
+ * the dictionary, and anything inside an element marked `translate="no"` is left alone. What the
+ * dictionary does not have stays in English — the generated text of messages and news, mostly.
  *
  * The English each piece was is kept, so the language can be changed at any moment and back.
  * Kept in this browser, as the other preferences are.
@@ -28,6 +30,20 @@ const COLUMN: Readonly<Record<Exclude<Language, 'en'>, 1 | 2>> = { pt: 1, es: 2 
 let current: Language = 'en';
 let dictionary = new Map<string, string>();
 
+/** A row with holes: matched by a pattern, its translation filled in from what the holes held. */
+interface Template {
+  re: RegExp;
+  /** Written in parts, "Since {0} · next report {1}": tried before the parts are taken one by one. */
+  dotted: boolean;
+  /** Which hole each capture is: "{1} of {0}" captures 1 first. */
+  holes: number[];
+  to: string;
+}
+/** Kept by the row's first word, or — when it starts with a hole — its last. */
+let byFirst = new Map<string, Template[]>();
+let byLast = new Map<string, Template[]>();
+let open: Template[] = [];
+
 export function language(): Language {
   return current;
 }
@@ -41,11 +57,55 @@ function stored(): Language {
   }
 }
 
+function template(en: string, to: string): Template {
+  const holes: number[] = [];
+  const source = en.split(/(\{\d\})/).map((part) => {
+    const hole = /^\{(\d)\}$/.exec(part);
+    if (hole === null) return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    holes.push(Number(hole[1]));
+    return "(.*?)";
+  }).join('');
+  return { re: new RegExp(`^${source}$`), holes, to, dotted: en.includes(' · ') };
+}
+
+function file(map: Map<string, Template[]>, key: string, t: Template): void {
+  const list = map.get(key);
+  if (list === undefined) map.set(key, [t]);
+  else list.push(t);
+}
+
 function build(lang: Language): void {
   dictionary = new Map();
+  byFirst = new Map();
+  byLast = new Map();
+  open = [];
   if (lang === 'en') return;
   const col = COLUMN[lang];
-  for (const row of PHRASES) dictionary.set(row[0], row[col]);
+  for (const row of PHRASES) {
+    if (!/\{\d\}/.test(row[0])) {
+      dictionary.set(row[0], row[col]);
+      continue;
+    }
+    const t = template(row[0], row[col]);
+    const words = row[0].split(' ');
+    if (!/^\{\d\}/.test(row[0])) file(byFirst, words[0], t);
+    else if (!/\{\d\}$/.test(row[0])) file(byLast, words[words.length - 1], t);
+    else open.push(t);
+  }
+}
+
+function fill(core: string, dotted: boolean): string | null {
+  const words = core.split(' ');
+  const candidates = [...(byFirst.get(words[0]) ?? []), ...(byLast.get(words[words.length - 1]) ?? []), ...open];
+  for (const t of candidates) {
+    if (dotted && !t.dotted) continue;
+    const m = t.re.exec(core);
+    if (m === null) continue;
+    const held: string[] = [];
+    t.holes.forEach((h, i) => { held[h] = translate(m[i + 1]); });
+    return t.to.replace(/\{(\d)\}/g, (_, h: string) => held[Number(h)] ?? '');
+  }
+  return null;
 }
 
 /** A piece of text in the language chosen — as it is, if the dictionary does not have it. */
@@ -65,12 +125,6 @@ export function translate(text: string, where: Element | null = null): string {
   // "Win a match" as "Win a match." is, without its full stop.
   const dotted = dictionary.get(`${core}.`);
   if (dotted !== undefined) return lead + dotted.replace(/\.$/, '') + trail;
-  // "Win a match · 12 Oct 2026": each part on its own.
-  if (core.includes(' · ')) {
-    const parts = core.split(' · ');
-    const out = parts.map((s) => translate(s));
-    if (out.some((s, i) => s !== parts[i])) return lead + out.join(' · ') + trail;
-  }
   // "Name:" and "Saving…" as "Name" and "Saving" are.
   const end = /[:…]$/.exec(core);
   if (end !== null) {
@@ -80,6 +134,16 @@ export function translate(text: string, where: Element | null = null): string {
   for (const [re, to] of PATTERNS) {
     if (re.test(core)) return lead + core.replace(re, (...args) => to(current as 'pt' | 'es', args.slice(1, -2) as string[])) + trail;
   }
+  // "Win a match · 12 Oct 2026": each part on its own — unless the whole has a row of its own.
+  if (core.includes(' · ')) {
+    const whole = fill(core, true);
+    if (whole !== null) return lead + whole + trail;
+    const parts = core.split(' · ');
+    const out = parts.map((s) => translate(s));
+    if (out.some((s, i) => s !== parts[i])) return lead + out.join(' · ') + trail;
+  }
+  const filled = fill(core, false);
+  if (filled !== null) return lead + filled + trail;
   return text;
 }
 
@@ -95,20 +159,43 @@ function skipped(el: Element | null): boolean {
   return el !== null && el.closest(SKIP) !== null;
 }
 
-function turnText(node: Text): void {
-  const v = node.nodeValue;
-  if (v === null || v.trim().length < 2 || skipped(node.parentElement)) return;
+/** The English a piece of text says: what this put there stood for it, or what the page wrote since. */
+function englishOf(node: Text): string {
+  const v = node.nodeValue ?? '';
   const was = englishText.get(node);
-  // The page wrote new text: that is the English now. Else it is still the one this put there.
-  const en = was !== undefined && was.shown === v ? was.en : v;
-  const out = translate(en, node.parentElement);
-  if (out === en) {
-    englishText.delete(node);
-    if (v !== en) node.nodeValue = en;
-    return;
-  }
-  englishText.set(node, { en, shown: out });
-  if (v !== out) node.nodeValue = out;
+  return was !== undefined && was.shown === v ? was.en : v;
+}
+
+function show(node: Text, en: string, out: string): void {
+  if (out === en) englishText.delete(node);
+  else englishText.set(node, { en, shown: out });
+  if (node.nodeValue !== out) node.nodeValue = out;
+}
+
+/**
+ * An element holding only text, written in pieces — "Finish ", "3rd", " or better" — looked up as
+ * the one sentence it is: the translation in the first piece, the rest emptied. False if it is not
+ * one, or the sentence is not in the dictionary.
+ */
+function turnJoined(el: Element): boolean {
+  const nodes = el.childNodes;
+  if (nodes.length < 2) return false;
+  for (const n of nodes) if (n.nodeType !== Node.TEXT_NODE) return false;
+  const texts = [...nodes] as Text[];
+  const en = texts.map(englishOf);
+  const whole = en.join('');
+  const out = translate(whole, el);
+  if (out === whole) return false;
+  texts.forEach((n, i) => show(n, en[i], i === 0 ? out : ''));
+  return true;
+}
+
+function turnText(node: Text): void {
+  const parent = node.parentElement;
+  if (parent === null || skipped(parent)) return;
+  if (turnJoined(parent)) return;
+  const en = englishOf(node);
+  show(node, en, en.trim().length < 2 ? en : translate(en, parent));
 }
 
 function turnAttrs(el: Element): void {
