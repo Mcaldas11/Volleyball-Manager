@@ -2,21 +2,22 @@
  * A person on the 3D court: a player in their side's kit, an official, a
  * coach — jointed exactly as playerRig.ts's skeleton, and shaped like a body.
  *
- * Every part is a smooth surface of revolution drawn round its bone and then
- * pushed out where the muscle is — the deltoid and biceps, the quads, the
- * calf behind the shin, the glutes, the chest and shoulder blades — with a
- * ball at each joint so a bent elbow or knee stays one surface instead of two
- * tubes meeting. The head is one sculpted surface — skull, cheekbones, the jaw
- * narrowing to the chin, the brow over the eye sockets, the nose, the lips —
- * under a face painted on it: brows, lips, a little colour in the cheeks, a
- * beard or stubble; glossy eyes with their irises under the upper lids; ears;
- * the hair over it. The hands have a palm, fingers and a thumb. The kit is a shirt with its
- * collar and short sleeves, the number on the back and the role's colour
- * across the shoulders; shorts cut at the thigh; knee pads as sleeves with
- * their cushion; crew socks; court shoes on a sole, a stripe in the trim
- * colour. Cloth has a satin sheen, skin a soft warm one where the light
- * grazes it. In the women's game the bodies are a woman's — and so is the
- * hair: a ponytail, a bun or a bob.
+ * Drawn low-poly: few facets, each flat-shaded and matte, so the body reads
+ * as cut planes. Every part is a surface of revolution round its bone, pushed
+ * out where the muscle is — the deltoid and biceps, the quads, the calf behind
+ * the shin, the glutes, the chest and shoulder blades — on an athlete's build,
+ * broad at the shoulders and narrow at the waist, with a ball at each joint so
+ * a bent elbow or knee stays one surface instead of two tubes meeting. The
+ * head is one sculpted surface — skull, cheekbones, the jaw narrowing to the
+ * chin, the brow over the eye sockets, the nose, the lips — under a face
+ * painted on it: brows, lips, a little colour in the cheeks, a beard or
+ * stubble; glossy eyes with their irises under the upper lids; ears; the hair
+ * over it in solid planes. The hands have a palm, fingers and a thumb. The kit
+ * is a shirt worn loose, its V-neck, cuffs and side panels in the role's
+ * colour, a big number front and back; long shorts with a stripe of the
+ * role's colour down each side; dark knee pads; tall white socks; court shoes
+ * in the team's colour on a white sole. In the women's game the bodies are a
+ * woman's — and so is the hair: a ponytail, a bun or a bob.
  *
  * The pieces each joint carries are merged into one mesh per material, so a
  * figure costs a few dozen draws however much detail it has — and the shapes
@@ -86,7 +87,9 @@ function bump(t: number, a: number, b: number): number {
  * Its axis is `z`, the way the body's bones run; `y` is forward.
  */
 function lathe(profile: ReadonlyArray<readonly [number, number]>, segments = 18): BufferGeometry {
-  const g = new LatheGeometry(profile.map(([r, h]) => new Vector2(r, h)), segments);
+  // Low-poly: under half the facets round — enough for the shape, few enough to see the planes — and
+  // a multiple of four, so there is an edge down the front, the back and each side, the same both sides.
+  const g = new LatheGeometry(profile.map(([r, h]) => new Vector2(r, h)), Math.max(8, 4 * Math.round((segments * 0.45) / 4)));
   g.rotateX(Math.PI / 2);
   return g;
 }
@@ -136,7 +139,7 @@ function placed(g: BufferGeometry, x: number, y: number, z: number, sx = 1, sy =
 }
 
 function ball(r: number, w = 18, h = 14): BufferGeometry {
-  return new SphereGeometry(r, w, h);
+  return new SphereGeometry(r, Math.max(6, Math.round(w * 0.55)), Math.max(4, Math.round(h * 0.55)));
 }
 
 // ---- The head ------------------------------------------------------------------------------
@@ -193,7 +196,9 @@ function headPoint(x: number, y: number, z: number, women: boolean, beard: numbe
 
 /** The head's surface: a sphere moved out to it, its seam at the back, its texture's middle at the face. */
 function headGeometry(women: boolean, beard: number): BufferGeometry {
-  const g = new SphereGeometry(1, 64, 44).rotateX(Math.PI / 2).rotateZ(Math.PI / 2);
+  // Faceted, with planes enough for the brow, the cheekbones, the nose and the jaw — a column of
+  // points down the middle of the face, for the nose's ridge.
+  const g = new SphereGeometry(1, 32, 20).rotateX(Math.PI / 2).rotateZ(Math.PI / 2);
   const pos = g.getAttribute('position');
   const p = new Vector3();
   for (let i = 0; i < pos.count; i++) {
@@ -366,12 +371,13 @@ function buildParts(kind: Kind): Parts {
   // -- The pelvis: the shorts, round the hips and seat.
   const hips = w ? 1.05 : 1;
   add('pelvis', 'shorts', shapeBy(lathe([
-    [0, -0.1], [0.07, -0.098], [0.13, -0.085], [0.162, -0.055], [0.168, -0.02], [0.157, 0.03], [0.148, 0.08], [0.144, 0.14], [0, 0.145],
+    // Its top inside the shirt, however the back bends.
+    [0, -0.1], [0.07, -0.098], [0.13, -0.085], [0.162, -0.055], [0.168, -0.02], [0.157, 0.03], [0.14, 0.08], [0.12, 0.12], [0, 0.13],
   ], 24), (v) => {
     v.x *= hips;
     v.y *= 0.72;
-    // The seat, behind; flatter at the front, and flat between the legs.
-    if (v.y < 0) v.y *= 1 + 0.22 * bump(v.z, -0.12, 0.06);
+    // The seat, behind — low, under the shirt's hem; flatter at the front, and flat between the legs.
+    if (v.y < 0) v.y *= 1 + 0.22 * bump(v.z, -0.14, 0);
     else v.y *= 1 - 0.1 * bump(v.z, -0.1, 0.12);
     if (v.z < -0.05) v.y *= 0.8;
   }));
@@ -379,13 +385,15 @@ function buildParts(kind: Kind): Parts {
   // -- The spine: the shirt's body, the collar, the neck.
   const chest = w ? 0.93 : 1;
   add('spine', 'shirt', shapeBy(lathe([
-    [0.158, -0.085], [0.16, -0.075], [0.156, -0.04], [w ? 0.14 : 0.148, 0.04], [0.155, 0.16], [0.173, 0.28], [0.186, 0.38],
+    [0.2, -0.1], [0.203, -0.09], [0.194, -0.04], [w ? 0.16 : 0.17, 0.04], [w ? 0.155 : 0.163, 0.16], [0.173, 0.28], [0.186, 0.38],
     [0.195, 0.44], [0.196, 0.49], [0.18, 0.53], [0.142, 0.562], [0.096, 0.585], [0.062, 0.598], [0, 0.604],
   ], 28), (v) => {
     const wide = v.z > 0.2 ? chest : 1;
     v.x *= wide;
-    // Out over the shoulders to meet the arms.
-    v.x *= 1 + (w ? 0.06 : 0.1) * bump(v.z, 0.36, 0.58);
+    // Out over the shoulders to meet the arms: an athlete's V down to the waist.
+    v.x *= 1 + (w ? 0.08 : 0.14) * bump(v.z, 0.3, 0.6);
+    // Loose at the hem, over the top of the shorts.
+    v.y *= 1 + 0.1 * (1 - ramp(v.z, -0.02, 0.12));
     v.y *= 0.6;
     if (v.y > 0) {
       // The chest — or the bust.
@@ -395,8 +403,8 @@ function buildParts(kind: Kind): Parts {
       v.y *= 1 + 0.07 * bump(v.z, 0.32, 0.56);
     }
   }));
-  add('spine', 'trim', placed(new TorusGeometry(0.058, 0.0065, 6, 28), 0, 0.006, 0.596, 1, 0.84, 1));
-  add('spine', 'skin', placed(new CylinderGeometry(0.051 * limbs, 0.054 * limbs, 0.15, 20).rotateX(Math.PI / 2), 0, 0.005, 0.612));
+  add('spine', 'trim', placed(new TorusGeometry(0.058, 0.0065, 4, 14), 0, 0.006, 0.596, 1, 0.84, 1));
+  add('spine', 'skin', placed(new CylinderGeometry(0.054 * limbs, 0.058 * limbs, 0.15, 10).rotateX(Math.PI / 2), 0, 0.005, 0.612));
 
   // -- The head: the face and skull as one sculpted surface, the eyes in it, the ears — then the hair.
   const hs = w ? 0.96 : 1;
@@ -406,7 +414,7 @@ function buildParts(kind: Kind): Parts {
     add('head', 'skin', placed(ball(0.03, 14, 10), s * 0.083 * hs, -0.006, 0.1, 0.4, 0.62, 1.05, 0.12, 0, -s * 0.18));
   }
   const cap = (cover: number, r: number, sz = 1.1): BufferGeometry => {
-    const g = new SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI * cover);
+    const g = new SphereGeometry(r, 20, 10, 0, Math.PI * 2, 0, Math.PI * cover);
     g.rotateX(Math.PI / 2);
     g.rotateX(0.5);
     return placed(g, 0, -0.012, 0.108, 0.9 * hs, 1.0 * hs, sz * hs);
@@ -462,7 +470,7 @@ function buildParts(kind: Kind): Parts {
     const sleeved = kind.longSleeves ? 1.12 : 1;
     add(sh, arm, shapeBy(lathe([
       [0, -0.37], [0.038, -0.355], [0.044, -0.3], [0.052, -0.22], [0.059, -0.13], [0.06, -0.05], [0.054, 0.01], [0, 0.02],
-    ].map(([r, h]) => [r * limbs * sleeved, h] as const), 22), (v) => {
+    ].map(([r, h]) => [r * limbs * sleeved, h] as const), 24), (v) => {
       // Biceps in front, triceps behind.
       if (v.y > 0) v.y *= 1 + 0.14 * bump(v.z, -0.08, -0.28);
       else v.y *= 1 + 0.06 * bump(v.z, -0.04, -0.22);
@@ -482,13 +490,15 @@ function buildParts(kind: Kind): Parts {
     add(el, 'skin', placed(new CapsuleGeometry(0.0105, 0.04, 4, 8), -side * 0.034 * limbs, 0.016, palmZ - 0.004, 1, 1, 1, 0.45, 0, side * 0.5));
 
     // -- The leg: the shorts' leg, the thigh, knee and pad, shin and calf, sock, shoe.
-    // Loose enough over the thigh — its quads included — never to show through.
-    add(hp, 'shorts', shapeBy(lathe([
-      [0.095, -0.222], [0.103, -0.216], [0.106, -0.15], [0.108 * hips, -0.05], [0.106 * hips, 0.04], [0.084, 0.1],
-    ], 24), (v) => { if (v.y > 0) v.y *= 1.1; }));
+    // Long and loose, to a hand above the knee pad — over the thigh, its quads included, never to show
+    // through; closed underneath, in to the thigh, so nothing shows up inside them. None under trousers.
+    if (!kind.trousers) add(hp, 'shorts', shapeBy(lathe([
+      [0.06, -0.31], [0.114, -0.31], [0.118, -0.3], [0.119, -0.22], [0.118, -0.15], [0.11 * hips, -0.1], [0.094 * hips, -0.04], [0.075, 0.02], [0.045, 0.07],
+    ], 24), (v) => { if (v.y > 0) v.y *= 1.08; }));
     const leg = kind.trousers ? 1.12 : 1;
     add(hp, legs, shapeBy(lathe([
-      [0, -0.48], [0.05, -0.47], [0.055, -0.45], [0.064, -0.4], [0.078, -0.3], [0.088, -0.2], [0.094, -0.1], [0.093, -0.02], [0.074, 0.02], [0, 0.03],
+      // Narrower at its top, under the shirt and shorts where it is never seen: room for them as the hip turns.
+      [0, -0.48], [0.05, -0.47], [0.055, -0.45], [0.064, -0.4], [0.078, -0.3], [0.088, -0.2], [0.093, -0.1], [0.086, -0.04], [0.068, 0], [0.045, 0.02], [0, 0.03],
     ].map(([r, h]) => [r * limbs * leg, h] as const), 24), (v) => {
       if (kind.trousers) return;
       // The quads in front, the hamstrings behind.
@@ -497,7 +507,7 @@ function buildParts(kind: Kind): Parts {
     }));
     add(kn, legs, placed(ball(0.053 * limbs * leg, 18, 14), 0, 0.004, 0));
     if (!kind.trousers) {
-      add(kn, 'pad', lathe([[0.063, -0.09], [0.069, -0.08], [0.071, -0.04], [0.071, 0.02], [0.066, 0.06]], 18));
+      add(kn, 'pad', lathe([[0.063, -0.09], [0.069, -0.08], [0.071, -0.04], [0.071, 0.02], [0.066, 0.06]], 24));
       add(kn, 'pad', placed(ball(0.05, 16, 12), 0, 0.044, -0.012, 0.95, 0.62, 1.1));
     }
     add(kn, legs, shapeBy(lathe([
@@ -508,14 +518,19 @@ function buildParts(kind: Kind): Parts {
       if (v.y < 0) v.y *= 1 + 0.34 * bump(v.z, -0.05, -0.3);
       else v.y *= 0.95;
     }));
-    add(kn, kind.trousers ? legs : 'sock', lathe([
-      [0.037, -0.476], [0.039, -0.44], [0.044 * limbs, -0.38], [0.047 * limbs, -0.335], [0.046 * limbs, -0.33],
-    ], 18));
+    // Tall socks, up the calf, shaped over it.
+    add(kn, kind.trousers ? legs : 'sock', shapeBy(lathe([
+      [0.037, -0.476], [0.039, -0.44], [0.044 * limbs, -0.38], [0.049 * limbs, -0.33], [0.055 * limbs, -0.27], [0.056 * limbs, -0.25], [0.055 * limbs, -0.245],
+    ], 22), (v) => {
+      if (kind.trousers) return;
+      if (v.y < 0) v.y *= 1 + 0.34 * bump(v.z, -0.05, -0.3);
+      else v.y *= 0.95;
+    }));
     add(an, kind.trousers ? legs : 'sock', ball(0.037, 14, 12));
     // The shoe: an upper from heel to toe, the sole under it, a stripe each side.
     const foot = (scale: number): BufferGeometry => {
       const g = new LatheGeometry([[0, -0.075], [0.035, -0.07], [0.048, -0.04], [0.052, 0.02], [0.05, 0.1], [0.04, 0.16], [0.02, 0.185], [0, 0.19]]
-        .map(([r, y]) => new Vector2(r * scale, y * scale)), 26);
+        .map(([r, y]) => new Vector2(r * scale, y * scale)), 12);
       return g;
     };
     // The upper: flat underneath; up round the heel and the ankle, down to the toe.
@@ -532,7 +547,7 @@ function buildParts(kind: Kind): Parts {
       v.z += -BONES.ankle + 0.013;
     }));
     // The padded collar round the ankle.
-    add(an, 'shoe', placed(new TorusGeometry(0.042, 0.009, 8, 22), 0, 0.006, -BONES.ankle + 0.074, 1, 1.18, 1, 0.12, 0, 0));
+    add(an, 'shoe', placed(new TorusGeometry(0.042, 0.009, 4, 11), 0, 0.006, -BONES.ankle + 0.074, 1, 1.18, 1, 0.12, 0, 0));
     // The stripe each side, sweeping up to the laces — on a court shoe.
     if (!kind.trousers) {
       for (const s of [-1, 1]) {
@@ -569,21 +584,14 @@ function partsFor(kind: Kind): Parts {
 
 // ---- The kit's textures ------------------------------------------------------------------
 
-function lighter(hex: string, by: number): string {
-  const c = new Color(hex);
-  c.lerp(new Color('#ffffff'), by);
-  return `#${c.getHexString()}`;
-}
-
 function darker(hex: string, by: number): string {
   const c = new Color(hex);
   c.lerp(new Color('#000000'), by);
   return `#${c.getHexString()}`;
 }
 
-/** The shirt, wrapped round the body: the number big on the back and small on
- *  the front, the role's colour across the shoulders, darker side panels and a
- *  faint sublimated pattern. */
+/** The shirt, wrapped round the body: the number big on the back and on the
+ *  front, the V-neck and the side panels in the role's colour. */
 function shirtTexture(look: Look): CanvasTexture {
   const S = 512;
   const c = document.createElement('canvas');
@@ -600,28 +608,33 @@ function shirtTexture(look: Look): CanvasTexture {
     tex.anisotropy = 4;
     return tex;
   }
-  // A faint diagonal pattern in the cloth.
-  ctx.globalAlpha = 0.07;
-  ctx.strokeStyle = lighter(colour, 0.6);
-  ctx.lineWidth = 10;
-  for (let x = -S; x < S * 2; x += 34) {
-    ctx.beginPath();
-    ctx.moveTo(x, S);
-    ctx.lineTo(x + S * 0.6, 0);
-    ctx.stroke();
+  // Side panels down from under the arms (a quarter of the way round each way from the back), in the
+  // role's colour, a darker edge either side of each.
+  for (const x of [0.25, 0.75]) {
+    ctx.fillStyle = darker(colour, 0.25);
+    ctx.fillRect(x * S - 26, 220, 52, S - 220);
+    ctx.fillStyle = look.trim;
+    ctx.fillRect(x * S - 19, 220, 38, S - 220);
   }
-  ctx.globalAlpha = 1;
-  // Side panels, under the arms (a quarter of the way round each way from the back).
-  ctx.fillStyle = darker(colour, 0.22);
-  for (const x of [0.25, 0.75]) ctx.fillRect(x * S - 22, 110, 44, S - 110);
-  // The yoke over the shoulders, in the role's colour, with a thin edge under it.
+  // The collar round the neck and the V-neck at the front, in the role's colour; the skin in the V.
   ctx.fillStyle = look.trim;
-  ctx.fillRect(0, 0, S, 112);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
-  ctx.fillRect(0, 112, S, 7);
+  ctx.fillRect(0, 0, S, 60);
+  const vee = (half: number, top: number, tip: number, fill: string): void => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(S / 2 - half, top);
+    ctx.lineTo(S / 2 + half, top);
+    ctx.lineTo(S / 2, tip);
+    ctx.closePath();
+    ctx.fill();
+  };
+  vee(58, 40, 205, look.trim);
+  vee(38, 40, 176, look.skin);
   if (look.number > 0) {
-    const light = new Color(colour).getHSL({ h: 0, s: 0, l: 0 }).l > 0.62;
-    const ink = light ? '#10151d' : '#ffffff';
+    // The number in the role's colour, where it shows on the shirt; else dark or white.
+    const lum = (hex: string): number => new Color(hex).getHSL({ h: 0, s: 0, l: 0 }).l;
+    const light = lum(colour) > 0.62;
+    const ink = Math.abs(lum(look.trim) - lum(colour)) > 0.28 ? look.trim : light ? '#10151d' : '#ffffff';
     const edge = light ? 'rgba(255,255,255,0.6)' : darker(colour, 0.55);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -635,7 +648,7 @@ function shirtTexture(look: Look): CanvasTexture {
     };
     // The back is where the wrap starts and ends, so its number is drawn at both edges.
     for (const x of [0, S]) write(170, x, 270);
-    write(72, S / 2, 205);
+    write(130, S / 2, 292);
   }
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
@@ -727,34 +740,19 @@ function drawFront(ctx: CanvasRenderingContext2D, S: number, colour: string, loo
   }
 }
 
-let strands: CanvasTexture | null = null;
-
-/** Hair: fine streaks running front to back, shared by everyone's (the colour is the material's). */
-function strandTexture(): CanvasTexture {
-  if (strands !== null) return strands;
+/** The shorts: their colour, a stripe of the role's colour down each side. */
+function shortsTexture(look: Look): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 128;
-  c.height = 128;
+  c.height = 32;
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#d8d8d8';
-  ctx.fillRect(0, 0, 128, 128);
-  // A fixed scatter: the same for every head, so the texture is made once.
-  let seed = 7;
-  const rand = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 900; i++) {
-    const x = rand() * 128;
-    const y = rand() * 128;
-    const l = 140 + rand() * 115;
-    ctx.strokeStyle = `rgb(${l},${l},${l})`;
-    ctx.lineWidth = 0.6 + rand();
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + (rand() - 0.5) * 4, y + 6 + rand() * 14);
-    ctx.stroke();
-  }
-  strands = new CanvasTexture(c);
-  strands.colorSpace = SRGBColorSpace;
-  return strands;
+  ctx.fillStyle = look.kit.shorts;
+  ctx.fillRect(0, 0, 128, 32);
+  ctx.fillStyle = look.trim;
+  for (const x of [0.25, 0.75]) ctx.fillRect(x * 128 - 4, 0, 8, 32);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
 }
 
 /** A sleeve: the shirt's colour, the role's colour at the cuff. */
@@ -769,7 +767,7 @@ function sleeveTexture(look: Look): CanvasTexture {
   // sleeve carries on past it, so has none.
   if (look.longSleeves !== true) {
     ctx.fillStyle = look.trim;
-    ctx.fillRect(0, 56, 16, 8);
+    ctx.fillRect(0, 50, 16, 14);
   }
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
@@ -796,12 +794,16 @@ function flagTexture(): CanvasTexture {
   return t;
 }
 
-/** Cloth: a satin sheen in its own colour where the light grazes it. */
-function cloth(color: string, roughness: number, map?: CanvasTexture): MeshPhysicalMaterial {
-  return new MeshPhysicalMaterial({
-    color: map === undefined ? new Color(color) : new Color('#ffffff'), map: map ?? null, roughness, metalness: 0,
-    sheen: 0.55, sheenRoughness: 0.5, sheenColor: new Color(lighter(color, 0.35)),
+/** A surface drawn low-poly: matte, every facet flat-shaded. */
+function flat(color: string, roughness: number, map?: CanvasTexture): MeshStandardMaterial {
+  return new MeshStandardMaterial({
+    color: map === undefined ? new Color(color) : new Color('#ffffff'), map: map ?? null, roughness, metalness: 0, flatShading: true,
   });
+}
+
+/** Cloth: matte. */
+function cloth(color: string, roughness: number, map?: CanvasTexture): MeshStandardMaterial {
+  return flat(color, Math.max(roughness, 0.78), map);
 }
 
 export class Figure {
@@ -829,48 +831,38 @@ export class Figure {
     };
     const parts = partsFor(kind);
     const shirt = look.libero ? look.kit.libero : look.kit.shirt;
-    const skin = new MeshPhysicalMaterial({
-      color: new Color(look.skin), roughness: 0.5, metalness: 0,
-      // Light through the skin's edge: a warm sheen where it grazes.
-      sheen: 0.4, sheenRoughness: 0.55, sheenColor: new Color(lighter(look.skin, 0.25)).multiply(new Color('#ffb59a')),
-    });
-    const shorts = cloth(look.kit.shorts, 0.55);
+    const skin = flat(look.skin, 0.72);
+    // In trousers the legs are the trousers: plain, no stripe.
+    const shorts = cloth(look.kit.shorts, 0.55, trousers ? undefined : shortsTexture(look));
     // A shaved head shows the scalp through it: its stubble is half skin.
     const hairColour = kind.hairStyle === 2 && !kind.women
       ? `#${new Color(look.skin).lerp(new Color(look.hair), 0.55).getHexString()}`
       : look.hair;
-    const std = (color: string, roughness: number): MeshStandardMaterial =>
-      new MeshStandardMaterial({ color: new Color(color), roughness, metalness: 0 });
+    const std = (color: string, roughness: number): MeshStandardMaterial => flat(color, roughness);
     this.slots.set('skin', skin);
     // The face: the same skin, painted.
-    this.slots.set('face', new MeshPhysicalMaterial({
-      map: faceTexture(look.skin, look.hair, kind.women ? 0 : kind.beard, kind.women), roughness: 0.52, metalness: 0,
-      sheen: 0.4, sheenRoughness: 0.55, sheenColor: new Color(lighter(look.skin, 0.25)).multiply(new Color('#ffb59a')),
-    }));
+    this.slots.set('face', flat(look.skin, 0.72, faceTexture(look.skin, look.hair, kind.women ? 0 : kind.beard, kind.women)));
     this.slots.set('legs', trousers ? shorts : skin);
     this.slots.set('shirt', cloth(shirt, 0.6, shirtTexture(look)));
     this.slots.set('sleeve', cloth(shirt, 0.6, sleeveTexture(look)));
     this.slots.set('plain', cloth(shirt, 0.6));
     this.slots.set('trim', std(look.trim, 0.5));
     this.slots.set('shorts', shorts);
-    const hair = std(hairColour, kind.hairStyle === 2 && !kind.women ? 0.85 : 0.62);
-    // Strands: lighter and darker, and the surface broken up by them, so it reads as hair, not a cap.
-    hair.map = strandTexture();
-    hair.bumpMap = hair.map;
-    hair.bumpScale = 0.9;
-    this.slots.set('hair', hair);
+    // Hair in solid planes, as the rest of the body is.
+    this.slots.set('hair', std(hairColour, 0.85));
     // Eyes that catch the light.
     const glossy = (color: string): MeshPhysicalMaterial =>
       new MeshPhysicalMaterial({ color: new Color(color), roughness: 0.18, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05 });
     this.slots.set('white', glossy('#efeae2'));
     this.slots.set('iris', glossy(look.eyes ?? '#4a2c18'));
     this.slots.set('pupil', glossy('#0b0907'));
-    this.slots.set('pad', std(look.number % 2 === 0 ? '#1b1f27' : '#e9ecf1', 0.85));
+    // Dark knee pads; white socks; court shoes in the team's colour, an official's or a coach's dark.
+    this.slots.set('pad', std('#3b414b', 0.85));
     this.slots.set('sock', cloth('#f2f4f7', 0.85));
-    this.slots.set('shoe', new MeshPhysicalMaterial({ color: new Color(look.shoes ?? (trousers ? '#15181e' : '#f6f7f9')), roughness: 0.35, clearcoat: 0.4, clearcoatRoughness: 0.4 }));
+    this.slots.set('shoe', std(look.shoes ?? (trousers ? '#15181e' : look.kit.shirt), 0.6));
     this.slots.set('frame', new MeshStandardMaterial({ color: new Color('#1b1d22'), roughness: 0.3, metalness: 0.5 }));
-    // A court shoe's gum sole; a smart shoe's black one.
-    this.slots.set('sole', std(trousers ? '#0d0f13' : '#a8794f', 0.7));
+    // A court shoe's white sole; a smart shoe's black one.
+    this.slots.set('sole', std(trousers ? '#0d0f13' : '#f2f4f7', 0.7));
     this.materials.push(...new Set(this.slots.values()));
     this.kitKey = JSON.stringify(look.kit);
 
@@ -942,19 +934,21 @@ export class Figure {
     this.look = look;
     this.kitKey = key;
     const shirt = look.libero ? look.kit.libero : look.kit.shirt;
-    for (const [slot, make] of [['shirt', shirtTexture], ['sleeve', sleeveTexture]] as const) {
-      const m = this.slots.get(slot) as MeshPhysicalMaterial;
+    const swap = (slot: Slot, map: CanvasTexture): void => {
+      const m = this.slots.get(slot)!;
       m.map?.dispose();
-      m.map = make(look);
-      m.sheenColor.set(lighter(shirt, 0.35));
+      m.map = map;
       m.needsUpdate = true;
+    };
+    swap('shirt', shirtTexture(look));
+    swap('sleeve', sleeveTexture(look));
+    this.slots.get('plain')!.color.set(shirt);
+    if (look.trousers === true) {
+      this.slots.get('shorts')!.color.set(look.kit.shorts);
+    } else {
+      swap('shorts', shortsTexture(look));
+      if (look.shoes === undefined) this.slots.get('shoe')!.color.set(look.kit.shirt);
     }
-    const plain = this.slots.get('plain') as MeshPhysicalMaterial;
-    plain.color.set(shirt);
-    plain.sheenColor.set(lighter(shirt, 0.35));
-    const shorts = this.slots.get('shorts') as MeshPhysicalMaterial;
-    shorts.color.set(look.kit.shorts);
-    shorts.sheenColor.set(lighter(look.kit.shorts, 0.35));
     this.slots.get('trim')!.color.set(look.trim);
   }
 
@@ -996,7 +990,7 @@ export class Figure {
   /** The figure's own materials and textures; its shapes are shared with every other of its kind. */
   dispose(): void {
     for (const m of this.materials) {
-      if (m.map !== strands) m.map?.dispose();
+      m.map?.dispose();
       m.dispose();
     }
   }
