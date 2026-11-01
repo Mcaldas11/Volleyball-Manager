@@ -40,7 +40,7 @@ import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
 import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
-import { playCrowd, playHit, playHooter, playPointCrowd, playStinger, playWhistle, setSoundOn, soundOn, startArena, stopArena } from '../sound.ts';
+import { playBounce, playCrowd, playHit, playHooter, playPointCrowd, playStinger, playWhistle, setSoundOn, soundOn } from '../sound.ts';
 
 /** National teams play in something like their flag's colour. */
 const NATION_HUES: Readonly<Record<string, number>> = {
@@ -107,7 +107,13 @@ async function animateRally(
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
   const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf, entry.passers);
   await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar, (beat) => {
-    if (beat.actor !== null) playHit(beat.callout !== null || beat.radar !== undefined);
+    // Struck — a serve, a spike, the block's hands — or played: a pass, a set, a dig.
+    if (beat.actor !== null) {
+      const pose = beat.poses.get(beat.actor);
+      playHit(pose === 'spike' || pose === 'serve' || pose === 'float' || pose === 'block' || beat.radar !== undefined);
+    } else if (beat.ball !== null && beat.ball.z <= 0.05) {
+      playBounce();
+    }
     const stinger = stingerFor(beat.callout);
     if (stinger !== null) playStinger(stinger);
   });
@@ -165,13 +171,6 @@ export function ServeRadar({ radar, store, kits }: { radar: Radar & { key: numbe
 export function MatchdayScreen(): JSX.Element | null {
   const g = useGame();
   const md = g.matchday;
-  // The hall is never silent while a match is on: from the team sheet to the last point, breaks and all.
-  const on = md !== null;
-  useEffect(() => {
-    if (!on) return undefined;
-    startArena();
-    return () => stopArena();
-  }, [on]);
   if (md === null) return null;
   return (
     <>
@@ -1527,7 +1526,7 @@ function LiveMatchView(): JSX.Element {
           const club = current.sides[team].clubId >= 0 ? world.clubs[current.sides[team].clubId] : undefined;
           return club !== undefined ? defenceLayoutsOf(club.tactics) : undefined;
         }, (entry) => {
-          // The stands: the home side cheered, a run sung, the visitors' big points booed.
+          // The stands, as the point ends: the home side cheered, the visitors' big points booed.
           const run = runRef.current;
           if (run.set !== entry.set) { run.set = entry.set; run.team = -1; run.n = 0; }
           if (run.team === entry.winner) run.n++;

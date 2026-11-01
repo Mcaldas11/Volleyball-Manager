@@ -123,7 +123,7 @@ export async function playBeats(
   setScene: (scene: Scene) => void,
   onBigPlay: (play: BigPlay) => void,
   onRadar?: (radar: Radar) => void,
-  /** Each beat as it is shown — for the sound of the ball. */
+  /** Each beat the moment the ball gets there — the touch, the spike, the block — for its sound. */
   onBeat?: (beat: Beat) => void,
 ): Promise<void> {
   for (const beat of beats) {
@@ -131,7 +131,8 @@ export async function playBeats(
     const ms = (beat.ms * 1.15) / speed;
     const release = beat.release !== undefined ? (beat.release * 1.15) / speed : undefined;
     setScene({ ...beat, ms, release, seq: ++beatSeq });
-    onBeat?.(beat);
+    // A beat is the ball on its way to whoever plays it: the sound is the contact, as it arrives.
+    if (onBeat !== undefined) setTimeout(() => { if (!cancelled.current) onBeat(beat); }, ms);
     const play = bigPlayFor(beat.callout);
     if (play !== null) onBigPlay(play);
     if (beat.radar !== undefined && onRadar !== undefined) onRadar(beat.radar);

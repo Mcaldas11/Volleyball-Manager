@@ -1,8 +1,8 @@
 /**
  * The match's sounds: recordings of the real thing (public/sounds, all CC0 — see CREDITS.txt there)
- * — the arena all through a match, shoes on the floor and voices on court; the referee's whistle
- * before each serve, the ball off the hand, a spike; the crowd for a point — cheering the home side,
- * singing on a run, booing the visitors' big points — and the scorer's buzzer for a timeout. Each is
+ * — only while the ball is in play, each the moment it happens: the referee's whistle before each
+ * serve, the ball off the hand, a spike, the block; then the crowd for the point — cheering the home
+ * side, booing the visitors' big points — and the scorer's buzzer for a timeout. Each is
  * played a little differently every time, so a rally never sounds like a loop. Until a recording has
  * loaded — or if it cannot be — the sound is made on the spot with the Web Audio API instead. Off with
  * one click — remembered per browser, as is how loud they are.
@@ -29,9 +29,6 @@ export function setSoundOn(on: boolean): void {
   } catch {
     // Without storage it simply isn't remembered.
   }
-  // The arena goes quiet with the rest — and comes back, if a match is on.
-  if (!on) silenceArena();
-  else if (arenaWanted) startArena();
 }
 
 /** How loud the sounds are, 0 to 1. */
@@ -83,7 +80,7 @@ function output(a: AudioContext): GainNode {
 
 const RECORDINGS = [
   'whistle', 'buzzer', 'spike-1', 'spike-2', 'touch-1', 'touch-2', 'touch-3', 'crowd',
-  'arena', 'cheer-1', 'cheer-2', 'cheer-3', 'cheer-4', 'cheer-5', 'boo-1', 'boo-2', 'chant',
+  'cheer-1', 'cheer-2', 'cheer-3', 'cheer-4', 'cheer-5', 'boo-1', 'boo-2',
 ] as const;
 type Recording = (typeof RECORDINGS)[number];
 const recordings = new Map<Recording, AudioBuffer>();
@@ -112,10 +109,7 @@ function loadRecordings(a: AudioContext): void {
     void fetch(`sounds/${name}.wav`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status}`))))
       .then((data) => a.decodeAudioData(data))
-      .then((buffer) => {
-        recordings.set(name, buffer);
-        if (name === 'arena' && arenaWanted) startArena();
-      })
+      .then((buffer) => { recordings.set(name, buffer); })
       .catch(() => {
         // That sound stays the one made on the spot.
       });
@@ -222,6 +216,14 @@ export function playHit(hard: boolean): void {
   }
 }
 
+/** The ball down on the floor: a dull slap, deeper than a hand on it. */
+export function playBounce(): void {
+  const a = audio();
+  if (a === null) return;
+  const take = (['touch-1', 'touch-2', 'touch-3'] as const)[Math.floor(Math.random() * 3)];
+  play(a, take, between(0.14, 0.2), between(0.72, 0.8));
+}
+
 /** The crowd for a point: a swell of applause, louder for the home side's — a different stretch of it each time. */
 export function playCrowd(loud: number): void {
   const a = audio();
@@ -273,58 +275,7 @@ export function playHooter(): void {
   tone.stop(a.currentTime + 0.62);
 }
 
-// ---- The arena ----------------------------------------------------------------------------------
-
-/** The arena's sound, going round for as long as a match is on — and whether one is. */
-let arena: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
-let arenaWanted = false;
-/** The crowd singing, while it is. */
-let chanting = false;
-
-/** The hall all through a match: the crowd, the shoes on the floor, the players calling. */
-export function startArena(): void {
-  arenaWanted = true;
-  const a = audio();
-  const buffer = recordings.get('arena');
-  if (a === null || buffer === undefined || arena !== null) return;
-  const src = a.createBufferSource();
-  src.buffer = buffer;
-  src.loop = true;
-  const gain = a.createGain();
-  gain.gain.setValueAtTime(0.0001, a.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.55, a.currentTime + 2);
-  src.connect(gain).connect(output(a));
-  src.start(a.currentTime, Math.random() * buffer.duration);
-  arena = { src, gain };
-}
-
-function silenceArena(): void {
-  if (arena === null || ctx === null) return;
-  const { src, gain } = arena;
-  const t = ctx.currentTime;
-  gain.gain.cancelScheduledValues(t);
-  gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), t);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
-  src.stop(t + 0.85);
-  arena = null;
-}
-
-/** The match is over, or left: the hall goes quiet. */
-export function stopArena(): void {
-  arenaWanted = false;
-  silenceArena();
-}
-
-/** The crowd singing for a while — once at a time. */
-function playChant(): void {
-  const a = audio();
-  const clip = recordings.get('chant');
-  if (a === null || clip === undefined || chanting) return;
-  chanting = true;
-  const length = between(7, 10);
-  play(a, 'chant', 0.32, between(0.97, 1.03), between(0, Math.max(0, clip.duration - length - 0.1)), length);
-  setTimeout(() => { chanting = false; }, length * 1000);
-}
+// ---- The stands ---------------------------------------------------------------------------------
 
 /** The visitors' big point: whistles and boos from the home stands. */
 function playBoo(loud: number): void {
@@ -351,7 +302,6 @@ export function playPointCrowd(m: PointMoment): void {
   }
   if (m.winner === m.home) {
     playCrowd(m.big ? 1 : 0.8);
-    if (m.big || m.run >= 3) playChant();
     return;
   }
   // The visitors' few fans clap; the home stands boo the points that hurt.
