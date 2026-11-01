@@ -1,8 +1,8 @@
 /**
  * The match's sounds: recordings of the real thing (public/sounds, all CC0 — see CREDITS.txt there)
  * — only while the ball is in play, each the moment it happens: the referee's whistle before each
- * serve, the ball off the hand, a spike, the block; then the crowd for the point — cheering the home
- * side, booing the visitors' big points — and the scorer's buzzer for a timeout. Each is
+ * serve, the ball off the hand, a spike, the block; then the stands applauding the point — louder
+ * when the home side wins it — and the scorer's buzzer for a timeout. Each is
  * played a little differently every time, so a rally never sounds like a loop. Until a recording has
  * loaded — or if it cannot be — the sound is made on the spot with the Web Audio API instead. Off with
  * one click — remembered per browser, as is how loud they are.
@@ -78,33 +78,12 @@ function output(a: AudioContext): GainNode {
   return master;
 }
 
-const RECORDINGS = [
-  'whistle', 'buzzer', 'spike-1', 'spike-2', 'touch-1', 'touch-2', 'touch-3', 'crowd',
-  'cheer-1', 'cheer-2', 'cheer-3', 'cheer-4', 'cheer-5', 'boo-1', 'boo-2',
-] as const;
+const RECORDINGS = ['whistle', 'buzzer', 'spike-1', 'spike-2', 'touch-1', 'touch-2', 'touch-3', 'crowd'] as const;
 type Recording = (typeof RECORDINGS)[number];
 const recordings = new Map<Recording, AudioBuffer>();
 
-/**
- * The arena's stingers: a monster spike, a stuff block, an ace. The game ships none of its own — a
- * file of the player's, put in public/sounds as monster-spike.mp3, block.mp3 or ace.mp3, is played if
- * it is there; otherwise the crowd's roar for the point is the moment's sound.
- */
-export type Stinger = 'monster-spike' | 'block' | 'ace';
-const STINGERS: readonly Stinger[] = ['monster-spike', 'block', 'ace'];
-const stingers = new Map<Stinger, AudioBuffer>();
-
 /** Fetches the recordings, once, as the first sound is played — the game's own files, next to the page. */
 function loadRecordings(a: AudioContext): void {
-  for (const name of STINGERS) {
-    void fetch(`sounds/${name}.mp3`)
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status}`))))
-      .then((data) => a.decodeAudioData(data))
-      .then((buffer) => { stingers.set(name, buffer); })
-      .catch(() => {
-        // None of the player's: the crowd it is.
-      });
-  }
   for (const name of RECORDINGS) {
     void fetch(`sounds/${name}.wav`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status}`))))
@@ -216,21 +195,11 @@ export function playHit(hard: boolean): void {
   }
 }
 
-/** The ball down on the floor: a dull slap, deeper than a hand on it. */
-export function playBounce(): void {
-  const a = audio();
-  if (a === null) return;
-  const take = (['touch-1', 'touch-2', 'touch-3'] as const)[Math.floor(Math.random() * 3)];
-  play(a, take, between(0.14, 0.2), between(0.72, 0.8));
-}
-
 /** The crowd for a point: a swell of applause, louder for the home side's — a different stretch of it each time. */
 export function playCrowd(loud: number): void {
   const a = audio();
   if (a === null) return;
   const level = Math.max(0, Math.min(1, loud));
-  const cheers = (['cheer-1', 'cheer-2', 'cheer-3', 'cheer-4', 'cheer-5'] as const).filter((c) => recordings.has(c));
-  if (cheers.length > 0 && play(a, cheers[Math.floor(Math.random() * cheers.length)], 0.2 + 0.4 * level, between(0.96, 1.04))) return;
   const clip = recordings.get('crowd');
   const length = 1.6 + 0.8 * level;
   if (clip !== undefined && play(a, 'crowd', 0.08 + 0.26 * level, between(0.96, 1.04), between(0, Math.max(0, clip.duration - length - 0.1)), length)) return;
@@ -243,20 +212,6 @@ export function playCrowd(loud: number): void {
   src.connect(low).connect(envelope(a, 0.02 + 0.05 * level, 0.18, 1.5));
   src.start();
   src.stop(a.currentTime + 1.6);
-}
-
-/** A big moment's stinger — the player's own file for it; without one, the crowd's roar for the point does. */
-export function playStinger(kind: Stinger): void {
-  const a = audio();
-  if (a === null) return;
-  const buffer = stingers.get(kind);
-  if (buffer === undefined) return;
-  const src = a.createBufferSource();
-  src.buffer = buffer;
-  const g = a.createGain();
-  g.gain.value = 0.35;
-  src.connect(g).connect(output(a));
-  src.start();
 }
 
 /** The hooter for a timeout: the scorer's buzzer. */
@@ -273,38 +228,4 @@ export function playHooter(): void {
   tone.connect(soft).connect(envelope(a, 0.04, 0.02, 0.6));
   tone.start();
   tone.stop(a.currentTime + 0.62);
-}
-
-// ---- The stands ---------------------------------------------------------------------------------
-
-/** The visitors' big point: whistles and boos from the home stands. */
-function playBoo(loud: number): void {
-  const a = audio();
-  if (a === null) return;
-  play(a, Math.random() < 0.5 ? 'boo-1' : 'boo-2', 0.1 + 0.3 * loud, between(0.95, 1.05));
-}
-
-/** A point, as the stands take it. */
-export interface PointMoment {
-  winner: 0 | 1;
-  /** The home side — none at a neutral venue, where both have their fans. */
-  home: 0 | 1 | null;
-  /** Points in a row the winner has now. */
-  run: number;
-  /** A set (or the match) is there to be won, or has just been. */
-  big: boolean;
-}
-
-export function playPointCrowd(m: PointMoment): void {
-  if (m.home === null) {
-    playCrowd(m.big ? 0.8 : 0.55);
-    return;
-  }
-  if (m.winner === m.home) {
-    playCrowd(m.big ? 1 : 0.8);
-    return;
-  }
-  // The visitors' few fans clap; the home stands boo the points that hurt.
-  playCrowd(0.25);
-  if (m.big || m.run >= 3) { if (Math.random() < 0.6) playBoo(m.big ? 0.9 : 0.6); } else if (Math.random() < 0.1) playBoo(0.35);
 }

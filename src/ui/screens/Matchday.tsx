@@ -20,7 +20,7 @@ import { Icon } from '../icons.tsx';
 import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { serverReadyOnCourt, TROPHY_LIFT_AT } from '../courtMotion.ts';
 import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
-import { bigPlayMs, playBeats, RADAR_MS, sleep, stingerFor, type BigPlay } from '../rallyPlayer.ts';
+import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
 import type { Kit } from '../court3d.ts';
 import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
@@ -40,7 +40,7 @@ import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
 import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
-import { playBounce, playCrowd, playHit, playHooter, playPointCrowd, playStinger, playWhistle, setSoundOn, soundOn } from '../sound.ts';
+import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn } from '../sound.ts';
 
 /** National teams play in something like their flag's colour. */
 const NATION_HUES: Readonly<Record<string, number>> = {
@@ -101,7 +101,6 @@ async function animateRally(
   onBigPlay: (play: BigPlay) => void,
   onRadar: (radar: Radar) => void,
   defenceOf?: (team: 0 | 1) => DefenceLayouts | undefined,
-  onPoint?: (entry: MatchdayLogEntry['entry']) => void,
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
@@ -111,15 +110,10 @@ async function animateRally(
     if (beat.actor !== null) {
       const pose = beat.poses.get(beat.actor);
       playHit(pose === 'spike' || pose === 'serve' || pose === 'float' || pose === 'block' || beat.radar !== undefined);
-    } else if (beat.ball !== null && beat.ball.z <= 0.05) {
-      playBounce();
     }
-    const stinger = stingerFor(beat.callout);
-    if (stinger !== null) playStinger(stinger);
   });
-  // The crowd for the point — the home crowd louder for the home side's.
-  if (onPoint !== undefined) onPoint(entry);
-  else playCrowd(entry.winner === 0 ? 0.9 : 0.35);
+  // The stands applaud the point — the home crowd louder for the home side's.
+  playCrowd(entry.winner === 0 ? 0.9 : 0.35);
 }
 
 /** A side's trip to the match, as the team sheet says it. */
@@ -1315,8 +1309,6 @@ function LiveMatchView(): JSX.Element {
   const [ceremony, setCeremony] = useState<number | null>(null);
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
-  /** Who has the last points in a row, this set — for the stands. */
-  const runRef = useRef<{ set: number; team: number; n: number }>({ set: 0, team: -1, n: 0 });
   const [bigPlay, setBigPlay] = useState<(BigPlay & { key: number }) | null>(null);
   const [subAnnouncement, setSubAnnouncement] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
   const [timeoutSecondsLeft, setTimeoutSecondsLeft] = useState(TIMEOUT_SECONDS);
@@ -1525,17 +1517,6 @@ function LiveMatchView(): JSX.Element {
           if (team === userTeam) return defenceLayoutsOf(g.matchTactics() ?? undefined);
           const club = current.sides[team].clubId >= 0 ? world.clubs[current.sides[team].clubId] : undefined;
           return club !== undefined ? defenceLayoutsOf(club.tactics) : undefined;
-        }, (entry) => {
-          // The stands, as the point ends: the home side cheered, the visitors' big points booed.
-          const run = runRef.current;
-          if (run.set !== entry.set) { run.set = entry.set; run.team = -1; run.n = 0; }
-          if (run.team === entry.winner) run.n++;
-          else { run.team = entry.winner; run.n = 1; }
-          const after: [number, number] = [entry.scoreBefore[0], entry.scoreBefore[1]];
-          after[entry.winner]++;
-          const target = entry.set >= 5 ? 15 : 25;
-          const big = after[entry.winner] >= target - 1 && after[entry.winner] > after[1 - entry.winner];
-          playPointCrowd({ winner: entry.winner, home: current.fixture.neutralVenue ? null : 0, run: run.n, big });
         });
         animatingRef.current = false;
         if (cancelled.current) break;
