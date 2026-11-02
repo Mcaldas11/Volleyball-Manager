@@ -20,11 +20,12 @@ import {
   type BlockPlan, type BlockTarget, type TeamTactics,
 } from '../engine/match/tactics.ts';
 import { APPROACH, BLOCK_PEAK, BLOCK_READY, COCKED, LOAD, STRIKE } from './courtMotion.ts';
-import { Figure, type Kit, type Look } from './figure3d.ts';
+import type { Kit, Look } from './figure3d.ts';
 import { FramePacer, noteFrame } from './frames.ts';
 import { Icon } from './icons.tsx';
 import { graphics, renderPixelRatio } from './preferences.ts';
 import { buildRig, COVER, mixShape, READY, REF_HEIGHT, STILL, type Shape as Pose } from './playerRig.ts';
+import { personFor, type Person } from './volleyballPlayer3d.ts';
 
 export const BLOCK_TARGET_NAMES: Readonly<Record<BlockTarget, string>> = { outside: 'Outside', opposite: 'Opposite', pipe: 'Pipe' };
 
@@ -313,9 +314,9 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario, onDrag, on
     const camera = new PerspectiveCamera(36, 1, 0.1, 100);
     camera.up.set(0, 0, 1);
 
-    const figures: Figure[] = [];
-    const figure = (l: Look): Figure => {
-      const f = new Figure(l);
+    const figures: Person[] = [];
+    const figure = (l: Look): Person => {
+      const f = personFor(l);
       scene.add(f.root);
       figures.push(f);
       return f;
@@ -349,12 +350,12 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario, onDrag, on
       ray.setFromCamera(new Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     };
     // The nearest player to the pointer on the screen, within a finger's width of his body — easier to catch on the move than his limbs.
-    const pick = (e: PointerEvent): { kind: Draggable; i: number; f: Figure } | null => {
+    const pick = (e: PointerEvent): { kind: Draggable; i: number; f: Person } | null => {
       const r = el.getBoundingClientRect();
       const px = e.clientX - r.left;
       const py = e.clientY - r.top;
-      let best: { kind: Draggable; i: number; f: Figure; d: number } | null = null;
-      const test = (list: Figure[], kind: Draggable): void => list.forEach((f, i) => {
+      let best: { kind: Draggable; i: number; f: Person; d: number } | null = null;
+      const test = (list: Person[], kind: Draggable): void => list.forEach((f, i) => {
         if (!f.root.visible) return;
         for (const z of [0.4, 1.0, 1.6]) {
           const v = new Vector3(f.root.position.x, f.root.position.y, f.root.position.z + z).project(camera);
@@ -374,8 +375,8 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario, onDrag, on
     };
     let yaw = 0;
     let dragging: number | null = null;
-    let held: { kind: Draggable; i: number; f: Figure } | null = null;
-    let hover: Figure | null = null;
+    let held: { kind: Draggable; i: number; f: Person } | null = null;
+    let hover: Person | null = null;
     const down = (e: PointerEvent): void => {
       el.setPointerCapture(e.pointerId);
       held = pick(e);
@@ -412,7 +413,7 @@ function BlockScene({ target, plan, layout, ours, theirs, onScenario, onDrag, on
     el.addEventListener('pointercancel', up);
     el.addEventListener('pointerleave', leave);
 
-    const put = (f: Figure, p: Spot2, lift: number, facing: number, pose: Pose, height: number): void => {
+    const put = (f: Person, p: Spot2, lift: number, facing: number, pose: Pose, height: number): void => {
       f.root.visible = true;
       f.pose({ x: p.x, y: p.y, lift, yaw: facing, scale: height / REF_HEIGHT, rig: buildRig(pose, STILL), alpha: 1 });
     };

@@ -34,6 +34,7 @@ import { REFEREE_STAND, SIDELINE, TROPHY_HAND_AT, TROPHY_OFFICIAL_AT, type Court
 import { COURT_HALF_WIDTH, NET_HEIGHT } from './matchCourt.ts';
 import { Figure, type Kit, type Look } from './figure3d.ts';
 import { graphics, renderPixelRatio, SHADOW_MAP } from './preferences.ts';
+import { personFor, type Person } from './volleyballPlayer3d.ts';
 
 export type { Kit, Look } from './figure3d.ts';
 
@@ -100,7 +101,7 @@ function netTexture(): CanvasTexture {
   return tex;
 }
 
-function buildNet(): Group {
+export function buildNet(): Group {
   const net = new Group();
   const width = 2 * COURT_HALF_WIDTH + 0.5;
   const mesh = new Mesh(
@@ -279,12 +280,13 @@ export class Court3D {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera();
-  private readonly figures = new Map<number, Figure>();
+  /** The players, each the low-poly athlete (volleyballPlayer3d.ts) — a man or a woman. */
+  private readonly figures = new Map<number, Person>();
   private readonly referee = new Figure(REFEREE_LOOK);
   /** The two line judges, flags in hand. */
   private readonly lineJudges: [Figure, Figure] = [new Figure(LINE_JUDGE_LOOK), new Figure(LINE_JUDGE_LOOK)];
   /** Each side's coach, made the first time the court is drawn. */
-  private coaches: [Figure, Figure] | null = null;
+  private coaches: [Person, Person] | null = null;
   /** The physio, made the first time one is on. */
   private medic: Figure | null = null;
   /** The benches, rebuilt when the kits or the halves change. */
@@ -492,7 +494,7 @@ export class Court3D {
     this.applyGraphics();
     if (coachLook !== undefined) {
       if (this.coaches === null) {
-        this.coaches = [new Figure(coachLook(0)), new Figure(coachLook(1))];
+        this.coaches = [personFor(coachLook(0)), personFor(coachLook(1))];
         for (const f of this.coaches) this.scene.add(f.root);
       }
       this.coaches.forEach((f, t) => {
@@ -513,7 +515,7 @@ export class Court3D {
     for (const [p, b] of motion.bodies) {
       let f = this.figures.get(p);
       if (f === undefined) {
-        f = new Figure(look(p));
+        f = personFor(look(p));
         this.figures.set(p, f);
         this.scene.add(f.root);
       } else {
@@ -669,7 +671,7 @@ export class Court3D {
     return this.onScreen(this.referee);
   }
 
-  private onScreen(f: Figure): { X: number; Y: number; s: number } {
+  private onScreen(f: Person): { X: number; Y: number; s: number } {
     f.head.getWorldPosition(this.tmp);
     this.tmp.z += 0.12;
     const d = this.tmp.distanceTo(this.camera.position);
