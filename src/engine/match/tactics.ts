@@ -9,6 +9,7 @@
 
 import { Position } from '../model/positions.ts';
 import type { DefenceLayouts } from './defence.ts';
+import type { ReceivePlans, ServerOrdersMap } from './serveReceive.ts';
 
 /**
  * The team's system: how many setters, and so who sets. In a 5-1 one setter
@@ -418,6 +419,10 @@ export interface TeamTactics {
   combinations?: Combinations;
   /** How the block sets up against the outside, the opposite and the pipe — see BlockPlan. Absent: read, two up. */
   blockPlans?: BlockPlans;
+  /** How each server serves, and from where along the end line — see serveReceive.ts. Absent: as each likes. */
+  servers?: ServerOrdersMap;
+  /** Where the passers stand against a float and against a jump serve, and how a float is taken — see serveReceive.ts. Absent: the usual line. */
+  receive?: ReceivePlans;
   /** Instructions for rotations P1..P6, indexed 0-5. */
   rotations: RotationTactics[];
 }

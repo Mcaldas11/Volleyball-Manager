@@ -172,6 +172,9 @@ const FLOAT_HIT = shape(FLOAT_COCK, {
   twist: -0.1, lean: 0.12, stride: 0.5, hFlex: 2.8, hAbd: 0.3, hElbow: 0.05, oFlex: 0.8, oAbd: 0.3, oElbow: 1.0,
 });
 const FLOAT_HOLD = shape(FLOAT_HIT, { lean: 0.15, hFlex: 2.3, hElbow: 0.1 });
+/** A jump float's last step and takeoff: low on the plant, the hitting arm already drawn back. */
+const FLOAT_LOAD = shape(LOAD, { hFlex: 2.6, hAbd: 0.85, hElbow: 1.9, oFlex: 1.2, oAbd: 0.2, oElbow: 0.4, twist: 0.3 });
+const FLOAT_TAKEOFF = shape(TAKEOFF, { hFlex: 3.0, hAbd: 0.85, hElbow: 2.0, oFlex: 2.3, oAbd: 0.15, oElbow: 0.2, twist: 0.4 });
 
 const ARMS_UP = shape(STAND, { lean: -0.12, nod: -0.4, ...arms(2.85, 0.62, 0.2) });
 /** A coach between points: arms folded, watching. */
@@ -1106,9 +1109,14 @@ function lookAt(f: Flow, yaw: number, pitch: number, dt: number): [number, numbe
 }
 
 /** How fast the ball spins off each kind of contact. */
-const SPIN: Partial<Record<Pose, number>> = { spike: 32, serve: 36, float: 0.4, set: -3, receive: 6, dig: 9, pass: 5 };
+const SPIN: Partial<Record<Pose, number>> = { spike: 32, serve: 36, jumpFloat: 0.4, float: 0.4, set: -3, receive: 6, dig: 9, pass: 5 };
 
-const CONTACTS: ReadonlySet<Pose> = new Set<Pose>(['serve', 'float', 'receive', 'dig', 'pass', 'set', 'spike', 'block', 'dive']);
+const CONTACTS: ReadonlySet<Pose> = new Set<Pose>(['serve', 'jumpFloat', 'float', 'receive', 'dig', 'pass', 'set', 'spike', 'block', 'dive']);
+
+/** A serve, of any kind. */
+function isServe(pose: Pose | null | undefined): boolean {
+  return pose === 'serve' || pose === 'jumpFloat' || pose === 'float';
+}
 
 /** The way something at (dx, dy) from a player lies, as a facing. */
 function yawTo(dx: number, dy: number): number {
@@ -1622,7 +1630,7 @@ export class CourtMotion {
     const opening = sc.actor !== null ? sc.poses.get(sc.actor) : undefined;
     let from = this.flight !== null ? flightAt(this.flight, now) : sc.ball;
     // The serve: the ball the kids gave him, from his hands.
-    if ((opening === 'serve' || opening === 'float') && this.flight === null && this.kidsLive && sc.actor !== null) {
+    if (isServe(opening) && this.flight === null && this.kidsLive && sc.actor !== null) {
       from = this.serveBall(sc.actor, now) ?? from;
     }
     if (!setup && this.kids.length > 0) this.callOffErrands(now);
@@ -1635,7 +1643,7 @@ export class CourtMotion {
       this.flight = {
         from, to: sc.ball, bulge: flightBulge(from, sc.ball, sc.arc), t0: now + held, ms: sc.ms - held,
         spin: (struck !== null ? SPIN[struck] : undefined) ?? 4,
-        float: struck === 'float',
+        float: struck === 'float' || struck === 'jumpFloat',
       };
     } else {
       this.flight = null;
@@ -1653,7 +1661,7 @@ export class CourtMotion {
       this.serveTeam = this.teamOf(p);
       if (this.needServe && this.serveDue === null) this.serveDue = now + 450 / this.pace;
     }
-    if (this.actorPose === 'serve' || this.actorPose === 'float') {
+    if (isServe(this.actorPose)) {
       // A point still unsignalled is history by the next serve.
       this.calls = this.calls.filter((c) => c.kind !== 'point');
       // Tossed already: if the whistle hasn't gone, it goes now.
@@ -1798,6 +1806,34 @@ export class CourtMotion {
         act(pose, keys, T + 540, yaw, { up: -T, peak: 0, down: T, h }, path);
         break;
       }
+      case 'jumpFloat': {
+        // Held a moment, tossed low and in front with one hand or both, then
+        // three quick steps and a short hop — and the float's punch through the
+        // middle of the ball, stopping dead, no swing.
+        const yaw = clampYaw(towardsAim, net, 0.5);
+        let h = 0.3;
+        if (ball !== null) {
+          const hand = this.placeFor(b, ball, yaw, FLOAT_HIT, 'hit');
+          h = Math.min(0.62, Math.max(0.15, ball.z - hand[2]));
+        }
+        const T = hangTime(h, pre * 0.3);
+        const held = Math.min(sc.release ?? 0, pre * 0.6);
+        const air = pre - held;
+        const toss = isActor && tossesWithBothHands(p) ? FLOAT_TOSS_BOTH : FLOAT_TOSS;
+        const keys = timeline(pre, [
+          [-pre, HOLD], [-air - Math.min(60, held * 0.3), HOLD], [-air + air * 0.22, toss],
+          [-T - 300, toss], [-T - 140, FLOAT_LOAD], [-T, FLOAT_TAKEOFF], [-T * 0.5, FLOAT_COCK], [0, FLOAT_HIT, 'whip'],
+          [200, FLOAT_HOLD], [T + 30, LAND], [T + 420, READY],
+        ]);
+        // He steps in from where he tossed it out of his hands.
+        const tossed = this.flight?.from;
+        const hold = reach(HOLD, b.hand, 'both', b.scale);
+        const back = toCourt(net, hold[0], hold[1]);
+        const start = tossed !== undefined ? { x: tossed.x - back.x, y: tossed.y - back.y } : { x: b.x, y: b.y };
+        const path = runUp(b, Math.max(-air * 0.7, -T - 420), T, 0.12, start);
+        act('jumpFloat', keys, T + 520, yaw, { up: -T, peak: 0, down: T, h }, path);
+        break;
+      }
       case 'float': {
         const yaw = clampYaw(towardsAim, net, 0.5);
         let h = 0;
@@ -1854,10 +1890,13 @@ export class CourtMotion {
       case 'set': {
         // At the net, square to the left antenna — the side's own left, zone 4 —
         // and set forwards or arched back over the head. Chasing a pass well
-        // off the net, face the hitter instead.
+        // off the net, face the hitter instead. A float taken overhead in the
+        // receive line: square to the serve, turned a little towards the setter.
+        const received = this.flight !== null && this.flight.from.y * this.flight.to.y < 0;
         const offNet = Math.abs(b.ty) > 1.6;
-        const yaw = offNet ? towardsAim : b.ty <= 0 ? Math.PI / 2 : -Math.PI / 2;
-        const back = !offNet && aim !== null && Math.cos(wrap(yawTo(aim.x - b.tx, aim.y - b.ty) - yaw)) < 0;
+        const yaw = received ? blendYaw(incoming, towardsAim, 0.3)
+          : offNet ? towardsAim : b.ty <= 0 ? Math.PI / 2 : -Math.PI / 2;
+        const back = !offNet && !received && aim !== null && Math.cos(wrap(yawTo(aim.x - b.tx, aim.y - b.ty) - yaw)) < 0;
         let h = 0;
         let dip = 0;
         if (ball !== null) {

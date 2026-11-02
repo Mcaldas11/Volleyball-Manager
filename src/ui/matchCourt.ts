@@ -24,11 +24,20 @@
  * in court metres: `x` across (-4.5 to 4.5, left to right as the viewer sees
  * it), `y` along the court with the net at 0, the near side (closest to the
  * camera) negative and the far side positive, and `z` height above the floor.
+ *
+ * The coach's orders show too: each server serves as he was told and from
+ * behind the zone he was told — 1, 6 or 5 — and the receive line stands where
+ * the coach has it against that kind of serve, taking a float overhead if
+ * that is the order.
  */
 
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
 import { SECOND_BALL, type RallyContact, type Shot } from '../engine/match/engine.ts';
 import { passZone, type PlayCall } from '../engine/match/tactics.ts';
+import {
+  receivePlansOf, receiveSpots, SERVE_ZONE_U, serveKindOf, serveZoneFor, type ReceivePlans, type ServeKind as LineFacing,
+  type ServerOrdersMap, type ServeStyle, type ServeZone,
+} from '../engine/match/serveReceive.ts';
 import { shotSpot, type AttackSource, type DefenceLayout, type DefenceLayouts } from '../engine/match/defence.ts';
 import type { Landing } from '../engine/match/landing.ts';
 import { Position } from '../engine/model/positions.ts';
@@ -51,13 +60,14 @@ export interface Ball3 extends Ground {
  * team-mate's attack to cover the block (`cover`), the server with the ball
  * in their hands (`hold`) — and a contact, which the player times so that
  * their hands meet the ball as the beat's flight arrives: a jump serve with
- * its run-up (`serve`) or a float (`float`), a serve received (`receive`), a
+ * its run-up (`serve`), a jump float off a short one (`jumpFloat`) or a
+ * standing float (`float`), a serve received (`receive`), a
  * hard-driven ball dug (`dig`), any other forearm pass (`pass`), a set, a
  * spike and a block.
  */
 export type Pose =
   | 'stand' | 'ready' | 'cover' | 'hold'
-  | 'serve' | 'float' | 'receive' | 'dig' | 'pass' | 'set' | 'spike' | 'block'
+  | 'serve' | 'jumpFloat' | 'float' | 'receive' | 'dig' | 'pass' | 'set' | 'spike' | 'block'
   /** Full length for a ball he can't get to. */
   | 'dive';
 
@@ -285,13 +295,27 @@ interface Team {
   noSwitch: boolean;
   /** How a player serves, when it is known. */
   serveKind: ServeKind;
+  /** Behind which zone of the end line each player serves from. */
+  serveZone: (p: number) => ServeZone;
+  /** Where the coach has the passers stand against each kind of serve. */
+  receive: ReceivePlans;
+  /** What the receive line is set against this rally: a float or a jump serve. */
+  facing: LineFacing;
 }
 
-/** How a player serves — a jump serve or a float — when it is known. */
-export type ServeKind = (p: number) => 'jump' | 'float' | undefined;
+/** How a player serves — a jump serve, a jump float or a standing float — when it is known. */
+export type ServeKind = (p: number) => ServeStyle | undefined;
+
+/** What a side's coach has ordered that shows on the court: how and where each
+ *  man serves, and where the passers stand — a side's tactics will do. */
+export interface SideOrders {
+  servers?: ServerOrdersMap;
+  receive?: ReceivePlans;
+}
 
 function buildTeam(
   near: boolean, court: number[], libero: number, serving: boolean, positions: Uint8Array, serveKind: ServeKind,
+  orders?: SideOrders,
 ): Team {
   const zones = [0, 1, 2, 3, 4, 5].map((z) => effectivePlayerAt(court, z, positions, libero, serving));
   const role = (p: number): Position => positions[p] as Position;
@@ -308,6 +332,9 @@ function buildTeam(
     zoneOf: (p) => zones.indexOf(p),
     noSwitch: false,
     serveKind,
+    serveZone: (p) => serveZoneFor(orders, p),
+    receive: receivePlansOf(orders),
+    facing: 'float',
   };
 }
 
@@ -358,8 +385,8 @@ function spread(f: Formation): Formation {
 
 /**
  * Serve receive. The passers — three, or the two or four the coach lined up —
- * spread across the court in the same left-to-right order as their
- * rotational spots; front-row players who don't
+ * stand where the coach has the line against this kind of serve, in the same
+ * left-to-right order as their rotational spots; front-row players who don't
  * pass wait at the net; a back-row setter hides at the net behind the
  * front-row team-mate in their own column, ready to release; any other
  * back-row non-passer (usually the opposite) hides deep, ready to hit from
@@ -368,9 +395,8 @@ function spread(f: Formation): Formation {
 function receiveFormation(t: Team): Formation {
   const f: Formation = new Map();
   const passers = [...t.passers].sort((a, b) => column(t.zoneOf(a)) - column(t.zoneOf(b)));
-  const lanes = passers.length >= 4 ? [0.12, 0.37, 0.63, 0.88]
-    : passers.length === 3 ? [0.18, 0.5, 0.82] : passers.length === 2 ? [0.3, 0.7] : [0.5];
-  passers.forEach((p, i) => f.set(p, { u: lanes[i], v: isFrontRow(t.zoneOf(p)) ? 0.58 : 0.66 }));
+  const spots = receiveSpots(t.receive[t.facing], passers.length).sort((a, b) => a.u - b.u);
+  passers.forEach((p, i) => f.set(p, { ...spots[i] }));
 
   for (let z = 0; z < 6; z++) {
     const p = t.zones[z];
@@ -384,13 +410,14 @@ function receiveFormation(t: Team): Formation {
 }
 
 /**
- * How a player serves: as the engine has him serve when that is known — the
- * weapon he is better with — and otherwise most hitters jump-serve off a
- * run-up and most setters, middles and liberos float it, with a few of each
- * doing the other, so a side's serves don't all look alike.
+ * How a player serves: as the engine has him serve when that is known — as
+ * his coach told him to, or with the weapon he is better at — and otherwise
+ * most hitters jump-serve off a run-up and most setters, middles and liberos
+ * float it, with a few of each doing the other, so a side's serves don't all
+ * look alike.
  */
-export function serveStyle(p: number, role: Position, kind?: 'jump' | 'float'): 'serve' | 'float' {
-  if (kind !== undefined) return kind === 'jump' ? 'serve' : 'float';
+export function serveStyle(p: number, role: Position, kind?: ServeStyle): 'serve' | 'jumpFloat' | 'float' {
+  if (kind !== undefined) return kind === 'jump' ? 'serve' : kind;
   const hitter = role === Position.OutsideHitter || role === Position.Opposite;
   return hitter ? (p % 5 === 0 ? 'float' : 'serve') : (p % 3 === 0 ? 'serve' : 'float');
 }
@@ -400,13 +427,18 @@ export function tossesWithBothHands(p: number): boolean {
   return (Math.imul(p + 17, 0x2c1b3c6d) >>> 0) % 5 < 2;
 }
 
-/** Where a server starts, and where they strike the ball: a jump server
- *  leaves room for the run-up and hits over the baseline; a float server
- *  stands just behind it. */
+/** Where a server starts, and where they strike the ball — behind zone 1, 6
+ *  or 5 of the end line, as he was told or likes to: a jump server leaves
+ *  room for the run-up and hits over the baseline, a jump float a shorter
+ *  one; a float server stands just behind it. Always behind the line. */
 function servePoints(t: Team, server: number): { from: Local; hit: Local; z: number } {
-  return serveStyle(server, t.role(server), t.serveKind(server)) === 'serve'
-    ? { from: { u: 0.84, v: 1.17 }, hit: { u: 0.82, v: 1.01 }, z: 3.05 }
-    : { from: { u: 0.84, v: 1.08 }, hit: { u: 0.84, v: 1.05 }, z: 2.55 };
+  const u = SERVE_ZONE_U[t.serveZone(server)];
+  // A run-up angled a touch in towards the middle of the court.
+  const inwards = (k: number): number => u + (0.5 - u) * k;
+  const style = serveStyle(server, t.role(server), t.serveKind(server));
+  if (style === 'serve') return { from: { u, v: 1.17 }, hit: { u: inwards(0.06), v: 1.01 }, z: 3.05 };
+  if (style === 'jumpFloat') return { from: { u, v: 1.13 }, hit: { u: inwards(0.03), v: 1.02 }, z: 2.8 };
+  return { from: { u, v: 1.08 }, hit: { u, v: 1.05 }, z: 2.55 };
 }
 
 /** The serving side at the moment of the serve: the server behind the
@@ -549,11 +581,79 @@ export function passSpot(q: number, jitter: number): { at: Local; z: number; arc
 
 /** A pass coming down lower than this, m, is bumped by the setter rather than set overhead. */
 const BUMP_BELOW = 2.0;
-/** A setter chasing a pass: a moment to read it, then this pace across the court, m/s. */
-const SETTER_START_MS = 260;
-const SETTER_RUN = 6;
-/** How high a ball goes for how long it is up — a/T² — so that a long one does not float. */
-const FLOAT_ARC = 0.9;
+/** How the players get about the court — as the court's own bodies do: top speed, m/s, and
+ *  how hard they speed up and pull up, m/s². */
+const RUN_TOP = 7.5;
+const RUN_ACCEL = 18;
+const RUN_BRAKE = 24;
+/** What of that a chase is counted on to make: nobody is flat out all the way. */
+const RUN_SURE = 0.86;
+/** A pass the setter is late under stays up this much longer for an overhead set, at most… */
+const SET_HANG = 1.3;
+/** …or, later than that, drops on past his hands to the waist, ms, and he bumps it. */
+const LET_DROP_MS = 120;
+/** How much higher, m, a pass held up for him goes at most. */
+const MORE_ARC = 1.5;
+
+/** How far a player gets in `ms`, m — going at `v0` m/s to begin with — flat out, then pulled up at the end. */
+function runIn(ms: number, v0 = 0): number {
+  const T = ms / 1000;
+  const peak = Math.max(v0, Math.min(RUN_TOP, (T + v0 / RUN_ACCEL) / (1 / RUN_ACCEL + 1 / RUN_BRAKE)));
+  const up = (peak - v0) / RUN_ACCEL;
+  const down = Math.min(peak / RUN_BRAKE, Math.max(0, T - up));
+  const cruise = Math.max(0, T - up - down);
+  return RUN_SURE * (((v0 + peak) / 2) * up + peak * cruise + (peak / 2) * down);
+}
+
+/** How long, ms, until `gets` — how far he gets in so many ms — makes `d` m. */
+function timeTo(d: number, gets: (ms: number) => number): number {
+  let lo = 0;
+  let hi = 4000;
+  for (let i = 0; i < 22; i++) {
+    const mid = (lo + hi) / 2;
+    if (gets(mid) >= d) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+/**
+ * How far a player on the move gets towards a spot `run` m off in `ms` — his
+ * pace carried into it if he was going that way; going the other way, he has
+ * to pull up first, and the ground he overran is his to make up; going across
+ * it, he has that to take out of his stride as he turns.
+ */
+function chaseIn(running: Running | null, dx: number, dy: number, run: number): (ms: number) => number {
+  if (running === null || running.v <= 0 || run < 1e-3) return (ms) => runIn(ms);
+  const along = (running.dir.x * dx + running.dir.y * dy) / run;
+  const ahead = running.v * along;
+  const across = running.v * Math.sqrt(Math.max(0, 1 - along * along));
+  const turn = (across / RUN_BRAKE) * 500;
+  if (ahead >= 0) return (ms) => runIn(Math.max(0, ms - turn), ahead);
+  const stop = (Math.max(-ahead, across) / RUN_BRAKE) * 1000;
+  const over = (ahead * ahead) / (2 * RUN_BRAKE);
+  return (ms) => Math.max(0, runIn(Math.max(0, ms - stop)) - over);
+}
+
+/** A player on his way somewhere: where he is, how fast he is going, and which way (a unit step, m). */
+interface Running {
+  at: Local;
+  v: number;
+  dir: { x: number; y: number };
+}
+
+/** Where a player running flat out from `from` for `to` is after `ms` — there, and stopped, if he makes it. */
+function runFor(from: Local, to: Local, ms: number): Running {
+  const d = metresBetween(from, to);
+  const dir = d > 1e-3
+    ? { x: ((to.u - from.u) * 2 * COURT_HALF_WIDTH) / d, y: ((to.v - from.v) * COURT_HALF_LENGTH) / d }
+    : { x: 0, y: 0 };
+  if (runIn(ms) >= d) return { at: { ...to }, v: 0, dir };
+  const T = ms / 1000;
+  const top = RUN_TOP / RUN_ACCEL;
+  const gone = RUN_SURE * (T <= top ? 0.5 * RUN_ACCEL * T * T : 0.5 * RUN_TOP * top + RUN_TOP * (T - top));
+  return { at: towards(from, to, Math.min(1, gone / d)), v: Math.min(RUN_TOP, RUN_ACCEL * T), dir };
+}
 /** How far a defender gets, m, in the `ms` a hit ball takes to reach him — from
  *  a standstill to set again, platform out: a lunge's worth, and little more
  *  for a ball hit hard. */
@@ -582,11 +682,17 @@ function teamsOf(
   serveKind: ServeKind = () => undefined,
   /** The receiving side's passers, when the coach lined up two or four rather than three. */
   passers?: readonly number[],
+  ordersOf?: (team: 0 | 1) => SideOrders | undefined,
 ): [Team, Team] {
   const teams: [Team, Team] = [
-    buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, serving === 0, positions, serveKind),
-    buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, serving === 1, positions, serveKind),
+    buildTeam(nearTeam === 0, court.homeCourt, court.homeLibero, serving === 0, positions, serveKind, ordersOf?.(0)),
+    buildTeam(nearTeam === 1, court.awayCourt, court.awayLibero, serving === 1, positions, serveKind, ordersOf?.(1)),
   ];
+  // The receive line sets up against the serve coming: a float, or a jump serve.
+  const server = teams[serving].zones[0];
+  const style = server !== undefined ? teams[serving].serveKind(server) : undefined;
+  teams[1 - serving].facing = style !== undefined ? serveKindOf(style)
+    : server !== undefined && serveStyle(server, teams[serving].role(server)) === 'serve' ? 'jump' : 'float';
   // Receiving with the setter in zone 1 and an outside in zone 2 — a 5-1 in
   // P1, a 4-2 twice round — a side keeps its places.
   if (receiving !== null) {
@@ -595,6 +701,10 @@ function teamsOf(
     if (passers !== undefined && passers.every((p) => t.zones.includes(p))) t.passers = [...passers];
   }
   return teams;
+}
+
+function isServeStyle(d: string | undefined): d is ServeStyle {
+  return d === 'jump' || d === 'jumpFloat' || d === 'float';
 }
 
 /** A fresh formation per side: the serving side ready to serve, the other ready to pass. */
@@ -615,11 +725,14 @@ function toPositions(teams: [Team, Team], forms: [Formation, Formation]): Map<nu
 
 /** The court between rallies: both sides set up for the next serve, the ball
  *  in the server's hands. `nearTeam` plays in the half closest to the camera;
- *  `serveKind`, when given, stands the server where his own serve starts. */
+ *  `serveKind`, when given, stands the server where his own serve starts;
+ *  `ordersOf`, each side's orders — where its servers serve from, where its
+ *  passers stand. */
 export function setupScene(
   court: CourtState, serving: 0 | 1, positions: Uint8Array, nearTeam: 0 | 1, serveKind?: ServeKind,
+  ordersOf?: (team: 0 | 1) => SideOrders | undefined,
 ): Scene {
-  const teams = teamsOf(court, positions, nearTeam, serving, null, serveKind);
+  const teams = teamsOf(court, positions, nearTeam, serving, null, serveKind, undefined, ordersOf);
   const forms = openingFormations(teams, serving);
   const server = teams[serving].zones[0];
   const hand = forms[serving].get(server);
@@ -659,12 +772,14 @@ export function rallyBeats(
   defenceOf?: (team: 0 | 1) => DefenceLayouts | undefined,
   /** The receiving side's passers, when it lined up other than the usual three. */
   passers?: readonly number[],
+  /** What each side's coach ordered: how and where its servers serve, where its passers stand. */
+  ordersOf?: (team: 0 | 1) => SideOrders | undefined,
 ): Beat[] {
   // The server stands where his serve — as the engine played it — starts.
   const first = contacts[0];
   const kindOf: ServeKind = (p) =>
-    first !== undefined && first.player === p && (first.detail === 'jump' || first.detail === 'float') ? first.detail : undefined;
-  const teams = teamsOf(court, positions, nearTeam, serveTeam, (1 - serveTeam) as 0 | 1, kindOf, passers);
+    first !== undefined && first.player === p && isServeStyle(first.detail) ? first.detail : undefined;
+  const teams = teamsOf(court, positions, nearTeam, serveTeam, (1 - serveTeam) as 0 | 1, kindOf, passers, ordersOf);
   const forms = openingFormations(teams, serveTeam);
   const beats: Beat[] = [];
   const at = (t: 0 | 1, p: number): Local => forms[t].get(p) ?? { u: 0.5, v: 0.5 };
@@ -691,6 +806,12 @@ export function rallyBeats(
   // The last attack: where it went and from where — for whoever digs it, or covers it.
   let lastAttack: { shot?: Shot; hu: number; team: 0 | 1; speed?: number; from: Ball3; land?: Landing } | null = null;
   let pass: { spot: ReturnType<typeof passSpot>; ms: number } | null = null;
+  // The setter already on his way to the net — off to the target as the serve
+  // or the attack came over, or as a free ball was called — for the pass to
+  // find him there, or on his way.
+  let setterRun: (Running & { p: number }) | null = null;
+  // Who went up to block the last attack: a setter among them comes down at the net.
+  let lastBlockers: readonly number[] = [];
   let firstTouch = -1;
   let setFrom: { p: number; at: Local } | null = null;
   // Who the engine says set the ball — the setter, the other setter in a 4-2,
@@ -707,7 +828,15 @@ export function rallyBeats(
       team.zones.find((p) => team.role(p) === role && !busy.includes(p));
     return free(Position.Libero) ?? free(Position.Opposite) ?? team.zones.find((p) => !busy.includes(p)) ?? -1;
   };
-  const setBall = (t: 0 | 1, attacker = -1): void => {
+  /**
+   * The second ball. The pass flies at its own pace — the setter's legs never
+   * hold it up in the air. Under it in time, he sets it overhead; a touch late,
+   * it stays up a moment longer for him; later than that he lets it drop past
+   * his hands to the waist and bumps it — cutting it off on its way if that is
+   * the nearest he gets. Only a fast set, a quick or a combination, which
+   * can't be bumped, waits on him. `fast` says the attack is one.
+   */
+  const setBall = (t: 0 | 1, attacker = -1, fast = false): void => {
     const before = forms[t];
     forms[t] = offenceFormation(teams[t]);
     const { spot: passed, ms: passMs } = pass ?? { spot: passSpot(1, 0), ms: 680 };
@@ -716,18 +845,37 @@ export function rallyBeats(
     // The libero inside the 3 m line: a bump set off a ball taken low — or a jump set, taking off behind the line.
     const how = engineSetHow;
     engineSetHow = undefined;
-    // Chasing the ball down: a pass too low to take overhead is let drop to
-    // the waist and bumped up — never swung at up by the shoulders.
-    const bump = how === 'bump' || (how !== 'jump' && passed.z < BUMP_BELOW);
-    const spot = bump ? { ...passed, z: Math.min(passed.z, 0.95) }
+    // A pass too low to take overhead is let drop to the waist and bumped up —
+    // never swung at up by the shoulders.
+    let bump = how === 'bump' || (how !== 'jump' && passed.z < BUMP_BELOW);
+    let spot = bump ? { ...passed, z: Math.min(passed.z, 0.95) }
       : how === 'jump' ? { ...passed, at: { ...passed.at, v: Math.max(passed.at.v, 0.37) }, z: Math.max(passed.z, 2.7) }
         : passed;
-    // A pass well off the net goes up high enough for the setter to get
-    // under it from wherever they were: never quicker than their legs.
-    const was = setter >= 0 ? before.get(setter) : undefined;
-    const run = was !== undefined ? metresBetween(was, spot.at) : 0;
-    const ms = Math.max(passMs, Math.round(SETTER_START_MS + (run / SETTER_RUN) * 1000));
-    const arc = Math.max(spot.arc, FLOAT_ARC * (ms / 1000) ** 2);
+    // Where he starts from: where he stood, or already on his way to the net.
+    const running = setterRun !== null && setterRun.p === setter ? setterRun : null;
+    setterRun = null;
+    const was = running?.at ?? (setter >= 0 ? before.get(setter) : undefined);
+    let ms = passMs;
+    let arc = spot.arc;
+    if (was !== undefined && how !== 'jump') {
+      const run = metresBetween(was, spot.at);
+      const gets = chaseIn(running, (spot.at.u - was.u) * 2 * COURT_HALF_WIDTH, (spot.at.v - was.v) * COURT_HALF_LENGTH, run);
+      const need = timeTo(run, gets);
+      if (!bump && need > passMs) {
+        if (fast || need <= passMs * SET_HANG) {
+          // Up a moment longer, and higher with it, so it doesn't float — within reason.
+          ms = Math.round(need);
+          arc = Math.min(spot.arc * (ms / passMs) ** 2, spot.arc + MORE_ARC);
+        } else {
+          bump = true;
+        }
+      }
+      if (bump && need > passMs) {
+        ms = passMs + LET_DROP_MS;
+        const most = gets(ms);
+        spot = { ...spot, at: run > most ? towards(was, spot.at, most / run) : spot.at, z: Math.min(spot.z, 0.95) };
+      }
+    }
     // A setter who dug the ball stays down where they dug it.
     const own = teams[t].setter;
     if (own >= 0 && own !== setter) forms[t].set(own, before.get(own) ?? { u: 0.5, v: 0.5 });
@@ -774,14 +922,19 @@ export function rallyBeats(
     const style = serveStyle(p, teams[t].role(p), teams[t].serveKind(p));
     const ball = air(t, hit, heightOr(c.height, z, 2.3, 3.6));
     radar = { team: t, player: p, speed: c.speed, height: c.height };
+    setterRun = null;
     if (style === 'serve') {
       push(ball, p, 1150, 1.9, [[p, 'serve']]);
+    } else if (style === 'jumpFloat') {
+      // Held a moment, tossed low, then three quick steps and up.
+      push(ball, p, 1100, 1.0, [[p, 'jumpFloat']]);
+      beats[beats.length - 1].release = 380;
     } else {
       push(ball, p, 1050, 0.55, [[p, 'float']]);
       beats[beats.length - 1].release = 540;
     }
     serveFrom = ball;
-    serveKmh = c.speed ?? (style === 'serve' ? 104 : 68);
+    serveKmh = c.speed ?? (style === 'serve' ? 104 : style === 'jumpFloat' ? 74 : 68);
     return hit;
   };
   /** How long a serve takes to reach `to`, and how high it flies. */
@@ -839,13 +992,18 @@ export function rallyBeats(
         forms[o] = defenceFormation(teams[o]);
         const passer = at(t, c.player);
         const setter = teams[t].setter;
-        if (setter >= 0 && setter !== c.player) forms[t].set(setter, { ...TARGET });
-        // A bad pass is a stretch: the passer lunges for it, low.
+        // A bad pass is a stretch: the passer lunges for it, low. A float the
+        // coach has the line take overhead is played with the fingers, high.
         const q = c.kind === 'receptionError' ? 0 : c.quality ?? 0.6;
         const stretched = q < 0.3;
-        const to = air(t, passer, stretched ? 0.45 : 0.7);
+        const fingers = c.overhead === true && !stretched && c.kind === 'reception';
+        const to = air(t, passer, fingers ? 2.25 : stretched ? 0.45 : 0.7);
         const { ms, arc } = served(to);
-        push(to, c.player, ms, arc, [[c.player, stretched ? 'dig' : 'receive']]);
+        if (setter >= 0 && setter !== c.player) {
+          setterRun = { p: setter, ...runFor(at(t, setter), TARGET, ms) };
+          forms[t].set(setter, { ...TARGET });
+        }
+        push(to, c.player, ms, arc, [[c.player, fingers ? 'set' : stretched ? 'dig' : 'receive']]);
         // The radar reads the serve as it flies.
         if (radar !== undefined) beats[beats.length - 1].radar = radar;
         if (c.kind === 'receptionError') {
@@ -880,6 +1038,12 @@ export function rallyBeats(
         forms[t] = defenceFormation(teams[t]);
         const catcher = teams[o].zones.find((p) => teams[o].role(p) === Position.Libero)
           ?? teams[o].passers[0] ?? teams[o].zones[5];
+        // "Free ball!" - and their setter is off to the net at once.
+        const theirs = teams[o].setter;
+        if (theirs >= 0 && theirs !== catcher && forms[o].has(theirs)) {
+          setterRun = { p: theirs, ...runFor(at(o, theirs), TARGET, 950) };
+          forms[o].set(theirs, { ...TARGET });
+        }
         push(air(o, at(o, catcher), 0.7), catcher, 950, 2.4, [[catcher, 'pass']]);
         pass = { spot: passSpot(0.8, wobble(seed, i)), ms: 720 };
         firstTouch = catcher;
@@ -901,7 +1065,8 @@ export function rallyBeats(
           needsSet = false;
           pass = null;
           engineSetter = null;
-        } else if (needsSet) setBall(t, c.player);
+          setterRun = null;
+        } else if (needsSet) setBall(t, c.player, c.detail === 'Quick (middle)' || c.play !== undefined);
         // The decoy lands where he jumped, out of the hitter's way.
         if (c.decoy !== undefined && c.decoy !== c.player) f.set(c.decoy, { u: DECOY_POINT.u, v: 0.16 });
         // Whoever set stays where they set from, to cover.
@@ -910,6 +1075,7 @@ export function rallyBeats(
         forms[t] = f;
         const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u, c.blockers ?? 2, defenceOf?.(o)?.[sourceOfLaneName(c.detail)]);
         forms[o] = block;
+        lastBlockers = blockers;
         const blockPoses: Array<[number, Pose]> = blockers.map((b) => [b, 'block']);
         // Team-mates crouch in under the hitter, ready for a ball off the block.
         const cover: Array<[number, Pose]> = [...forms[t].keys()].filter((p) => p !== c.player).map((p) => [p, 'cover']);
@@ -1036,6 +1202,13 @@ export function rallyBeats(
           forms[t].set(c.player, spot);
           ms = flight(spot);
           arc = shot === 'tip' ? 0.45 : shot === 'roll' ? 1.0 : 0;
+        }
+        // The setter — not the one digging it, nor up at the net blocking it —
+        // releases for the net as the ball is hit, to be under the dig as it comes up.
+        const own = teams[t].setter;
+        if (c.kind === 'dig' && own >= 0 && own !== c.player && !lastBlockers.includes(own) && forms[t].has(own)) {
+          setterRun = { p: own, ...runFor(at(t, own), TARGET, ms) };
+          forms[t].set(own, { ...TARGET });
         }
         push(air(t, spot, z), c.player, ms, arc, [[c.player, 'dig']], callout);
         // The side that just attacked recovers into its defence.

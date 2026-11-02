@@ -6184,6 +6184,20 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .dedit .zcourt-note b { color: var(--text); }
 .tboard.compact.phase-out .tboard-body { grid-template-columns: 250px minmax(0, 1fr); }
 
+/* Serve & Receive: the receive line on the court, each server's orders beside it — the list scrolls in its panel. */
+.tboard.compact.phase-serve .tboard-body { grid-template-columns: 250px minmax(0, 1fr); }
+.tboard.phase-serve .tboard-cards { min-height: 0; align-self: stretch; }
+.dedit .zcourt-note b.good { color: var(--good); }
+.dedit .zcourt-note b.bad { color: var(--bad); }
+.sorders { display: flex; flex: 1 1 0; flex-direction: column; gap: 6px; min-height: 0; }
+.sorders-list { flex: 1 1 0; min-height: 120px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.sorders-table th, .sorders-table td { padding: 5px 8px; white-space: nowrap; }
+.sorders-table .segmented { flex-wrap: nowrap; }
+.sorders-table .segmented-sm button { padding: 3px 7px; white-space: nowrap; }
+/* On a short window the court gives way, so the line's buttons and note still fit. */
+.tboard.phase-serve .dedit-svg { max-height: max(170px, calc(var(--app-h, 100vh) - 500px)); }
+.sorders-name { display: inline-flex; align-items: center; gap: 6px; }
+
 /* ---- A competition's review, in the inbox ---- */
 .crv { display: flex; flex-direction: column; }
 .crv-hero {

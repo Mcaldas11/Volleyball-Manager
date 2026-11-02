@@ -304,3 +304,80 @@ test('the libero inside the 3 m line bumps the second ball, or jump-sets it from
   }
   assert.ok(bumps > 0 && jumps > 0, `${bumps} bumps, ${jumps} jump sets`);
 });
+
+test('the coach\'s serving orders show: each man serves behind the zone he was told, as he was told, behind the line', () => {
+  const world = generateWorld({ seed: 76, startYear: 2026, scale: 'small', manager: stubManager() });
+  const store = world.players;
+  const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
+  a.tactics = { ...a.tactics, servers: Object.fromEntries(a.players.map((p) => [p, { style: 'jumpFloat' as const, zone: 5 as const }])) };
+  b.tactics = { ...b.tactics, servers: Object.fromEntries(b.players.map((p) => [p, { style: 'float' as const, zone: 6 as const }])) };
+  const sim = new MatchSimulator(store, {
+    home: toTeamSetup(store, a), away: toTeamSetup(store, b), format: MatchFormat.BestOf5,
+    importance: 0.5, neutralVenue: false, collectLog: true, seed: 3,
+  });
+  const ordersOf = (team: 0 | 1) => (team === 0 ? a : b).tactics;
+  let home = 0;
+  let away = 0;
+  for (let i = 0; i < 120; i++) {
+    const pre = sim.snapshot();
+    if (pre.matchOver) break;
+    const entry = sim.step();
+    if (entry === null) break;
+    const serve = entry.contacts[0];
+    const setup = setupScene(pre, entry.serveTeam, store.position, 0, (p) => (p === serve.player ? serve.detail as 'jumpFloat' | 'float' : undefined), ordersOf);
+    const [first] = rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner, undefined, entry.passers, ordersOf);
+    const at = setup.positions.get(serve.player)!;
+    assert.ok(depth(at.y) > 1, 'behind the end line');
+    if (entry.serveTeam === 0) {
+      // Home, the near side: behind zone 5 is on its own left, the viewer's left.
+      assert.ok(at.x < -2, `home serves from behind zone 5 (${at.x.toFixed(2)})`);
+      assert.equal(first.poses.get(serve.player), 'jumpFloat');
+      home++;
+    } else {
+      assert.ok(Math.abs(at.x) < 0.5, `away serves from behind zone 6 (${at.x.toFixed(2)})`);
+      assert.equal(first.poses.get(serve.player), 'float');
+      away++;
+    }
+    // Struck from behind the line, too.
+    assert.ok(depth(first.ball!.y) > 1, 'the ball struck behind the end line');
+  }
+  assert.ok(home > 5 && away > 5, `serves seen: ${home} home, ${away} away`);
+});
+
+test('the receive line stands where its coach has it against the serve coming — and takes a float overhead if told to', () => {
+  const world = generateWorld({ seed: 77, startYear: 2026, scale: 'small', manager: stubManager() });
+  const store = world.players;
+  const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
+  const close = { left: { u: 0.2, v: 0.45 }, middle: { u: 0.5, v: 0.47 }, right: { u: 0.8, v: 0.45 }, overhead: true };
+  const deep = { left: { u: 0.18, v: 0.8 }, middle: { u: 0.5, v: 0.82 }, right: { u: 0.82, v: 0.8 } };
+  a.tactics = { ...a.tactics, receive: { float: close, jump: deep } };
+  const sim = new MatchSimulator(store, {
+    home: toTeamSetup(store, a), away: toTeamSetup(store, b), format: MatchFormat.BestOf5,
+    importance: 0.5, neutralVenue: false, collectLog: true, seed: 4,
+  });
+  const ordersOf = (team: 0 | 1) => (team === 0 ? a : b).tactics;
+  const seen = { float: 0, jump: 0, overhead: 0 };
+  for (let i = 0; i < 300; i++) {
+    const pre = sim.snapshot();
+    if (pre.matchOver) break;
+    const entry = sim.step();
+    if (entry === null) break;
+    if (entry.serveTeam !== 1) continue;
+    const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner, undefined, entry.passers, ordersOf);
+    const float = entry.contacts[0].detail === 'float' || entry.contacts[0].detail === 'jumpFloat';
+    const passers = entry.passers ?? [...beats[0].positions.keys()].filter((p) => pre.homeCourt.concat(pre.homeLibero).includes(p)
+      && beats[0].poses.get(p) !== 'serve');
+    const want = float ? 0.46 : 0.81;
+    const line = [...beats[0].positions].filter(([p, g]) => pre.homeCourt.concat(pre.homeLibero).includes(p)
+      && Math.abs(depth(g.y) - want) < 0.03);
+    assert.ok(line.length >= 2, `the passers ${float ? 'up close to a float' : 'deep to a jump serve'} (${line.length} of ${passers.length})`);
+    seen[float ? 'float' : 'jump']++;
+    const pass = entry.contacts.find((c) => c.kind === 'reception');
+    if (float && pass?.overhead === true && (pass.quality ?? 0) >= 0.3) {
+      const touch = beats.find((bt) => bt.actor === pass.player && bt.ball !== null && bt.ball.z > 2);
+      assert.ok(touch !== undefined && touch.poses.get(pass.player) === 'set', 'a float taken overhead: the fingers, high');
+      seen.overhead++;
+    }
+  }
+  assert.ok(seen.float > 3 && seen.jump > 3 && seen.overhead > 2, JSON.stringify(seen));
+});

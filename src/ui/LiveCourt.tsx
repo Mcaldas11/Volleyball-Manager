@@ -1198,7 +1198,7 @@ function drawPlayer(
   const shoulder = hip + 0.58;
   ctx.strokeStyle = FLAT_SKIN;
   ctx.lineWidth = Math.max(1.5, wide(0.085));
-  if (b.pose === 'block' || b.pose === 'spike' || b.pose === 'set' || b.pose === 'serve' || b.pose === 'float') {
+  if (b.pose === 'block' || b.pose === 'spike' || b.pose === 'set' || b.pose === 'serve' || b.pose === 'jumpFloat' || b.pose === 'float') {
     const reach = b.pose === 'set' ? shoulder + 0.55 : shoulder + 0.75;
     const spread = b.pose === 'block' ? 0.2 : 0.12;
     for (const side of [-1, 1]) {

@@ -9,9 +9,13 @@
  * setter looks for first. Pick a zone on the court and its plan is laid out
  * as cards; the whole team's instructions — the system, the offence, the
  * tempo, how often combinations are run — sit beside them. Out of
- * possession, the defence and the serve. Every instruction is a card with a
- * picture of what it does and its current setting; pick one and its options
- * open underneath. The overview down the side has everything at a glance.
+ * possession, the defence and the serve. The serve and the serve receive have
+ * their own page: where the passers stand against a float and against a jump
+ * serve — dragged on the court — and whether a float is taken overhead; and
+ * for each server, how he serves and from where along the end line. Every
+ * instruction is a card with a picture of what it does and its current
+ * setting; pick one and its options open underneath. The overview down the
+ * side has everything at a glance.
  */
 
 import { useRef, useState, type JSX, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
@@ -25,6 +29,15 @@ import {
   presetLayout, shotSpot, type AttackSource, type DefenceLayout, type DefenceLayouts, type DefencePreset, type Spot,
 } from '../engine/match/defence.ts';
 import type { Shot } from '../engine/match/engine.ts';
+import { computeRatings } from '../engine/match/ratings.ts';
+import {
+  bestServe, lineDepth, presetOfLine, RECEIVE_PRESET_NAMES, RECEIVE_PRESETS, receiveFit, receivePlansOf, receivePreset, receiveSpots,
+  SERVE_KIND_NAMES, SERVE_KINDS, SERVE_STYLE_NAMES, SERVE_STYLES, SERVE_ZONES, usualZone,
+  type ReceiveLayout, type ReceivePlans, type ServeKind, type ServerOrders, type ServeStyle, type ServeZone,
+} from '../engine/match/serveReceive.ts';
+import { Position } from '../engine/model/positions.ts';
+import { Pos, Segmented } from './components.tsx';
+import { Dropdown } from './dropdown.tsx';
 import { Icon } from './icons.tsx';
 import { BlockPlanDialog, blockPlansSummary } from './blockPlan3d.tsx';
 import { clubKit, hueOf, kitFromHue } from './kits.ts';
@@ -475,6 +488,198 @@ function DefenceEditor({ tactics: t, onChange }: { tactics: TeamTactics; onChang
   );
 }
 
+/** The receive line in a few words: its standard name or "Own", and how a float is taken. */
+function lineName(l: ReceiveLayout, kind: ServeKind): string {
+  const p = presetOfLine(l);
+  const where = p !== null ? RECEIVE_PRESET_NAMES[p] : 'Own line';
+  return kind === 'float' ? `${where} · ${l.overhead === true ? 'overhead' : 'forearms'}` : where;
+}
+
+/** The passers' spots, by key. */
+const LINE_KEYS = ['left', 'middle', 'right'] as const;
+type LineKey = (typeof LINE_KEYS)[number];
+
+/**
+ * Where the passers stand against each kind of serve — the left, middle and
+ * right passer of the line, each dragged where the coach wants him, or a
+ * standard line — and, against a float, whether it is taken overhead. A line
+ * of two stands between the three spots, a line of four spreads across them.
+ */
+function ReceiveEditor({ tactics: t, onChange }: { tactics: TeamTactics; onChange: () => void }): JSX.Element {
+  const [kind, setKind] = useState<ServeKind>('float');
+  const [drag, setDrag] = useState<LineKey | null>(null);
+  const [, redraw] = useState(0);
+  const svg = useRef<SVGSVGElement>(null);
+  const plans = receivePlansOf(t);
+  const line = plans[kind];
+  /** The side's own plans, made the first time one is changed. */
+  const own = (): ReceivePlans => {
+    if (t.receive === undefined) {
+      const c = (l: ReceiveLayout): ReceiveLayout => ({ ...l, left: { ...l.left }, middle: { ...l.middle }, right: { ...l.right } });
+      t.receive = { float: c(plans.float), jump: c(plans.jump) };
+    }
+    return t.receive;
+  };
+  const move = (e: ReactPointerEvent<SVGSVGElement>): void => {
+    const el = svg.current;
+    if (drag === null || el === null) return;
+    const ctm = el.getScreenCTM();
+    if (ctm === null) return;
+    const pt = el.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const q = pt.matrixTransform(ctm.inverse());
+    own()[kind][drag] = { u: Math.min(0.96, Math.max(0.04, q.x / 100)), v: Math.min(0.97, Math.max(0.3, q.y / 100)) };
+    redraw((n) => n + 1);
+  };
+  const drop = (): void => {
+    if (drag === null) return;
+    setDrag(null);
+    onChange();
+  };
+  const preset = presetOfLine(line);
+  const fit = receiveFit(plans, kind);
+  const edge = Math.round((fit - 1) * 1000) / 10;
+  const metres = (lineDepth(line) * 9).toFixed(1);
+  const overhead = kind === 'float' && line.overhead === true;
+  // Where a line of two and of four would stand, faintly.
+  const two = receiveSpots(line, 2);
+  const four = receiveSpots(line, 4);
+
+  return (
+    <div className="zcourt dedit">
+      <div className="dedit-head">
+        <span className="dedit-title">Serve receive</span>
+        <span className="zrot-label">Against</span>
+        <span className="tboard-zones">
+          {SERVE_KINDS.map((k) => (
+            <button key={k} className={k === kind ? 'active wide' : 'wide'} onClick={() => setKind(k)}>{SERVE_KIND_NAMES[k]}</button>
+          ))}
+        </span>
+      </div>
+      <svg ref={svg} className="dedit-svg" viewBox="-4 -16 108 122" onPointerMove={move} onPointerUp={drop} onPointerLeave={drop}>
+        <rect x="0" y="0" width="100" height="100" fill="#c76f36" />
+        <line x1="0" y1="33.3" x2="100" y2="33.3" stroke="rgba(255,255,255,0.85)" strokeWidth="0.8" />
+        <line x1="0" y1="66.6" x2="100" y2="66.6" stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" strokeDasharray="2 2" />
+        <text x="1.5" y="31.5" fontSize="3.6" fill="rgba(255,255,255,0.75)">3 m</text>
+        <text x="1.5" y="64.8" fontSize="3.6" fill="rgba(255,255,255,0.55)">6 m</text>
+        <rect x="-3" y="-1.5" width="106" height="3" fill="rgba(255,255,255,0.92)" />
+        {/* Their serve coming over: a jump serve driven flat, a float wobbling. */}
+        <circle cx="84" cy="-9" r="3.6" fill="#e5484d" />
+        <path d={kind === 'jump' ? 'M 82 -6 L 52 40' : 'M 82 -6 Q 74 6 70 12 T 58 26 T 52 40'} fill="none"
+          stroke="rgba(255,255,255,0.8)" strokeWidth="1" strokeDasharray={kind === 'jump' ? '' : '2 1.5'} />
+        {/* A line of two and of four, as they would stand. */}
+        {[...two, ...four].map((p, i) => (
+          <circle key={i} cx={p.u * 100} cy={p.v * 100} r="2.2" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="0.6" />
+        ))}
+        {LINE_KEYS.map((key) => {
+          const at = line[key];
+          return (
+            <g key={key} className={`dedit-man${drag === key ? ' dragging' : ''}`}
+              onPointerDown={(e) => { (e.currentTarget as SVGGElement).setPointerCapture(e.pointerId); setDrag(key); }}>
+              <circle cx={at.u * 100} cy={at.v * 100} r="6" fill="currentColor" stroke="#fff" strokeWidth="0.8" />
+              {overhead
+                ? <path d={`M ${at.u * 100 - 3} ${at.v * 100 + 1.5} L ${at.u * 100} ${at.v * 100 - 2.5} L ${at.u * 100 + 3} ${at.v * 100 + 1.5}`}
+                  fill="none" stroke="#0b1018" strokeWidth="1.3" strokeLinejoin="round" />
+                : <text x={at.u * 100} y={at.v * 100 + 2} textAnchor="middle" fontSize="5.5" fontWeight="800" fill="#0b1018">{key[0].toUpperCase()}</text>}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="dedit-presets">
+        {RECEIVE_PRESETS.map((p) => (
+          <button key={p} className={`sm${preset === p ? ' active' : ''}`}
+            onClick={() => { own()[kind] = { ...receivePreset(p), overhead: line.overhead }; onChange(); }}>
+            {RECEIVE_PRESET_NAMES[p]}
+          </button>
+        ))}
+      </div>
+      {kind === 'float' && (
+        <div className="dedit-presets">
+          <button className={`sm${!overhead ? ' active' : ''}`} onClick={() => { own().float.overhead = undefined; onChange(); }}>Forearms</button>
+          <button className={`sm${overhead ? ' active' : ''}`} onClick={() => { own().float.overhead = true; onChange(); }}>Overhead</button>
+        </div>
+      )}
+      <p className="zcourt-note" title={kind === 'float'
+        ? 'A float dips and darts: come in close and take it early. Taken overhead, the passers\' hands count as well as their platform.'
+        : 'A jump serve is on the passers at once: deep, they have the time to see it.'}>
+        <b>{metres} m</b> off the net · passing{' '}
+        <b className={edge > 0 ? 'good' : edge < 0 ? 'bad' : ''}>{edge > 0 ? '+' : ''}{edge.toFixed(1)}%</b> on the usual line.{' '}
+        {kind === 'float' ? 'Close in on a float.' : 'Deep for a jump serve.'}
+      </p>
+    </div>
+  );
+}
+
+/** The serve-style choices: as he likes, or one of them. */
+type StylePick = ServeStyle | 'auto';
+
+/**
+ * Each server's orders: how he serves — as he likes, which is his best serve,
+ * or a jump serve, a jump float or a standing float — and from where along
+ * the end line, behind zone 1, 6 or 5. His jump and float serves are there to
+ * choose by.
+ */
+function ServingOrders({ tactics: t, onChange }: { tactics: TeamTactics; onChange: () => void }): JSX.Element {
+  const g = useGame();
+  const store = g.world?.players;
+  const sheet = g.lineup();
+  if (store === undefined || sheet === null) return <p className="tboard-note">No squad to give orders to.</p>;
+  const servers = [...new Set([...sheet.lineup, ...sheet.bench])].filter((p) => p >= 0 && store.position[p] !== Position.Libero);
+  const set = (p: number, patch: ServerOrders): void => {
+    const all = { ...(t.servers ?? {}) };
+    const next: ServerOrders = { ...all[p], ...patch };
+    if (next.style === undefined) delete next.style;
+    if (next.zone === undefined) delete next.zone;
+    if (next.style === undefined && next.zone === undefined) delete all[p];
+    else all[p] = next;
+    t.servers = Object.keys(all).length > 0 ? all : undefined;
+    onChange();
+  };
+  return (
+    <div className="sorders">
+      <div className="sorders-list">
+        <table className="data-table sorders-table">
+          <thead>
+            <tr><th>Server</th><th className="num" title="Jump serve · float serve, 1-20">JS · FL</th><th>Serve</th><th>From</th></tr>
+          </thead>
+          <tbody>
+            {servers.map((p) => {
+              const orders = t.servers?.[p] ?? {};
+              const best = bestServe(computeRatings(store, p, store.position[p] as Position));
+              const starter = sheet.lineup.includes(p);
+              const options = [
+                { value: 'auto' as StylePick, label: `Own (${best === 'jump' ? 'jump serve' : 'float'})` },
+                ...SERVE_STYLES.map((s) => ({ value: s as StylePick, label: SERVE_STYLE_NAMES[s] })),
+              ];
+              return (
+                <tr key={p} className={starter ? '' : 'row-away'}>
+                  <td><span className="sorders-name"><Pos pos={store.position[p] as Position} /> {store.shortName(p)}</span></td>
+                  <td className="num">{store.getAttr(p, 'jumpServe')} · {store.getAttr(p, 'floatServe')}</td>
+                  <td>
+                    <Dropdown size="sm" value={orders.style ?? 'auto'} options={options}
+                      onChange={(v) => set(p, { style: v === 'auto' ? undefined : v })} />
+                  </td>
+                  <td>
+                    <Segmented size="sm" value={orders.zone ?? 0}
+                      options={[[0, `Own (${usualZone(p)})`] as const, ...SERVE_ZONES.map((z) => [z, String(z)] as const)]}
+                      onChange={(v) => set(p, { zone: v === 0 ? undefined : v as ServeZone })} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="tboard-note">
+        Every serve is struck from behind the end line — behind zone 1 on the right, 6 in the middle or 5 on the left. The
+        jump serve is the hardest and the likeliest to be missed; the standing float the safest; the jump float
+        in between, and it wobbles like the float.
+      </p>
+    </div>
+  );
+}
+
 /**
  * The whole board. `onFormation` changes the system (it may need more than a
  * flip of a field); every other change edits `tactics` and calls `onChange`.
@@ -486,7 +691,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
   onFormation?: (f: Formation) => void;
   compact?: boolean;
 }): JSX.Element {
-  const [phase, setPhase] = useState<'in' | 'out'>('in');
+  const [phase, setPhase] = useState<'in' | 'out' | 'serve'>('in');
   const [zone, setZone] = useState<PassZone>('A');
   const [open, setOpen] = useState<CardKey | null>(null);
   const plans = zonePlansOf(t);
@@ -573,12 +778,21 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
         <button role="tab" aria-selected={phase === 'out'} className={phase === 'out' ? 'active' : ''} onClick={() => setPhase('out')}>
           <Icon name="club" size={14} /> Out of Possession
         </button>
+        <button role="tab" aria-selected={phase === 'serve'} className={phase === 'serve' ? 'active' : ''} onClick={() => setPhase('serve')}>
+          <Icon name="whistle" size={14} /> Serve &amp; Receive
+        </button>
       </div>
       <div className="tboard-body">
         {phase === 'in' && !compact && <ZoneCourt plans={plans} zone={zone} onZone={setZone} />}
         {phase === 'out' && <DefenceEditor tactics={t} onChange={onChange} />}
+        {phase === 'serve' && <ReceiveEditor tactics={t} onChange={onChange} />}
         <div className="tboard-cards">
-          {phase === 'in' ? (
+          {phase === 'serve' ? (
+            <>
+              <div className="tboard-head">Serving orders <span className="faint">· how each man serves, and from where</span></div>
+              <ServingOrders tactics={t} onChange={onChange} />
+            </>
+          ) : phase === 'in' ? (
             <>
               <div className="tboard-head">Whole team</div>
               {grid(teamKeys)}
@@ -644,6 +858,11 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
               ...outKeys.map((k) => [cards[k].title, cards[k].value] as [string, string]),
               ['Block plan', blockPlansSummary(t)],
               ['Behind the block', behindTheBlock(t)],
+            ]} />
+            <Overview title="Serve & receive" active={phase === 'serve'} onClick={() => setPhase('serve')} rows={[
+              ['Against a float', lineName(receivePlansOf(t).float, 'float')],
+              ['Against a jump serve', lineName(receivePlansOf(t).jump, 'jump')],
+              ['Servers with orders', String(Object.keys(t.servers ?? {}).length)],
             ]} />
           </aside>
         )}

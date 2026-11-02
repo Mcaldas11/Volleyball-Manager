@@ -19,11 +19,11 @@ import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { serverReadyOnCourt, TROPHY_LIFT_AT } from '../courtMotion.ts';
-import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
+import { rallyBeats, setupScene, type Radar, type Scene, type SideOrders } from '../matchCourt.ts';
+import { plannedServe } from '../../engine/match/serveReceive.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
 import { PlayClock } from '../playClock.ts';
 import type { Kit } from '../court3d.ts';
-import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
 import {
   ATTACKER_OPTIONS, BLOCK_OPTIONS, COMBINATION_OPTIONS, DEFENSE_OPTIONS, OFFENSE_OPTIONS, RECEPTION_OPTIONS, SERVE_OPTIONS,
@@ -80,10 +80,19 @@ function SideCrest({ side, size }: { side: MatchSide; size: number }): JSX.Eleme
 }
 
 /** Both sides set up for the next serve, from the live snapshot — the
- *  server where his own serve, jump or float, starts, given his ball by a ball kid. */
-function sceneFor(snap: MatchdaySnapshot | null, roles: Uint8Array, nearTeam: 0 | 1, store: PlayerStore): Scene {
+ *  server where his own serve starts, behind the zone he serves from, given
+ *  his ball by a ball kid; the passers lined up against that serve, where
+ *  their coach has them. */
+function sceneFor(
+  snap: MatchdaySnapshot | null, roles: Uint8Array, nearTeam: 0 | 1, store: PlayerStore,
+  ordersOf?: (team: 0 | 1) => SideOrders | undefined,
+): Scene {
   if (snap === null) return { positions: new Map(), poses: new Map(), ball: null, arc: 0, actor: null, ms: 400 };
-  return { ...setupScene(snap, snap.serving, roles, nearTeam, (p) => (servesJump(store, p) ? 'jump' : 'float')), ballKids: true };
+  const serving = snap.serving;
+  return {
+    ...setupScene(snap, serving, roles, nearTeam, (p) => plannedServe(store, ordersOf?.(serving), p), ordersOf),
+    ballKids: true,
+  };
 }
 
 /**
@@ -104,15 +113,17 @@ async function animateRally(
   defenceOf?: (team: 0 | 1) => DefenceLayouts | undefined,
   /** The court's clock: paused, the rally holds where it is until it runs again. */
   clock?: PlayClock,
+  /** Each side's orders: where its servers serve from, where its passers stand. */
+  ordersOf?: (team: 0 | 1) => SideOrders | undefined,
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf, entry.passers);
+  const beats = rallyBeats(logEntry, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceOf, entry.passers, ordersOf);
   await playBeats(beats, speed, cancelled, setScene, onBigPlay, onRadar, (beat) => {
     // Struck — a serve, a spike, the block's hands — or played: a pass, a set, a dig.
     if (beat.actor !== null) {
       const pose = beat.poses.get(beat.actor);
-      playHit(pose === 'spike' || pose === 'serve' || pose === 'float' || pose === 'block' || beat.radar !== undefined);
+      playHit(pose === 'spike' || pose === 'serve' || pose === 'jumpFloat' || pose === 'float' || pose === 'block' || beat.radar !== undefined);
     }
   }, clock);
   // The stands applaud the point — the home crowd louder for the home side's.
@@ -1283,7 +1294,15 @@ function LiveMatchView(): JSX.Element {
   const logRef = useRef<HTMLDivElement>(null);
   // The user's side plays in the half nearest the camera.
   const nearTeam: 0 | 1 = md.userIsHome ? 0 : 1;
-  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, g.liveRoles(), nearTeam, store));
+  /** Each side's tactics right now: the user's as set, the other as its club has it. */
+  const tacticsNow = (team: 0 | 1): TeamTactics | undefined => {
+    const now = g.matchday;
+    if (now === null) return undefined;
+    if (team === (now.userIsHome ? 0 : 1)) return g.matchTactics() ?? undefined;
+    const club = now.sides[team].clubId >= 0 ? world.clubs[now.sides[team].clubId] : undefined;
+    return club?.tactics;
+  };
+  const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, g.liveRoles(), nearTeam, store, tacticsNow));
   const [labels, setLabels] = useState<CourtLabels>('ratings');
   const [overlay, setOverlay] = useState<'subs' | 'tactics' | null>(null);
   /** One of the user's players clicked beside the court: his options, by the row. */
@@ -1360,13 +1379,10 @@ function LiveMatchView(): JSX.Element {
     radarTimer.current = setTimeout(() => setRadar(null), RADAR_MS / (g.matchday?.speed ?? 1));
   };
 
-  /** How each side defends right now: the user's as set, the other as its club has it. */
+  /** How each side defends right now. */
   const defenceNow = (team: 0 | 1): DefenceLayouts | undefined => {
-    const now = g.matchday;
-    if (now === null) return undefined;
-    if (team === (now.userIsHome ? 0 : 1)) return defenceLayoutsOf(g.matchTactics() ?? undefined);
-    const club = now.sides[team].clubId >= 0 ? world.clubs[now.sides[team].clubId] : undefined;
-    return club !== undefined ? defenceLayoutsOf(club.tactics) : undefined;
+    const t = tacticsNow(team);
+    return t !== undefined ? defenceLayoutsOf(t) : undefined;
   };
 
   const triggerBigPlay = (play: BigPlay): void => {
@@ -1530,13 +1546,9 @@ function LiveMatchView(): JSX.Element {
         playWhistle();
         const logEntry = g.playNextRally();
         if (logEntry === null) { animatingRef.current = false; break; }
-        await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay, triggerRadar, (team) => {
-          // The user's side defends as set now; the other as its club has it.
-          const userTeam = current.userIsHome ? 0 : 1;
-          if (team === userTeam) return defenceLayoutsOf(g.matchTactics() ?? undefined);
-          const club = current.sides[team].clubId >= 0 ? world.clubs[current.sides[team].clubId] : undefined;
-          return club !== undefined ? defenceLayoutsOf(club.tactics) : undefined;
-        }, clock);
+        // The user's side defends, serves and passes as set now; the other as its club has it.
+        await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay, triggerRadar,
+          defenceNow, clock, tacticsNow);
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
@@ -1556,7 +1568,7 @@ function LiveMatchView(): JSX.Element {
         // Everyone walks into position for the next serve — rotating on a
         // side-out — while the referee gives the point and waves the serve on:
         // a little longer after a close call against the user, for him to ask for the video.
-        setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam, store));
+        setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam, store, tacticsNow));
         const hot = g.lastCall()?.close === true && g.challengeError() === null;
         await sleep((hot ? 3600 : 1800) / current.speed);
       }
@@ -1588,10 +1600,10 @@ function LiveMatchView(): JSX.Element {
         if (stop.current) { if (cancelled.current) return; } else {
           const { entry } = review.log;
           const roles = g.liveRoles();
-          setScene(setupScene(review.log, entry.serveTeam, roles, nearTeam, (p) => (servesJump(store, p) ? 'jump' : 'float')));
+          setScene(setupScene(review.log, entry.serveTeam, roles, nearTeam, (p) => plannedServe(store, tacticsNow(entry.serveTeam), p), tacticsNow));
           await sleep(900);
           const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
-          const beats = rallyBeats(review.log, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceNow);
+          const beats = rallyBeats(review.log, entry.serveTeam, entry.contacts, roles, seed, nearTeam, entry.winner, defenceNow, entry.passers, tacticsNow);
           const slow = Math.min(2, beats.length);
           if (!stop.current) await playBeats(beats.slice(0, beats.length - slow), 0.85, stop, setScene, () => undefined);
           // The decisive touch in slow motion — the camera in close on where it comes down.
@@ -1610,7 +1622,7 @@ function LiveMatchView(): JSX.Element {
       if (cancelled.current) return;
       animatingRef.current = false;
       g.closeVideoReview();
-      setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam, store));
+      setScene(sceneFor(g.matchday?.snapshot ?? null, g.liveRoles(), nearTeam, store, tacticsNow));
     })();
     return () => {
       cancelled.current = true;
@@ -1626,7 +1638,7 @@ function LiveMatchView(): JSX.Element {
 
   // A substitution or libero change between rallies redraws the set-up.
   useEffect(() => {
-    if (!animatingRef.current) setScene(sceneFor(md.snapshot, g.liveRoles(), nearTeam, store));
+    if (!animatingRef.current) setScene(sceneFor(md.snapshot, g.liveRoles(), nearTeam, store, tacticsNow));
   }, [md.snapshot]);
 
   const [homeClub, awayClub] = md.sides;

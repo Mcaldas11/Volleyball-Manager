@@ -308,7 +308,7 @@ export class Cameraman {
     const ball = motion.ballAt(now);
     const actor = motion.actor !== null ? motion.bodies.get(motion.actor) : undefined;
     // The serve on its way: still from behind him, until it crosses the net.
-    if (actor !== undefined && (actor.pose === 'serve' || actor.pose === 'float') && ball !== null
+    if (actor !== undefined && (actor.pose === 'serve' || actor.pose === 'jumpFloat' || actor.pose === 'float') && ball !== null
       && Math.sign(ball.y) === this.servingEnd) return 'serve';
     if (ball !== null && motion.flight !== null && now < motion.flight.t0 + motion.flight.ms + 400) {
       this.lastPlay = now;

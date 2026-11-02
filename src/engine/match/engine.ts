@@ -41,6 +41,9 @@ import {
 import { matchRating } from './playerRating.ts';
 import { computeRatings, contest, type PlayerMatchRatings } from './ratings.ts';
 import {
+  overheadReception, receiveFit, receivePlansOf, serveKindOf, serveRating, serveStyleFor, type ServeStyle,
+} from './serveReceive.ts';
+import {
   AttackLane,
   lineupSlotPositions,
   BlockAssignment,
@@ -239,8 +242,10 @@ export interface RallyContact {
     | 'blockTouch' | 'dig' | 'digError' | 'freeball';
   team: 0 | 1;
   player: number;
-  /** Lane for attacks, reception grade for passes; `jump` or `float` for a serve. */
+  /** Lane for attacks, reception grade for passes; `jump`, `jumpFloat` or `float` for a serve. */
   detail?: string;
+  /** A float received overhead, with the fingers, as the coach had the line take it. */
+  overhead?: boolean;
   /** How good a pass or dig was, 0 to 1. */
   quality?: number;
   /** The ball's speed off the hand, km/h — serves and attacks. */
@@ -497,6 +502,14 @@ const PASSED_IT_COST = 0.95;
 const AIMED_AT_PASSER = 0.6;
 const AIMED_AT_SETTER = 0.2;
 const AIMING_ERROR = 0.01;
+
+/**
+ * Each serve's power and risk: the jump serve the hardest and the likeliest
+ * to be missed, the standing float the safest, the jump float in between.
+ * The first and last are what the engine has always played.
+ */
+const SERVE_STYLE_POWER: Readonly<Record<ServeStyle, number>> = { jump: 1.06, jumpFloat: 1.0, float: 0.97 };
+const SERVE_STYLE_RISK: Readonly<Record<ServeStyle, number>> = { jump: 0.022, jumpFloat: 0.004, float: -0.012 };
 
 /** Rallies an engine-coached side lets a change settle before making another. */
 const AUTO_SUB_COOLDOWN_RALLIES = 4;
@@ -1537,12 +1550,14 @@ export class MatchSimulator {
   }
 
   /** How high a serve is struck, m: a jump server near the top of his jump,
-   *  a float server at full stretch, his feet on the floor. */
-  private serveHeight(sr: PlayerMatchRatings, jump: boolean): number | undefined {
+   *  a float server at full stretch, his feet on the floor — off a jump float, a
+   *  short hop up. */
+  private serveHeight(sr: PlayerMatchRatings, style: ServeStyle): number | undefined {
     if (!this.recording) return undefined;
     const p = sr.idx;
-    if (jump) return round2(this.store.spikeReachCm[p] / 100 - 0.14 - Math.abs(this.flair.gaussian(0, 0.06)));
-    return round2((this.store.heightCm[p] * 1.33) / 100 + 0.04 + this.flair.gaussian(0, 0.03));
+    if (style === 'jump') return round2(this.store.spikeReachCm[p] / 100 - 0.14 - Math.abs(this.flair.gaussian(0, 0.06)));
+    const hop = style === 'jumpFloat' ? 0.32 : 0;
+    return round2((this.store.heightCm[p] * 1.33) / 100 + 0.04 + hop + this.flair.gaussian(0, 0.03));
   }
 
   /** How high a blocker's hands are when the ball meets them, m. */
@@ -1552,10 +1567,12 @@ export class MatchSimulator {
     return round2(reach - 0.03 - (1 - def.rate(blocker).fatigue) * 0.2 - Math.abs(this.flair.gaussian(0, 0.04)));
   }
 
-  /** How fast a serve leaves the hand, km/h: a jump serve driven, a float pushed. */
-  private serveSpeed(sr: PlayerMatchRatings, jump: boolean): number | undefined {
+  /** How fast a serve leaves the hand, km/h: a jump serve driven, a float pushed — off a jump, a little harder. */
+  private serveSpeed(sr: PlayerMatchRatings, style: ServeStyle): number | undefined {
     if (!this.recording) return undefined;
-    const v = jump ? 78 + 0.45 * sr.serveJump + this.flair.gaussian(0, 4) : 58 + 0.15 * sr.serveFloat + this.flair.gaussian(0, 3);
+    const v = style === 'jump' ? 78 + 0.45 * sr.serveJump + this.flair.gaussian(0, 4)
+      : style === 'jumpFloat' ? 62 + 0.18 * serveRating(sr, style) + this.flair.gaussian(0, 3)
+        : 58 + 0.15 * sr.serveFloat + this.flair.gaussian(0, 3);
     return Math.round(clamp(v, 50, 132) * (this.store.women ? WOMEN_BALL_SPEED : 1));
   }
 
@@ -2115,29 +2132,30 @@ export class MatchSimulator {
     const profile = SERVE_PROFILE[srv.tactics.serve];
     const defProfile = DEFENSE_PROFILE[srv.tactics.defense];
 
-    // Jump serves are more dangerous but less reliable; the engine picks
-    // whichever weapon the player is actually better at.
-    const jump = sr.serveJump > sr.serveFloat;
-    const rawPower = (jump ? sr.serveJump : sr.serveFloat) * (jump ? 1.06 : 0.97);
+    // Jump serves are more dangerous but less reliable; a jump float sits
+    // between them and the standing float. A server serves as the coach told
+    // him to — or, left to himself, with whichever weapon he is better at.
+    const style = serveStyleFor(srv.tactics, server, sr);
+    const rawPower = serveRating(sr, style) * SERVE_STYLE_POWER[style];
     const serveStrength =
       rawPower * profile.power * defProfile.servePressure * sr.fatigue * sr.confidence;
     const serveAccuracy = sr.serveAccuracy * profile.accuracy;
 
     const aimed = srvRotTactics(srv) === ServeTarget.WeakestPasser || srvRotTactics(srv) === ServeTarget.Setter;
     const errorProb = clamp(
-      0.20 - 0.0018 * serveAccuracy + 0.0012 * (serveStrength - 50) + (jump ? 0.022 : -0.012) + (aimed ? AIMING_ERROR : 0),
+      0.20 - 0.0018 * serveAccuracy + 0.0012 * (serveStrength - 50) + SERVE_STYLE_RISK[style] + (aimed ? AIMING_ERROR : 0),
       0.015,
       0.34,
     );
-    const speed = this.serveSpeed(sr, jump);
-    const height = this.serveHeight(sr, jump);
+    const speed = this.serveSpeed(sr, style);
+    const height = this.serveHeight(sr, style);
     if (rng.chance(errorProb)) {
       sStats.serveErrors++;
       rcv.stats.opponentErrors++;
-      this.push({ kind: 'serveError', team: serving, player: server, detail: jump ? 'jump' : 'float', speed, height });
+      this.push({ kind: 'serveError', team: serving, player: server, detail: style, speed, height });
       return (1 - serving) as 0 | 1;
     }
-    this.push({ kind: 'serve', team: serving, player: server, detail: jump ? 'jump' : 'float', speed, height });
+    this.push({ kind: 'serve', team: serving, player: server, detail: style, speed, height });
 
     // ---- Reception ----
     const receiver = this.pickReceiver(rcv, srv.tactics, srvRotTactics(srv));
@@ -2149,9 +2167,15 @@ export class MatchSimulator {
     // (Set by pickReceiver just above — read afresh, not as the rally began.)
     const line = this.rallyPassers as number[] | null;
     const lineUp = line === null ? 1 : line.length === 2 ? TWO_PASSER_EDGE : FOUR_PASSER_EDGE;
+    // Where the coach has the line stand against this kind of serve — and a
+    // float he has them take overhead is played with the fingers.
+    const kind = serveKindOf(style);
+    const plans = receivePlansOf(rcv.tactics);
+    const overhead = kind === 'float' && plans.float.overhead === true;
     const recvSkill =
-      rr.reception * rr.fatigue * rr.confidence * DEFENSE_PROFILE[rcv.tactics.defense].receptionBonus *
-      (1 + PREP_EDGE * rcv.prep.reception) * lineUp;
+      (overhead ? overheadReception(rr.reception, rr.setting) : rr.reception) * rr.fatigue * rr.confidence *
+      DEFENSE_PROFILE[rcv.tactics.defense].receptionBonus * (1 + PREP_EDGE * rcv.prep.reception) * lineUp *
+      receiveFit(plans, kind);
     // SERVE_EDGE is the inherent difficulty of handling a professional serve,
     // independent of who is hitting it. The wide contest scale keeps a single
     // serve/reception mismatch from swinging the pass grade to an extreme —
@@ -2190,6 +2214,7 @@ export class MatchSimulator {
       player: receiver,
       detail: GRADE_SYMBOL[grade],
       quality: q,
+      ...(overhead ? { overhead: true } : {}),
     });
 
     // ---- Offense / transition loop ----

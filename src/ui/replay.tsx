@@ -14,7 +14,7 @@ import { describeHighlight } from '../engine/world/monthAwards.ts';
 import { ClubCrest, Segmented } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { LiveCourt, type CourtLabels } from './LiveCourt.tsx';
-import { rallyBeats, setupScene, type CourtState, type Radar, type Scene } from './matchCourt.ts';
+import { rallyBeats, setupScene, type CourtState, type Radar, type Scene, type ServeKind, type SideOrders } from './matchCourt.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from './rallyPlayer.ts';
 import { BigPlayCallout, CameraPicker, crowdFor, ServeRadar } from './screens/Matchday.tsx';
 import { useGame } from './state.ts';
@@ -50,9 +50,11 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
   const homeSide = useMemo(() => new Set([...h.homeCourt, h.homeLibero]), [h]);
   const teamOf = (p: number): 0 | 1 => (homeSide.has(p) ? 0 : 1);
   const serve = h.contacts.find((c) => c.kind === 'serve' || c.kind === 'serveError');
-  const kindOf = (p: number): 'jump' | 'float' | undefined =>
-    serve !== undefined && serve.player === p && (serve.detail === 'jump' || serve.detail === 'float') ? serve.detail : undefined;
-  const opening = (): Scene => setupScene(court, h.serveTeam, roles, nearTeam, kindOf);
+  const kindOf: ServeKind = (p) => serve !== undefined && serve.player === p
+    && (serve.detail === 'jump' || serve.detail === 'jumpFloat' || serve.detail === 'float') ? serve.detail : undefined;
+  // Where each side's servers serve from and its passers stand, as its coach has it now.
+  const ordersOf = (team: 0 | 1): SideOrders | undefined => (team === 0 ? home : away)?.tactics;
+  const opening = (): Scene => setupScene(court, h.serveTeam, roles, nearTeam, kindOf, ordersOf);
 
   const [scene, setScene] = useState<Scene>(opening);
   /** Each showing remounts the court, so it starts from the serve. */
@@ -84,7 +86,7 @@ function Replay({ highlight: h, title }: { highlight: Highlight; title: string }
       if (cancelled.current) return;
       const seed = h.set * 1000 + h.scoreBefore[0] * 31 + h.scoreBefore[1];
       const beats = rallyBeats(court, h.serveTeam, h.contacts, roles, seed, nearTeam, h.winner,
-        (team) => defenceLayoutsOf((team === 0 ? home : away)?.tactics), h.passers);
+        (team) => defenceLayoutsOf((team === 0 ? home : away)?.tactics), h.passers, ordersOf);
       await playBeats(beats, pace, cancelled, setScene, (play) => {
         setBigPlay({ ...play, key: Date.now() });
         clearTimeout(timer.current);
