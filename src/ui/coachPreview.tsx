@@ -10,10 +10,11 @@ import {
   CanvasTexture, CircleGeometry, DirectionalLight, HemisphereLight, Mesh, MeshBasicMaterial, NeutralToneMapping,
   PerspectiveCamera, PMREMGenerator, Scene, SRGBColorSpace, Vector3, WebGLRenderer,
 } from 'three';
-import { Figure, type Look } from './figure3d.ts';
+import type { Look } from './figure3d.ts';
 import { FramePacer, noteFrame } from './frames.ts';
 import { arms, buildRig, REF_HEIGHT, shape, STAND, STILL } from './playerRig.ts';
 import { graphics, renderPixelRatio } from './preferences.ts';
+import { personFor, type Person } from './volleyballPlayer3d.ts';
 
 export interface CoachPreviewHandle {
   /** Head and shoulders, as a JPEG data URL — null without WebGL. */
@@ -47,7 +48,7 @@ export const CoachPreview = forwardRef<CoachPreviewHandle, {
 }>(function CoachPreview({ look, turning = true }, ref): JSX.Element {
   const wrap = useRef<HTMLDivElement>(null);
   const view = useRef<{
-    renderer: WebGLRenderer; scene: Scene; camera: PerspectiveCamera; figure: Figure | null; yaw: number; size: [number, number];
+    renderer: WebGLRenderer; scene: Scene; camera: PerspectiveCamera; figure: Person | null; yaw: number; size: [number, number];
   } | null>(null);
 
   // The stage, made once: lights, the hall's soft light all round, the camera on him.
@@ -164,7 +165,7 @@ export const CoachPreview = forwardRef<CoachPreviewHandle, {
       v.scene.remove(v.figure.root);
       v.figure.dispose();
     }
-    v.figure = new Figure(look);
+    v.figure = personFor(look);
     v.scene.add(v.figure.root);
     pose(v.figure, v.yaw);
   }, [JSON.stringify(look)]);
@@ -209,6 +210,6 @@ export const CoachPreview = forwardRef<CoachPreviewHandle, {
   );
 });
 
-function pose(f: Figure, yaw: number): void {
+function pose(f: Person, yaw: number): void {
   f.pose({ x: 0, y: 0, lift: 0, yaw, scale: HEIGHT / REF_HEIGHT, rig: buildRig(EASY, STILL), alpha: 1 });
 }
