@@ -152,6 +152,8 @@ export interface Limb {
   z: number;
   bend: number;
   end: number;
+  /** A leg: whether its foot is on the floor taking weight in the running cycle, not swinging through. */
+  down?: boolean;
 }
 
 export interface Rig {
@@ -184,6 +186,28 @@ export interface Motion {
    *  pushing off, back braking, in towards a turn. */
   accelX?: number;
   accelY?: number;
+  /** How fast the body is turning, rad/s, anticlockwise from above: turning on the spot, the feet
+   *  step round with it rather than being swept round under it. */
+  turn?: number;
+  /** Where each ankle [left, right] is held instead of where the running cycle puts it — a foot
+   *  planted on the floor while the body moves over it — in the body frame before the whole body's
+   *  tip (see `untipped`); null leaves that foot to the cycle. */
+  feet?: readonly [V3 | null, V3 | null];
+}
+
+/** Drifting slower than this, m/s, the legs don't step: the feet stay put, and catch up after. */
+const STEP_FROM = 0.1;
+
+/** Turning slower than the first, rad/s, the feet just pivot where they are; faster than the second, they step it all. */
+const PIVOT: readonly [number, number] = [0.4, 1.2];
+
+/**
+ * How fast a turn carries the body along over each foot, m/s, the way it faces: forward over the
+ * right foot and back over the left turning left (anticlockwise), the other way round turning
+ * right — nothing for a turn slow enough to pivot on the spot. The legs step to it as they do to a run.
+ */
+export function turnPace(turn: number, stance: number): number {
+  return turn * ease01((Math.abs(turn) - PIVOT[0]) / (PIVOT[1] - PIVOT[0])) * stance;
 }
 
 export const STILL: Motion = { hand: 1, gait: 0, moveX: 0, moveY: 0, airborne: 0, lookYaw: 0, lookPitch: 0 };
@@ -258,9 +282,17 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const speed = Math.hypot(m.moveX, m.moveY);
   // Off their feet — launched at a ball, or down on the floor — the legs stop running.
   const down = Math.min(1, Math.max(Math.abs(s.dive), Math.abs(s.roll)) / 0.6);
-  // How much of a running cycle shows: none standing, all of it at a jog.
+  // Turning, the floor goes by under the feet as well as with the run: the legs step to that.
+  const spin = turnPace(m.turn ?? 0, s.stance);
+  const pace = Math.hypot(speed, spin);
+  // How much of a running cycle shows: none standing, all of it at a jog — the arms and the
+  // hips only for going somewhere, the legs for turning too.
   const run = Math.min(1, speed / 1.4) * (1 - m.airborne) * (1 - down);
-  const stride = strideLength(speed);
+  // The legs step properly from a walk — the foot on the floor planted on it, not dragged — and
+  // round a turn from the first step; drifting slower than a step is worth, they don't step at all.
+  const stepping = Math.max(Math.min(1, Math.max(0, pace - STEP_FROM) / 0.6), Math.min(1, Math.abs(spin) / 0.3))
+    * (1 - m.airborne) * (1 - down);
+  const stride = strideLength(pace);
   // Running, the hips sink as each foot takes the weight under the body and
   // rise through the stride.
   const bob = run * 0.03 * Math.cos(m.gait) ** 2;
@@ -299,10 +331,9 @@ export function buildRig(s: Shape, m: Motion): Rig {
     };
   };
 
-  // Legs: each ankle placed on the floor, the running cycle swinging it along
-  // the way the player is moving and lifting it on the way through.
-  const dirX = speed > 1e-3 ? m.moveX / speed : 0;
-  const dirY = speed > 1e-3 ? m.moveY / speed : 0;
+  // Legs: each ankle placed on the floor, the running cycle swinging it along the way the floor
+  // goes by under it — the way the player is moving, and round with a turn — and lifting it on
+  // the way through.
   const full = Math.min(0.28, stride / 2);
   // A shuffle's step is short enough that the feet, a stride apart in phase and each swinging a
   // touch past its mark, still keep a gap between them.
@@ -312,14 +343,24 @@ export function buildRig(s: Shape, m: Motion): Rig {
   const legOf = (side: -1 | 1): Limb => {
     const ahead = side === m.hand ? -s.stride / 2 : s.stride / 2;
     const phase = m.gait + (side === 1 ? Math.PI : 0);
+    const footPace = Math.hypot(m.moveX, m.moveY + side * spin);
     // Feet land under the body rather than far out in front — no further than a leg reaches — and
     // the heel kicks up behind on the way through. The faster the run the less of each stride a
     // foot spends on the floor, so the one on it keeps pace with the floor.
-    const reach = half * Math.min(1, run * 1.6) * strideAt(phase, duty);
-    const lift = run * (0.05 + 0.04 * speed) * (1 - 0.5 * shuffle) * footLiftAt(phase, duty);
-    const ax = side * s.stance + dirX * reach;
-    const ay = ahead + dirY * reach - m.airborne * s.tuck * 0.45;
-    const az = BONES.ankle + lift + m.airborne * s.tuck;
+    const reach = half * Math.min(1, stepping * 1.6) * strideAt(phase, duty);
+    // A step lifts the foot clear of the floor — never a shuffle along it — the higher the faster.
+    const lift = (Math.min(1, stepping / 0.15) * 0.025 + stepping * (0.025 + 0.04 * pace)) * (1 - 0.5 * shuffle) * footLiftAt(phase, duty);
+    // The stride shared between the run, straight along it, and the turn, round an arc about the
+    // body's middle — as a foot planted on the floor goes round under a body turning over it.
+    const k = footPace > 1e-3 ? reach / footPace : 0;
+    const round = (spin * k) / Math.max(0.05, s.stance);
+    const [bx, by] = [side * s.stance, ahead];
+    const held = m.feet?.[side < 0 ? 0 : 1] ?? null;
+    const [ax, ay, az] = held ?? [
+      bx * Math.cos(round) - by * Math.sin(round) + m.moveX * k,
+      bx * Math.sin(round) + by * Math.cos(round) + m.moveY * k - m.airborne * s.tuck * 0.45,
+      BONES.ankle + lift + m.airborne * s.tuck,
+    ];
     // Into the pelvis's frame: from the hip joint, then undo the pelvis's tip.
     const dx = ax - side * BONES.hipOut;
     const vy = ay - s.hipShift;
@@ -329,7 +370,10 @@ export function buildRig(s: Shape, m: Motion): Rig {
     const leg = solveLeg(dx, vy * c - vz * sn, vy * sn + vz * c);
     // The foot kept flat on the floor, pointed in the air or pushing off a stride.
     const push = run * 0.35 * Math.max(0, -Math.sin(phase));
-    return { x: leg.x, y: leg.y, z: 0, bend: leg.bend, end: leg.bend - leg.x - pitch - m.airborne * s.point - push };
+    return {
+      x: leg.x, y: leg.y, z: 0, bend: leg.bend, end: leg.bend - leg.x - pitch - m.airborne * s.point - push,
+      down: lift === 0 && m.airborne < 0.01,
+    };
   };
 
   const twist = -s.twist * m.hand;
@@ -386,6 +430,11 @@ interface Frame {
 function child(f: Frame, offset: V3, rot: M3 = I3): Frame {
   const o = apply(f.m, offset);
   return { m: mul(f.m, rot), t: [f.t[0] + o[0], f.t[1] + o[1], f.t[2] + o[2]] };
+}
+
+/** A point in the body frame, as it was before the rig tipped the whole body (`Rig.root`): where to hold a foot, for `Motion.feet`. */
+export function untipped(r: Rig, v: V3): V3 {
+  return apply(mul(ry(-r.root.roll), rx(-r.root.pitch)), [v[0], v[1], v[2] - r.root.rise]);
 }
 
 export interface Joints {

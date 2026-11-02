@@ -37,8 +37,8 @@ import {
   ballAlong, COURT_HALF_LENGTH, COURT_HALF_WIDTH, flightBulge, NET_HEIGHT, tossesWithBothHands, type Ball3, type Pose, type Scene,
 } from './matchCourt.ts';
 import {
-  arms, buildRig, COVER, HOLD, jointPositions, mixShape, READY, REF_HEIGHT, shape, SHAPE_KEYS, STAND, STILL, strideLength,
-  type Rig, type Shape, type V3,
+  arms, BONES, buildRig, COVER, HOLD, jointPositions, mixShape, READY, REF_HEIGHT, shape, SHAPE_KEYS, STAND, STILL,
+  strideLength, turnPace, untipped, type Motion, type Rig, type Shape, type V3,
 } from './playerRig.ts';
 import type { Cheer } from './crowd3d.ts';
 
@@ -543,6 +543,8 @@ interface Action {
   path: Path | null;
   /** When it has handed back to the player's posture, ms from the contact. */
   end: number;
+  /** A reaction's hop: how much of it they go up with — set as they leave the floor, on the move less. */
+  hop?: number;
 }
 
 /** Keys laid out in time: none earlier than the action's start, and always in order. */
@@ -786,6 +788,8 @@ const ACCEL = 18; // m/s²
 const BRAKE = 24; // m/s²
 const SETTLE = 0.12; // s
 const TURN_RATE = 10; // rad/s
+/** The fastest the way to turn to is let move, rad/s: a little under TURN_RATE, eased up to. */
+const FACE_RATE = 8;
 
 /** A step bigger than this, and this much bigger than the step before, is a jump. */
 const JUMP = 0.05;
@@ -850,10 +854,12 @@ class Follow {
 interface Flow {
   /** Each part of the shape, in SHAPE_KEYS order. */
   shape: Follow[];
-  /** The way they face, unwrapped. */
+  /** The way they face, unwrapped — and the way they are turning to, steadied first, unwrapped too. */
   yaw: Follow;
-  /** Where the head is turned to, relative to the body. */
+  face: number;
+  /** Where the head is turned to, relative to the body — and where the eyes are, a moment ahead of it. */
   lookYaw: Follow;
+  look: [number, number];
   lookPitch: Follow;
   /** How hard they are speeding up across the floor, m/s², eased in and out as a body's weight shifts. */
   ax: Follow;
@@ -861,6 +867,10 @@ interface Flow {
   /** How fast they are going, in the body's frame, as the legs take it up: a first step, not a leap into stride. */
   moveX: Follow;
   moveY: Follow;
+  /** How fast they are turning, rad/s, as the legs take it up: turning on the spot, they step round. */
+  turn: Follow;
+  /** Each foot's hold on the floor, [left, right]. */
+  feet: [Foot, Foot];
   /** Last frame's height off the floor, m, and how fast it was changing, m/s. */
   lift: number;
   liftV: number;
@@ -872,16 +882,208 @@ function flowOf(b: Body): Flow {
   b.flow ??= {
     shape: SHAPE_KEYS.map((k) => new Follow(b.shape[k])),
     yaw: new Follow(b.yaw),
+    face: b.yaw,
     lookYaw: new Follow(0),
+    look: [0, 0],
     lookPitch: new Follow(0),
     ax: new Follow(0),
     ay: new Follow(0),
     moveX: new Follow(0),
     moveY: new Follow(0),
+    turn: new Follow(0),
+    feet: [footFree(), footFree()],
     lift: b.lift,
     liftV: 0,
   };
   return b.flow;
+}
+
+/** A foot's hold on the floor. */
+interface Foot {
+  /** Down on the floor — and where it was put down, court metres. */
+  down: boolean;
+  x: number;
+  y: number;
+  /** How much of the hold shows: 1 down, easing to 0 as the foot is lifted off into its stride. */
+  hold: number;
+  /** How long it has stood off its place with the body still, s. */
+  off: number;
+  /** A small step back to its place under way, 0 to 1 — and where from — or null. */
+  settle: number | null;
+  sx: number;
+  sy: number;
+  /** Where it showed last frame, and how fast it was going there, m/s. */
+  lx: number;
+  ly: number;
+  vx: number;
+  vy: number;
+  seen: boolean;
+  /** Coming to a stop as it is put down: how long since, s — from where, at what pace — or null. */
+  land: number | null;
+  ux: number;
+  uy: number;
+  wx: number;
+  wy: number;
+}
+
+function footFree(): Foot {
+  return {
+    down: false, x: 0, y: 0, hold: 0, off: 0, settle: null, sx: 0, sy: 0, lx: 0, ly: 0, vx: 0, vy: 0, seen: false,
+    land: null, ux: 0, uy: 0, wx: 0, wy: 0,
+  };
+}
+
+/**
+ * How far a foot put down at a pace runs on, `u` of the way through coming to a stop, as a share
+ * of that pace × the time it takes: the pace eased out to nothing (as `gentle` eases in), so the
+ * foot slows from the pace it came down at with no jolt, and ends up half that on.
+ */
+function runOn(u: number): number {
+  const c = Math.min(1, Math.max(0, u));
+  return c - c ** 6 + 3 * c ** 5 - 2.5 * c ** 4;
+}
+
+/** 0 to 1 over 0 to 1, setting off and arriving with no pace and no push: a foot let go, or stepped across. */
+function gentle(t: number): number {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * c * (c * (6 * c - 15) + 10);
+}
+
+/** A planted foot left this far behind its stride by a body moving without stepping is dragged after it, m. */
+const STRETCH = 0.24;
+/** Standing still, a foot this far off its place steps back to it, m — after this long, s, and taking this long, s. */
+const SETTLE_OFF = 0.06;
+const SETTLE_WAIT = 0.3;
+const SETTLE_TIME = 0.28;
+/** How long a foot takes to come to a stop on the floor as it is put down, s — and the fastest it is let run on at, m/s. */
+const LAND_TIME = 0.08;
+const LAND_PACE = 0.6;
+
+/**
+ * The rig with the feet planted on the floor. A foot the running cycle puts down stays where it
+ * was put while the body moves, turns or changes its shape over it, and is lifted off into its
+ * stride as the cycle lifts it — so no foot slides along the floor. One left too far behind is
+ * dragged after the body; standing still off its place, it steps back there, one foot at a time.
+ * Off the floor, or down on it after a dive, the feet go free.
+ */
+function plantFeet(b: Body, f: Flow, s: Shape, m: Motion, dt: number): Rig {
+  const free = buildRig(s, m);
+  // Off the floor, down on it, or after a stall: let go.
+  const loose = b.lift > 0.01 || grounded(s) > 0.3 || dt > 0.1;
+  const j = jointPositions(free);
+  const c = Math.cos(b.yaw);
+  const sn = Math.sin(b.yaw);
+  const k = b.scale;
+  const toLocal = (x: number, y: number, z: number): V3 => {
+    const dx = (x - b.x) / k;
+    const dy = (y - b.y) / k;
+    return untipped(free, [dx * c + dy * sn, -dx * sn + dy * c, z]);
+  };
+  const still = Math.hypot(b.vx, b.vy) < 0.15 && Math.abs(f.turn.x) < 0.4;
+  const held: [V3 | null, V3 | null] = [null, null];
+  f.feet.forEach((foot, i) => {
+    const a = j.ankles[i];
+    const px = b.x + (a[0] * c - a[1] * sn) * k;
+    const py = b.y + (a[0] * sn + a[1] * c) * k;
+    // Where it shows this frame — and so how fast it is going, for the next.
+    const show = (x: number, y: number, z: number): void => {
+      held[i] = toLocal(x, y, z);
+      if (foot.seen && dt > 0) {
+        foot.vx = (x - foot.lx) / dt;
+        foot.vy = (y - foot.ly) / dt;
+      }
+      foot.lx = x;
+      foot.ly = y;
+      foot.seen = true;
+    };
+    if (foot.settle !== null && !loose) {
+      // Stepping back to its place: up a little, over, and down there.
+      foot.settle = Math.min(1, foot.settle + dt / SETTLE_TIME);
+      const e = gentle(foot.settle);
+      show(foot.sx + (px - foot.sx) * e, foot.sy + (py - foot.sy) * e, a[2] + 0.035 * Math.sin(Math.PI * foot.settle) ** 2);
+      if (foot.settle >= 1) {
+        foot.settle = null;
+        foot.down = true;
+        foot.x = px;
+        foot.y = py;
+        foot.vx = 0;
+        foot.vy = 0;
+        foot.hold = 1;
+      }
+      return;
+    }
+    foot.settle = null;
+    // Down when the running cycle has it taking weight — not as it swings down the last of the way.
+    const onFloor = !loose && free.legs[i].down === true && a[2] < BONES.ankle + 0.01;
+    if (onFloor) {
+      if (!foot.down) {
+        // Put down from where it showed, at the pace it was going — eased out to a stop over a few
+        // frames, never stopped dead in one — and held where that brings it.
+        foot.down = true;
+        foot.off = 0;
+        if (foot.seen) {
+          const pace = Math.hypot(foot.vx, foot.vy);
+          const keep = pace > LAND_PACE ? LAND_PACE / pace : 1;
+          foot.land = 0;
+          foot.ux = foot.lx;
+          foot.uy = foot.ly;
+          foot.wx = foot.vx * keep;
+          foot.wy = foot.vy * keep;
+          foot.x = foot.ux + foot.wx * LAND_TIME * runOn(1);
+          foot.y = foot.uy + foot.wy * LAND_TIME * runOn(1);
+        } else {
+          foot.x = px;
+          foot.y = py;
+        }
+      }
+      foot.hold = 1;
+      if (foot.land !== null) {
+        foot.land = Math.min(LAND_TIME, foot.land + dt);
+        const on = LAND_TIME * runOn(foot.land / LAND_TIME);
+        show(foot.ux + foot.wx * on, foot.uy + foot.wy * on, a[2]);
+        if (foot.land >= LAND_TIME) foot.land = null;
+        return;
+      }
+      // Left behind by a body moving over it without stepping: drawn after it more and more as it
+      // stretches, never snatched.
+      const d = Math.hypot(foot.x - px, foot.y - py);
+      const most = STRETCH * k;
+      if (d > 0.7 * most) {
+        const pull = gentle((d - 0.7 * most) / (0.6 * most)) * (1 - Math.exp(-dt / 0.06));
+        const to = Math.max(0.7 * most, d - (d - 0.7 * most) * pull);
+        const cap = Math.min(to, 1.3 * most);
+        foot.x = px + ((foot.x - px) * cap) / d;
+        foot.y = py + ((foot.y - py) * cap) / d;
+      }
+      foot.off = still && d > SETTLE_OFF * k ? foot.off + dt : 0;
+      const other = f.feet[1 - i];
+      if (foot.off > SETTLE_WAIT && other.settle === null && other.down) {
+        foot.settle = 0;
+        foot.sx = foot.x;
+        foot.sy = foot.y;
+        foot.off = 0;
+        foot.down = false;
+      }
+    } else {
+      if (foot.land !== null) {
+        // Lifted again before it had stopped: let go from where it is.
+        foot.x = foot.lx;
+        foot.y = foot.ly;
+        foot.land = null;
+      }
+      foot.down = false;
+      foot.hold = Math.max(0, foot.hold - dt / (loose ? 0.07 : 0.12));
+    }
+    if (foot.hold > 0) {
+      const w = gentle(foot.hold);
+      show(px + (foot.x - px) * w, py + (foot.y - py) * w, a[2]);
+    } else {
+      // Free: where the cycle has it.
+      show(px, py, a[2]);
+      held[i] = null;
+    }
+  });
+  return held[0] === null && held[1] === null ? free : buildRig(s, { ...m, feet: held });
 }
 
 /** The shape the body takes, asked for `aim`: each part followed with its momentum. */
@@ -895,7 +1097,12 @@ function flowShape(f: Flow, aim: Shape, dt: number, time: number): Shape {
 
 /** The head turned to the ball, a moment behind it as eyes and neck are. */
 function lookAt(f: Flow, yaw: number, pitch: number, dt: number): [number, number] {
-  return [f.lookYaw.step(yaw, dt, 0.12), f.lookPitch.step(pitch, dt, 0.12)];
+  // The ball turns at a stroke off every touch: the eyes take that up first, so the head's own
+  // turn never changes pace at a stroke.
+  const g = dt > 0.1 || dt <= 0 ? 1 : 1 - Math.exp(-dt / 0.06);
+  f.look[0] += wrap(yaw - f.look[0]) * g;
+  f.look[1] += (pitch - f.look[1]) * g;
+  return [f.lookYaw.step(f.look[0], dt, 0.12), f.lookPitch.step(f.look[1], dt, 0.12)];
 }
 
 /** How fast the ball spins off each kind of contact. */
@@ -910,6 +1117,11 @@ function yawTo(dx: number, dy: number): number {
 
 function wrap(a: number): number {
   return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
+/** A facing `w` of the way from `a` round to `b`, the short way. */
+function blendYaw(a: number, b: number, w: number): number {
+  return a + wrap(b - a) * w;
 }
 
 /** A facing kept within `max` of `around`. */
@@ -2878,27 +3090,46 @@ export class CourtMotion {
     const speed = Math.hypot(b.vx, b.vy);
 
     // ---- Which way they face ----
+    // Each reason to face a way is blended into the next rather than switched to — so a body
+    // slowing past a threshold, or coming up to its mark, never swings back and forth between two.
     const net = netYaw(b.ty);
     const remaining = Math.hypot(b.tx + b.ox - b.x, b.ty + b.oy - b.y);
+    const ahead = yawTo(b.vx, b.vy);
     let face: number;
     const huddle = spotFor(b, now);
     if (huddle !== null) {
       // Into the huddle: running to it, then facing in.
       const d = Math.hypot(huddle.x - b.x, huddle.y - b.y);
-      face = d > 0.9 && speed > 1.5 ? yawTo(b.vx, b.vy) : huddle.face;
-    } else if (action !== null && action.yaw !== null && rel > -Math.max(350, (action.tc - action.t0) * 0.6)) face = action.yaw;
-    else if ((speed > 2.6 && remaining > 1.5) || (b.via !== null && speed > 0.8)) face = yawTo(b.vx, b.vy);
-    else if (b.side !== null) face = yawTo(-b.x, -b.y * 0.5);
-    else if (ball !== null && b.pose !== 'stand' && b.pose !== 'hold') face = clampYaw(yawTo(ball.x - b.x, ball.y - b.y), net, 1.2);
-    else face = net;
+      face = blendYaw(huddle.face, ahead, smooth((d - 0.6) / 0.6) * smooth((speed - 1.1) / 0.8));
+    } else {
+      // Standing: off the court, in towards it; on it, at the ball — never far off the net's way — or the net's way.
+      const rest = b.side !== null ? yawTo(-b.x, -b.y * 0.5)
+        : ball !== null && b.pose !== 'stand' && b.pose !== 'hold' ? clampYaw(yawTo(ball.x - b.x, ball.y - b.y), net, 1.2) : net;
+      // Running somewhere a way off — or to the substitution zone — the way they are going.
+      const going = b.via !== null ? smooth((speed - 0.5) / 0.6) : smooth((speed - 2.2) / 0.8) * smooth((remaining - 1.1) / 0.8);
+      face = blendYaw(rest, ahead, going);
+      // A move's own facing, eased into a little ahead of it.
+      if (action !== null && action.yaw !== null) {
+        const lead = Math.max(350, (action.tc - action.t0) * 0.6);
+        face = blendYaw(face, action.yaw, smooth((rel + lead) / 160));
+      }
+    }
     // Turning with a swing, not at a stroke. Lying on the floor, the body doesn't spin round to the ball.
     const lying = grounded(b.shape) > 0.7;
-    b.yaw = wrap(f.yaw.step(f.yaw.x + wrap(face - f.yaw.x), dt, lying ? 0.5 : 0.09, TURN_RATE * (lying ? 0.05 : 1)));
+    // The way to turn to steadied first, so the turn's own pace never changes at a stroke — the
+    // way a run is going wanders as they steer, and the body follows that, not every wobble.
+    // Nor ever so fast the turn hits its limit: it eases up to that pace instead.
+    const toward = wrap(face - f.face) * (dt > 0.1 ? 1 : 1 - Math.exp(-dt / 0.07));
+    f.face += dt > 0.1 || dt <= 0 ? toward : FACE_RATE * dt * Math.tanh(toward / (FACE_RATE * dt));
+    b.yaw = wrap(f.yaw.step(f.yaw.x + wrap(f.face - f.yaw.x), dt, lying ? 0.5 : 0.09, TURN_RATE * (lying ? 0.05 : 1)));
 
     // ---- Off the floor ----
     const jumpNow = action !== null && action.jump !== null ? liftAt(action.jump, rel) : 0;
     const r = b.reaction;
-    const hop = r !== null && r.jump !== null ? liftAt(r.jump, now - r.tc) * Math.max(0, 1 - speed / 2.5) : 0;
+    // A celebration's hop: lower on the move — how much lower settled as they leave the floor, not
+    // changing with every stride once they are up.
+    if (r !== null && r.jump !== null && r.hop === undefined && now - r.tc > r.jump.up) r.hop = Math.max(0, 1 - speed / 2.5);
+    const hop = r !== null && r.jump !== null ? liftAt(r.jump, now - r.tc) * (r.hop ?? 0) : 0;
     const lift = Math.max(jumpNow, hop);
     if (lift > 0) {
       // Rising and falling with the jump — and, should it end before the floor comes, carrying
@@ -2953,10 +3184,14 @@ export class CourtMotion {
     // ---- Running, and looking at the ball ----
     const legsX = f.moveX.step(moveX, dt, 0.06);
     const legsY = f.moveY.step(moveY, dt, 0.06);
-    const legs = Math.hypot(legsX, legsY);
+    // Turning, the legs step round with the body rather than the feet being swept round under it.
+    const turn = f.turn.step(f.yaw.v, dt, 0.06);
+    const spin = turnPace(turn, s.stance);
+    const legs = Math.hypot(legsX, legsY, spin);
     b.gait += (Math.PI * legs * dt) / strideLength(legs);
-    // Coming to a stop the feet come together under the body, to set off from there again.
-    const still = Math.max(0, 1 - legs / 0.4);
+    // Coming to a stop the feet come together under the body, to set off from there again — not
+    // while stepping round a turn.
+    const still = Math.max(0, 1 - Math.hypot(legsX, legsY) / 0.2) * (1 - Math.min(1, Math.abs(spin) / 0.15));
     if (still > 0) b.gait += (Math.round(b.gait / Math.PI) * Math.PI - b.gait) * (1 - Math.exp(-dt / 0.15)) * still;
     let lookYaw = 0;
     let lookPitch = 0;
@@ -2971,7 +3206,7 @@ export class CourtMotion {
     const airborne = smooth(b.lift / 0.2);
     const accelX = f.ax.x * c + f.ay.x * sn;
     const accelY = -f.ax.x * sn + f.ay.x * c;
-    b.rig = buildRig(s, { hand: b.hand, gait: b.gait, moveX: legsX, moveY: legsY, airborne, lookYaw, lookPitch, accelX, accelY });
+    b.rig = plantFeet(b, f, s, { hand: b.hand, gait: b.gait, moveX: legsX, moveY: legsY, airborne, lookYaw, lookPitch, accelX, accelY, turn }, dt);
 
     const alphaTarget = b.leaving ? 0 : 1;
     b.alpha += (alphaTarget - b.alpha) * (1 - Math.exp(-dt / 0.25));

@@ -7,7 +7,7 @@ import { stubManager } from '../engine/world/world.ts';
 import { CourtMotion, crossesCourt, LINE_JUDGES, lineCall, REFEREE_STAND, TROPHY_HAND_AT, TROPHY_LIFT_AT, type Body, type Signal } from './courtMotion.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
 import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
-import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL } from './playerRig.ts';
+import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL, strideLength, turnPace } from './playerRig.ts';
 
 function liveMatch(seed: number) {
   const world = generateWorld({ seed, startYear: 2026, scale: 'small', manager: stubManager() });
@@ -107,6 +107,90 @@ test('running swings the feet along the way the player is going, one off the flo
     assert.ok(Math.min(j.ankles[0][2], j.ankles[1][2]) - BONES.ankle < 0.12, 'one foot is always near the floor');
   }
   assert.ok(Math.max(...lifted) > 0.1, 'and the other comes through off it');
+});
+
+test('turning on the spot the feet step round with the body, not swept round under it', () => {
+  for (const turn of [1.5, 2, 3, 5]) {
+    let yaw = 0;
+    let gait = 0;
+    let slid = 0;
+    let steps = 0;
+    let prev: Array<[number, number, number]> | null = null;
+    const dt = 1 / 60;
+    for (let i = 0; i < 90; i++) {
+      yaw += turn * dt;
+      const pace = Math.abs(turnPace(turn, READY.stance));
+      gait += (Math.PI * pace * dt) / strideLength(pace);
+      const j = jointPositions(buildRig(READY, { ...STILL, gait, turn }));
+      const c = Math.cos(yaw);
+      const s = Math.sin(yaw);
+      const feet = j.ankles.map((a) => [a[0] * c - a[1] * s, a[0] * s + a[1] * c, a[2]] as [number, number, number]);
+      if (prev !== null) {
+        for (let k = 0; k < 2; k++) {
+          const down = (z: number): boolean => z < BONES.ankle + 0.006;
+          if (down(feet[k][2]) && down(prev[k][2])) slid += Math.hypot(feet[k][0] - prev[k][0], feet[k][1] - prev[k][1]);
+          if (!down(feet[k][2]) && down(prev[k][2])) steps++;
+        }
+      }
+      prev = feet;
+    }
+    // Swept round, each foot would go the length of its arc: stance × the angle turned.
+    const swept = 2 * READY.stance * turn * 1.5;
+    assert.ok(slid < 0.15 * swept, `turning ${turn} rad/s the feet slid ${slid.toFixed(2)} m of ${swept.toFixed(2)}`);
+    assert.ok(steps >= 1, `turning ${turn} rad/s they step`);
+  }
+});
+
+test('a foot down on the floor stays put: through rallies, the feet barely slide along it', () => {
+  const { sim, store, teamOf } = liveMatch(5);
+  const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+  let now = 0;
+  let slid = 0;
+  let frames = 0;
+  const last = new Map<number, Ball3[]>();
+  const run = (ms: number): void => {
+    const end = now + ms;
+    while (now < end - 1e-6) {
+      now += 1000 / 60;
+      m.step(1 / 60, now);
+      for (const [p, b] of m.bodies) {
+        if (b.side !== null) continue;
+        frames++;
+        const j = jointPositions(b.rig);
+        const c = Math.cos(b.yaw);
+        const s = Math.sin(b.yaw);
+        const feet = j.ankles.map((a) => ({ x: b.x + (a[0] * c - a[1] * s) * b.scale, y: b.y + (a[0] * s + a[1] * c) * b.scale, z: b.lift + a[2] * b.scale }));
+        const before = last.get(p);
+        if (before !== undefined) {
+          feet.forEach((f, k) => {
+            const was = before[k];
+            const floor = BONES.ankle * b.scale + 0.005;
+            if (f.z < floor && was.z < floor && Math.abs(f.z - was.z) < 0.0015) {
+              const d = Math.hypot(f.x - was.x, f.y - was.y);
+              // Faster than a foot coming to a stop as it is put down.
+              if (d * 60 > 0.35) slid += d;
+            }
+          });
+        }
+        last.set(p, feet);
+      }
+    }
+  };
+  for (let i = 0; i < 8; i++) {
+    const pre = sim.snapshot();
+    m.scene(setupScene(pre, pre.serving, store.position, 0), now);
+    run(900);
+    const entry = sim.step();
+    if (entry === null) break;
+    for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner)) {
+      m.scene(beat, now);
+      run(Math.round(beat.ms / (1000 / 60)) * (1000 / 60));
+    }
+    run(1500);
+  }
+  const perMinute = slid / (frames / 3600);
+  // Swept round and dragged along as they once were, about 17 m a player-minute.
+  assert.ok(perMinute < 8, `${perMinute.toFixed(1)} m of sliding a player-minute`);
 });
 
 test('every hand meets the ball: passes, sets, spikes, serves', () => {
