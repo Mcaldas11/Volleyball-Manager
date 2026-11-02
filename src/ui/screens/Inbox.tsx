@@ -17,6 +17,7 @@ import {
 } from '../../engine/world/loans.ts';
 import {
   ClubCrest, ClubLink, Flag, initials, money, MoneyInput, PlayerFace, PlayerLink, RatingBadge, Segmented, StarMeter,
+  useListPages,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { SeasonReviewPreview } from '../seasonReview.tsx';
@@ -113,10 +114,13 @@ export function InboxScreen(): JSX.Element {
       return true;
     })
     .reverse();
+  // Drawn a page at a time — always as far down as the open message.
+  const { shown: drawn, more } = useListPages(shown, `${folder}/${filter}`,
+    selected !== undefined ? shown.indexOf(selected) : -1);
 
   // Newest first, under a heading for each day.
   const groups: Array<{ day: number; items: GameMessage[] }> = [];
-  for (const m of shown) {
+  for (const m of drawn) {
     const last = groups[groups.length - 1];
     if (last !== undefined && last.day === m.day) last.items.push(m);
     else groups.push({ day: m.day, items: [m] });
@@ -192,6 +196,7 @@ export function InboxScreen(): JSX.Element {
               ))}
             </div>
           ))}
+          {more}
         </div>
       </section>
 

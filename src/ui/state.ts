@@ -46,6 +46,7 @@ import {
   MatchFormat, MatchSimulator, registeredLiberos, simulateMatch, SUBS_PER_SET, type MatchResult, type RallyLogEntry, type ShoutKind,
   type SubstitutionPlan, type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
+import { bestByAbility } from '../engine/model/ability.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
 import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
@@ -5173,12 +5174,14 @@ class Game {
     if (world === null) return [];
     const store = world.players;
     const q = filters.query.trim().toLowerCase();
+    // Our own players out on loan, looked up once rather than for every player in the world.
+    const ours = new Set(club !== null ? world.loans.filter((l) => l.parentClubId === club.id).map((l) => l.playerIdx) : []);
     const out: number[] = [];
     for (let i = 0; i < store.count; i++) {
       if (!store.isActive(i)) continue;
       if (club !== null && store.clubId[i] === club.id) continue;
       if (store.hasFlag(i, PlayerFlag.Youth)) continue;
-      if (club !== null && world.loans.some((l) => l.playerIdx === i && l.parentClubId === club.id)) continue;
+      if (ours.has(i)) continue;
       if (q !== '' && !store.fullName(i).toLowerCase().includes(q)) continue;
       if (filters.position !== null && store.position[i] !== filters.position) continue;
       if (filters.freeAgentOnly && store.clubId[i] !== NO_CLUB) continue;
@@ -5196,9 +5199,7 @@ class Game {
 
       out.push(i);
     }
-    return out
-      .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
-      .slice(0, limit);
+    return bestByAbility(out, store.currentAbility, limit);
   }
 
   /** Dispatch a scout to watch a player; the report arrives in a week. */

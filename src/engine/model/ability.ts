@@ -180,3 +180,19 @@ export const AGEING_RESISTANCE: Readonly<Record<Position, number>> = {
   [Position.MiddleBlocker]: 1.1,
   [Position.Libero]: 0.6,
 };
+
+/**
+ * The `limit` best of `players` by current ability, best first — those level
+ * keeping their order — as sorting them all would give, without sorting the
+ * whole world: a count by ability finds where the cut falls, and only the
+ * players above it are sorted.
+ */
+export function bestByAbility(players: readonly number[], ability: ArrayLike<number>, limit: number): number[] {
+  let top = 0;
+  for (const p of players) if (ability[p] > top) top = ability[p];
+  const count = new Uint32Array(top + 1);
+  for (const p of players) count[ability[p]]++;
+  let cut = top;
+  for (let have = 0; cut > 0 && have + count[cut] < limit; cut--) have += count[cut];
+  return players.filter((p) => ability[p] >= cut).sort((a, b) => ability[b] - ability[a]).slice(0, limit);
+}

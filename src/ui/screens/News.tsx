@@ -10,7 +10,7 @@ import { useState, type CSSProperties, type JSX } from 'react';
 import { flagImageUrl, NATIONS } from '../../engine/world/nations.ts';
 import type { NewsItem, NewsKind } from '../../engine/world/news.ts';
 import { fanComments, fanName, type FanComment } from '../../engine/world/fans.ts';
-import { ClubCrest, Empty, PlayerFace } from '../components.tsx';
+import { ClubCrest, Empty, PlayerFace, useListPages } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -96,6 +96,8 @@ export function NewsScreen(): JSX.Element {
   for (const n of world.news) counts.set(n.nation, (counts.get(n.nation) ?? 0) + 1);
   const nations = [...counts].sort((a, b) => b[1] - a[1]).map(([id]) => id);
   const open = items.find((n) => n.id === openId) ?? items[0];
+  // Drawn a page at a time — always as far down as the open story.
+  const { shown, more } = useListPages(items, `${filter}/${nation}`, open !== undefined ? items.indexOf(open) : -1);
 
   return (
     <div className="news">
@@ -123,7 +125,7 @@ export function NewsScreen(): JSX.Element {
         </header>
         <div className="news-items">
           {items.length === 0 && <p className="news-none">No stories here yet — the papers fill up as the season goes on.</p>}
-          {items.map((n) => (
+          {shown.map((n) => (
             <button
               key={n.id}
               className={`news-item${open?.id === n.id ? ' on' : ''}`}
@@ -138,6 +140,7 @@ export function NewsScreen(): JSX.Element {
               </span>
             </button>
           ))}
+          {more}
         </div>
       </section>
 

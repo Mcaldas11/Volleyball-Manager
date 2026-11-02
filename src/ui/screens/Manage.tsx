@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import { receiveLineOf } from '../../engine/match/receiveLine.ts';
 import type { ReceptionFormation } from '../../engine/match/tactics.ts';
 import {
@@ -13,7 +13,7 @@ import { clubBooks } from '../../engine/season/books.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import {
   abilityClass, Bar, Card, ChoiceField, ClubLink, Empty, Flag, KV, money, moneyShort, MoneyInput,
-  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useSort,
+  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useListPages, useSort,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
@@ -459,7 +459,9 @@ export function ScoutingScreen(): JSX.Element {
   };
   const filtersActive = JSON.stringify(filters) !== JSON.stringify(DEFAULT_SCOUT_FILTERS);
 
-  const pool = g.scoutingPool(filters);
+  // The whole world searched: again when the filters or the game change, not each time a row is picked.
+  const version = g.getSnapshot();
+  const pool = useMemo(() => g.scoutingPool(filters), [filters, version]);
   // The pool arrives best-first; only re-sort once a column is chosen.
   const targets = sort.key === 'default' ? pool : sortBy(pool, sort, (p, k) => {
     switch (k) {
@@ -472,6 +474,9 @@ export function ScoutingScreen(): JSX.Element {
       default: return 0;
     }
   });
+  // Drawn a page at a time — always as far down as the player picked.
+  const { shown, more } = useListPages(targets, `${JSON.stringify(filters)}/${JSON.stringify(sort)}`,
+    target !== null ? targets.indexOf(target) : -1, 8);
   const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
   const report = target !== null && matchesWatched > 0
     ? buildScoutReport(world, world.userClubId, target, { matchesWatched })
@@ -600,7 +605,7 @@ export function ScoutingScreen(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {targets.map((p) => {
+                {shown.map((p) => {
                   const known = totalMatchesWatched(world, p);
                   return (
                     <tr
@@ -623,6 +628,7 @@ export function ScoutingScreen(): JSX.Element {
                     </tr>
                   );
                 })}
+                {more}
                 {targets.length === 0 && (
                   <tr><td colSpan={8}><Empty>No players match these filters.</Empty></td></tr>
                 )}

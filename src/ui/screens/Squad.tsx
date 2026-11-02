@@ -46,6 +46,9 @@ const POSITION_FILTERS: ReadonlyArray<readonly [number, string]> = [
   ...POSITIONS.map((p) => [p, `${POSITION_NAMES[p]}s`] as const),
 ];
 
+/** The row height last fitted for a list of so many rows. */
+const FITTED_ROWS = new Map<number, string>();
+
 /**
  * Every row of a list in view: the rows take the height the panel has over
  * them, between a compact and a comfortable height, so the list never scrolls.
@@ -54,13 +57,20 @@ function useFitRows(wrapRef: RefObject<HTMLDivElement | null>, count: number): v
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (wrap === null) return;
+    // The height the rows had last time, put on before the first paint: when it
+    // still fits, the fitting below changes nothing and the table is laid out once.
+    const known = FITTED_ROWS.get(count);
+    if (known !== undefined) wrap.style.setProperty('--row-h', known);
     const fit = (): void => {
       const head = wrap.querySelector('thead')?.getBoundingClientRect().height ?? 30;
       // A pixel a row for its border.
       const h = Math.floor((wrap.clientHeight - head) / Math.max(1, count)) - 1;
-      wrap.style.setProperty('--row-h', `${Math.max(19, Math.min(40, h))}px`);
+      const rowH = `${Math.max(19, Math.min(40, h))}px`;
+      FITTED_ROWS.set(count, rowH);
+      if (wrap.style.getPropertyValue('--row-h') !== rowH) wrap.style.setProperty('--row-h', rowH);
     };
-    fit();
+    // Fitted once the browser lays the panel out, not by asking it to now: a forced
+    // layout of the whole screen before its first paint, every time it opens.
     const ro = new ResizeObserver(fit);
     ro.observe(wrap);
     return () => ro.disconnect();

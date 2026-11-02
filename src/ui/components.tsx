@@ -42,6 +42,72 @@ export function useDismiss(open: boolean, close: () => void): RefObject<HTMLDivE
   return ref;
 }
 
+/**
+ * A long list drawn a page at a time: the first `page` items at once, then the
+ * next page each time the end of what is drawn nears the bottom of its panel —
+ * so a screen of hundreds of rows opens straight away. `keep` is the index of
+ * an item that must be drawn however far down it is (the open one), and a new
+ * `key` (another folder, another filter) starts again from the top. `more` goes
+ * at the end of the list: a row of a table when `colSpan` is given.
+ */
+export function useListPages<T>(
+  items: readonly T[], key: string, keep = -1, colSpan?: number, page = 40,
+): { shown: readonly T[]; more: JSX.Element | null } {
+  const [state, setState] = useState({ key, limit: page });
+  const limit = Math.max(state.key === key ? state.limit : page, keep + 1);
+  const shown = items.length > limit ? items.slice(0, limit) : items;
+  const grow = (): void => setState({ key, limit: shown.length + page });
+  return {
+    shown,
+    // Keyed by how much is drawn: each page drawn looks again, until the panel is full.
+    more: shown.length < items.length ? <ListMore key={shown.length} onNear={grow} colSpan={colSpan} /> : null,
+  };
+}
+
+/** The end of a list still being drawn: as it comes near the view, the next page is drawn. */
+function ListMore({ onNear, colSpan }: { onNear: () => void; colSpan?: number }): JSX.Element {
+  const ref = useRef<HTMLElement>(null);
+  const near = useRef(onNear);
+  near.current = onNear;
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      near.current();
+      return;
+    }
+    let io: IntersectionObserver | null = null;
+    // Once the screen is painted: finding the panel reads its styles, which
+    // before the first paint would mean working them all out early.
+    let timer = 0;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        io = new IntersectionObserver((seen) => {
+          if (seen.some((e) => e.isIntersecting)) near.current();
+        }, { root: scrollParent(el), rootMargin: '600px 0px' });
+        io.observe(el);
+      }, 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+      io?.disconnect();
+    };
+  }, []);
+  return colSpan !== undefined
+    ? <tr className="list-more" aria-hidden="true"><td colSpan={colSpan} ref={ref as RefObject<HTMLTableCellElement>} /></tr>
+    : <div className="list-more" aria-hidden="true" ref={ref as RefObject<HTMLDivElement>} />;
+}
+
+/** The panel an element scrolls in — the nearest ancestor that scrolls — or null for the window. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p !== null; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if (o === 'auto' || o === 'scroll') return p;
+  }
+  return null;
+}
+
 /** One colour per role, used to tell players apart on the court view at a glance. */
 export const POSITION_ACCENT: Readonly<Record<Position, string>> = {
   [Position.Setter]: 'var(--pos-s)',
