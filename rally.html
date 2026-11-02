@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rally Preview</title>
+    <link rel="icon" type="image/png" href="/src/ui/logo.png" />
+    <link rel="stylesheet" href="fonts/fonts.css" />
+    <style>
+      :root {
+        --panel: rgba(8, 14, 23, 0.82);
+        --line: #263345;
+        --text: #e9ecf1;
+        --dim: #98a2b3;
+        --gold: #d7a73f;
+        --gold-bright: #f0c35a;
+      }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #04070d; color: var(--text); font-family: 'Archivo', system-ui, sans-serif; }
+      #view { display: block; width: 100vw; height: 100vh; }
+      .hud { position: fixed; left: 16px; top: 16px; max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); backdrop-filter: blur(6px); }
+      .hud h1 { margin: 0 0 2px; font: 600 18px/1.2 'Barlow Condensed', 'Archivo', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; }
+      .hud h1 b { color: var(--gold-bright); }
+      .hud p { margin: 0 0 10px; font-size: 12px; color: var(--dim); }
+      .hud .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+      .hud .row span { align-self: center; min-width: 52px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+      .hud button { padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: #111c2a; color: var(--text); font: 500 12px 'Archivo', sans-serif; cursor: pointer; }
+      .hud button:hover { border-color: var(--gold); }
+      .hud button[aria-pressed='true'] { border-color: var(--gold); background: rgba(215, 167, 63, 0.18); color: var(--gold-bright); }
+      .hud .stats { margin-top: 8px; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div class="hud">
+      <h1>Rally <b>slow motion</b></h1>
+      <p>Space pauses · → steps a frame · the court as a match draws it</p>
+      <div class="row" data-group="speed">
+        <span>Speed</span>
+        <button data-speed="0.25">¼×</button>
+        <button data-speed="0.5">½×</button>
+        <button data-speed="1">1×</button>
+        <button data-pause>Pause</button>
+        <button data-step>Step</button>
+      </div>
+      <div class="row" data-group="camera">
+        <span>Camera</span>
+        <button data-camera="courtside">Courtside</button>
+        <button data-camera="behind">Behind</button>
+        <button data-camera="dynamic">Dynamic</button>
+        <button data-camera="professional">Professional</button>
+        <button data-camera="sky">Sky</button>
+      </div>
+      <div class="row" data-group="game">
+        <span>Game</span>
+        <button data-game="men">Men's</button>
+        <button data-game="women">Women's</button>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <script type="module" src="/src/ui/rallyPreview.ts"></script>
+  </body>
+</html>
