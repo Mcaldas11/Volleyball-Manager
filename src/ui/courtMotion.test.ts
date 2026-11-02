@@ -6,6 +6,7 @@ import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
 import { CourtMotion, crossesCourt, LINE_JUDGES, lineCall, REFEREE_STAND, TROPHY_HAND_AT, TROPHY_LIFT_AT, type Body, type Signal } from './courtMotion.ts';
 import { PlayerFlag } from '../engine/model/players.ts';
+import { servesJump } from '../engine/match/ratings.ts';
 import { COURT_HALF_LENGTH, COURT_HALF_WIDTH, rallyBeats, setupScene, type Ball3, type Beat, type Pose } from './matchCourt.ts';
 import { BONES, buildRig, COVER, HOLD, jointPositions, READY, STAND, STILL, strideLength, turnPace } from './playerRig.ts';
 
@@ -203,6 +204,15 @@ test('every hand meets the ball: passes, sets, spikes, serves', () => {
     const median = [...misses].sort((a, b) => a - b)[Math.floor(misses.length / 2)];
     assert.ok(median < 0.3, `${pose}: the ball should be in the hands (median miss ${median.toFixed(2)} m)`);
   }
+});
+
+test('no pass at thin air: every forearm pass, dig and set is played with the ball in the hands', () => {
+  const touches = [12, 5].flatMap((seed) => playRallies(seed, 40))
+    .filter((c) => c.pose === 'receive' || c.pose === 'pass' || c.pose === 'dig' || c.pose === 'set');
+  assert.ok(touches.length > 100, `enough touches were played (${touches.length})`);
+  const off = touches.filter((c) => c.miss > 0.6);
+  assert.equal(off.length, 0, `${off.length} of ${touches.length} played with the ball well off the hands: `
+    + off.map((c) => `${c.pose} ${c.miss.toFixed(2)} m`).join(', '));
 });
 
 test('hitters and jump servers strike at the top of a real jump', () => {
@@ -543,6 +553,41 @@ test('before the first serve: lined up, then hands slapped at the net — each s
   for (const [p, g] of setup.positions) {
     const b = m.bodies.get(p)!;
     assert.ok(Math.hypot(b.x - g.x, b.y - g.y) < 0.6, `${p} in place for the serve`);
+  }
+});
+
+test('the server is never left standing with the ball: no ball carried off the court holds up his serve', () => {
+  // Matches where a player who had gone for a ball on the court went off with it, and the serve
+  // waited out the match screen's longest wait, the server stood holding his.
+  for (const [seed, rallies] of [[5, 12], [12, 30]] as const) {
+    const { sim, store, teamOf } = liveMatch(seed);
+    const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
+    let now = 0;
+    const run = (ms: number): void => {
+      const end = now + ms;
+      while (now < end - 1e-6) {
+        now += 1000 / 60;
+        m.step(1 / 60, now);
+      }
+    };
+    for (let i = 0; i < rallies; i++) {
+      const pre = sim.snapshot();
+      m.scene({ ...setupScene(pre, pre.serving, store.position, 0, (p) => (servesJump(store, p) ? 'jump' : 'float')), ballKids: true }, now);
+      run(1100);
+      let waited = 0;
+      while (waited < 9000 && !m.serverReady()) {
+        run(100);
+        waited += 100;
+      }
+      assert.ok(waited < 6000, `match ${seed}, rally ${i}: the server waited ${waited} ms to serve`);
+      const entry = sim.step();
+      if (entry === null) break;
+      for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner)) {
+        m.scene(beat, now);
+        run(Math.round((beat.ms * 1.15) / (1000 / 60)) * (1000 / 60));
+      }
+      run(1500);
+    }
   }
 });
 

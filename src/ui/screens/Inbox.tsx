@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { MIND_GAME_REPLIES } from '../../engine/world/mindGames.ts';
 import { MatchReviewSheet } from '../matchReviewSheet.tsx';
 import { ContextSheet, RichBody } from '../inboxSheets.tsx';
@@ -9,6 +9,7 @@ import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import { messageNeedsAction, messageSender, injuryDuration, ordinal } from '../../engine/world/inbox.ts';
 import {
   contractEndSeason, inboxPrefsOf, messageCategory, type GameMessage, type InboxPrefs, type MessageCategory, type ReportTable,
+  type World,
 } from '../../engine/world/world.ts';
 import {
   canRecall, coachTalkBlock, fitMatches, promiseShare, PLAYING_TIME_NAMES, PLAYING_TIME_SHARE, type LoanReport,
@@ -88,6 +89,7 @@ export function InboxScreen(): JSX.Element {
   const [folder, setFolder] = useState<Folder>('inbox');
   const [filter, setFilter] = useState<Filter>('all');
   const listRef = useRef<HTMLDivElement>(null);
+  const open = useCallback((id: number) => g.selectMessage(id), [g]);
 
   const selected = g.inboxSelected !== null ? world.messages.find((m) => m.id === g.inboxSelected) : undefined;
 
@@ -180,30 +182,14 @@ export function InboxScreen(): JSX.Element {
           {groups.map((grp) => (
             <div key={`${grp.day}-${grp.items[0].id}`} className="mail-day">
               <div className="mail-day-head">{g.longDateLabel(grp.day)}</div>
-              {grp.items.map((m) => {
-                const cat = messageCategory(m);
-                return (
-                  <button
-                    key={m.id}
-                    className={`mail-row${g.inboxSelected === m.id ? ' active' : ''}${m.read !== true ? ' unread' : ''}`}
-                    data-pronouns={m.staffId !== undefined || m.staffTalksId !== undefined || m.staffApproachId !== undefined ||
-                      messageCategory(m) === 'career' || messageCategory(m) === 'board' ? 'keep' : undefined}
-                    style={catStyle(cat)}
-                    onClick={() => g.selectMessage(m.id)}
-                  >
-                    <MessageAvatar message={m} size={40} />
-                    <span className="mail-row-main">
-                      <span className="mail-row-from">{messageSender(m)}</span>
-                      <span className="mail-row-subject">{m.subject}</span>
-                      <span className="mail-row-snippet">{m.body}</span>
-                    </span>
-                    <span className="mail-row-marks">
-                      {m.starred === true && <Icon name="star" size={13} className="icon-filled mail-row-star" />}
-                      {messageNeedsAction(world, m) && <span className="mail-row-action" title="Action needed" />}
-                    </span>
-                  </button>
-                );
-              })}
+              {grp.items.map((m) => (
+                <MailRow
+                  key={m.id}
+                  message={m} world={world} day={world.day} subject={m.subject} body={m.body}
+                  active={g.inboxSelected === m.id} unread={m.read !== true} starred={m.starred === true}
+                  needsAction={messageNeedsAction(world, m)} onOpen={open}
+                />
+              ))}
             </div>
           ))}
         </div>
@@ -224,11 +210,49 @@ export function InboxScreen(): JSX.Element {
   );
 }
 
+/**
+ * One message in the list. It is handed everything it shows that can change,
+ * so a click redraws the rows it changes — the one opened, the one left —
+ * not the whole post; and every row once a day, for the faces.
+ */
+const MailRow = memo(function MailRow({
+  message: m, world, subject, body, active, unread, starred, needsAction, onOpen,
+}: {
+  message: GameMessage; world: World; day: number; subject: string; body: string;
+  active: boolean; unread: boolean; starred: boolean; needsAction: boolean; onOpen: (id: number) => void;
+}): JSX.Element {
+  const cat = messageCategory(m);
+  return (
+    <button
+      className={`mail-row${active ? ' active' : ''}${unread ? ' unread' : ''}`}
+      data-pronouns={m.staffId !== undefined || m.staffTalksId !== undefined || m.staffApproachId !== undefined ||
+        cat === 'career' || cat === 'board' ? 'keep' : undefined}
+      style={catStyle(cat)}
+      onClick={() => onOpen(m.id)}
+    >
+      <AvatarIn world={world} message={m} size={40} />
+      <span className="mail-row-main">
+        <span className="mail-row-from">{messageSender(m)}</span>
+        <span className="mail-row-subject">{subject}</span>
+        <span className="mail-row-snippet">{body}</span>
+      </span>
+      <span className="mail-row-marks">
+        {starred && <Icon name="star" size={13} className="icon-filled mail-row-star" />}
+        {needsAction && <span className="mail-row-action" title="Action needed" />}
+      </span>
+    </button>
+  );
+});
+
 /** The face beside a message: the player it is about, the club it comes
  *  from, or the office's own badge. */
-export function MessageAvatar({ message: m, size }: { message: GameMessage; size: number }): JSX.Element {
+export function MessageAvatar({ message, size }: { message: GameMessage; size: number }): JSX.Element {
   const g = useGame();
-  const world = g.world!;
+  return <AvatarIn world={g.world!} message={message} size={size} />;
+}
+
+/** {@link MessageAvatar} for a world in hand — without following the game, so a memoised row stays put. */
+function AvatarIn({ world, message: m, size }: { world: World; message: GameMessage; size: number }): JSX.Element {
   const store = world.players;
   const cat = messageCategory(m);
   if (m.playerIdx !== undefined && store.isActive(m.playerIdx) && cat !== 'offer' && m.clubId === undefined) {

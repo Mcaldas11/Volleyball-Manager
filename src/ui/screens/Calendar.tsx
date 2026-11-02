@@ -6,7 +6,7 @@ import {
 } from '../../engine/season/friendlies.ts';
 import { DAYS_PER_SEASON, TRANSFER_WINDOWS, type Competition, type Fixture } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
-import { useGame } from '../state.ts';
+import { formatDate, useGame } from '../state.ts';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -74,7 +74,7 @@ export function CalendarScreen(): JSX.Element {
     ? { day: next.day, label: `${next.home === club.id ? 'vs' : 'at'} ${world.clubs[next.home === club.id ? next.away : next.home]?.name ?? '—'}` }
     : nextNote;
 
-  const monthTitle = monthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const monthTitle = formatDate(monthDate, 'monthYear');
 
   // The pre-season, while there is still time to fix up a friendly.
   const preSeason = today % DAYS_PER_SEASON <= friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS;
@@ -184,7 +184,7 @@ export function CalendarScreen(): JSX.Element {
               <div key={f.id} className="cal-up">
                 <span className="cal-up-date">
                   <b>{date?.getUTCDate()}</b>
-                  <span>{date?.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</span>
+                  <span>{date !== null ? formatDate(date, 'weekday') : ''}</span>
                 </span>
                 <span className="cal-up-main">
                   <strong className="club-link" onClick={() => opp !== undefined && g.selectClub(opp.id)}>

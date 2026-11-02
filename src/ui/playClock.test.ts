@@ -37,14 +37,26 @@ test('paused mid-rally, the rally holds on the beat it is at — no next beat, n
   const start = performance.now();
   const at = (): number => performance.now() - start;
   const beats = [beat(80 / 1.15), beat(80 / 1.15), beat(80 / 1.15)];
-  // Paused a moment into the second beat, for 200 ms.
-  setTimeout(() => clock.stop(true), 110);
-  setTimeout(() => clock.stop(false), 310);
-  await playBeats(beats, 1, { current: false }, (s: Scene) => { void s; shown.push(at()); }, () => undefined, undefined, () => contacts.push(at()), clock);
+  // Paused a moment into the second beat, for 200 ms — timed from the beat
+  // itself, so a busy machine running the tests late can't move it.
+  let resumed = Infinity;
+  const onBeat = (s: Scene): void => {
+    void s;
+    shown.push(at());
+    if (shown.length !== 2) return;
+    setTimeout(() => {
+      clock.stop(true);
+      setTimeout(() => {
+        resumed = at();
+        clock.stop(false);
+      }, 200);
+    }, 20);
+  };
+  await playBeats(beats, 1, { current: false }, onBeat, () => undefined, undefined, () => contacts.push(at()), clock);
   assert.equal(shown.length, 3);
-  // The second beat began before the pause; the third only after the pause and the rest of the second.
-  assert.ok(shown[1] < 110, `the second beat at ${shown[1].toFixed(0)} ms`);
-  assert.ok(shown[2] >= 350, `the third beat held to ${shown[2].toFixed(0)} ms, past the pause`);
+  // The third beat only after the pause and the rest of the second: its 80 ms of play, and the 200 stopped.
+  assert.ok(shown[2] >= resumed, `the third beat at ${shown[2].toFixed(0)} ms, play going on at ${resumed.toFixed(0)}`);
+  assert.ok(shown[2] - shown[1] >= 270, `the second beat held ${(shown[2] - shown[1]).toFixed(0)} ms, past the pause`);
   // The second beat's contact waited out the pause too.
-  assert.ok(contacts[1] >= 350, `the second contact at ${contacts[1].toFixed(0)} ms`);
+  assert.ok(contacts[1] >= resumed, `the second contact at ${contacts[1].toFixed(0)} ms, play going on at ${resumed.toFixed(0)}`);
 });

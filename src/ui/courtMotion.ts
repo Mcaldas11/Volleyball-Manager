@@ -1702,6 +1702,9 @@ export class CourtMotion {
     const spots = this.sideSpots();
     for (const [p, b] of this.bodies) {
       if (sc.positions.has(p)) continue;
+      // Off the court: whatever ball he had picked up, or was going for, he leaves — or the serve
+      // would wait on a ball carried off the court.
+      this.letGoOfBalls(b, now);
       b.ox = 0;
       b.oy = 0;
       b.pose = 'stand';
@@ -1856,13 +1859,17 @@ export class CourtMotion {
         const yaw = offNet ? towardsAim : b.ty <= 0 ? Math.PI / 2 : -Math.PI / 2;
         const back = !offNet && aim !== null && Math.cos(wrap(yawTo(aim.x - b.tx, aim.y - b.ty) - yaw)) < 0;
         let h = 0;
+        let dip = 0;
         if (ball !== null) {
           const hand = this.placeFor(b, ball, yaw, SET_TOUCH, 'both');
-          h = Math.min(0.45, Math.max(0, ball.z - hand[2]));
+          h = Math.min(0.6, Math.max(0, ball.z - hand[2]));
+          // A ball coming down below his hands: he sits in under it.
+          dip = Math.min(0.4, Math.max(0, hand[2] - ball.z));
         }
+        const under = (s: Shape): Shape => (dip > 0 ? { ...s, crouch: s.crouch + dip } : s);
         const T = hangTime(h, pre * 0.45);
         const keys = timeline(pre, [
-          [-pre, READY], [-Math.min(380, pre * 0.6), SET_PREP], [0, SET_TOUCH], [150, back ? BACK_SET_OUT : SET_OUT],
+          [-pre, READY], [-Math.min(380, pre * 0.6), under(SET_PREP)], [0, under(SET_TOUCH)], [150, back ? BACK_SET_OUT : SET_OUT],
           [Math.max(480, T + 200), READY],
         ]);
         const jump = h > 0.08;
@@ -2348,7 +2355,10 @@ export class CourtMotion {
     for (const [p, b] of this.bodies) {
       if (b.side === 'bench' && b.home !== null && b.via === null) this.warmUp(p, b, now);
       this.stepBody(b, dt, now, ball);
-      if (b.leaving && b.alpha < 0.02) this.bodies.delete(p);
+      if (b.leaving && b.alpha < 0.02) {
+        this.letGoOfBalls(b, now);
+        this.bodies.delete(p);
+      }
     }
     for (const k of this.ballKids) this.stepBody(k, dt, now, ball);
     if (ball !== null) {
@@ -2448,6 +2458,21 @@ export class CourtMotion {
     s.holder = null;
     s.to = null;
     s.flight = { from, to: { x: from.x, y: from.y, z: BALL_R }, bulge: 0, t0: now, ms: 150 + 250 * Math.sqrt(Math.max(0, from.z)), spin: 0 };
+  }
+
+  /** A player going off the court: a ball in his hands drops at his feet, and one he was going for is left to someone else. */
+  private letGoOfBalls(b: Body, now: number): void {
+    if (this.kidOf(b) !== undefined) return;
+    for (const s of this.spares) {
+      if (s.holder === b) this.drop(s, now);
+      if (s.fetcher === b) s.fetcher = null;
+    }
+    this.picks = this.picks.filter((p) => p.by !== b);
+    this.throws = this.throws.filter((t) => t.by !== b);
+    if (b.errand != null) {
+      b.errand = null;
+      b.pace = undefined;
+    }
   }
 
   /** Done with a ball — served: off the kids' hands, and out of their errands. */

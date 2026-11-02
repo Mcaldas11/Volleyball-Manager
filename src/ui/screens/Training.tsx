@@ -17,7 +17,7 @@ import { abilityClass, Bar, ClubCrest, Empty, money, PlayerFace, Pos, Segmented,
 import { CAMP_DAYS, CAMP_KINDS, campBlock, campCost, CAMPS, campWindow, type CampKind } from '../../engine/world/camp.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
-import { useGame } from '../state.ts';
+import { formatDate, useGame } from '../state.ts';
 
 const FOCUS_OPTIONS: ReadonlyArray<readonly [WeeklyFocus, string]> = [
   ['auto', 'Automatic'], ['physical', 'Physical'], ['technical', 'Technical'], ['tactical', 'Tactical'], ['balanced', 'Balanced'],
@@ -138,7 +138,10 @@ function WeekPlan(): JSX.Element {
   const days = weekPlan(world, club, monday);
   const settings = weekSettings(plan, monday);
   const date = (day: number): Date | null => g.calendarDate(day);
-  const long = (day: number): string => date(day)?.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) ?? '';
+  const long = (day: number): string => {
+    const d = date(day);
+    return d !== null ? formatDate(d, 'dayLongMonthYear') : '';
+  };
   const setWeek = (patch: Partial<{ focus: WeeklyFocus; intensity: Intensity }>): void => {
     plan.weeks[monday] = { ...settings, ...patch };
     g.touch();

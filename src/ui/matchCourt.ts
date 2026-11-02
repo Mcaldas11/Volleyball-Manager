@@ -547,6 +547,30 @@ export function passSpot(q: number, jitter: number): { at: Local; z: number; arc
   };
 }
 
+/** A pass coming down lower than this, m, is bumped by the setter rather than set overhead. */
+const BUMP_BELOW = 2.0;
+/** A setter chasing a pass: a moment to read it, then this pace across the court, m/s. */
+const SETTER_START_MS = 260;
+const SETTER_RUN = 6;
+/** How high a ball goes for how long it is up — a/T² — so that a long one does not float. */
+const FLOAT_ARC = 0.9;
+/** How far a defender gets, m, in the `ms` a hit ball takes to reach him — from
+ *  a standstill to set again, platform out: a lunge's worth, and little more
+ *  for a ball hit hard. */
+function digReach(ms: number): number {
+  return 0.15 + 5 * (ms / 1000) ** 2;
+}
+
+/** How far apart two team-frame points are on the court, m. */
+function metresBetween(a: Local, b: Local): number {
+  return Math.hypot((a.u - b.u) * 2 * COURT_HALF_WIDTH, (a.v - b.v) * COURT_HALF_LENGTH);
+}
+
+/** The point a fraction `k` of the way from `a` to `b`. */
+function towards(a: Local, b: Local, k: number): Local {
+  return { u: a.u + (b.u - a.u) * k, v: a.v + (b.v - a.v) * k };
+}
+
 /** A repeatable number between -1 and 1 for the `i`th contact of the rally seeded `seed`. */
 function wobble(seed: number, i: number): number {
   const x = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453;
@@ -686,15 +710,24 @@ export function rallyBeats(
   const setBall = (t: 0 | 1, attacker = -1): void => {
     const before = forms[t];
     forms[t] = offenceFormation(teams[t]);
-    const { spot: passed, ms } = pass ?? { spot: passSpot(1, 0), ms: 680 };
+    const { spot: passed, ms: passMs } = pass ?? { spot: passSpot(1, 0), ms: 680 };
     const setter = engineSetter ?? setterFor(t, [firstTouch, attacker]);
     engineSetter = null;
     // The libero inside the 3 m line: a bump set off a ball taken low — or a jump set, taking off behind the line.
     const how = engineSetHow;
     engineSetHow = undefined;
-    const spot = how === 'bump' ? { ...passed, z: Math.min(passed.z, 0.95) }
-      : how === 'jump' ? { ...passed, at: { ...passed.at, v: Math.max(passed.at.v, 0.37) }, z: Math.max(passed.z, 3.0) }
+    // Chasing the ball down: a pass too low to take overhead is let drop to
+    // the waist and bumped up — never swung at up by the shoulders.
+    const bump = how === 'bump' || (how !== 'jump' && passed.z < BUMP_BELOW);
+    const spot = bump ? { ...passed, z: Math.min(passed.z, 0.95) }
+      : how === 'jump' ? { ...passed, at: { ...passed.at, v: Math.max(passed.at.v, 0.37) }, z: Math.max(passed.z, 2.7) }
         : passed;
+    // A pass well off the net goes up high enough for the setter to get
+    // under it from wherever they were: never quicker than their legs.
+    const was = setter >= 0 ? before.get(setter) : undefined;
+    const run = was !== undefined ? metresBetween(was, spot.at) : 0;
+    const ms = Math.max(passMs, Math.round(SETTER_START_MS + (run / SETTER_RUN) * 1000));
+    const arc = Math.max(spot.arc, FLOAT_ARC * (ms / 1000) ** 2);
     // A setter who dug the ball stays down where they dug it.
     const own = teams[t].setter;
     if (own >= 0 && own !== setter) forms[t].set(own, before.get(own) ?? { u: 0.5, v: 0.5 });
@@ -718,9 +751,8 @@ export function rallyBeats(
     const decoy = decoyNext;
     decoyNext = null;
     if (decoy !== null && decoy !== setter && forms[t].has(decoy)) forms[t].set(decoy, { ...DECOY_POINT });
-    // Chasing the ball down: a pass too low to take overhead gets bumped up.
-    push(air(t, spot.at, spot.z), setter >= 0 ? setter : null, ms, spot.arc, [
-      ...(setter >= 0 ? [[setter, spot.z >= 2.25 ? 'set' : 'pass'] as [number, Pose]] : []),
+    push(air(t, spot.at, spot.z), setter >= 0 ? setter : null, ms, arc, [
+      ...(setter >= 0 ? [[setter, bump ? 'pass' : 'set'] as [number, Pose]] : []),
       ...(decoy !== null && decoy !== setter ? [[decoy, 'spike'] as [number, Pose]] : []),
     ]);
     needsSet = false;
@@ -843,7 +875,7 @@ export function rallyBeats(
         setBall(t, byHitter ? c.player : -1);
         if (byHitter) {
           const spot = forms[t].get(c.player) ?? { u: 0.5, v: 0.3 };
-          push(air(t, { u: spot.u, v: Math.max(0.12, spot.v) }, 1.5), c.player, 760, 1.2, [[c.player, 'pass']]);
+          push(air(t, { u: spot.u, v: Math.max(0.12, spot.v) }, 0.95), c.player, 760, 1.2, [[c.player, 'pass']]);
         }
         forms[t] = defenceFormation(teams[t]);
         const catcher = teams[o].zones.find((p) => teams[o].role(p) === Position.Libero)
@@ -957,6 +989,15 @@ export function rallyBeats(
         let z = 0.5;
         let callout: Beat['callout'] = null;
         const shot = lastAttack !== null && lastAttack.team !== t && contacts[i - 1]?.kind === 'attack' ? lastAttack.shot : undefined;
+        // He gets only so far from where he stood as it was played — what his
+        // legs make while the ball is in the air: further than that, it is
+        // played into him, or he cuts it off on the way.
+        const start = spot;
+        const within = (want: Local, flightMs: number): Local => {
+          const most = digReach(flightMs);
+          const run = metresBetween(start, want);
+          return run > most ? towards(start, want, most / run) : want;
+        };
         if (c.shot === 'recycle') {
           // Played softly into the block, it floats back over the hitter's own side to a team-mate covering.
           ms = 720;
@@ -970,26 +1011,30 @@ export function rallyBeats(
             u: Math.min(0.92, Math.max(0.08, spot.u + wobble(seed, i + 5) * 0.18)),
             v: 0.3 + (wobble(seed, i + 9) + 1) * 0.16,
           };
-          spot = { u: spot.u + (target.u - spot.u) * 0.85, v: spot.v + (target.v - spot.v) * 0.85 };
-          forms[t].set(c.player, spot);
           ms = 680;
+          spot = within(towards(spot, target, 0.85), ms);
+          forms[t].set(c.player, spot);
           arc = 1.5;
           z = 0.6;
         } else if (shot !== undefined && lastAttack !== null) {
-          // The defender reads it and gets to it: all the way to a tip or a roll
-          // shot, most of the way across to a ball hit hard.
-          const target = inCourt(lastAttack.land !== undefined ? spotOf(lastAttack.land, lastAttack.hu)
-            : shotSpot(shot, lastAttack.hu, wobble(seed, i + 3), wobble(seed, i + 11)));
+          // The defender reads it and goes for it: all the way to a tip or a
+          // roll shot if he can make it, most of the way to a ball hit hard.
+          const attack = lastAttack;
+          const target = inCourt(attack.land !== undefined ? spotOf(attack.land, attack.hu)
+            : shotSpot(shot, attack.hu, wobble(seed, i + 3), wobble(seed, i + 11)));
           const soft = shot === 'tip' || shot === 'roll';
-          const k = soft ? 1 : 0.7;
-          spot = { u: spot.u + (target.u - spot.u) * k, v: spot.v + (target.v - spot.v) * k };
-          forms[t].set(c.player, spot);
           z = shot === 'tip' ? 0.3 : 0.5;
-          const to = air(t, spot, z);
-          const from = lastAttack.from;
-          const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
-          ms = soft ? (shot === 'tip' ? 560 : 680)
-            : lastAttack.speed !== undefined ? Math.round(Math.min(420, Math.max(220, (d / ((lastAttack.speed / 3.6) * 0.85)) * 1000))) : 340;
+          const flight = (l: Local): number => {
+            if (soft) return shot === 'tip' ? 560 : 680;
+            if (attack.speed === undefined) return 340;
+            const to = air(t, l, z);
+            const d = Math.hypot(to.x - attack.from.x, to.y - attack.from.y, to.z - attack.from.z);
+            return Math.round(Math.min(420, Math.max(220, (d / ((attack.speed / 3.6) * 0.85)) * 1000)));
+          };
+          const want = towards(spot, target, soft ? 1 : 0.7);
+          spot = within(want, flight(want));
+          forms[t].set(c.player, spot);
+          ms = flight(spot);
           arc = shot === 'tip' ? 0.45 : shot === 'roll' ? 1.0 : 0;
         }
         push(air(t, spot, z), c.player, ms, arc, [[c.player, 'dig']], callout);

@@ -12,7 +12,7 @@ import {
   attrClass, Bar, ClubCrest, money, PlayerFace, RatingBadge, StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
-import { useGame } from '../state.ts';
+import { formatDate, useGame } from '../state.ts';
 import { UnemployedHome } from './Career.tsx';
 import { NationalHome } from './National.tsx';
 
@@ -89,9 +89,7 @@ function NowManaging(): JSX.Element {
   const today = next.day === world.day;
   const days = next.day - world.day;
   const date = g.calendarDate(next.day);
-  const shortDate = date === null ? '' : date.toLocaleDateString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
-  });
+  const shortDate = date === null ? '' : formatDate(date, 'weekdayDayMonth');
 
   return (
     <section className="hm-banner">

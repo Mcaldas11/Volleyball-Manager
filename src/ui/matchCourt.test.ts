@@ -290,16 +290,15 @@ test('the libero inside the 3 m line bumps the second ball, or jump-sets it from
       const set = entry.contacts.find((c) => c.kind === 'set' && (c.detail === 'bump' || c.detail === 'jump'));
       if (set === undefined) continue;
       const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, positions, i, 0);
-      const touch = beats.find((b) => b.actor === set.player && b.ball !== null && (b.poses.get(set.player) === 'pass' || b.poses.get(set.player) === 'set'));
-      assert.ok(touch !== undefined, 'the libero plays it');
+      // He may have set an earlier ball in the rally the ordinary way: this one is among his touches.
+      const touches = beats.filter((b) => b.actor === set.player && b.ball !== null);
       if (set.detail === 'bump') {
         bumps++;
-        assert.equal(touch.poses.get(set.player), 'pass', 'a bump: forearms');
+        assert.ok(touches.some((b) => b.poses.get(set.player) === 'pass' && b.ball!.z <= 0.95), 'a bump: forearms, the ball taken low');
       } else {
         jumps++;
-        assert.equal(touch.poses.get(set.player), 'set', 'a jump set: overhead');
-        assert.ok(depth(touch.positions.get(set.player)!.y) > 1 / 3, 'from behind the 3 m line');
-        assert.ok(touch.ball!.z >= 2.9, 'up in the air');
+        assert.ok(touches.some((b) => b.poses.get(set.player) === 'set' && depth(b.positions.get(set.player)!.y) > 1 / 3 && b.ball!.z >= 2.65),
+          'a jump set: overhead, from behind the 3 m line, up in the air');
       }
     }
   }

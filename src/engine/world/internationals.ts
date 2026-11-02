@@ -1060,6 +1060,9 @@ function callUp(world: World, t: Tournament): void {
   }
 }
 
+/** The month's name — one formatter, made once: toLocaleDateString makes a new one every call. */
+const MONTH = new Intl.DateTimeFormat('en-GB', { month: 'long', timeZone: 'UTC' });
+
 /** "18 July 2026" for a day, as the messages put it. */
 function dateLabel(world: World, day: number): string {
   const seasonDay = ((day % DAYS_PER_SEASON) + DAYS_PER_SEASON) % DAYS_PER_SEASON;
@@ -1067,7 +1070,7 @@ function dateLabel(world: World, day: number): string {
   const year = world.startYear + Math.floor(day / DAYS_PER_SEASON) + (seasonDay >= 184 ? 1 : 0);
   const date = new Date(Date.UTC(2001, 0, 1));
   date.setUTCDate(date.getUTCDate() + doy);
-  return `${date.getUTCDate()} ${date.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' })} ${year}`;
+  return `${date.getUTCDate()} ${MONTH.format(date)} ${year}`;
 }
 
 /** Back to their clubs: a nation's players, once it is out. */

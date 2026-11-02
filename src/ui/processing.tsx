@@ -17,7 +17,7 @@ import { notesOn, shortCompName } from './screens/Calendar.tsx';
 import { CATEGORY_META, MessageAvatar } from './screens/Inbox.tsx';
 import { NEWS_KIND, NewsVisual, useNewsDate } from './screens/News.tsx';
 import type { NewsItem } from '../engine/world/news.ts';
-import { useGame } from './state.ts';
+import { formatDate, useGame } from './state.ts';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -113,7 +113,7 @@ function DayCard({ turning }: { turning: boolean }): JSX.Element {
     <section className="proc-day">
       <div className="proc-day-top">
         <strong key={turning ? world.day : 'date'} className={`proc-day-date${turning ? ' turning' : ''}`}>
-          {g.weekdayLabelForDay(world.day)} {date?.getUTCDate()} {date?.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}
+          {g.weekdayLabelForDay(world.day)} {date?.getUTCDate()} {date !== null ? formatDate(date, 'monthShort') : ''}
         </strong>
         <img className="proc-logo" src={logo} alt="" />
       </div>
@@ -210,7 +210,7 @@ function Fortnight(): JSX.Element {
         {days.map((day, i) => {
           const d = g.calendarDate(day);
           const label = i === 0 || d?.getUTCDate() === 1
-            ? `${d?.getUTCDate()} ${d?.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}`
+            ? `${d?.getUTCDate()} ${d !== null ? formatDate(d, 'monthShort') : ''}`
             : `${d?.getUTCDate()}`;
           return (
             <div key={day} className={`proc-cell${day === today ? ' today' : ''}${day < today ? ' past' : ''}`}>

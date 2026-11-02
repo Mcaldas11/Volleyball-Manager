@@ -6270,25 +6270,21 @@ class Game {
   dateLabelForDay(day: number): string {
     const date = this.calendarDate(day);
     if (date === null) return '';
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-    });
+    return formatDate(date, 'dayMonthYear');
   }
 
   /** Short weekday name ("Sat") for an absolute world day — for the header's date block. */
   weekdayLabelForDay(day: number): string {
     const date = this.calendarDate(day);
     if (date === null) return '';
-    return date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+    return formatDate(date, 'weekday');
   }
 
   /** "Mon, 11 January 2027" — the header's full date. */
   longDateLabel(day: number): string {
     const date = this.calendarDate(day);
     if (date === null) return '';
-    const weekday = date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
-    const month = date.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
-    return `${weekday}, ${String(date.getUTCDate()).padStart(2, '0')} ${month} ${date.getUTCFullYear()}`;
+    return `${formatDate(date, 'weekday')}, ${String(date.getUTCDate()).padStart(2, '0')} ${formatDate(date, 'month')} ${date.getUTCFullYear()}`;
   }
 
   /** The calendar date (UTC) an absolute world day falls on. */
@@ -6307,6 +6303,27 @@ class Game {
     md.setUTCDate(md.getUTCDate() + doy);
     return new Date(Date.UTC(year, md.getUTCMonth(), md.getUTCDate()));
   }
+}
+
+/**
+ * The ways the game writes a date, each formatter made once: toLocaleDateString
+ * builds a new one on every call, slow enough to hold up a screen that writes
+ * a date for every day in a long list, as the inbox does.
+ */
+const DATE_FORMATS = {
+  weekday: new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }),
+  month: new Intl.DateTimeFormat('en-GB', { month: 'long', timeZone: 'UTC' }),
+  monthShort: new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }),
+  monthYear: new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+  dayMonthYear: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }),
+  dayLongMonthYear: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }),
+  weekdayDayMonth: new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
+};
+
+/** A calendar date (UTC) written one of the game's ways: "Sat", "January", "Jan", "January 2027", "11 Jan 2027",
+ *  "11 January 2027", "Sat 11 Jan". */
+export function formatDate(date: Date, how: keyof typeof DATE_FORMATS): string {
+  return DATE_FORMATS[how].format(date);
 }
 
 export const game = new Game();
