@@ -31,6 +31,7 @@ import { Position } from '../engine/model/positions.ts';
 import { RATING_BANDS } from '../engine/match/playerRating.ts';
 import { Court3D, type Kit, type Look } from './court3d.ts';
 import { FramePacer, noteFrame } from './frames.ts';
+import type { PlayClock } from './playClock.ts';
 import { buildProjector, type Projector } from './courtCamera.ts';
 import type { CameraMode } from './courtCameras.ts';
 import { BOARD_HEIGHT, BOARD_TEXT, BOARD_X, END_BOARD_Y, FLOOR } from './hall3d.ts';
@@ -99,8 +100,10 @@ interface CourtProps {
 export function LiveCourt({
   scene, store, roles, kits, teamOf, ratings, labels = 'ratings', timeout = null, paused = false, speed = 1,
   teamNames = ['Home', 'Away'], view = '3d', camera = 'broadcast', sideline = null, nearTeam = 0, crowdFill = 0.85, injury = null, zoom = null,
-  ceremony = null, trophy = null, numberOf, coachLookFor,
+  ceremony = null, trophy = null, numberOf, coachLookFor, clock,
 }: {
+  /** The clock to draw the court by, if it can be stopped (playClock.ts): stopped, everything on the court holds where it is. */
+  clock?: PlayClock;
   /** The manager's own look for his side's coach — see CourtProps. */
   coachLookFor?: (team: 0 | 1, kit: Kit) => Look | null;
   /** Each player's shirt number — see CourtProps. */
@@ -142,6 +145,10 @@ export function LiveCourt({
   const topRef = useRef<HTMLCanvasElement>(null);
   const props = useRef<CourtProps>({ store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, numberOf, coachLookFor, sideline, nearTeam, crowdFill, zoom });
   props.current = { store, roles, kits, teamOf, ratings, labels, teamNames, view, camera, numberOf, coachLookFor, sideline, nearTeam, crowdFill, zoom };
+  const clockRef = useRef(clock);
+  clockRef.current = clock;
+  /** The court's own time: the match's clock, if it has one that stops, else the wall clock. */
+  const timeNow = (): number => clockRef.current?.now() ?? performance.now();
   /** The bench side as last handed to the motion. */
   const sidelineKey = useRef('');
   const applySideline = (now: number): void => {
@@ -176,31 +183,31 @@ export function LiveCourt({
   // Hand each new scene to the motion: new marks, new moves, a new flight.
   useEffect(() => {
     // Who is off the court first: a substitution's two players find each other in the zone.
-    applySideline(performance.now());
-    motion.current?.scene(scene, performance.now());
+    applySideline(timeNow());
+    motion.current?.scene(scene, timeNow());
   }, [scene]);
 
   // The referee's side of things: stoppages, time-outs, the pace of play.
   useEffect(() => {
-    motion.current?.setStoppage(timeout, paused, performance.now());
+    motion.current?.setStoppage(timeout, paused, timeNow());
   }, [timeout, paused]);
 
   // Before the first serve: the warm-up, the line-up and the hands at the net.
   useEffect(() => {
-    if (ceremony != null) motion.current?.ceremony(performance.now());
+    if (ceremony != null) motion.current?.ceremony(timeNow());
   }, [ceremony]);
 
   // A final won: the trophy lifted.
   useEffect(() => {
-    if (trophy !== null) motion.current?.trophyLift(trophy.team, trophy.captain, performance.now());
+    if (trophy !== null) motion.current?.trophyLift(trophy.team, trophy.captain, timeNow());
   }, [trophy?.team, trophy?.captain]);
 
   // Someone hurt: down, the physio on, up again or helped off.
   const injuryKey = injury === null ? '' : `${injury.p}:${injury.phase}`;
   useEffect(() => {
     // Who is off hurt goes on the sideline before he is sent there.
-    applySideline(performance.now());
-    motion.current?.setInjury(injury, performance.now());
+    applySideline(timeNow());
+    motion.current?.setInjury(injury, timeNow());
   }, [injuryKey]);
   if (motion.current !== null) motion.current.pace = speed;
 
@@ -306,16 +313,20 @@ export function LiveCourt({
     };
 
     let raf = 0;
-    let last = performance.now();
+    let last = timeNow();
     // No more frames than the preferences' limit — the time between two drawn is what the motion moves on by.
     const pacer = new FramePacer();
-    const frame = (now: number): void => {
-      if (!pacer.due(now)) {
+    const frame = (wall: number): void => {
+      if (!pacer.due(wall)) {
         raf = requestAnimationFrame(frame);
         return;
       }
-      noteFrame(pacer, now);
-      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      noteFrame(pacer, wall);
+      // The court's own time: stopped, nothing on it moves on — it is still drawn, for the camera
+      // and the view to be changed.
+      const now = timeNow();
+      const held = clockRef.current?.stopped === true;
+      const dt = held ? 0 : Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
       if (JSON.stringify([props.current.kits, props.current.nearTeam]) !== hallKits) {
         looks.clear();
@@ -323,7 +334,7 @@ export function LiveCourt({
       }
       if (props.current.view !== shownView) paintHall();
       applySideline(now);
-      m.step(dt, now);
+      if (!held) m.step(dt, now);
       top.clearRect(0, 0, cssW, cssH);
       // Each view draws on a clean slate: one leaving its text alignment or
       // font behind threw the other's names and ratings off their players.

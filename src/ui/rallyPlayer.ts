@@ -113,17 +113,20 @@ export async function playBeats(
   onRadar?: (radar: Radar) => void,
   /** Each beat the moment the ball gets there — the touch, the spike, the block — for its sound. */
   onBeat?: (beat: Beat) => void,
+  /** The clock the court is drawn by, if it can be stopped: the beats wait on it, a pause holding the rally where it is. */
+  clock?: { sleep(ms: number): Promise<void> },
 ): Promise<void> {
+  const wait = (ms: number): Promise<void> => (clock !== undefined ? clock.sleep(ms) : sleep(ms));
   for (const beat of beats) {
     if (cancelled.current) return;
     const ms = (beat.ms * 1.15) / speed;
     const release = beat.release !== undefined ? (beat.release * 1.15) / speed : undefined;
     setScene({ ...beat, ms, release, seq: ++beatSeq });
     // A beat is the ball on its way to whoever plays it: the sound is the contact, as it arrives.
-    if (onBeat !== undefined) setTimeout(() => { if (!cancelled.current) onBeat(beat); }, ms);
+    if (onBeat !== undefined) void wait(ms).then(() => { if (!cancelled.current) onBeat(beat); });
     const play = bigPlayFor(beat.callout);
     if (play !== null) onBigPlay(play);
     if (beat.radar !== undefined && onRadar !== undefined) onRadar(beat.radar);
-    await sleep(ms);
+    await wait(ms);
   }
 }

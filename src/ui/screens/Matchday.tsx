@@ -21,6 +21,7 @@ import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
 import { serverReadyOnCourt, TROPHY_LIFT_AT } from '../courtMotion.ts';
 import { rallyBeats, setupScene, type Radar, type Scene } from '../matchCourt.ts';
 import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPlayer.ts';
+import { PlayClock } from '../playClock.ts';
 import type { Kit } from '../court3d.ts';
 import { servesJump } from '../../engine/match/ratings.ts';
 import { TeamSheet } from '../teamSheet.tsx';
@@ -101,6 +102,8 @@ async function animateRally(
   onBigPlay: (play: BigPlay) => void,
   onRadar: (radar: Radar) => void,
   defenceOf?: (team: 0 | 1) => DefenceLayouts | undefined,
+  /** The court's clock: paused, the rally holds where it is until it runs again. */
+  clock?: PlayClock,
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
@@ -111,7 +114,7 @@ async function animateRally(
       const pose = beat.poses.get(beat.actor);
       playHit(pose === 'spike' || pose === 'serve' || pose === 'float' || pose === 'block' || beat.radar !== undefined);
     }
-  });
+  }, clock);
   // The stands applaud the point — the home crowd louder for the home side's.
   playCrowd(entry.winner === 0 ? 0.9 : 0.35);
 }
@@ -1309,6 +1312,17 @@ function LiveMatchView(): JSX.Element {
   const [ceremony, setCeremony] = useState<number | null>(null);
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
+  // The court's clock. Paused by the manager himself, it stops at once — the ball in the air, the
+  // rally waiting on it — and play goes on from exactly there. A stoppage of the referee's (a
+  // time-out, a substitution, an injury, the video, a panel open) still waits for the rally to end.
+  const clockRef = useRef<PlayClock | null>(null);
+  if (clockRef.current === null) clockRef.current = new PlayClock();
+  const clock = clockRef.current;
+  const held = md.paused && md.pauseUntil === null && md.timeoutActive === null && md.injury == null
+    && md.videoReview == null && md.pausedForPanel !== true && md.trophy == null;
+  useEffect(() => {
+    clock.stop(held);
+  }, [held]);
   const [bigPlay, setBigPlay] = useState<(BigPlay & { key: number }) | null>(null);
   const [subAnnouncement, setSubAnnouncement] = useState<{ text: string; team: 0 | 1; key: number } | null>(null);
   const [timeoutSecondsLeft, setTimeoutSecondsLeft] = useState(TIMEOUT_SECONDS);
@@ -1441,10 +1455,11 @@ function LiveMatchView(): JSX.Element {
       // A moment before the first serve, for the referee to wave it on — which
       // also stops a throwaway mount before it has played a single rally.
       await sleep(1200 / (g.matchday?.speed ?? 1));
-      // The very start of the match: the warm-up, the line-up and the hands at the net first.
+      // The very start of the match: the warm-up, the line-up and the hands at the net first — on
+      // the court's clock, so a pause in the middle of it holds it there.
       if (!cancelled.current && (g.matchday?.log.length ?? 1) === 0) {
         setCeremony(Date.now());
-        await sleep(6600 / (g.matchday?.speed ?? 1));
+        await clock.sleep(6600 / (g.matchday?.speed ?? 1));
       }
       // A rally left half shown when this view went away: its ball is dead now.
       if (!cancelled.current && g.matchday?.ballInPlay === true) g.deadBall();
@@ -1503,10 +1518,14 @@ function LiveMatchView(): JSX.Element {
         // The server goes to his spot behind the end line, and a ball kid gives him the ball, before
         // the referee waves him on — never a serve from inside the court, nor with a ball still on
         // it. (A court not being drawn holds nobody up.)
+        // (Timed on the court's clock: paused meanwhile, the wait holds with it.)
         for (let waited = 0; waited < 9000 && !cancelled.current && !document.hidden && !serverReadyOnCourt(); waited += 100) {
-          await sleep(100);
+          await clock.sleep(100);
+          if (g.matchday?.paused === true) break;
         }
         if (cancelled.current) break;
+        // Paused while he got there: no serve until play is back on.
+        if (g.matchday?.paused === true) continue;
         animatingRef.current = true;
         playWhistle();
         const logEntry = g.playNextRally();
@@ -1517,7 +1536,7 @@ function LiveMatchView(): JSX.Element {
           if (team === userTeam) return defenceLayoutsOf(g.matchTactics() ?? undefined);
           const club = current.sides[team].clubId >= 0 ? world.clubs[current.sides[team].clubId] : undefined;
           return club !== undefined ? defenceLayoutsOf(club.tactics) : undefined;
-        });
+        }, clock);
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
@@ -1745,6 +1764,7 @@ function LiveMatchView(): JSX.Element {
               zoom={varZoom}
               ceremony={ceremony}
               trophy={md.trophy ?? null}
+              clock={clock}
             />
             {md.trophy != null && <TrophyBanner />}
             <div className={`lv-court-tools${md.trophy != null ? ' hidden' : ''}`}>
