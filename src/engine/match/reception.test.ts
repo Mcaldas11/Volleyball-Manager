@@ -46,8 +46,9 @@ test('the usual three: libero and both outsides take the serve, and the log says
 });
 
 test('two passers hide the weaker-passing outside — who then attacks the first ball fresher', () => {
-  const three = play(3, 30);
-  const two = play(2, 30);
+  // Enough matches for a few points of kill rate to show through the noise — over 30, it is about as big as the edge.
+  const three = play(3, 90);
+  const two = play(2, 90);
   const store = two.store;
   const whoTwo = receivers(two.results);
   const whoThree = receivers(three.results);

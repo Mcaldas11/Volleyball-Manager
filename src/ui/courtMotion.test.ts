@@ -71,6 +71,8 @@ function playRallies(seed: number, rallies: number, check?: (m: CourtMotion, bea
     const pre = sim.snapshot();
     m.scene(setupScene(pre, pre.serving, store.position, 0), now);
     run(900, null);
+    // As the match does: the serve waits on the server, walking round to where he serves from.
+    for (let waited = 0; waited < 9000 && !m.serverReady(); waited += 100) run(100, null);
     const entry = sim.step();
     if (entry === null) break;
     for (const beat of rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner)) {

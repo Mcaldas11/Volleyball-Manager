@@ -381,3 +381,30 @@ test('the receive line stands where its coach has it against the serve coming â€
   }
   assert.ok(seen.float > 3 && seen.jump > 3 && seen.overhead > 2, JSON.stringify(seen));
 });
+
+test('the block goes up in front of the hitter: the one off whose hands it comes is there, never along the net at the far antenna', () => {
+  let blocks = 0;
+  for (const seed of [3, 12, 21]) {
+    const { sim, positions } = liveMatch(seed);
+    for (let i = 0; i < 250; i++) {
+      const pre = sim.snapshot();
+      if (pre.matchOver) break;
+      const entry = sim.step();
+      if (entry === null) break;
+      const named = entry.contacts.filter((c) => c.kind === 'blockTouch').map((c) => c.player);
+      const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, positions, i, 0, entry.winner);
+      const up: number[] = [];
+      beats.forEach((b, j) => {
+        const prev = beats[j - 1];
+        if (b.actor === null || b.ball === null || b.poses.get(b.actor) !== 'block' || prev?.actor == null || prev.ball === null) return;
+        if (prev.poses.get(prev.actor) !== 'spike') return;
+        blocks++;
+        up.push(b.actor);
+        assert.ok(Math.abs(b.ball.x - prev.ball.x) < 2.2,
+          `seed ${seed} rally ${i}: hit at x ${prev.ball.x.toFixed(1)}, touched off the block at x ${b.ball.x.toFixed(1)}`);
+      });
+      for (const p of named) assert.ok(up.includes(p), `seed ${seed} rally ${i}: the blocker the engine names (${p}) is the one on the court`);
+    }
+  }
+  assert.ok(blocks > 30, `block touches seen: ${blocks}`);
+});

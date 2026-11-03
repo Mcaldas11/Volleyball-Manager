@@ -505,8 +505,12 @@ function attackFormation(
 
 /** Defending an attack aimed from `hitU` (in this team's own frame): the two
  *  closest front-row players close the block on the hitter, the back row sets
- *  up a perimeter shaded towards the ball. */
-function blockFormation(t: Team, hitU: number, count = 2, layout?: DefenceLayout): { f: Formation; blockers: number[] } {
+ *  up a perimeter shaded towards the ball. `named`, the blocker the engine
+ *  says got his hands to it, is up in the block whatever — a middle chasing a
+ *  slide out to the pin, say. */
+function blockFormation(
+  t: Team, hitU: number, count = 2, layout?: DefenceLayout, named?: number,
+): { f: Formation; blockers: number[] } {
   const f = defenceFormation(t);
   const front = t.zones
     .filter((_, z) => isFrontRow(z))
@@ -514,16 +518,20 @@ function blockFormation(t: Team, hitU: number, count = 2, layout?: DefenceLayout
   const target = Math.min(0.9, Math.max(0.1, hitU));
   // One, two or three up — as many as the engine says got there.
   const n = Math.max(1, Math.min(3, count, front.length));
-  const blockers = front.slice(0, n);
+  let blockers = front.slice(0, n);
+  if (named !== undefined && front.includes(named) && !blockers.includes(named)) blockers = [named, ...blockers.slice(0, n - 1)];
   const spots = n === 1 ? [0] : n === 2 ? [-0.06, 0.06] : [-0.11, 0, 0.11];
+  // Side by side across the net in the order they stood: nobody crosses another to get there.
+  const across = [...blockers].sort((a, b) => (f.get(a)?.u ?? 0.5) - (f.get(b)?.u ?? 0.5));
   // Whoever doesn't block drops off the net to where the coach has him — and
   // the back three stand where the coach's layout for this attack puts them.
   let free = 0;
-  front.forEach((p, i) => {
-    if (i < n) f.set(p, { u: target + spots[i], v: 0.05 });
+  for (const p of front) {
+    const i = across.indexOf(p);
+    if (i >= 0) f.set(p, { u: target + spots[i], v: 0.05 });
     else if (layout !== undefined) f.set(p, free++ === 0 ? { ...layout.free } : { u: 1 - layout.free.u, v: layout.free.v });
     else f.set(p, { u: f.get(p)?.u ?? 0.5, v: 0.14 });
-  });
+  }
   const perimeter = [{ u: 0.14, v: 0.7 }, { u: 0.5, v: 0.88 }, { u: 0.86, v: 0.7 }];
   const back = t.zones.filter((_, z) => !isFrontRow(z));
   for (const [p, lane] of assignLanes(back, (p) => BACK_LANE[t.role(p)])) {
@@ -1073,7 +1081,10 @@ export function rallyBeats(
         if (setFrom !== null && setFrom.p !== c.player) f.set(setFrom.p, { ...setFrom.at });
         setFrom = null;
         forms[t] = f;
-        const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u, c.blockers ?? 2, defenceOf?.(o)?.[sourceOfLaneName(c.detail)]);
+        // Whoever the engine says gets his hands to it — a stuff block, or a touch off the block — is in it.
+        const next = contacts[i + 1];
+        const named = c.kind === 'blocked' ? c.by : next?.kind === 'blockTouch' && next.team === o ? next.player : undefined;
+        const { f: block, blockers } = blockFormation(teams[o], 1 - hit.u, c.blockers ?? 2, defenceOf?.(o)?.[sourceOfLaneName(c.detail)], named);
         forms[o] = block;
         lastBlockers = blockers;
         const blockPoses: Array<[number, Pose]> = blockers.map((b) => [b, 'block']);
@@ -1138,13 +1149,17 @@ export function rallyBeats(
         break;
       }
       case 'blockTouch': {
-        // The engine picks the blocker by zone, which may not be one of the two
-        // shown closing the block — whoever it is, they are up at the net.
-        const bl = at(t, c.player);
-        forms[t].set(c.player, { u: bl.u, v: 0.05 });
+        // Off the hands of the block that went up in front of the hitter. The
+        // engine's blocker is one of them; a rally logged before it picked him
+        // by where he stood once switched may name someone further along the
+        // net — the block's own man takes it then, the ball never flying along
+        // the tape to the far antenna.
+        const by = lastBlockers.length === 0 || lastBlockers.includes(c.player) ? c.player : lastBlockers[0];
+        const bl = at(t, by);
+        forms[t].set(by, { u: bl.u, v: 0.05 });
         const recycled = contacts[i - 1]?.shot === 'recycle';
-        push(air(t, { u: bl.u, v: 0.02 }, heightOr(c.height, 2.85, 2.6, 3.4) - 0.1), c.player, recycled ? 320 : 160, recycled ? 0.15 : 0,
-          [[c.player, 'block']]);
+        push(air(t, { u: bl.u, v: 0.02 }, heightOr(c.height, 2.85, 2.6, 3.4) - 0.1), by, recycled ? 320 : 160, recycled ? 0.15 : 0,
+          [[by, 'block']]);
         break;
       }
       case 'dig':

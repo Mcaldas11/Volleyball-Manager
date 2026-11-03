@@ -1781,7 +1781,7 @@ export class CourtMotion {
         let h = 0.7;
         if (ball !== null) {
           const hand = this.placeFor(b, ball, yaw, !serving && sc.shot === 'tip' ? TIP_HIT : !serving && sc.shot === 'roll' ? ROLL_HIT : STRIKE, 'hit');
-          h = Math.min(serving ? 0.85 : 1.0, Math.max(0.25, ball.z - hand[2]));
+          h = Math.min(1.0, Math.max(0.25, ball.z - hand[2]));
         }
         const T = hangTime(h, pre * (serving ? 0.4 : 0.5));
         // A tip or a roll shot: the same run and jump, a different arm.

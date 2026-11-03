@@ -151,6 +151,14 @@ const TRIPLE_TRANSITION = -0.03;
 const MISREAD_BLOCK = 0.84;
 const LATE_MIDDLE_BLOCK = 0.82;
 const OFF_HAND_TYPICAL = 0.25;
+/** Where each role blocks at the net once the side has switched: 0 its left, 1 the middle, 2 its right. */
+const BLOCK_SPOT: Readonly<Record<Position, number>> = {
+  [Position.OutsideHitter]: 0,
+  [Position.MiddleBlocker]: 1,
+  [Position.Libero]: 1,
+  [Position.Opposite]: 2,
+  [Position.Setter]: 2,
+};
 
 export enum MatchFormat {
   BestOf5 = 0,
@@ -2910,14 +2918,32 @@ export class MatchSimulator {
     return total / (1 + helpers * 0.28) + (count - 1) * 7.5;
   }
 
+  /**
+   * Who blocks an attack: the front-row player across the net from it, where
+   * he stands once his side has switched — the right-side blocker (the
+   * opposite, or the setter) against the outside, the outside against the
+   * opposite, the middle against the quick and the pipe. A side receiving with
+   * its setter in zone 1 and an outside in zone 2 doesn't switch: whoever is
+   * in that column blocks.
+   */
   private pickBlocker(def: TeamRuntime, lane: number): number {
-    // Zone indices: 1 = zone 2 (right), 2 = zone 3 (middle), 3 = zone 4 (left).
-    const zone = lane === AttackLane.QuickMiddle || lane === AttackLane.Pipe
-      ? 2
-      : lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight
-        ? 3
-        : 1;
-    return def.court[zone];
+    // In the defending side's own frame: 0 its left, 1 the middle, 2 its right.
+    const across = lane === AttackLane.QuickMiddle || lane === AttackLane.Pipe ? 1
+      : lane === AttackLane.OppositeRight || lane === AttackLane.BackRowRight ? 0 : 2;
+    const pos = this.roles;
+    const stays = def !== this.teams[this.serving] &&
+      pos[def.court[0]] === Position.Setter && pos[def.court[1]] === Position.OutsideHitter;
+    // Not switching: zone 4 (index 3) on the left, 3 in the middle, 2 (index 1) on the right.
+    if (stays) return def.court[3 - across];
+    // Each to his own spot at the net, the nearest free one if it is taken — as the court shows them.
+    const front = [def.court[3], def.court[2], def.court[1]];
+    const taken = [-1, -1, -1];
+    for (const p of [...front].sort((a, b) => BLOCK_SPOT[pos[a] as Position] - BLOCK_SPOT[pos[b] as Position])) {
+      const want = BLOCK_SPOT[pos[p] as Position];
+      const spot = [want, want - 1, want + 1, want - 2, want + 2].find((s) => s >= 0 && s <= 2 && taken[s] < 0) ?? want;
+      taken[spot] = p;
+    }
+    return taken[across] >= 0 ? taken[across] : def.court[3 - across];
   }
 
   /** Average digging strength of the players who can realistically get the ball up. */
