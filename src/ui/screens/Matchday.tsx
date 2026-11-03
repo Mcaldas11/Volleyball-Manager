@@ -5,6 +5,7 @@ import { chemistryOf } from '../../engine/world/chemistry.ts';
 import { TRAVEL_COST, tripTo, type Trip } from '../../engine/world/fatigue.ts';
 import { fixtureRivalry } from '../../engine/world/rivals.ts';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
+import type { AttributeName } from '../../engine/model/attributes.ts';
 import { INJURY_NAMES, type PlayerStore } from '../../engine/model/players.ts';
 import {
   CHALLENGE_CHECK_NAMES, challengeChecksFor, type ChallengeCheck, type LastCall, type ShoutKind,
@@ -2286,10 +2287,24 @@ function PlannedSubs({ bench, roles }: { bench: number[]; roles: Uint8Array }): 
   const ss = md.subPlans?.serveSub ?? null;
   // A player can be in one plan only: each leaves out whoever the other has planned.
   const inSwitch = new Set(ds !== null ? [ds.setter, ds.opposite] : []);
-  const setters = bench.filter((p) => roles[p] === Position.Setter && p !== ss?.server);
-  const opposites = bench.filter((p) => roles[p] === Position.Opposite && p !== ss?.server);
+  // Anyone on the bench may come on to set, and anyone to hit at opposite — his own position or
+  // not, playing it as well as he can: those who play it first, then the rest by how they set or hit.
+  const free = bench.filter((p) => p !== ss?.server);
+  const byFit = (role: Position, attr: AttributeName) => (a: number, b: number): number =>
+    Number(roles[b] === role) - Number(roles[a] === role) || store.getAttr(b, attr) - store.getAttr(a, attr);
+  const setters = [...free].sort(byFit(Position.Setter, 'setting'));
+  const opposites = [...free].sort(byFit(Position.Opposite, 'spikeTechnique'));
   const [setter, setSetter] = useState<number | null>(ds?.setter ?? setters[0] ?? null);
-  const [opposite, setOpposite] = useState<number | null>(ds?.opposite ?? opposites[0] ?? null);
+  const [opposite, setOpposite] = useState<number | null>(ds?.opposite ?? opposites.find((p) => p !== (ds?.setter ?? setters[0])) ?? null);
+  // One man can't be both: picking the other's man swaps them round.
+  const pickSetter = (p: number): void => {
+    if (p === opposite) setOpposite(setter);
+    setSetter(p);
+  };
+  const pickOpposite = (p: number): void => {
+    if (p === setter) setSetter(opposite);
+    setOpposite(p);
+  };
   const picked = new Set(ds !== null ? inSwitch : [setter, opposite]);
   const servers = bench.filter((p) => !picked.has(p) || p === ss?.server).sort((a, b) => serveRating(store, b) - serveRating(store, a));
   const [server, setServer] = useState<number | null>(ss?.server ?? null);
@@ -2304,30 +2319,32 @@ function PlannedSubs({ bench, roles }: { bench: number[]; roles: Uint8Array }): 
   );
   return (
     <div className="subplans">
-      <section className="subplan-card" title="Setter in zone 4, opposite in zone 1: a bench setter on for the opposite, a bench opposite on for the setter — back three rotations later.">
+      <section className="subplan-card" title="Setter in zone 4, opposite in zone 1: someone from the bench on to set for the opposite, someone on to hit at opposite for the setter — back three rotations later.">
         <header className="subplan-head">
           <Icon name="swap" size={15} /> <b>Double switch</b>{state(ds)}
           {ds?.armed === true
             ? <button className="sm" onClick={() => g.planDoubleSwitch(null, null)}>Call off</button>
-            : <button className="sm primary" disabled={setter === null || opposite === null} onClick={() => g.planDoubleSwitch(setter, opposite)}>
+            : <button className="sm primary" disabled={setter === null || opposite === null || setter === opposite} onClick={() => g.planDoubleSwitch(setter, opposite)}>
               <Icon name="check" size={13} /> Plan it
             </button>}
         </header>
-        <p className="field-hint" title="Three hitters at the net, the new setter setting from the back row; three rotations later the two who went off come back.">
-          Setter in zone 4, opposite in zone 1: a bench setter on for the opposite, a bench opposite on for the setter — back
-          three rotations later. Four substitutions.
+        <p className="field-hint" title="Three hitters at the net, the new setter setting from the back row; three rotations later the two who went off come back. Anyone may come on to set or to hit at opposite — one out of his position plays it less well.">
+          Setter in zone 4, opposite in zone 1: anyone from the bench on to set for the opposite, anyone on to hit at
+          opposite for the setter — back three rotations later. Four substitutions.
         </p>
         <div className="subplan-picks">
           <label className="subplan-pick">
             <span>Setter on</span>
-            {setters.length === 0 ? <span className="faint">No setter on the bench</span> : (
-              <Dropdown size="sm" value={setter} onChange={setSetter} disabled={ds?.armed === true} options={setters.map((p) => who(p))} />
+            {setters.length < 2 ? <span className="faint">Not enough on the bench</span> : (
+              <Dropdown size="sm" value={setter} onChange={pickSetter} disabled={ds?.armed === true}
+                options={setters.map((p) => who(p, ` · set ${store.getAttr(p, 'setting')}`))} />
             )}
           </label>
           <label className="subplan-pick">
             <span>Opposite on</span>
-            {opposites.length === 0 ? <span className="faint">No opposite on the bench</span> : (
-              <Dropdown size="sm" value={opposite} onChange={setOpposite} disabled={ds?.armed === true} options={opposites.map((p) => who(p))} />
+            {opposites.length < 2 ? <span className="faint">Not enough on the bench</span> : (
+              <Dropdown size="sm" value={opposite} onChange={pickOpposite} disabled={ds?.armed === true}
+                options={opposites.map((p) => who(p, ` · spike ${store.getAttr(p, 'spikeTechnique')}`))} />
             )}
           </label>
         </div>
