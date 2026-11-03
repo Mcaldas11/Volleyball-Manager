@@ -1806,7 +1806,8 @@ export class CourtPlayer implements Person {
     j.hips.position.set(0, r.pelvis.y, r.pelvis.z);
     j.hips.rotation.set(r.pelvis.pitch, 0, 0);
     j.torso.rotation.set(r.spine.x, r.spine.y, r.spine.z);
-    j.head.rotation.set(r.head.x, 0, r.head.z);
+    // Turned on the neck, then nodded — as playerRig.ts has it: never tipped over on its side.
+    j.head.rotation.set(r.head.x, 0, r.head.z, 'ZXY');
     // The rig's sides run left (0), right (1).
     [j.left, j.right].forEach((l, i) => {
       const arm = r.arms[i];

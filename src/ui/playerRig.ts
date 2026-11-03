@@ -450,7 +450,8 @@ export function jointPositions(r: Rig): Joints {
   const root: Frame = { m: mul(rx(r.root.pitch), ry(r.root.roll)), t: [0, 0, r.root.rise] };
   const pelvis = child(root, [0, r.pelvis.y, r.pelvis.z], rx(r.pelvis.pitch));
   const spine = child(pelvis, [0, 0, BONES.spine], mul(mul(rx(r.spine.x), ry(r.spine.y)), rz(r.spine.z)));
-  const head = child(child(spine, [0, 0, BONES.neck], mul(rx(r.head.x), rz(r.head.z))), [0, 0, BONES.head]);
+  // The head turns on the neck, then nods: turned first, a nod tips it straight down where it looks, never over on its side.
+  const head = child(child(spine, [0, 0, BONES.neck], mul(rz(r.head.z), rx(r.head.x))), [0, 0, BONES.head]);
   const sides = [-1, 1] as const;
   const shoulders = sides.map((side, i) => {
     const a = r.arms[i];

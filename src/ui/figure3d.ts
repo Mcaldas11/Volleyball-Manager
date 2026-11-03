@@ -963,7 +963,8 @@ export class Figure {
     this.pelvis.position.set(0, r.pelvis.y, r.pelvis.z);
     this.pelvis.rotation.set(r.pelvis.pitch, 0, 0);
     this.spine.rotation.set(r.spine.x, r.spine.y, r.spine.z);
-    this.head.rotation.set(r.head.x, 0, r.head.z);
+    // Turned on the neck, then nodded — as playerRig.ts has it: never tipped over on its side.
+    this.head.rotation.set(r.head.x, 0, r.head.z, 'ZXY');
     for (let i = 0; i < 2; i++) {
       const arm = r.arms[i];
       this.shoulders[i].position.z = BONES.shoulderUp + r.shoulderLift[i];

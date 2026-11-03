@@ -1113,6 +1113,18 @@ const SPIN: Partial<Record<Pose, number>> = { spike: 32, serve: 36, jumpFloat: 0
 
 const CONTACTS: ReadonlySet<Pose> = new Set<Pose>(['serve', 'jumpFloat', 'float', 'receive', 'dig', 'pass', 'set', 'spike', 'block', 'dive']);
 
+/**
+ * When the ball leaves a server's hands, ms into the serve's scene: as his toss arm comes up — a
+ * jump server at once, throwing it high and forward; a float server after holding it, then a
+ * short, late lift (see startContact's serves, whose keys these follow).
+ */
+function tossAt(pose: Pose, sc: Scene): number {
+  const pre = Math.max(120, sc.ms);
+  if (pose === 'serve') return Math.min(160, pre * 0.15);
+  const held = Math.min(sc.release ?? 0, pre * (pose === 'jumpFloat' ? 0.6 : 0.8));
+  return held + (pre - held) * (pose === 'jumpFloat' ? 0.22 : 0.3);
+}
+
 /** A serve, of any kind. */
 function isServe(pose: Pose | null | undefined): boolean {
   return pose === 'serve' || pose === 'jumpFloat' || pose === 'float';
@@ -1304,6 +1316,8 @@ export class CourtMotion {
   private readonly kids: Kid[] = [];
   /** Every ball but the one in play: in someone's hands, on its way to someone, or on the floor. */
   private spares: Spare[] = [];
+  /** The serve still in the server's hands: whose, until when, and how high the toss goes from them. */
+  private inHands: { by: Body; until: number; arc: number } | null = null;
   private nextBall = 1;
   /** Throws and rolls under way until the ball leaves the hands, and hands on their way down to a ball on the floor. */
   private throws: Throw[] = [];
@@ -1638,13 +1652,16 @@ export class CourtMotion {
       // Set up for a serve in the live match: no ball flies to the server — a ball kid gives him one.
       this.flight = null;
     } else if (sc.ball !== null && from !== null) {
-      // A ball still in the server's hands leaves them only at the toss.
-      const held = Math.min(sc.release ?? 0, sc.ms * 0.8);
+      // A ball still in the server's hands leaves them only at the toss — and rides in them until
+      // then, wherever they go, the toss starting from where they are as the arm goes up.
+      const server = isServe(opening) && sc.actor !== null ? this.bodies.get(sc.actor) : undefined;
+      const leave = server !== undefined ? tossAt(opening!, sc) : Math.min(sc.release ?? 0, sc.ms * 0.8);
       this.flight = {
-        from, to: sc.ball, bulge: flightBulge(from, sc.ball, sc.arc), t0: now + held, ms: sc.ms - held,
+        from, to: sc.ball, bulge: flightBulge(from, sc.ball, sc.arc), t0: now + leave, ms: sc.ms - leave,
         spin: (struck !== null ? SPIN[struck] : undefined) ?? 4,
         float: struck === 'float' || struck === 'jumpFloat',
       };
+      this.inHands = server !== undefined ? { by: server, until: now + leave, arc: sc.arc } : null;
     } else {
       this.flight = null;
     }
@@ -2337,6 +2354,7 @@ export class CourtMotion {
 
   /** The ball, where it is now: the one in play — or, between rallies, the one just down, then the server's. */
   ballAt(now: number): Ball3 | null {
+    if (this.flight !== null && this.inHands !== null) return heldAt(this.inHands.by);
     if (this.flight !== null) return flightAt(this.flight, now);
     return this.focus !== null ? this.spareAt(this.focus, now) : null;
   }
@@ -2400,6 +2418,15 @@ export class CourtMotion {
       }
     }
     for (const k of this.ballKids) this.stepBody(k, dt, now, ball);
+    // The toss: the ball leaves the server's hands from wherever they have got to.
+    const held = this.inHands;
+    if (held !== null && (this.flight === null || now >= held.until)) {
+      this.inHands = null;
+      if (this.flight !== null) {
+        const from = heldAt(held.by);
+        this.flight = { ...this.flight, from, bulge: flightBulge(from, this.flight.to, held.arc) };
+      }
+    }
     if (ball !== null) {
       this.trail.push(ball);
       if (this.trail.length > 7) this.trail.shift();
