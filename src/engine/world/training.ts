@@ -31,6 +31,7 @@ import { ATTR_COUNT, ATTR_INDEX, type AttributeName } from '../model/attributes.
 import type { Club } from '../model/club.ts';
 import { Position } from '../model/positions.ts';
 import { Combinations, combinationsOf } from '../match/tactics.ts';
+import { FAMILIARITY_GAIN, learnTactic } from '../match/tacticFamiliarity.ts';
 import { postMessage } from './inbox.ts';
 import { DAYS_PER_SEASON, type Fixture, type World } from './world.ts';
 
@@ -419,7 +420,9 @@ function trainingWeek(world: World, club: Club, monday: number): PlannedDay[] {
 /**
  * The day's training at every club: condition spent on a training day (as
  * hard as the session, the week and the player's own load make it), given
- * back on a day of rest. Called each morning, before the day's recovery.
+ * back on a day of rest — and the tactic learnt a little more, the most on a
+ * tactical day, a day's preparation or a match. Called each morning, before
+ * the day's recovery.
  */
 export function trainingDay(world: World): void {
   const monday = weekStartOf(world, world.day);
@@ -427,7 +430,10 @@ export function trainingDay(world: World): void {
   for (const club of world.clubs) {
     if (club.players.length === 0) continue;
     const today = trainingWeek(world, club, monday)[world.day - monday];
-    if (today === undefined || today.session === 'match') continue;
+    if (today === undefined) continue;
+    const harder = today.session === 'match' ? 1 : INTENSITY[today.intensity].dev;
+    learnTactic(club.tactics, (FAMILIARITY_GAIN[today.session] ?? 0) * harder);
+    if (today.session === 'match') continue;
     const s = SESSIONS[today.session];
     for (const p of club.players) {
       if (store.injuryDaysLeft[p] > 0) continue;
@@ -436,6 +442,8 @@ export function trainingDay(world: World): void {
       store.condition[p] = Math.max(25, Math.min(100, store.condition[p] + change));
     }
   }
+  // The national sides meet seldom: their tactic comes slowly.
+  for (const team of world.nationalTeams) if (team.tactics !== undefined) learnTactic(team.tactics, NATIONAL_GAIN);
   // Days gone by have nothing more to look up.
   const days = dayIndex.get(world);
   if (days !== undefined) for (const d of days.keys()) if (d < world.day - 14) days.delete(d);
@@ -563,6 +571,9 @@ export function trainPositions(world: World): void {
     }
   }
 }
+
+/** What a national side learns of its tactic a day, points. */
+const NATIONAL_GAIN = 1.5;
 
 const POSITION_NAME_LOWER: Readonly<Record<Position, string>> = {
   [Position.Setter]: 'setter',

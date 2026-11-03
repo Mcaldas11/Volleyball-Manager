@@ -3,6 +3,7 @@ import { Formation, FORMATION_NAMES, formationOf } from '../../engine/match/tact
 import { lineupSlotPositions } from '../../engine/season/seasonEngine.ts';
 import { abilityClass, Empty, Segmented, StarMeter } from '../components.tsx';
 import { Icon } from '../icons.tsx';
+import { TacticPills } from '../tacticPills.tsx';
 import { TeamSheet } from '../teamSheet.tsx';
 import { chemistryOf } from '../../engine/world/chemistry.ts';
 import { useGame } from '../state.ts';
@@ -28,7 +29,8 @@ export function LineupScreen(): JSX.Element {
     ? Math.round(lineup.reduce((s, p) => s + store.currentAbility[p], 0) / lineup.length)
     : 0;
   const hasPreference = g.hasPreferredSheet();
-  const formation = formationOf(g.activeTactics() ?? undefined);
+  const tactics = g.activeTactics();
+  const formation = formationOf(tactics ?? undefined);
 
   return (
     <div className="lineup-page">
@@ -50,6 +52,7 @@ export function LineupScreen(): JSX.Element {
             onChange={(f) => g.setFormation(f)}
           />
         </div>
+        {tactics !== null && <TacticPills tactics={tactics} />}
         <div className="lineup-bar-rating">
           <span className="faint">Starting six</span>
           <StarMeter value={teamAvg} size={16} />

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultTactics, Formation, formationOf, OffensiveSystem } from '../match/tactics.ts';
+import { NEW_TACTIC_FAMILIARITY } from '../match/tacticFamiliarity.ts';
 import { generateWorld } from '../world/worldGen.ts';
 import { stubManager } from '../world/world.ts';
 import {
@@ -48,7 +49,10 @@ test('a new tactic starts from the defaults, not as a copy of the loaded one', (
   club.tactics.rotations[2].setterTempoBias = 90;
   club.preferredLibero = club.players[0];
   newTactic(club);
-  assert.deepEqual(club.tactics, defaultTactics());
+  // The defaults — and new to the side, all of it still to learn.
+  const { familiarity, ...rest } = club.tactics;
+  assert.deepEqual(rest, defaultTactics());
+  assert.equal(familiarity?.attack, NEW_TACTIC_FAMILIARITY);
   assert.deepEqual(club.preferredLineup, []);
   assert.equal(club.preferredLibero, -1);
   assert.equal(club.preferredDefensiveLibero, -1);

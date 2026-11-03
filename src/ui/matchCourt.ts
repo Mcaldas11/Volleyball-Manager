@@ -33,7 +33,7 @@
 
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
 import { SECOND_BALL, type RallyContact, type Shot } from '../engine/match/engine.ts';
-import { passZone, type PlayCall } from '../engine/match/tactics.ts';
+import { passZone, Tempo, type PlayCall } from '../engine/match/tactics.ts';
 import {
   receivePlansOf, receiveSpots, SERVE_ZONE_U, serveKindOf, serveZoneFor, type ReceivePlans, type ServeKind as LineFacing,
   type ServerOrdersMap, type ServeStyle, type ServeZone,
@@ -301,16 +301,24 @@ interface Team {
   receive: ReceivePlans;
   /** What the receive line is set against this rally: a float or a jump serve. */
   facing: LineFacing;
+  /** How high the setter puts the ball up: a slow tempo higher, a fast one flatter. */
+  setHeight: number;
 }
 
 /** How a player serves — a jump serve, a jump float or a standing float — when it is known. */
 export type ServeKind = (p: number) => ServeStyle | undefined;
+
+/** How high each tempo has the set go, against the usual: a slow ball up high, a very fast one flat. */
+const SET_HEIGHT: Readonly<Record<Tempo, number>> = {
+  [Tempo.VeryFast]: 0.72, [Tempo.Fast]: 0.86, [Tempo.Balanced]: 1, [Tempo.Slow]: 1.35,
+};
 
 /** What a side's coach has ordered that shows on the court: how and where each
  *  man serves, and where the passers stand — a side's tactics will do. */
 export interface SideOrders {
   servers?: ServerOrdersMap;
   receive?: ReceivePlans;
+  tempo?: Tempo;
 }
 
 function buildTeam(
@@ -335,6 +343,7 @@ function buildTeam(
     serveZone: (p) => serveZoneFor(orders, p),
     receive: receivePlansOf(orders),
     facing: 'float',
+    setHeight: SET_HEIGHT[orders?.tempo ?? Tempo.Balanced] ?? 1,
   };
 }
 
@@ -1064,7 +1073,9 @@ export function rallyBeats(
       case 'blocked': {
         // The setter's second ball: no set — the pass comes to him at the net and he plays it over.
         const dump = c.detail === SECOND_BALL;
-        const { f, hit, setArc } = attackFormation(teams[t], c.player, dump ? undefined : c.detail, c.play);
+        const { f, hit, setArc: plainArc } = attackFormation(teams[t], c.player, dump ? undefined : c.detail, c.play);
+        // As high as the side's tempo has it — a slow one gives the hitter, and the block, time.
+        const setArc = dump ? plainArc : plainArc * teams[t].setHeight;
         if (c.decoy !== undefined) decoyNext = c.decoy;
         if (dump) {
           if (pass !== null) f.set(c.player, { u: pass.spot.at.u, v: 0.06 });

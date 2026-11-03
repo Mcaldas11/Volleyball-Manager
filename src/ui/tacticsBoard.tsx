@@ -84,7 +84,7 @@ const COMBO_ZONE_OPTIONS: Array<[number, string]> = [[1, 'Allowed'], [0, 'Not he
 const HINTS: Readonly<Record<string, string>> = {
   formation: '5-1: one setter runs the offence. 4-2: two setters diagonal; the one in the back row sets.',
   offense: 'How the setter shares the ball out across the attack lanes.',
-  tempo: 'Faster tempo beats the block but asks more of the pass and the setter.',
+  tempo: 'Faster tempo beats the block but asks more of the pass and the setter — the set lower and flatter; a slow one puts the ball up high, giving the hitter time, and the block too.',
   combos: 'How often a pin attack off a good pass is run as a combination off the middle — X, tandem, shoot, pipe. Rehearse them in training.',
   middle: 'With the setter at the net — P2, P3, P4 — the right side is free: the quick in front (tensa), the back quick (costas) or the slide behind him (china). Any: the setter mixes them.',
   middleBack: 'With the setter in the back row — P1, P6, P5 — the opposite is up at the net on the right, so there is no slide: the quick in front or the back quick.',

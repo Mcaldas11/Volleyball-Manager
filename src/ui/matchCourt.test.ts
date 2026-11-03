@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchFormat, MatchSimulator, SECOND_BALL } from '../engine/match/engine.ts';
 import { Position } from '../engine/model/positions.ts';
-import { Formation } from '../engine/match/tactics.ts';
+import { Formation, Tempo } from '../engine/match/tactics.ts';
 import { toTeamSetup } from '../engine/season/seasonEngine.ts';
 import { generateWorld } from '../engine/world/worldGen.ts';
 import { stubManager } from '../engine/world/world.ts';
@@ -407,4 +407,29 @@ test('the block goes up in front of the hitter: the one off whose hands it comes
     }
   }
   assert.ok(blocks > 30, `block touches seen: ${blocks}`);
+});
+
+test('the tempo shows in the set: a slow one puts the ball up high, a very fast one flat', () => {
+  const { sim, positions } = liveMatch(8);
+  let compared = 0;
+  for (let i = 0; i < 80 && compared < 20; i++) {
+    const pre = sim.snapshot();
+    if (pre.matchOver) break;
+    const entry = sim.step();
+    if (entry === null) break;
+    const at = (tempo: Tempo): number[] =>
+      rallyBeats(pre, entry.serveTeam, entry.contacts, positions, i, 0, entry.winner, undefined, entry.passers, () => ({ tempo }))
+        .filter((b) => b.actor !== null && b.poses.get(b.actor) === 'spike' && b.callout?.kind !== 'attack')
+        .map((b) => b.arc);
+    const slow = at(Tempo.Slow);
+    const usual = at(Tempo.Balanced);
+    const fast = at(Tempo.VeryFast);
+    slow.forEach((arc, k) => {
+      // The setter playing his own second ball over at once: no set, and nothing to change.
+      if (usual[k] <= 0 || (arc === usual[k] && arc === fast[k])) return;
+      assert.ok(arc > usual[k] && usual[k] > fast[k], `set ${k}: slow ${arc.toFixed(2)}, balanced ${usual[k].toFixed(2)}, very fast ${fast[k].toFixed(2)}`);
+      compared++;
+    });
+  }
+  assert.ok(compared > 5, `sets compared: ${compared}`);
 });

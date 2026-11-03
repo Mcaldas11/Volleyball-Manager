@@ -44,6 +44,9 @@ import {
   overheadReception, receiveFit, receivePlansOf, serveKindOf, serveRating, serveStyleFor, type ServeStyle,
 } from './serveReceive.ts';
 import {
+  intensityFatigue, matchFamiliarity, UNFAMILIAR_DEFENCE, UNFAMILIAR_SERVE, UNFAMILIAR_SET, type FamiliarityArea,
+} from './tacticFamiliarity.ts';
+import {
   AttackLane,
   lineupSlotPositions,
   BlockAssignment,
@@ -619,6 +622,8 @@ class TeamRuntime {
   readonly read: number;
   /** What it prepared for. */
   readonly prep: { reception: number; transition: number; block: number; combinations?: number };
+  /** How well it knows its tactic, each part 0-1, as the match starts — see tacticFamiliarity.ts. */
+  readonly familiar: Readonly<Record<FamiliarityArea, number>>;
   /** How well each setter and hitter of the side know each other. */
   readonly chemistry: (setter: number, hitter: number) => number;
   /** The liberos named for the match: only they play libero, and they play nothing else. */
@@ -642,6 +647,7 @@ class TeamRuntime {
     this.startLineup = setup.lineup.slice();
     this.read = Math.min(1, Math.max(0, setup.read ?? 0));
     this.prep = setup.prep ?? { reception: 0, transition: 0, block: 0 };
+    this.familiar = matchFamiliarity(setup.tactics);
     this.chemistry = setup.chemistry ?? (() => 0.5);
     this.startRotation = setup.startingRotation ?? 0;
     this.room = setup.roomEdge ?? 1;
@@ -2147,7 +2153,8 @@ export class MatchSimulator {
     const rawPower = serveRating(sr, style) * SERVE_STYLE_POWER[style];
     const serveStrength =
       rawPower * profile.power * defProfile.servePressure * sr.fatigue * sr.confidence;
-    const serveAccuracy = sr.serveAccuracy * profile.accuracy;
+    // A side that doesn't know its tactic yet serves it, and passes, a little worse.
+    const serveAccuracy = sr.serveAccuracy * profile.accuracy * (1 - UNFAMILIAR_SERVE * (1 - srv.familiar.serve));
 
     const aimed = srvRotTactics(srv) === ServeTarget.WeakestPasser || srvRotTactics(srv) === ServeTarget.Setter;
     const errorProb = clamp(
@@ -2183,7 +2190,7 @@ export class MatchSimulator {
     const recvSkill =
       (overhead ? overheadReception(rr.reception, rr.setting) : rr.reception) * rr.fatigue * rr.confidence *
       DEFENSE_PROFILE[rcv.tactics.defense].receptionBonus * (1 + PREP_EDGE * rcv.prep.reception) * lineUp *
-      receiveFit(plans, kind);
+      receiveFit(plans, kind) * (1 - UNFAMILIAR_SERVE * (1 - rcv.familiar.serve));
     // SERVE_EDGE is the inherent difficulty of handling a professional serve,
     // independent of who is hitting it. The wide contest scale keeps a single
     // serve/reception mismatch from swinging the pass grade to an extreme —
@@ -2291,7 +2298,9 @@ export class MatchSimulator {
       setRatings.fatigue * setRatings.confidence;
     const setQuality = clamp(
       quality * 0.55 + (setSkill / 100) * 0.45 + rng.gaussian(0, 0.07) - (transition ? 0.06 : 0) -
-        (hand === 'bump' ? BUMP_SET : hand === 'jump' ? JUMP_SET : 0),
+        (hand === 'bump' ? BUMP_SET : hand === 'jump' ? JUMP_SET : 0) -
+        // An attack the side doesn't know yet is run a little less sharply.
+        UNFAMILIAR_SET * (1 - atk.familiar.attack),
       0,
       1,
     );
@@ -2443,7 +2452,7 @@ export class MatchSimulator {
     // A block that knows the attack's patterns is there before the ball.
     const blockRating =
       this.blockStrength(def, lane, blockCount) * (1 - tempo.blockDelay) * def.edge * (1 + READ_BLOCK * atk.read) *
-      (1 + PREP_EDGE * def.prep.block) * beaten * planEdge;
+      (1 + PREP_EDGE * def.prep.block) * beaten * planEdge * (1 - UNFAMILIAR_DEFENCE * (1 - def.familiar.defence));
 
     // ---- Dig ----
     // Where the coach has the defence stand against an attack from this side,
@@ -2454,7 +2463,8 @@ export class MatchSimulator {
       this.digStrength(def) * DEFENSE_PROFILE[def.tactics.defense].digCoverage * def.edge * (1 + READ_DIG * atk.read) *
       coverEdge(layout, source, clamp((ar.attackControl - ar.attackPower) / 20, -1, 1)) *
       (target === null ? 1 : 1 + CLOSE_COURT * (blockCount - 2)) *
-      (bp?.numbers === BlockNumbers.Triple ? TRIPLE_DIG : 1);
+      (bp?.numbers === BlockNumbers.Triple ? TRIPLE_DIG : 1) *
+      (1 - UNFAMILIAR_DEFENCE * (1 - def.familiar.defence));
     const covered = this.recording ? coverage(layout, source) : undefined;
 
     // ---- Outcome ----
@@ -3007,11 +3017,12 @@ export class MatchSimulator {
     }
   }
 
-  /** Drain condition from everyone who was on court. */
+  /** Drain condition from everyone who was on court — the faster, the harder the side's tactic works them. */
   private applyFatigue(contacts: number): void {
-    const intensity = 0.00045 + contacts * 0.00007;
+    const rally = 0.00045 + contacts * 0.00007;
     for (let t = 0; t < 2; t++) {
       const team = this.teams[t];
+      const intensity = rally * intensityFatigue(team.tactics);
       for (let z = 0; z < 6; z++) {
         const p = effectivePlayerAt(team.court, z, this.roles, team.liberoIdx, team.onServe);
         const r = team.rate(p);

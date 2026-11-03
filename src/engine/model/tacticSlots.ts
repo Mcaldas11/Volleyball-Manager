@@ -10,6 +10,7 @@
  */
 
 import { defaultTactics, FORMATION_NAMES, formationOf, type TeamTactics } from '../match/tactics.ts';
+import { freshFamiliarity, NEW_TACTIC_FAMILIARITY } from '../match/tacticFamiliarity.ts';
 import type { Club } from './club.ts';
 
 export const MAX_TACTICS = 3;
@@ -90,9 +91,12 @@ export function newTactic(club: TacticFields, name?: string): number | null {
   const slots = tacticSlots(club);
   if (slots.length >= MAX_TACTICS) return null;
   saveLoadedTactic(club);
+  const fresh = defaultTactics();
+  // New to the side: it has it all to learn.
+  fresh.familiarity = freshFamiliarity(fresh, NEW_TACTIC_FAMILIARITY);
   const blank: SavedTactic = {
     name: name ?? `Tactic ${slots.length + 1}`,
-    tactics: defaultTactics(),
+    tactics: fresh,
     preferredLineup: [],
     preferredLibero: -1,
     preferredDefensiveLibero: -1,

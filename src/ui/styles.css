@@ -2141,6 +2141,49 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
 .lineup-bar-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 280px; max-width: 760px; }
 .lineup-bar-rating { display: flex; align-items: center; gap: 8px; }
 .lineup-bar-rating strong { font: 700 22px/1 var(--font-display); }
+/* How well the side knows its tactic, and how hard it is on the legs: two pills, a ring of petals each, the detail on hover. */
+.tpills { display: flex; align-items: center; gap: 8px; }
+.tpill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: help;
+  outline: none;
+}
+.tpill:hover, .tpill:focus-visible { border-color: var(--club-bright, var(--gold)); }
+.tpill-gauge { width: 22px; height: 22px; flex: none; }
+.tpill-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: none;
+  width: 290px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  font-weight: 400;
+  cursor: default;
+}
+.tpill:hover .tpill-card, .tpill:focus-within .tpill-card { display: block; }
+.tpill-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.tpill-card-head b { font: 700 13px/1.2 var(--font-display); letter-spacing: 0.04em; }
+.tpill-card-head span { font-size: 12px; font-weight: 700; }
+.tpill-row { display: grid; grid-template-columns: 110px 1fr 28px; align-items: center; gap: 8px; font-size: 12px; line-height: 1.9; color: var(--text-dim); }
+.tpill-row b { color: var(--text); text-align: right; }
+.tpill-bar { height: 6px; overflow: hidden; border-radius: 3px; background: rgba(255, 255, 255, 0.08); }
+.tpill-bar i { display: block; height: 100%; border-radius: 3px; }
+.tpill-card p { margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--text-dim); }
 
 .ts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 330px); gap: 16px; align-items: start; }
 .ts-main { display: flex; gap: 16px; align-items: stretch; justify-content: center; flex-wrap: wrap; min-width: 0; }
