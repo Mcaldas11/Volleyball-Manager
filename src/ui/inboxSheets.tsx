@@ -15,7 +15,7 @@ import { isFriendly } from '../engine/season/friendlies.ts';
 import { achievementList } from '../engine/world/achievements.ts';
 import { boardMood } from '../engine/world/career.ts';
 import { ordinal } from '../engine/world/inbox.ts';
-import { contractEndSeason, type GameMessage, type World } from '../engine/world/world.ts';
+import { contractEndSeason, DAYS_PER_SEASON, type GameMessage, type World } from '../engine/world/world.ts';
 import { ClubCrest, money, StarMeter } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
@@ -181,12 +181,14 @@ function BoardSheet({ world, clubId }: { world: World; clubId: number }): JSX.El
   );
 }
 
-/** A cup: the club's way through it, round by round, and where it stands now. */
-function CupSheet({ world, compId, clubId }: { world: World; compId: number; clubId: number }): JSX.Element | null {
+/** A cup: the club's way through it, round by round, in the season `day` falls in — not every season's — and where it stands now. */
+function CupSheet({ world, compId, clubId, day }: { world: World; compId: number; clubId: number; day: number }): JSX.Element | null {
   const g = useGame();
   const comp = world.competitions[compId];
   if (comp === undefined) return null;
-  const games = world.fixtures.filter((f) => f.competitionId === compId && (f.home === clubId || f.away === clubId)).sort((a, b) => a.day - b.day);
+  const season = Math.floor(day / DAYS_PER_SEASON);
+  const games = world.fixtures.filter((f) => f.competitionId === compId && (f.home === clubId || f.away === clubId)
+    && Math.floor(f.day / DAYS_PER_SEASON) === season).sort((a, b) => a.day - b.day);
   const progress = cupProgress(comp, clubId);
   if (games.length === 0 && progress === null) return null;
   const tone = progress === null ? '' : progress.champion ? 'good' : progress.alive ? '' : 'bad';
@@ -466,7 +468,7 @@ export function ContextSheet({ message: m }: { message: GameMessage }): JSX.Elem
   const s = m.subject;
   const compId = m.competitionId ?? competitionNamed(world, s);
   if (compId !== undefined && world.competitions[compId] !== undefined && isCupCompetition(world.competitions[compId]) && me >= 0) {
-    const cup = <CupSheet world={world} compId={compId} clubId={me} />;
+    const cup = <CupSheet world={world} compId={compId} clubId={me} day={m.day} />;
     return m.clubId !== undefined && m.clubId !== me ? <>{cup}<ClubSheet world={world} clubId={m.clubId} /></> : cup;
   }
   if (s.startsWith('Achievement: ')) return <AchievementSheet world={world} title={s.slice('Achievement: '.length)} />;

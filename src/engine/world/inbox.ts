@@ -11,7 +11,7 @@
 
 import { openInjuryCase, TREATMENT_MIN_DAYS } from './treatment.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
-import { bestKnown, readLevel, READ_WARN_STARTING, READ_WARN_WORKED_OUT } from '../model/tacticRead.ts';
+import { bestKnown, readLevel, readSuggestions, READ_WARN_STARTING, READ_WARN_WORKED_OUT } from '../model/tacticRead.ts';
 import { INJURY_NAMES } from '../model/players.ts';
 import { compileLoanReport, diffLoanStats, newLoanStats, wageBill } from './loans.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
@@ -252,6 +252,21 @@ export function welcomeMessages(world: World): void {
   });
 }
 
+/**
+ * The assistant's recommendation, as paragraphs to follow a warning: the
+ * changes that would throw the opposition most, how well they would read us
+ * then, and the price — the side has the new instructions to learn.
+ */
+function readAdvice(read: NonNullable<Club['tacticRead']>, t: Club['tactics'], n: number): string {
+  const { changes, now, after } = readSuggestions(read, t, n);
+  if (changes.length === 0) return '';
+  const pct = (v: number): number => Math.round(v * 100);
+  return '\n\nWhat I would change:\n' +
+    changes.map((c) => `- ${c.label[0].toUpperCase()}${c.label.slice(1)}: from ${c.from} to ${c.to}`).join('\n') +
+    `\n\nThat would take them from reading ${pct(now)}% of what we do to ${pct(after)}%. ` +
+    'The players would have the new instructions to learn, so expect our familiarity with the tactic to dip for a week or two.';
+}
+
 /** "a, b and c" */
 function listed(items: readonly string[]): string {
   return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
@@ -272,12 +287,13 @@ export function tacticReadNotice(world: World, club: Club): void {
   read.warned = stage;
   if (stage <= warned) return;
   const known = listed(bestKnown(read, club.tactics));
+  const advice = readAdvice(read, club.tactics, stage === 2 ? 3 : 2);
   postMessage(world, stage === 2
     ? {
       subject: 'The opposition have us worked out',
       body: `Teams know exactly how we play now — our ${known} above all — and they are setting up to stop it. ` +
         'It is costing us points. We need to change things: even a few adjustments to the instructions will ' +
-        'throw them, and the more we change, the longer they will need to catch up.',
+        'throw them, and the more we change, the longer they will need to catch up.' + advice,
       from: 'Assistant Manager',
       clubId: club.id,
       category: 'matchday',
@@ -285,7 +301,7 @@ export function tacticReadNotice(world: World, club: Club): void {
     : {
       subject: 'The opposition are starting to read us',
       body: `Our opponents have been studying the video, and they are picking up our patterns — our ${known} most ` +
-        'of all. Nothing to panic about yet, but a few small adjustments to the tactic would keep them guessing.',
+        'of all. Nothing to panic about yet, but a few small adjustments to the tactic would keep them guessing.' + advice,
       from: 'Assistant Manager',
       clubId: club.id,
       category: 'matchday',

@@ -109,3 +109,49 @@ export function bestKnown(read: TacticRead | undefined, t: TeamTactics, n = 3): 
     .slice(0, n)
     .map((x) => x.label);
 }
+
+/** The team instructions the assistant would change, and what each of their settings is called. */
+const CHANGEABLE: ReadonlyArray<{ key: 'offense' | 'tempo' | 'defense' | 'serve'; label: string; names: readonly string[] }> = [
+  { key: 'offense', label: 'offence', names: ['Fast offence', 'Balanced', 'Outside focused', 'Opposite focused', 'Middle focused', 'Pipe heavy', 'Back-row heavy'] },
+  { key: 'tempo', label: 'tempo', names: ['Very fast', 'Fast', 'Balanced', 'Slow'] },
+  { key: 'defense', label: 'defence', names: ['Conservative', 'Aggressive', 'Triple block priority', 'Service pressure', 'Reception stability'] },
+  { key: 'serve', label: 'serving', names: ['Risky', 'Balanced', 'Conservative'] },
+];
+
+/** A change the assistant recommends: which instruction, from what to what. */
+export interface ReadChange {
+  label: string;
+  from: string;
+  to: string;
+}
+
+/**
+ * What to change to throw the opposition: for each of the team instructions,
+ * the setting they know least that does the most to cut how well they read the
+ * side — the one nearest what it plays now when several do as much — the
+ * best `n` of them, and how well they would read it with all of them made.
+ */
+export function readSuggestions(read: TacticRead | undefined, t: TeamTactics, n = 2): { changes: ReadChange[]; now: number; after: number } {
+  const now = readLevel(read, t);
+  const options = CHANGEABLE.map((c) => {
+    const current = t[c.key] as number;
+    let best = current;
+    let bestLevel = now;
+    for (let v = 0; v < c.names.length; v++) {
+      if (v === current) continue;
+      const level = readLevel(read, { ...t, [c.key]: v });
+      if (level < bestLevel - 1e-6 || (Math.abs(level - bestLevel) <= 1e-6 && best !== current && Math.abs(v - current) < Math.abs(best - current))) {
+        best = v;
+        bestLevel = level;
+      }
+    }
+    return { c, current, best, gain: now - bestLevel };
+  }).filter((o) => o.best !== o.current && o.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, n);
+  let changed: TeamTactics = t;
+  for (const o of options) changed = { ...changed, [o.c.key]: o.best };
+  return {
+    changes: options.map((o) => ({ label: o.c.label, from: o.c.names[o.current] ?? '?', to: o.c.names[o.best] ?? '?' })),
+    now,
+    after: readLevel(read, changed),
+  };
+}

@@ -109,6 +109,10 @@ test('the assistant warns once as the opposition start to read the tactic, once 
   }
   assert.deepEqual(warnings(), ['The opposition are starting to read us', 'The opposition have us worked out']);
   assert.match(world.messages[world.messages.length - 1].body, /offence/);
+  // And he says what to change, from what to what, and what it would do.
+  const advice = world.messages[world.messages.length - 1].body;
+  assert.match(advice, /What I would change:\n- [A-Z][a-z]+: from .+ to .+/);
+  assert.match(advice, /from reading \d+% of what we do to \d+%/);
 
   // A new plan throws them; play it long enough and he warns again.
   club.tactics.formation = 1;
