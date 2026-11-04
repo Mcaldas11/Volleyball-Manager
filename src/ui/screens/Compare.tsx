@@ -10,7 +10,7 @@ import {
 } from '../../engine/model/attributes.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import { TRAIT_NAMES, traitsOf } from '../../engine/model/traits.ts';
-import { averageRating, seasonTotals } from '../../engine/world/records.ts';
+import { appsLabel, averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
 import { contractEndSeason } from '../../engine/world/world.ts';
 import { Card, ClubLink, money, PlayerFace, Pos } from '../components.tsx';
 import { Icon } from '../icons.tsx';
@@ -38,7 +38,7 @@ export function PlayerCompare({ a, b }: { a: number; b: number }): JSX.Element {
     { k: 'Block reach', va: store.blockReachCm[a], vb: store.blockReachCm[b], show: (v) => `${v} cm` },
     { k: 'Value', va: store.value[a], vb: store.value[b], show: (v) => money(v), none: true },
     { k: 'Wage', va: store.wage[a], vb: store.wage[b], show: (v) => money(v), lower: true },
-    { k: 'Apps this season', va: season(a).apps, vb: season(b).apps, show: (v) => `${v}` },
+    { k: 'Apps this season', va: season(a).apps, vb: season(b).apps, show: (_, p) => appsLabel(seasonRecords(world, p, world.season)) },
     { k: 'Average rating', va: season(a).rating, vb: season(b).rating, show: (v) => (v > 0 ? v.toFixed(2) : '—') },
   ];
 

@@ -8,6 +8,7 @@
  * new one.
  */
 
+import { appsLabel } from './records.ts';
 import { entrants } from './teamAwards.ts';
 import type { World } from './world.ts';
 import { DAYS_PER_SEASON } from './world.ts';
@@ -43,6 +44,8 @@ export interface PlayerCompStats extends BoxScore {
   /** The club he plays for now, -1 if none. */
   clubId: number;
   apps: number;
+  /** The same, as read: starts, then off the bench in brackets — see appsLabel. */
+  appsText: string;
   ratingSum: number;
   points: number;
   mvps: number;
@@ -108,7 +111,7 @@ export function competitionStats(
     if (l === undefined || l.apps === 0) continue;
     const clubId = store.clubId[p];
     const line: PlayerCompStats = {
-      p, clubId, apps: l.apps, ratingSum: l.ratingSum, points: l.points, mvps: l.mvps,
+      p, clubId, apps: l.apps, appsText: appsLabel([l]), ratingSum: l.ratingSum, points: l.points, mvps: l.mvps,
       kills: l.kills ?? 0, attacks: l.attacks ?? 0, attackErrors: l.attackErrors ?? 0, aces: l.aces,
       serves: l.serves ?? 0, blocks: l.blocks, digs: l.digs ?? 0, receptions: l.receptions ?? 0,
       goodPasses: l.goodPasses ?? 0, assists: l.assists ?? 0,

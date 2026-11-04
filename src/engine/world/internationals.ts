@@ -1156,7 +1156,7 @@ export function applyIntlResult(world: World, t: Tournament, m: IntlMatch, resul
   } as unknown as Fixture;
   const homeStats = result.stats.home.players;
   const awayStats = result.stats.away.players;
-  recordFixture(world, fixture, homeStats, awayStats);
+  recordFixture(world, fixture, homeStats, awayStats, 'full', result);
   // Hurt playing for his country: his club loses him too.
   applyMatchInjuries(world, result.injuries ?? [], matchInjuryRng(world, fixture.id, m.day));
 

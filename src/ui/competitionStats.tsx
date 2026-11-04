@@ -135,7 +135,7 @@ function PlayersTable({ players }: { players: PlayerCompStats[] }): JSX.Element 
               <th className="num">#</th>
               <th />
               <th>Player</th><th>Pos</th><th>Club</th>
-              {th('m', 'M', 'Matches')}
+              {th('m', 'M', 'Matches started, and off the bench in brackets')}
               {th('rating', 'Av Rat', 'Average match rating')}
               {th('points', 'Pts')}
               {th('kills', 'Kills')}
@@ -155,7 +155,7 @@ function PlayersTable({ players }: { players: PlayerCompStats[] }): JSX.Element 
                 <td className="strong">{store.fullName(s.p)}</td>
                 <td><Pos pos={store.position[s.p] as Position} /></td>
                 <td className="dim">{s.clubId >= 0 ? <ClubLink id={s.clubId} short /> : '—'}</td>
-                <td className="num dim">{s.apps}</td>
+                <td className="num dim">{s.appsText}</td>
                 <td className="num"><RatingBadge value={s.ratingSum / s.apps} size="sm" /></td>
                 <td className="num"><strong>{s.points}</strong></td>
                 <td className="num">{s.kills}</td>

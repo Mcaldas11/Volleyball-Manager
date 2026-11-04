@@ -2077,6 +2077,9 @@ button.cal-chip:hover:not(:disabled) { filter: brightness(1.2); }
 .profile-tabs { flex: none; display: flex; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
 .profile-stats { flex: 0 1 auto; min-height: 0; }
 .profile-stats > .card-body { min-height: 0; overflow-y: auto; }
+.positions-played { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+.positions-played-one { display: inline-flex; align-items: center; gap: 6px; }
+.positions-played-count { margin-left: auto; color: var(--text-dim); }
 .profile-details { align-items: start; }
 
 .attr-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 26px; }

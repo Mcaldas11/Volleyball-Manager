@@ -314,6 +314,10 @@ export interface MatchResult {
   mvp: number;
   /** The position each player in the two squads played — or would have, off the bench. */
   roles?: Map<number, Position>;
+  /** Who began the match: the six of the first set and the liberos named for it. */
+  starters?: ReadonlySet<number>;
+  /** The positions each player was on court in, a bit per position — see positionsIn. */
+  positionsPlayed?: ReadonlyMap<number, number>;
   /** The match's best point and best play, when asked for. */
   highlights?: Highlight[];
   /** Who got hurt, and how it ended: came off for it, played on, got worse — see injury.ts. */
@@ -618,6 +622,10 @@ class TeamRuntime {
   }
   /** The six who start each set, in rotational order — the coach may hand in a new sheet between sets. */
   startLineup: number[];
+  /** Who began the match — startLineup moves on with the coach's sheets, this does not. */
+  readonly starters = new Set<number>();
+  /** The positions each player has been on court in, a bit per position. */
+  readonly positionsPlayed = new Map<number, number>();
   /** How well the opposition reads this side's tactic, 0-1. */
   readonly read: number;
   /** What it prepared for. */
@@ -1616,6 +1624,9 @@ export class MatchSimulator {
     // Coin toss for first serve.
     this.serving = this.rng.chance(0.5) ? 0 : 1;
     this.drawForm();
+    for (const t of this.teams) {
+      for (const p of [...t.startLineup, t.liberoIdx, t.defensiveLibero]) if (p >= 0) t.starters.add(p);
+    }
     this.beginSet();
   }
 
@@ -1660,6 +1671,8 @@ export class MatchSimulator {
       mvp: this.findMvp(),
       roles: new Map([...this.teams[0].ratings.keys(), ...this.teams[1].ratings.keys()]
         .map((p) => [p, this.roles[p] as Position])),
+      starters: new Set([...this.teams[0].starters, ...this.teams[1].starters]),
+      positionsPlayed: new Map([...this.teams[0].positionsPlayed, ...this.teams[1].positionsPlayed]),
       injuries: this.injuries,
       highlights: this.best !== null
         ? [this.best.point, this.best.play].filter((h): h is Highlight => h !== null)
@@ -3030,6 +3043,7 @@ export class MatchSimulator {
         // fast as a 5-stamina one.
         r.fatigue = Math.max(0.72, r.fatigue - intensity * (1.7 - r.stamina));
         statsFor(team.stats, p).ralliesPlayed++;
+        team.positionsPlayed.set(p, (team.positionsPlayed.get(p) ?? 0) | (1 << this.roles[p]));
       }
     }
   }

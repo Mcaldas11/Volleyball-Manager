@@ -16,7 +16,7 @@ import { TRAIT_HINTS, TRAIT_NAMES, traitsOf } from '../../engine/model/traits.ts
 import { NATIONS } from '../../engine/world/nations.ts';
 import { secondNation, tiedNation } from '../../engine/world/internationals.ts';
 import { canRecall, coachTalkBlock, PLAYING_TIME_NAMES } from '../../engine/world/loans.ts';
-import { averageRating, seasonRecords, seasonTotals } from '../../engine/world/records.ts';
+import { appsLabel, averageRating, positionsPlayed, seasonRecords, seasonTotals, type CompetitionRecord } from '../../engine/world/records.ts';
 import { accoladeTitle, playerAccolades } from '../../engine/world/accolades.ts';
 import { STAFF_ROLE_NAMES } from '../../engine/model/staff.ts';
 import { contractEndSeason, type World } from '../../engine/world/world.ts';
@@ -200,7 +200,7 @@ export function SquadScreen(): JSX.Element {
                 <SortTh k="condition" sort={sort} onSort={onSort}>Cond</SortTh>
                 <SortTh k="morale" sort={sort} onSort={onSort}>Morale</SortTh>
                 <th>Status</th>
-                <SortTh k="apps" sort={sort} onSort={onSort} num title="Appearances this season">Apps</SortTh>
+                <SortTh k="apps" sort={sort} onSort={onSort} num title="Matches this season: started, and off the bench in brackets">Apps</SortTh>
                 <SortTh k="rating" sort={sort} onSort={onSort} num title="Average match rating this season">Av Rat</SortTh>
                 <SortTh k="wage" sort={sort} onSort={onSort} num>Wage</SortTh>
                 <SortTh k="contract" sort={sort} onSort={onSort} num title="Contract ends on 30 June of">Ends</SortTh>
@@ -261,7 +261,7 @@ export function SquadScreen(): JSX.Element {
                           )
                           : <Status store={store} i={p} />}
                     </td>
-                    <td className="num dim">{totals.get(p)!.apps}</td>
+                    <td className="num dim">{appsLabel(seasonRecords(world, p, world.season))}</td>
                     <td className="num"><RatingBadge value={avgRating(p)} size="sm" /></td>
                     <td className="num dim">{money(incoming?.kind === 'transfer' ? incoming.wage : store.wage[p])}</td>
                     {incoming !== undefined
@@ -695,7 +695,7 @@ export function PlayerDetail(): JSX.Element | null {
         <StatTile
           label="Average rating"
           value={<RatingBadge value={averageRating(season)} size="lg" />}
-          sub={`${season.apps} app${season.apps === 1 ? '' : 's'} this season`}
+          sub={`${appsLabel(seasonRecords(world, p, world.season))} app${season.apps === 1 ? '' : 's'} this season`}
         />
       </div>
 
@@ -1038,7 +1038,7 @@ function SeasonStatsCard({ world, p, form }: { world: World; p: number; form: nu
           <thead>
             <tr>
               <th>Competition</th>
-              <th className="num">Apps</th>
+              <th className="num" title="Matches started, and off the bench in brackets">Apps</th>
               <th className="num" title="Points (kills + aces + blocks)">Pts</th>
               <th className="num">Aces</th>
               <th className="num">Blocks</th>
@@ -1051,7 +1051,7 @@ function SeasonStatsCard({ world, p, form }: { world: World; p: number; form: nu
             {lines.map((l) => (
               <tr key={l.competitionId}>
                 <td className="strong">{world.competitions[l.competitionId]?.name ?? 'Competition'}</td>
-                <td className="num">{l.apps}</td>
+                <td className="num">{appsLabel([l])}</td>
                 <td className="num">{l.points}</td>
                 <td className="num dim">{l.aces}</td>
                 <td className="num dim">{l.blocks}</td>
@@ -1063,7 +1063,7 @@ function SeasonStatsCard({ world, p, form }: { world: World; p: number; form: nu
             {lines.length > 1 && (
               <tr className="total-row">
                 <td>Total</td>
-                <td className="num">{total.apps}</td>
+                <td className="num">{appsLabel(lines)}</td>
                 <td className="num">{total.points}</td>
                 <td className="num">{total.aces}</td>
                 <td className="num">{total.blocks}</td>
@@ -1075,7 +1075,28 @@ function SeasonStatsCard({ world, p, form }: { world: World; p: number; form: nu
           </tbody>
         </table>
       )}
+      <PositionsPlayed lines={lines} natural={world.players.position[p] as Position} />
     </Card>
+  );
+}
+
+/** The positions a player's season was played in: just the one, or which and how often. */
+function PositionsPlayed({ lines, natural }: { lines: CompetitionRecord[]; natural: Position }): JSX.Element | null {
+  const played = positionsPlayed(lines);
+  if (played.length === 0) return null;
+  return (
+    <div className="positions-played" title="Matches in each position. A match played in two positions counts in both.">
+      <span className="faint">Positions played</span>
+      {played.map(({ position, matches }) => (
+        <span className="positions-played-one" key={position}>
+          <Pos pos={position} />
+          <span>{POSITION_NAMES[position]}</span>
+          <b>{matches}</b>
+          {position !== natural && <span className="faint">out of position</span>}
+        </span>
+      ))}
+      <span className="positions-played-count">{played.length === 1 ? 'Only this position' : `${played.length} positions`}</span>
+    </div>
   );
 }
 

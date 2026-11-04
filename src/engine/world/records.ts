@@ -14,7 +14,7 @@
 
 import { matchRating, playedInMatch, type RatingPath } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
-import type { Position } from '../model/positions.ts';
+import { POSITIONS, type Position } from '../model/positions.ts';
 import { courtShare, recordLoanMatch } from './loans.ts';
 import { noteTeamMatch } from './teamAwards.ts';
 import { recordClubMatch } from './clubHistory.ts';
@@ -45,6 +45,51 @@ export interface CompetitionRecord {
   /** Perfect and positive passes. */
   goodPasses?: number;
   assists?: number;
+  /** Of `apps`, the matches he began; the rest he came on in. Absent on lines
+   *  written before it was kept. */
+  starts?: number;
+  /** Appearances already on the line when `starts` began to be kept: nobody
+   *  can say now how they began. */
+  unsplit?: number;
+  /** Matches in each position. A match played in two counts in both. */
+  positions?: Partial<Record<Position, number>>;
+}
+
+/** What a match knows of who began it and who played where. A quick-simulated
+ *  match has none: its six and libero play it all, in their own positions. */
+export interface MatchAppearances {
+  starters?: ReadonlySet<number>;
+  positionsPlayed?: ReadonlyMap<number, number>;
+}
+
+/**
+ * Appearances as they are read: the matches started, then those off the bench
+ * in brackets — "1(4)", or "12" when he began them all. The bare total when
+ * any of them comes from before it was kept.
+ */
+export function appsLabel(lines: readonly CompetitionRecord[]): string {
+  let apps = 0;
+  let starts = 0;
+  let split = true;
+  for (const l of lines) {
+    apps += l.apps;
+    if (l.starts === undefined || (l.unsplit ?? 0) > 0) split = false;
+    else starts += l.starts;
+  }
+  if (!split) return `${apps}`;
+  return apps > starts ? `${starts}(${apps - starts})` : `${starts}`;
+}
+
+/** The positions of a player's lines and the matches in each, the most played first. */
+export function positionsPlayed(lines: readonly CompetitionRecord[]): Array<{ position: Position; matches: number }> {
+  const all = new Map<Position, number>();
+  for (const l of lines) {
+    for (const position of POSITIONS) {
+      const n = l.positions?.[position] ?? 0;
+      if (n > 0) all.set(position, (all.get(position) ?? 0) + n);
+    }
+  }
+  return [...all].map(([position, matches]) => ({ position, matches })).sort((a, b) => b.matches - a.matches);
 }
 
 /** How many past ratings the form guide remembers. */
@@ -61,6 +106,7 @@ function recordSide(
   setsFor: number,
   setsAgainst: number,
   path: RatingPath,
+  match?: MatchAppearances,
 ): void {
   const store = world.players;
   for (const [p, s] of stats) {
@@ -80,6 +126,13 @@ function recordSide(
         apps: 0, ratingSum: 0, best: 0, points: 0, aces: 0, blocks: 0, mvps: 0,
       };
       lines.push(line);
+    }
+    if (line.starts === undefined && line.apps > 0) line.unsplit = line.apps;
+    line.starts = (line.starts ?? 0) + (match?.starters === undefined || match.starters.has(p) ? 1 : 0);
+    const held = match?.positionsPlayed?.get(p) ?? 1 << store.position[p];
+    const positions = line.positions ??= {};
+    for (const position of POSITIONS) {
+      if ((held & (1 << position)) !== 0) positions[position] = (positions[position] ?? 0) + 1;
     }
     line.apps++;
     line.ratingSum += rating;
@@ -117,9 +170,10 @@ export function recordFixture(
   awayStats: Map<number, PlayerMatchStats>,
   /** The engine it was played through — each rates on its own yardstick. */
   path: RatingPath = 'full',
+  match?: MatchAppearances,
 ): void {
-  recordSide(world, fixture, homeStats, fixture.homeSets, fixture.awaySets, path);
-  recordSide(world, fixture, awayStats, fixture.awaySets, fixture.homeSets, path);
+  recordSide(world, fixture, homeStats, fixture.homeSets, fixture.awaySets, path, match);
+  recordSide(world, fixture, awayStats, fixture.awaySets, fixture.homeSets, path, match);
   // National teams' squads are not clubs.
   if (world.competitions[fixture.competitionId]?.kind === 'international') return;
   noteTeamMatch(world, fixture, homeStats, awayStats);

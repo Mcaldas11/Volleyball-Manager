@@ -467,7 +467,7 @@ export function applyMatchResult(
   }
   accumulate(ctx.stats, homeStats, result.setScores.length);
   accumulate(ctx.stats, awayStats, result.setScores.length);
-  recordFixture(world, fixture, homeStats, awayStats);
+  recordFixture(world, fixture, homeStats, awayStats, 'full', result);
   // The assistant's notes on it, for the manager.
   postMatchReview(world, fixture);
   // Who got hurt, and how it ended — off, played on with it, worse.
