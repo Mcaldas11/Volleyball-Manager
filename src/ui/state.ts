@@ -505,7 +505,20 @@ export interface SubPlans {
   serveSub: ServeSubPlan | null;
 }
 
+/** The tactic as it stood at kickoff — the side's, with its saved tactics and team sheet — to go back to once the match is over. */
+interface TacticsAtKickoff {
+  tactics: TeamTactics;
+  slots?: SavedTactic[];
+  active?: number;
+  preferredLineup?: number[];
+  preferredLibero?: number;
+  preferredDefensiveLibero?: number;
+  preferredFormation?: Formation;
+}
+
 export interface MatchdayState {
+  /** The tactic as it stood at kickoff: whatever is changed during the match is for the match only. */
+  tacticsAtKickoff?: TacticsAtKickoff;
   fixture: Fixture;
   /** The rest of the round in the competition, played at kick-off to unfold alongside — see aroundTheLeague.ts. */
   around?: AroundTheLeague;
@@ -2187,7 +2200,30 @@ class Game {
     this.showPostMatch(f);
   }
 
+  /** The match over: the tactic goes back to how it stood at kickoff — what was changed during it was for it alone. */
+  private restoreKickoffTactics(): void {
+    const md = this.matchday;
+    const was = md?.tacticsAtKickoff;
+    if (md == null || was === undefined) return;
+    md.tacticsAtKickoff = undefined;
+    if (md.national != null) {
+      const sheet = this.nationalSheet();
+      if (sheet !== null) sheet.tactics = was.tactics;
+      return;
+    }
+    const club = this.club;
+    if (club === null) return;
+    club.tactics = was.tactics;
+    club.tacticSlots = was.slots;
+    club.activeTactic = was.active;
+    if (was.preferredLineup !== undefined) club.preferredLineup = was.preferredLineup;
+    if (was.preferredLibero !== undefined) club.preferredLibero = was.preferredLibero;
+    if (was.preferredDefensiveLibero !== undefined) club.preferredDefensiveLibero = was.preferredDefensiveLibero;
+    club.preferredFormation = was.preferredFormation;
+  }
+
   private showPostMatch(f: Fixture): void {
+    this.restoreKickoffTactics();
     // The press want the manager's reaction — offered from the result screen; not after a match never played.
     if (this.world !== null && f.forfeit === undefined) generatePostMatchInterview(this.world, f);
     this.postMatch = f.id;
@@ -2786,6 +2822,16 @@ class Game {
     if (homeClub === undefined || awayClub === undefined) return;
 
     this.handInSquad(md, (p) => world.players.isAvailable(p));
+    // Changes made during the match are for the match: afterwards the tactic is as it was at kickoff.
+    md.tacticsAtKickoff = {
+      tactics: structuredClone(club.tactics),
+      slots: club.tacticSlots !== undefined ? structuredClone(club.tacticSlots) : undefined,
+      active: club.activeTactic,
+      preferredLineup: [...club.preferredLineup],
+      preferredLibero: club.preferredLibero,
+      preferredDefensiveLibero: club.preferredDefensiveLibero,
+      preferredFormation: club.preferredFormation,
+    };
     const userSetup: TeamSetup = {
       clubId: club.id,
       name: club.name,
@@ -4812,6 +4858,8 @@ class Game {
     const { t, m } = found;
     const nation = md.national.nation;
     this.handInSquad(md, (p) => canPlayForCountry(world, p));
+    // Changes made during the match are for the match: afterwards the tactic is as it was at kickoff.
+    md.tacticsAtKickoff = { tactics: structuredClone(tactics) };
     const userSetup: TeamSetup = {
       clubId: -1,
       name: nationName(nation),

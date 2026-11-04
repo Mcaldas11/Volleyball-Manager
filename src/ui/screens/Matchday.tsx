@@ -1255,7 +1255,9 @@ function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | nul
       <header className="lv-overlay-head">
         <strong><Icon name="tactics" size={16} /> Tactics</strong>
         <Segmented<'team' | 'rotations'> size="sm" options={[['team', 'Team'], ['rotations', 'Rotations']]} value={tab} onChange={setTab} />
-        <span className="faint">Changes apply from the next rally.</span>
+        <span className="faint" title="Once the match is over the tactic goes back to how it was at kickoff.">
+          Changes apply from the next rally — for this match only.
+        </span>
         {saved !== null && saved.slots.length >= 2 && (
           <Dropdown
             size="sm"

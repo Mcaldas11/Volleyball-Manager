@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newSeasonContext, startSeason, advanceDay } from '../season/seasonEngine.ts';
 import { appointManager } from './career.ts';
-import { bareResult, reportResult } from './matchReports.ts';
+import { bareResult, clubRecordOf, reportResult } from './matchReports.ts';
 import { generateWorld } from './worldGen.ts';
 import { stubManager } from './world.ts';
 
@@ -36,4 +36,31 @@ test('every match of the manager\'s club keeps its box score, and reads back the
   const bare = bareResult(f);
   assert.deepEqual([bare.homeSets, bare.awaySets], [f.homeSets, f.awaySets]);
   assert.equal(bare.stats.home.players.size, 0);
+});
+
+test('a player\'s numbers for the club add up every kept match he played in', () => {
+  const world = generateWorld({ seed: 71, startYear: 2026, scale: 'small', manager: stubManager() });
+  const ctx = newSeasonContext();
+  startSeason(world, ctx);
+  const club = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12)[0];
+  appointManager(world, club.id);
+  for (let d = 0; d < 140; d++) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
+  const mine = world.fixtures.filter((f) => f.played && (f.home === club.id || f.away === club.id) && world.matchReports?.has(f.id));
+  assert.ok(mine.length > 2, `${mine.length} kept matches`);
+  // Whoever played the most of them.
+  const lines = mine.map((f) => {
+    const r = reportResult(f, world.matchReports!.get(f.id)!);
+    return { f, players: (f.home === club.id ? r.stats.home : r.stats.away).players };
+  });
+  const p = club.players.find((x) => lines.filter((l) => (l.players.get(x)?.ralliesPlayed ?? 0) > 0).length >= 2)!;
+  const played = lines.filter((l) => (l.players.get(p)?.ralliesPlayed ?? 0) > 0);
+  const rec = clubRecordOf(world, p, club.id)!;
+  assert.equal(rec.games, played.length);
+  assert.equal(rec.sets, played.reduce((n, l) => n + l.f.homeSets + l.f.awaySets, 0));
+  const sum = (k: 'attackKills' | 'serveAces' | 'blockPoints'): number => played.reduce((n, l) => n + l.players.get(p)![k], 0);
+  assert.equal(rec.kills, sum('attackKills'));
+  assert.equal(rec.aces, sum('serveAces'));
+  assert.equal(rec.blocks, sum('blockPoints'));
+  assert.equal(rec.points, rec.kills + rec.aces + rec.blocks);
+  assert.equal(clubRecordOf(world, p, club.id === 0 ? 1 : 0), null, 'nothing for a club he never played for');
 });

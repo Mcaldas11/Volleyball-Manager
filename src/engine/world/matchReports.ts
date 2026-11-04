@@ -143,3 +143,57 @@ export function bareResult(fixture: Fixture): MatchResult {
     mvp: fixture.mvp,
   };
 }
+
+/** What a player has done for a club, summed over every one of its matches kept here. */
+export interface ClubRecord {
+  /** Matches he got on court in, and the sets those went to. */
+  games: number;
+  sets: number;
+  points: number;
+  kills: number;
+  attacks: number;
+  attackErrors: number;
+  aces: number;
+  blocks: number;
+  digs: number;
+  passes: number;
+  goodPasses: number;
+  assists: number;
+}
+
+/**
+ * A player's numbers for a club, from the box scores kept of its matches — the
+ * manager's club's, since he took it over. Null if none of them had him on court.
+ */
+export function clubRecordOf(world: World, p: number, clubId: number): ClubRecord | null {
+  const reports = world.matchReports;
+  if (reports === undefined || reports.size === 0) return null;
+  const byId = new Map<number, Fixture>();
+  for (const f of world.fixtures) if (reports.has(f.id)) byId.set(f.id, f);
+  const r: ClubRecord = {
+    games: 0, sets: 0, points: 0, kills: 0, attacks: 0, attackErrors: 0, aces: 0, blocks: 0, digs: 0, passes: 0, goodPasses: 0, assists: 0,
+  };
+  const at = (k: (typeof PLAYER_FIELDS)[number]): number => 2 + PLAYER_FIELDS.indexOf(k);
+  for (const [id, report] of reports) {
+    const f = byId.get(id);
+    if (f === undefined) continue;
+    const side = f.home === clubId ? 0 : f.away === clubId ? 1 : -1;
+    if (side < 0) continue;
+    const line = report.lines.find((l) => l[0] === p && l[1] === side);
+    if (line === undefined || (line[at('ralliesPlayed')] ?? 0) <= 0) continue;
+    const v = (k: (typeof PLAYER_FIELDS)[number]): number => line[at(k)] ?? 0;
+    r.games++;
+    r.sets += f.homeSets + f.awaySets;
+    r.kills += v('attackKills');
+    r.attacks += v('attacksTotal');
+    r.attackErrors += v('attackErrors') + v('attackBlocked');
+    r.aces += v('serveAces');
+    r.blocks += v('blockPoints');
+    r.digs += v('digsTotal');
+    r.passes += v('receptionsTotal');
+    r.goodPasses += v('receptionPerfect') + v('receptionPositive');
+    r.assists += v('setAssists');
+  }
+  r.points = r.kills + r.aces + r.blocks;
+  return r.games > 0 ? r : null;
+}

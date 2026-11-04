@@ -15,6 +15,7 @@ import { isFriendly } from '../engine/season/friendlies.ts';
 import { achievementList } from '../engine/world/achievements.ts';
 import { boardMood } from '../engine/world/career.ts';
 import { ordinal } from '../engine/world/inbox.ts';
+import { clubRecordOf } from '../engine/world/matchReports.ts';
 import { contractEndSeason, DAYS_PER_SEASON, type GameMessage, type World } from '../engine/world/world.ts';
 import { ClubCrest, money, StarMeter } from './components.tsx';
 import { Icon } from './icons.tsx';
@@ -149,6 +150,42 @@ function Form({ world, clubId }: { world: World; clubId: number }): JSX.Element 
 }
 
 // ---- Sheets -----------------------------------------------------------------------------
+
+/**
+ * A player's numbers for the club, from every match of it kept since the
+ * manager took over: points, kills, aces and blocks — in all, a game and a
+ * set — his attacking, his defence and passing, his setting.
+ */
+function ClubRecordSheet({ world, p, clubId }: { world: World; p: number; clubId: number }): JSX.Element | null {
+  const r = clubRecordOf(world, p, clubId);
+  if (r === null) return null;
+  const sets = Math.max(1, r.sets);
+  const one = (v: number): string => v.toFixed(1);
+  const pct = (a: number, b: number): string => `${Math.round((a / Math.max(1, b)) * 100)}%`;
+  return (
+    <Sheet label="His numbers for the club" icon="stats" aside={<span className="ibx-pill">{r.games} games · {r.sets} sets</span>}>
+      <div className="ibx-figs">
+        <Figure label="Points" value={r.points} />
+        <Figure label="Points a game" value={one(r.points / r.games)} />
+        <Figure label="Points a set" value={one(r.points / sets)} />
+      </div>
+      <div className="ibx-figs">
+        <Figure label="Kills" value={r.kills} />
+        <Figure label="Aces" value={r.aces} />
+        <Figure label="Blocks" value={r.blocks} />
+      </div>
+      {r.attacks > 0 && (
+        <Row k="Attack">{pct(r.kills, r.attacks)} kills · {one(r.kills / sets)} a set · efficiency {pct(r.kills - r.attackErrors, r.attacks)}</Row>
+      )}
+      <Row k="Serve">{one(r.aces / sets)} aces a set</Row>
+      <Row k="Block">{one(r.blocks / sets)} a set</Row>
+      {r.digs > 0 && <Row k="Digs">{r.digs} · {one(r.digs / sets)} a set</Row>}
+      {r.passes > 0 && <Row k="Reception">{pct(r.goodPasses, r.passes)} good · {r.passes} passes</Row>}
+      {r.assists > 0 && <Row k="Assists">{r.assists} · {one(r.assists / sets)} a set</Row>}
+      <p className="paper-muted ibx-note">From the {r.games} games for the club kept since you took charge.</p>
+    </Sheet>
+  );
+}
 
 /** The board: how it feels about the manager, the target against where the club is, the money. */
 function BoardSheet({ world, clubId }: { world: World; clubId: number }): JSX.Element | null {
@@ -466,6 +503,8 @@ export function ContextSheet({ message: m }: { message: GameMessage }): JSX.Elem
   const world = g.world!;
   const me = world.userClubId;
   const s = m.subject;
+  // A player's milestone for the club: his numbers there.
+  if (m.playerIdx !== undefined && me >= 0 && /: \d+ games for /.test(s)) return <ClubRecordSheet world={world} p={m.playerIdx} clubId={me} />;
   const compId = m.competitionId ?? competitionNamed(world, s);
   if (compId !== undefined && world.competitions[compId] !== undefined && isCupCompetition(world.competitions[compId]) && me >= 0) {
     const cup = <CupSheet world={world} compId={compId} clubId={me} day={m.day} />;

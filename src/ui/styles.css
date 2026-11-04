@@ -8081,6 +8081,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .ibx-pill { padding: 2px 9px; border-radius: 999px; background: rgba(40, 30, 10, 0.08); font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: none; color: #4d525c; }
 .ibx-pill.good { background: rgba(35, 122, 59, 0.14); color: #237a3b; }
 .ibx-pill.bad { background: rgba(179, 50, 43, 0.12); color: #b3322b; }
+.ibx-note { margin: 8px 0 0; font-size: 12px; }
 .ibx-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px; }
 .ibx-fig { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.5); }
 .ibx-fig b { font: 800 22px/1.05 var(--font-display); color: var(--paper-ink); }
