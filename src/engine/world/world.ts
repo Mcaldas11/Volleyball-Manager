@@ -735,6 +735,8 @@ export interface World {
   affiliateTalks?: Array<{ clubId: number; resolvesOn: number }>;
   /** The day the manager last spoke to each of his players, one to one — see playerTalks.ts. */
   playerChats?: Record<number, number>;
+  /** The messages whose honoured players the manager has congratulated — see congratulate.ts. By message id. */
+  congratulated?: Record<number, true>;
   /** Promises of games the manager has made. */
   promises?: PlayerPromise[];
   /** Weeks each of the manager's players has been unhappy. */

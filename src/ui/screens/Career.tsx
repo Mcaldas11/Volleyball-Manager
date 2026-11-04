@@ -14,7 +14,7 @@ import {
   Bar, Card, ClubCrest, clubThemeStyle, Empty, Flag, KV, managerPhotoUrl, money, PersonFace, Segmented, StarMeter,
 } from '../components.tsx';
 import { StaffRole } from '../../engine/model/staff.ts';
-import { AccoladeList, HonourList, honourOf, type Honour } from '../honours.tsx';
+import { AccoladeList, AllHonoursButton, HonourList, honourOf, type Honour } from '../honours.tsx';
 import { coachAccolades } from '../../engine/world/accolades.ts';
 import { StaffSheet, TeamStyle } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
@@ -175,7 +175,7 @@ function careerSpells(world: World): Spell[] {
 function nationalTitles(world: World): Honour[] {
   return (world.career.nationalJobs ?? [])
     .flatMap((j) => nationalRecord(world, j.nation, j.startDay, j.endDay).titles
-      .map((t) => honourOf(world, t.competitionId, t.year, NATIONS[j.nation]?.code)))
+      .map((t) => honourOf(world, t.competitionId, t.year, NATIONS[j.nation]?.code, { nation: j.nation })))
     .filter((h): h is Honour => h !== null);
 }
 
@@ -299,6 +299,7 @@ export function CareerScreen(): JSX.Element {
       .map((t) => honourOf(
         world, t.competitionId, world.startYear + t.season + 1,
         new Set(jobs.map((j) => j.clubId)).size > 1 || titles.length > 0 ? world.clubs[t.clubId]?.shortName : undefined,
+        { clubId: t.clubId },
       ))
       .filter((h): h is Honour => h !== null),
     ...titles,
@@ -392,9 +393,14 @@ export function CareerScreen(): JSX.Element {
           <HistoryRows />
         </section>
         <section className="cp-panel cp-honours">
-          <h3 className="cp-title"><Icon name="trophy" size={14} /> Trophies ({honours.length})</h3>
-          <HonourList honours={honours} empty="No trophies yet." />
-          {accolades.length > 0 && <AccoladeList accolades={accolades} world={world} />}
+          <div className="cp-title-row">
+            <h3 className="cp-title"><Icon name="trophy" size={14} /> Trophies ({honours.length})</h3>
+            <AllHonoursButton owner={name} honours={honours} accolades={accolades} world={world} />
+          </div>
+          <div className="cp-honours-list">
+            <HonourList honours={honours} empty="No trophies yet." />
+            {accolades.length > 0 && <AccoladeList accolades={accolades} world={world} />}
+          </div>
         </section>
       </div>
     </div>

@@ -1451,6 +1451,18 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     out.push(<button key="books" className="paper-btn primary-dark" onClick={() => g.go('finances')}>View finances</button>);
   }
 
+  // Our own players honoured: call them in and say well done — one, or the group together.
+  const honoured = g.honouredBy(m.id);
+  if (honoured.length > 0) {
+    const done = g.congratulationBlockFor(m.id) !== null;
+    out.push(
+      <button key="congrats" className="paper-btn primary-dark" disabled={done} onClick={() => g.congratulate(m.id)}
+        title={honoured.map((x) => store.fullName(x)).join(', ')}>
+        <Icon name={done ? 'check' : 'star'} size={15} />{' '}
+        {done ? 'Congratulated' : honoured.length === 1 ? `Congratulate ${store.shortName(honoured[0])}` : `Congratulate the ${honoured.length} players`}
+      </button>,
+    );
+  }
   if (p !== undefined && store.isActive(p)) {
     out.push(<button key="player" className="paper-btn" onClick={() => g.select(p)}>View player</button>);
   }

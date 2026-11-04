@@ -7,7 +7,7 @@ import { coachSpells, spellTrophies } from '../../engine/world/career.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import { contractEndSeason } from '../../engine/world/world.ts';
 import { attrClass, ClubCrest, clubThemeStyle, Flag, initials, KV, money, StarMeter } from '../components.tsx';
-import { AccoladeList, HonourList, honourOf, type Honour } from '../honours.tsx';
+import { AccoladeList, AllHonoursButton, HonourList, honourOf, type Honour } from '../honours.tsx';
 import { coachAccolades } from '../../engine/world/accolades.ts';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -302,7 +302,7 @@ export function CoachProfile(): JSX.Element | null {
   const manyClubs = new Set(spells.map((s) => s.clubId)).size > 1;
   const honours = spells
     .flatMap((s) => spellTrophies(world, s).map((t) => honourOf(world, t.competitionId, t.year,
-      manyClubs ? world.clubs[s.clubId]?.shortName : undefined)))
+      manyClubs ? world.clubs[s.clubId]?.shortName : undefined, { clubId: s.clubId })))
     .filter((h): h is Honour => h !== null);
   const accolades = coachAccolades(world, coach.id);
   const a = coach.attributes;
@@ -430,9 +430,14 @@ export function CoachProfile(): JSX.Element | null {
           )}
         </section>
         <section className="cp-panel cp-honours">
-          <h3 className="cp-title"><Icon name="trophy" size={14} /> Trophies ({honours.length})</h3>
-          <HonourList honours={honours} empty="No trophies yet." />
-          {accolades.length > 0 && <AccoladeList accolades={accolades} world={world} />}
+          <div className="cp-title-row">
+            <h3 className="cp-title"><Icon name="trophy" size={14} /> Trophies ({honours.length})</h3>
+            <AllHonoursButton owner={name} honours={honours} accolades={accolades} world={world} />
+          </div>
+          <div className="cp-honours-list">
+            <HonourList honours={honours} empty="No trophies yet." />
+            {accolades.length > 0 && <AccoladeList accolades={accolades} world={world} />}
+          </div>
         </section>
       </div>
     </div>

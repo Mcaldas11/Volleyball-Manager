@@ -63,6 +63,7 @@ import {
 import { cohesionEdge, cohesionOf, dressingRoom, setCaptain, setViceCaptain, type DressingRoom } from '../engine/world/dressingRoom.ts';
 import { applyTalkMorale, favouriteness, giveTalk, type TalkMoment, type TalkResult, type TalkTone } from '../engine/world/teamTalk.ts';
 import { answerTransferRequest, CHAT_LINES, chatBlock, chatOpening, talkToPlayer, type ChatTopic } from '../engine/world/playerTalks.ts';
+import { congratulate as congratulatePlayers, congratulationBlock, honouredIn } from '../engine/world/congratulate.ts';
 import {
   answerGrievance, grievanceOf, MOVE_REPLY_LINES, movePromiseOf, type MoveGrievance, type MovePromise, type MoveReply,
 } from '../engine/world/blockedMoves.ts';
@@ -1691,6 +1692,31 @@ class Game {
   }
 
   /** Show a message in the reading pane (or clear it) without leaving the Inbox. */
+  /** The manager's own players a message honours — a milestone, an award, a team of the month or season. */
+  honouredBy(messageId: number): number[] {
+    const world = this.world;
+    const m = world?.messages.find((x) => x.id === messageId);
+    return world === null || m === undefined ? [] : honouredIn(world, m);
+  }
+
+  /** Why the players a message honours can't be congratulated now, or null if they can. */
+  congratulationBlockFor(messageId: number): string | null {
+    const world = this.world;
+    const m = world?.messages.find((x) => x.id === messageId);
+    return world === null || m === undefined ? 'Nothing to congratulate.' : congratulationBlock(world, m);
+  }
+
+  /** Call in the players a message honours and congratulate them — one, or the group together. */
+  congratulate(messageId: number): void {
+    const world = this.world;
+    const club = this.club;
+    const m = world?.messages.find((x) => x.id === messageId);
+    if (world === null || club === null || m === undefined) return;
+    const r = congratulatePlayers(world, club, m);
+    this.notice = r.ok ? `${r.text} “${r.reply}”` : r.text;
+    this.emit();
+  }
+
   selectMessage(messageId: number | null): void {
     this.inboxSelected = messageId;
     if (messageId !== null) {
