@@ -66,7 +66,8 @@ export function MatchResultScreen(): JSX.Element | null {
     ['Blocks', h.blockPoints, a.blockPoints],
     ['Aces', h.serveAces, a.serveAces],
     ['Digs', h.digsTotal, a.digsTotal],
-    ['Errors', h.attackErrors + h.serveErrors + h.receptionErrors, a.attackErrors + a.serveErrors + a.receptionErrors],
+    // An ace conceded — through untouched or shanked off the pass — is the other side's ace, not one more error.
+    ['Errors', h.attackErrors + h.serveErrors, a.attackErrors + a.serveErrors],
   ];
 
   const homeSide = fixture.home === me ? 'mine' : 'theirs';

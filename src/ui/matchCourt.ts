@@ -1024,7 +1024,9 @@ export function rallyBeats(
         // The radar reads the serve as it flies.
         if (radar !== undefined) beats[beats.length - 1].radar = radar;
         if (c.kind === 'receptionError') {
-          push(air(t, { u: passer.u < 0.5 ? -0.1 : 1.1, v: Math.min(1.1, passer.v + 0.3) }, 0), null, 620, 1.3);
+          // Shanked off the platform and away: an ace, the server's point.
+          push(air(t, { u: passer.u < 0.5 ? -0.1 : 1.1, v: Math.min(1.1, passer.v + 0.3) }, 0), null, 620, 1.3, [],
+            { kind: 'ace', team: o, speed: radar?.speed, height: radar?.height });
         } else {
           pass = { spot: passSpot(q, wobble(seed, i)), ms: 680 };
           firstTouch = c.player;
@@ -1265,10 +1267,13 @@ export function rallyBeats(
     // Into the net is a fault, not a ball out.
     last.out = end === 'attackError' && contacts[contacts.length - 1]?.shot !== 'net';
     const attacks = contacts.filter((c) => c.kind === 'attack' || c.kind === 'kill' || c.kind === 'blocked').length;
-    last.big = end === 'kill' || end === 'blocked' || end === 'ace' || attacks >= 3;
+    // A serve shanked off the pass is an ace as much as one that hits the floor.
+    const ace = end === 'ace' || end === 'receptionError';
+    last.big = end === 'kill' || end === 'blocked' || ace || attacks >= 3;
     const final = contacts[contacts.length - 1];
-    last.how = end === 'kill' ? 'kill' : end === 'blocked' ? 'block' : end === 'ace' ? 'ace' : 'error';
-    const hero = end === 'blocked' ? final?.by : end === 'kill' || end === 'ace' ? final?.player : undefined;
+    last.how = end === 'kill' ? 'kill' : end === 'blocked' ? 'block' : ace ? 'ace' : 'error';
+    const hero = end === 'blocked' ? final?.by : end === 'kill' || end === 'ace' ? final?.player
+      : end === 'receptionError' ? contacts[0]?.player : undefined;
     if (hero !== undefined && hero >= 0) last.hero = hero;
   }
   return beats;

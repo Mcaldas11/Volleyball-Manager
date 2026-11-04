@@ -57,6 +57,8 @@ export function rallyFlow(log: readonly RallyLogEntry[]): string[] {
     let how: PointHow = 'e';
     if (last !== undefined) {
       if ((last.kind === 'kill' || last.kind === 'ace') && last.team === r.winner) how = last.kind === 'kill' ? 'k' : 'a';
+      // Shanked off the pass: the server's ace.
+      else if (last.kind === 'receptionError' && last.team !== r.winner) how = 'a';
       else if (last.kind === 'blocked' && last.team !== r.winner) how = 'b';
       // An attack called out, turned over on video as in or off the block: the hitter's kill.
       else if (r.overturned === true && last.kind === 'attackError' && last.team === r.winner && r.doubt !== 'netTouch') how = 'k';

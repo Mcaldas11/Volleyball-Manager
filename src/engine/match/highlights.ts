@@ -119,11 +119,13 @@ export function rateRally(
       what: 'block', star: last.by, starTeam: (1 - last.team) as 0 | 1, speed: last.speed, height: last.blockHeight,
       score: 2.1 + Math.max(0, (last.speed ?? 100) - 105) * 0.04,
     };
-  } else if (last.kind === 'ace') {
+  } else if (last.kind === 'ace' || last.kind === 'receptionError') {
+    // Through untouched, or shanked off the pass: an ace either way, the server's.
     const serve = contacts.find((c) => c.kind === 'serve');
     const speed = serve?.speed;
+    const server = last.kind === 'ace' ? last.player : serve?.player ?? last.player;
     point = {
-      what: 'ace', star: last.player, starTeam: last.team, speed, height: serve?.height,
+      what: 'ace', star: server, starTeam: (last.kind === 'ace' ? last.team : 1 - last.team) as 0 | 1, speed, height: serve?.height,
       score: 1.5 + Math.max(0, (speed ?? 0) - 100) * 0.1,
     };
   }

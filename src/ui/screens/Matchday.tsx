@@ -683,8 +683,10 @@ function liveStats(log: readonly MatchdayLogEntry[]): [TeamLiveStats, TeamLiveSt
     switch (last.kind) {
       case 'kill': s[last.team].kills++; break;
       case 'ace': s[last.team].aces++; break;
+      // Shanked off the pass: the server's ace, not one more error.
+      case 'receptionError': s[1 - last.team].aces++; break;
       case 'blocked': s[1 - last.team].blocks++; break;
-      case 'attackError': case 'serveError': case 'receptionError': case 'setError': case 'digError':
+      case 'attackError': case 'serveError': case 'setError': case 'digError':
         s[last.team].errors++;
         break;
       default: break;

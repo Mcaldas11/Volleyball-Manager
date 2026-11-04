@@ -340,7 +340,7 @@ function describeContact(c: RallyContact, store: NameLookup): string {
     case 'ace': return `ACE ${who}`;
     case 'serveError': return `${who} serve error`;
     case 'reception': return `${who} passes ${c.detail}`;
-    case 'receptionError': return `${who} shanks the pass`;
+    case 'receptionError': return `${who} shanks the pass — an ace`;
     case 'set': return c.detail === 'bump' ? `${who} bump-sets it (inside the 3 m)` : c.detail === 'jump' ? `${who} jump-sets from behind the 3 m line` : '';
     case 'setError': return c.detail === 'bump' ? `${who} bump set goes astray` : `${who} setting error`;
     case 'attack': return `${who} attacks (${c.detail})${blockNote(c)}`;
@@ -405,6 +405,14 @@ export function describeRallyHighlight(
     };
   }
   const serve = r.contacts[0];
+  // Shanked off the pass: the server's ace.
+  if (last?.kind === 'receptionError' && serve !== undefined) {
+    const read = reading(serve.speed, serve.height);
+    return {
+      before: 'Ace — ', player: store.shortName(serve.player),
+      after: ` — ${store.shortName(last.player)} shanks the pass${read !== '' ? ` (${read})` : ''}.`,
+    };
+  }
   if (last?.kind === 'ace' && serve?.speed !== undefined) {
     return {
       before: 'Ace — ', player: store.shortName(last.player),
