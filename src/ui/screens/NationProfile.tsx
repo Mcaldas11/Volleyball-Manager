@@ -5,6 +5,8 @@ import {
 } from '../../engine/world/internationals.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import { abilityClass, Card, ClubLink, Empty, Flag, KV, PlayerFace, Pos, StarMeter } from '../components.tsx';
+import { InterestButton } from '../nationCoach.tsx';
+import { nationalCoachName } from '../../engine/world/internationals.ts';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -66,8 +68,9 @@ export function NationProfile(): JSX.Element | null {
           <span className="club-hero-fact-value">
             {mine
               ? <span className="player-link" onClick={() => g.go('career')}>{world.manager.firstName} {world.manager.lastName}</span>
-              : vacant ? <span className="dim">Vacant</span> : <span className="dim">Federation appointee</span>}
+              : vacant ? <span className="dim">Vacant</span> : nationalCoachName(world, n)}
           </span>
+          <span className="nat-coach-hero"><InterestButton nation={n} /></span>
         </div>
         <div className="club-hero-fact">
           <span className="club-hero-fact-label">Players eligible</span>

@@ -1,3 +1,6 @@
+import { InterestButton } from '../nationCoach.tsx';
+import { useListPages } from '../components.tsx';
+import { nationalCoachName } from '../../engine/world/internationals.ts';
 import { useState, type JSX } from 'react';
 import type { Club } from '../../engine/model/club.ts';
 import {
@@ -6,7 +9,7 @@ import {
 } from '../../engine/world/career.ts';
 import { ordinal } from '../../engine/world/inbox.ts';
 import {
-  nationalApplicationBlock, nationalHiringChance, nationalRecord, nextTournamentFor, worldRanking,
+  nationalHiringChance, nationalRecord, nextTournamentFor, worldRanking,
 } from '../../engine/world/internationals.ts';
 import type { World } from '../../engine/world/world.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
@@ -478,10 +481,16 @@ function ContractBlock(): JSX.Element | null {
   const offer = world.career.contractOffer;
   const lastSeason = contract.untilSeason <= world.season;
   const blocked = contractAskBlock(world);
+  const nationalContract = world.career.nationalJobs?.find((j) => j.endDay < 0)?.contract;
   return (
     <div className="career-contract">
       <KV k="Contract"><span className={lastSeason ? 'warn' : undefined}>Until 30 June {contractEndYear(world, contract)}</span></KV>
       <KV k="Wage">{money(contract.wage)} a season</KV>
+      {nationalContract !== undefined && (
+        <KV k={`${NATIONS[world.career.nationalTeam ?? -1]?.name ?? 'National team'} contract`}>
+          {money(nationalContract.wage)} a season, until June {contractEndYear(world, nationalContract)}
+        </KV>
+      )}
       {offer != null ? (
         <div className="career-offer">
           <span className="career-offer-kicker">New contract offered</span>
@@ -650,49 +659,44 @@ export function JobCentreScreen(): JSX.Element {
   );
 }
 
-/** The national teams looking for a head coach — an offer, if one comes, arrives in the inbox. */
+/** The national teams and their coaches, any of them open to a word — an offer, if one comes, arrives in the inbox. */
 function NationalVacancies(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const I = world.internationals;
   const ranking = worldRanking(world);
-  const rows = [...(I?.vacancies ?? [])].sort((a, b) => ranking.indexOf(a.nation) - ranking.indexOf(b.nation));
+  const vacant = new Set((I?.vacancies ?? []).map((v) => v.nation));
+  // Those looking for a coach first, then the rest by their place in the world.
+  const rows = [...ranking].sort((a, b) => Number(vacant.has(b)) - Number(vacant.has(a)) || ranking.indexOf(a) - ranking.indexOf(b));
+  const { shown, more } = useListPages(rows, 'nations', -1, 6);
   return (
-    <Card title={`National teams (${rows.length})`} icon="world" flush>
-      {rows.length === 0 ? <Empty>No national team is looking for a coach right now.</Empty> : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Nation</th><th className="num">World rank</th><th>Next tournament</th><th>Vacant since</th><th>Interest</th><th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((v) => {
-                const interest = interestOf(nationalHiringChance(world, v.nation));
-                const next = nextTournamentFor(world, v.nation);
-                const block = nationalApplicationBlock(world, v.nation);
-                const applied = I?.applications.find((a) => a.nation === v.nation);
-                const offered = I?.offers.some((o) => o.nation === v.nation) ?? false;
-                return (
-                  <tr key={v.nation}>
-                    <td><span className="name-cell"><Flag nation={v.nation} /> <span className="strong">{NATIONS[v.nation]?.name}</span></span></td>
-                    <td className="num">{ranking.indexOf(v.nation) + 1}</td>
-                    <td className="dim">{next !== undefined ? `${next.name} · ${g.dateLabelForDay(next.startDay)}` : '—'}</td>
-                    <td className="dim">{g.dateLabelForDay(v.since)}</td>
-                    <td className={interest.cls}>{interest.label}</td>
-                    <td className="num">
-                      {offered ? <span className="good">Offer in your inbox</span>
-                        : applied !== undefined ? <span className="faint">Applied · answer by {g.dateLabelForDay(applied.answerOn)}</span>
-                          : <button className="sm primary" disabled={block !== null} title={block ?? undefined} onClick={() => g.applyForNationalJob(v.nation)}>Apply</button>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <Card title={`National teams (${vacant.size} looking for a coach)`} icon="world" flush>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr><th>Nation</th><th className="num">World rank</th><th>Head coach</th><th>Next tournament</th><th>Interest</th><th /></tr>
+          </thead>
+          <tbody>
+            {shown.map((n) => {
+              const chance = nationalHiringChance(world, n) * (vacant.has(n) ? 1 : 0.5);
+              const interest = interestOf(chance);
+              const next = nextTournamentFor(world, n);
+              const coach = nationalCoachName(world, n);
+              return (
+                <tr key={n}>
+                  <td><span className="name-cell"><Flag nation={n} /> <span className="strong">{NATIONS[n]?.name}</span></span></td>
+                  <td className="num">{ranking.indexOf(n) + 1}</td>
+                  <td>{coach ?? <span className="warn">Vacant</span>}</td>
+                  <td className="dim">{next !== undefined ? `${next.name} · ${g.dateLabelForDay(next.startDay)}` : '—'}</td>
+                  <td className={interest.cls}>{interest.label}</td>
+                  <td className="num"><InterestButton nation={n} /></td>
+                </tr>
+              );
+            })}
+            {more}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

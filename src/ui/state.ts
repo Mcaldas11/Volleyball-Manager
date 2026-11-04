@@ -95,7 +95,8 @@ import {
   newTactic as newTacticSlot, renameTactic as renameTacticSlot, tacticSlots, type SavedTactic,
 } from '../engine/model/tacticSlots.ts';
 import {
-  acceptNationalOffer, applyForNationalJob, applyIntlResult, askForSquad, canPlayForCountry, declineNationalOffer,
+  acceptNationalOffer, applyForNationalJob, applyIntlResult, askForSquad, canPlayForCountry, counterNationalOffer, declineNationalOffer,
+  expressNationalInterest, nationalInterestBlock, type NationalCounter,
   leaveNationalJob, matchImportance, nameSquad,
   nationalApplicationBlock, nationName, nationSetup, nextTournamentFor, postMatchReport, squadDue, squadOf,
   startNationalCareer, suggestSquad, userMatchToday, userNation, type IntlMatch, type Tournament,
@@ -4983,6 +4984,28 @@ class Game {
       ? `Application sent to the ${nationName(nation)} Volleyball Federation — expect an answer by ${this.dateLabelForDay(answerOn)}.`
       : problem ?? 'You cannot apply for that job.';
     this.emit();
+  }
+
+  /** Tell a federation the manager would like its job, open or not. */
+  expressNationalInterest(nation: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const problem = nationalInterestBlock(world, nation);
+    const answerOn = problem === null ? expressNationalInterest(world, nation) : null;
+    this.notice = answerOn !== null
+      ? `You have told the ${nationName(nation)} Volleyball Federation you are interested — expect an answer by ${this.dateLabelForDay(answerOn)}.`
+      : problem ?? 'You cannot do that now.';
+    this.emit();
+  }
+
+  /** Put the manager's terms to a federation; its answer is returned for the talks on screen. */
+  counterNationalOffer(offerId: number, wage: number, untilSeason: number): NationalCounter {
+    const world = this.world;
+    if (world === null) return { outcome: 'withdrawn', text: 'That offer has lapsed.' };
+    const r = counterNationalOffer(world, offerId, wage, untilSeason);
+    if (r.outcome === 'withdrawn') this.notice = r.text;
+    this.emit();
+    return r;
   }
 
   /** Open the federation's message where the squad for the next tournament is named. False if there is none yet. */

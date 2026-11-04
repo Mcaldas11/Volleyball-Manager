@@ -1,3 +1,5 @@
+import { nationalOfferTerms } from '../../engine/world/internationals.ts';
+import { NegotiateNationalOffer } from '../nationCoach.tsx';
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { MIND_GAME_REPLIES } from '../../engine/world/mindGames.ts';
 import { MatchReviewSheet } from '../matchReviewSheet.tsx';
@@ -439,6 +441,8 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
         <ReportRow k="Status" tone={offer !== undefined || accepted ? 'good' : undefined}>
           {offer !== undefined ? 'Awaiting your answer' : accepted ? 'Accepted' : 'Closed'}
         </ReportRow>
+        {offer !== undefined && <ReportRow k="Wage">{money(nationalOfferTerms(world, offer).wage)} a season</ReportRow>}
+        {offer !== undefined && <ReportRow k="Contract">Until June {world.startYear + nationalOfferTerms(world, offer).untilSeason + 1}</ReportRow>}
         {offer !== undefined && <ReportRow k="Offer stands until">{g.longDateLabel(offer.expiresOn)}</ReportRow>}
       </div>
     );
@@ -1331,6 +1335,7 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
       <button key="accept-nation" className="paper-btn primary-dark" onClick={() => g.acceptNationalOffer(nationalOffer.id)}>
         <Icon name="check" size={15} /> Accept job
       </button>,
+      <NegotiateNationalOffer key="talks-nation" offer={nationalOffer} />,
       <button key="decline-nation" className="paper-btn" onClick={() => g.declineNationalOffer(nationalOffer.id)}>Decline</button>,
     );
   }

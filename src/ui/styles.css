@@ -8243,3 +8243,45 @@ input:is([type="checkbox"], [type="radio"]) { width: 16px; height: 16px; min-wid
 .whats-new-item b { font-size: 14px; }
 .whats-new-item small { font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
 .whats-new-icon { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 8px; color: var(--gold-bright); background: var(--gold-soft); }
+
+/* A national competition on a page of its own; its past editions. */
+/* The side panel scrolls as one, so the honours under a long list of tournaments can be reached. */
+.intl-side { overflow-y: auto; }
+.intl-chip.live, .intl-group.live { flex-direction: row; }
+.intl-side > * { flex: none; }
+.intl-side .intl-honours { overflow: visible; }
+.intl.intl-open { grid-template-columns: minmax(0, 1fr); }
+.intl-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+.intl-head-actions { display: inline-flex; align-items: center; gap: 10px; }
+.intl-tabs { display: flex; flex-wrap: wrap; gap: 22px; border-bottom: 1px solid var(--line); }
+.intl-honour { width: 100%; background: none; border-width: 0 0 1px; border-radius: 0; text-align: left; cursor: pointer; }
+.intl-honour:hover { background: var(--surface-2); }
+.intl-editions { display: flex; flex-direction: column; gap: 4px; max-height: 420px; overflow-y: auto; }
+.intl-edition { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 7px 10px; text-align: left; }
+.intl-edition.on { border-color: var(--club-bright, var(--gold)); background: var(--surface-3); }
+.intl-place { display: inline-block; min-width: 18px; font-weight: 800; text-align: center; }
+.intl-place.gold { color: var(--gold-bright); }
+.intl-place.silver { color: #d7dde6; }
+.intl-place.bronze { color: #d99a5b; }
+
+/* Who coaches a nation, and the word to its federation. */
+.nat-coach-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; font-size: 12.5px; }
+.nat-coach-action { margin-left: auto; }
+.nat-coach-hero { display: block; margin-top: 4px; }
+.nat-talks { width: min(520px, 100%); color: var(--text); }
+.nat-talks .hol-title { color: var(--gold-bright); }
+.nat-talks .hol-sub, .nat-talks-row > span { color: var(--text-dim); }
+.nat-talks .nat-talks-reply { color: var(--text); }
+.nat-talks-body { display: flex; flex-direction: column; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--line); }
+.nat-talks-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 13px; }
+.nat-talks-reply { margin: 0; padding: 10px 12px; border-left: 3px solid var(--gold); border-radius: 6px; background: var(--surface-3); font-size: 13px; line-height: 1.45; }
+.nat-talks-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 24px 18px; }
+
+/* A league's finished seasons; a cup's past editions. */
+.league-table-actions { display: inline-flex; align-items: center; gap: 12px; }
+.past-club { display: inline-flex; align-items: center; gap: 7px; }
+.table-wrap > .legend { padding: 0 12px 8px; }
+.past-cups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; flex: 1; min-height: 0; }
+.past-cups .card { min-height: 0; }
+tr.clickable { cursor: pointer; }
+tr.row-on td { background: var(--surface-3); }

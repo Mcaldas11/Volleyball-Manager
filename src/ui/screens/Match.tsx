@@ -1,4 +1,5 @@
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
+import { championOf, pastLeagueTable, pastSeasonsOf } from '../../engine/season/pastSeasons.ts';
 import { predictionFor } from '../../engine/world/predictions.ts';
 import { RivalTag } from '../components.tsx';
 import { fixtureRivalry, rivalryName } from '../../engine/world/rivals.ts';
@@ -660,6 +661,9 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
   const world = g.world!;
   const me = world.userClubId;
   const [tab, setTab] = useState('table');
+  /** A finished season's table to look at, or -1 for this one. */
+  const [past, setPast] = useState(-1);
+  const seasons = useMemo(() => pastSeasonsOf(world, comp.id), [world, comp.id, world.season]);
 
   const rows = [...comp.table].sort(compareTableRows);
   const { championship: champSize, relegation: relegationSize } = playoffBandSizes(comp);
@@ -702,9 +706,19 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
           title="League Table"
           icon="trophy"
           flush
-          actions={<span className="faint">3 pts for a 3-0 or 3-1 win, 2 for 3-2, 1 for losing 2-3</span>}
+          actions={(
+            <span className="league-table-actions">
+              <span className="faint">3 pts for a 3-0 or 3-1 win, 2 for 3-2, 1 for losing 2-3</span>
+              {seasons.length > 0 && (
+                <Dropdown size="sm" value={past} onChange={setPast} options={[
+                  { value: -1, label: `${seasonLabel(world, world.season)} · this season` },
+                  ...seasons.map((s) => ({ value: s, label: seasonLabel(world, s) })),
+                ]} />
+              )}
+            </span>
+          )}
         >
-          <div className="table-wrap">
+          {past >= 0 ? <PastTable comp={comp} season={past} /> : <div className="table-wrap">
             <table className="data-table league-table">
               <thead>
                 <tr>
@@ -749,10 +763,10 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
                 })}
               </tbody>
             </table>
-          </div>
+          </div>}
         </Card>
       )}
-      {tab !== 'stats' && activeGroup === undefined && champSize > 0 && (
+      {tab !== 'stats' && activeGroup === undefined && past < 0 && champSize > 0 && (
         <p className="legend">
           <span className="zone-key champ" /> Top {champSize} — championship playoff
           {relegationSize > 0 && (
@@ -764,6 +778,48 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
   );
 }
 
+
+/** A finished season's table, as the regular season left it, with who took the title. */
+function PastTable({ comp, season }: { comp: Competition; season: number }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const rows = useMemo(() => pastLeagueTable(world, comp.id, season), [world, comp.id, season]);
+  const champion = championOf(world, comp.id, season);
+  return (
+    <div className="table-wrap">
+      <table className="data-table league-table">
+        <thead>
+          <tr>
+            <th className="num">Pos</th><th>Club</th><th className="num">P</th><th className="num">W</th><th className="num">L</th>
+            <th className="num">Sets</th><th className="num">Ratio</th><th className="num">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.clubId} className={r.clubId === world.userClubId ? 'me' : ''}>
+              <td className="num pos-cell">{i + 1}</td>
+              <td>
+                <span className="past-club">
+                  <ClubLink id={r.clubId} />
+                  {r.clubId === champion && <span className="gold-text" title="Champions"><Icon name="trophy" size={13} /></span>}
+                </span>
+              </td>
+              <td className="num dim">{r.played}</td>
+              <td className="num">{r.won}</td>
+              <td className="num">{r.lost}</td>
+              <td className="num dim">{r.setsFor}:{r.setsAgainst}</td>
+              <td className="num dim">{setRatio(r).toFixed(2)}</td>
+              <td className="num pts-cell">{r.points}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {champion >= 0 && rows[0]?.clubId !== champion && (
+        <p className="legend">The regular season's table — the trophy marks the champions, who took the title in the playoffs.</p>
+      )}
+    </div>
+  );
+}
 
 /** A single-elimination bracket: one column per round, filled in as results
  *  come in. Rounds not yet reached show as empty "TBD" placeholders so the

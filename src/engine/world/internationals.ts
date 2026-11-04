@@ -50,6 +50,7 @@
 import { intlEventDays, plannedEventDays, type IntlKind } from './calendar.ts';
 import { frameVerdict, framedSquad } from './nationalExtras.ts';
 import { Rng } from '../core/rng.ts';
+import { bankFor } from './names.ts';
 import { MatchFormat, simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
 import { matchRating, playedInMatch, TYPICAL_RATING } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
@@ -58,14 +59,14 @@ import { compareTableRows, newTableRow, type LeagueTableRow } from '../model/clu
 import { PlayerFlag } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import { pickLineup } from '../season/seasonEngine.ts';
-import { ensureManagerAttributes } from './career.ts';
+import { ensureManagerAttributes, type ManagerContract } from './career.ts';
 import { postMessage } from './inbox.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from './nations.ts';
 import { postNews } from './news.ts';
 import { applyMatchInjuries, matchInjuryRng } from './progression.ts';
 import { recordFixture } from './records.ts';
 import {
-  DAYS_PER_SEASON, type Competition, type Fixture, type GameMessage, type World,
+  DAYS_PER_SEASON, euros, type Competition, type Fixture, type GameMessage, type World,
 } from './world.ts';
 
 export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics' | 'qualifier' | 'friendly';
@@ -152,6 +153,10 @@ export interface NationalOffer {
   expiresOn: number;
   /** The answer to an application of his, rather than an approach. */
   applied: boolean;
+  /** What it is offering as things stand; the most it will pay; how many rounds of talks there have been. Absent: not worked out yet. */
+  terms?: ManagerContract;
+  ceiling?: number;
+  rounds?: number;
 }
 
 /** A national team without a head coach, and when it means to have one. */
@@ -171,7 +176,11 @@ export interface Internationals {
   tiedTo: Map<number, number>;
   vacancies: NationalVacancy[];
   /** The manager's applications for national jobs, and when each is answered. */
-  applications: Array<{ nation: number; answerOn: number }>;
+  applications: Array<{ nation: number; answerOn: number; interest?: boolean }>;
+  /** The day the manager last told each federation he would like its job. */
+  interestAsked?: Record<number, number>;
+  /** How many times each nation's job has changed hands: its coach's name goes with it. */
+  coachTurns?: Record<number, number>;
   /** The fourteen the manager has named for his nation's next tournament. */
   chosen: { tournamentId: number; players: number[] } | null;
   /** Players below this store index have been looked at for a second nationality. */
@@ -1675,26 +1684,33 @@ function nationalJobsDay(world: World): void {
   for (const a of [...I.applications]) {
     if (a.answerOn > world.day) continue;
     I.applications = I.applications.filter((x) => x !== a);
-    if (!I.vacancies.some((v) => v.nation === a.nation)) continue;
-    if (world.rng.chance(nationalHiringChance(world, a.nation))) {
+    const open = I.vacancies.some((v) => v.nation === a.nation);
+    // Not looking for a coach: only his word that he is interested reaches them.
+    if (!open && a.interest !== true) continue;
+    if (userNation(world) === a.nation) continue;
+    if (world.rng.chance(nationalHiringChance(world, a.nation) * (open ? 1 : OCCUPIED_POST))) {
       offerNationalJob(world, a.nation, true);
     } else {
       postMessage(world, {
-        subject: `${nationName(a.nation)}: thank you for your application`,
-        body: `The ${nationName(a.nation)} Volleyball Federation has decided to look elsewhere for its head coach.`,
+        subject: `${nationName(a.nation)}: thank you for your ${a.interest === true ? 'interest' : 'application'}`,
+        body: open
+          ? `The ${nationName(a.nation)} Volleyball Federation has decided to look elsewhere for its head coach.`
+          : `The ${nationName(a.nation)} Volleyball Federation thanks you for getting in touch, but is happy with its head coach, ${nationalCoachName(world, a.nation) ?? 'as things stand'}.`,
         from: `${nationName(a.nation)} Volleyball Federation`,
         category: 'career',
       });
     }
   }
   nationalApproaches(world);
+  nationalContractDay(world);
   for (const v of [...I.vacancies]) {
     if (v.fillsOn > world.day || I.applications.some((a) => a.nation === v.nation)) continue;
     if (I.offers.some((o) => o.nation === v.nation)) continue;
     I.vacancies = I.vacancies.filter((x) => x !== v);
+    (I.coachTurns ??= {})[v.nation] = (I.coachTurns[v.nation] ?? 0) + 1;
     postNews(world, {
       kind: 'coach',
-      headline: `${nationName(v.nation)} name a new national team coach`,
+      headline: `${nationName(v.nation)} name ${nationalCoachName(world, v.nation)} as national team coach`,
       body: `The ${nationName(v.nation)} Volleyball Federation has filled the head coach's job.`,
       nation: v.nation,
       fans: { story: 'nationCoachIn', nation: v.nation },
@@ -1710,22 +1726,27 @@ const NATIONAL_APPROACH_GAP = 56;
 /** A federation offers the manager its job — in the inbox, to accept or turn down. */
 export function offerNationalJob(world: World, nation: number, applied: boolean): NationalOffer {
   const I = internationals(world);
+  const opening = openingTerms(world, nation);
   const offer: NationalOffer = {
     id: I.nextOfferId++, nation, madeOn: world.day, expiresOn: world.day + NATIONAL_OFFER_DAYS, applied,
+    terms: opening.terms, ceiling: opening.ceiling, rounds: 0,
   };
   I.offers.push(offer);
+  // The job isn't open: they would be parting with the man they have.
+  const sitting = I.vacancies.some((v) => v.nation === nation) ? null : nationalCoachName(world, nation);
   const next = nextTournamentFor(world, nation);
   const rank = worldRanking(world).indexOf(nation) + 1;
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
   postMessage(world, {
     subject: applied ? `${nationName(nation)} offer you the national team job` : `${nationName(nation)} want you as their head coach`,
     body: (applied
-      ? `The ${nationName(nation)} Volleyball Federation has considered your application and would like you to coach the national team.`
+      ? `The ${nationName(nation)} Volleyball Federation has considered your approach and would like you to coach the national team${sitting !== null ? `, in place of ${sitting}` : ''}.`
       : `The ${nationName(nation)} Volleyball Federation is looking for a head coach for the national team, and would like it to be you.`) +
       ` ${nationName(nation)} are ${ordinal(rank)} in the world ranking` +
       `${next !== undefined ? `, and their next tournament is the ${next.name}, starting on ${dateLabel(world, next.startDay)}` : ''}.` +
       `${club !== undefined ? ` The job goes alongside your work at ${club.name}.` : ''}` +
       `${userNation(world) >= 0 ? ` Accepting it means leaving ${nationName(userNation(world))}.` : ''}` +
+      ` They offer ${euros(opening.terms.wage)} a season, until June ${world.startYear + opening.terms.untilSeason + 1} — you can sign, negotiate or decline.` +
       ` The offer stands until ${dateLabel(world, offer.expiresOn)}.`,
     from: `${nationName(nation)} Volleyball Federation`,
     nationalOffer: { id: offer.id, nation },
@@ -1740,7 +1761,21 @@ export function acceptNationalOffer(world: World, offerId: number): boolean {
   const offer = I.offers.find((o) => o.id === offerId);
   if (offer === undefined) return false;
   I.offers = I.offers.filter((o) => o !== offer);
+  const terms = nationalOfferTerms(world, offer);
+  // The job wasn't open: its coach makes way, and the papers have it.
+  const sitting = I.vacancies.some((v) => v.nation === offer.nation) ? null : nationalCoachName(world, offer.nation);
   appointNationalCoach(world, offer.nation);
+  const job = world.career.nationalJobs?.find((j) => j.nation === offer.nation && j.endDay < 0);
+  if (job !== undefined) job.contract = { ...terms };
+  if (sitting !== null) {
+    postNews(world, {
+      kind: 'coach',
+      headline: `${nationName(offer.nation)} replace ${sitting} with ${world.manager.firstName} ${world.manager.lastName}`,
+      body: `The ${nationName(offer.nation)} Volleyball Federation has made a change at the top of its national team.`,
+      nation: offer.nation,
+      fans: { story: 'nationCoachIn', nation: offer.nation },
+    });
+  }
   return true;
 }
 
@@ -1776,6 +1811,139 @@ function nationalApproaches(world: World): void {
     I.lastApproach = world.day;
     return;
   }
+}
+
+// ---- National coaches, interest and contracts ------------------------------------------------
+
+/** Who coaches a nation: the manager, a coach of its own — named for the nation, and a new name each time the job changes hands — or, with the job open, nobody. */
+export function nationalCoachName(world: World, nation: number): string | null {
+  if (userNation(world) === nation) return `${world.manager.firstName} ${world.manager.lastName}`;
+  const I = internationals(world);
+  if (I.vacancies.some((v) => v.nation === nation)) return null;
+  const rng = new Rng(`ncoach:${world.seed}:${nation}:${I.coachTurns?.[nation] ?? 0}`);
+  const bank = bankFor(NATIONS[nation]?.nameGroup ?? '');
+  return `${rng.pick(bank.first)} ${rng.pick(bank.last)}`;
+}
+
+/** How long before a federation will hear from the manager again. */
+const INTEREST_GAP = 90;
+/** A federation with a coach is this much less ready to make a change than one looking for one. */
+const OCCUPIED_POST = 0.5;
+
+/** Why the manager can't tell a federation he is interested now, or null if he can. */
+export function nationalInterestBlock(world: World, nation: number): string | null {
+  const I = internationals(world);
+  if (userNation(world) === nation) return `You already coach ${nationName(nation)}.`;
+  if (I.offers.some((o) => o.nation === nation)) return `${nationName(nation)} have made you an offer — it is in your inbox.`;
+  if (I.applications.some((a) => a.nation === nation)) return `${nationName(nation)} will answer soon.`;
+  const asked = I.interestAsked?.[nation];
+  if (asked !== undefined && world.day - asked < INTEREST_GAP) return `You spoke to ${nationName(nation)} recently — give it a while.`;
+  return null;
+}
+
+/** Tell a federation the manager would like its job — open or not. It answers within a week. Returns the answer day, or null. */
+export function expressNationalInterest(world: World, nation: number): number | null {
+  if (nationalInterestBlock(world, nation) !== null) return null;
+  const I = internationals(world);
+  (I.interestAsked ??= {})[nation] = world.day;
+  const answerOn = world.day + world.rng.int(3, 7);
+  I.applications.push({ nation, answerOn, interest: true });
+  return answerOn;
+}
+
+/** What a federation opens with: more the higher it stands in the world and the bigger his name, for two seasons or so. */
+function openingTerms(world: World, nation: number): { terms: ManagerContract; ceiling: number } {
+  const rank = Math.max(0, worldRanking(world).indexOf(nation));
+  const standing = Math.pow(Math.max(0, 1 - rank / 50), 1.5);
+  const name = 0.8 + (world.career.reputation / 10000) * 0.6;
+  const wage = Math.round(((60_000 + 340_000 * standing) * name) / 1000) * 1000;
+  const ceiling = Math.round((wage * (1.2 + 0.4 * nationalHiringChance(world, nation))) / 1000) * 1000;
+  // This season counts only if most of it is still to run.
+  const untilSeason = world.season + (world.day % DAYS_PER_SEASON > 180 ? 2 : 1);
+  return { terms: { wage, untilSeason }, ceiling };
+}
+
+/** An offer's terms — an offer from before they were kept gets them now. */
+export function nationalOfferTerms(world: World, offer: NationalOffer): ManagerContract {
+  if (offer.terms === undefined) {
+    const { terms, ceiling } = openingTerms(world, offer.nation);
+    offer.terms = terms;
+    offer.ceiling = ceiling;
+  }
+  return offer.terms;
+}
+
+/** The longest a federation signs a coach for, in seasons: longer the keener it is. */
+export function nationalLongestTerm(world: World, nation: number): number {
+  return nationalHiringChance(world, nation) >= 0.5 ? 4 : 3;
+}
+
+/** A federation's answer to the manager's counter-offer. */
+export interface NationalCounter {
+  outcome: 'agreed' | 'counter' | 'final' | 'withdrawn';
+  text: string;
+}
+
+/**
+ * The manager's terms put to a federation. Within what it can pay, it agrees;
+ * beyond that it comes part of the way, and after a couple of rounds has said
+ * its last word. Far beyond it, more than once, and it walks away.
+ */
+export function counterNationalOffer(world: World, offerId: number, wage: number, untilSeason: number): NationalCounter {
+  const I = internationals(world);
+  const offer = I.offers.find((o) => o.id === offerId);
+  if (offer === undefined) return { outcome: 'withdrawn', text: 'That offer has lapsed.' };
+  const terms = nationalOfferTerms(world, offer);
+  const ceiling = offer.ceiling ?? terms.wage;
+  const fed = `The ${nationName(offer.nation)} Volleyball Federation`;
+  offer.rounds = (offer.rounds ?? 0) + 1;
+  const longest = world.season + nationalLongestTerm(world, offer.nation) - 1;
+  const until = Math.max(world.season, Math.min(untilSeason, longest));
+  const year = (s: number): number => world.startYear + s + 1;
+  const shorter = until < untilSeason ? ` It will sign you until June ${year(until)} at the longest.` : '';
+  if (wage <= ceiling) {
+    offer.terms = { wage, untilSeason: until };
+    return { outcome: 'agreed', text: `${fed} agrees: ${euros(wage)} a season, until June ${year(until)}.${shorter} Sign when you are ready.` };
+  }
+  if (wage > ceiling * 1.6 && offer.rounds >= 2) {
+    declineNationalOffer(world, offerId);
+    return { outcome: 'withdrawn', text: `${fed} has withdrawn its offer: it feels the two of you are too far apart.` };
+  }
+  if (offer.rounds >= 3) {
+    offer.terms = { wage: ceiling, untilSeason: until };
+    return { outcome: 'final', text: `${fed} says this is its last word: ${euros(ceiling)} a season, until June ${year(until)}.${shorter}` };
+  }
+  const moved = Math.round((terms.wage + (ceiling - terms.wage) * 0.6) / 1000) * 1000;
+  offer.terms = { wage: Math.max(terms.wage, moved), untilSeason: until };
+  return { outcome: 'counter', text: `${fed} can't go that far, but comes up to ${euros(offer.terms.wage)} a season, until June ${year(until)}.${shorter}` };
+}
+
+/** His national contract running out as a new season starts: results earn him another two years; without them, the job ends. */
+function nationalContractDay(world: World): void {
+  const nation = userNation(world);
+  if (nation < 0) return;
+  const job = world.career.nationalJobs?.find((j) => j.nation === nation && j.endDay < 0);
+  const c = job?.contract;
+  if (job === undefined || c === undefined || c.untilSeason >= world.season) return;
+  const { won, lost } = nationalRecord(world, nation, job.startDay, -1);
+  const from = `${nationName(nation)} Volleyball Federation`;
+  if (won + lost === 0 || won / (won + lost) >= 0.5) {
+    job.contract = { wage: Math.round((c.wage * 1.05) / 1000) * 1000, untilSeason: world.season + 1 };
+    postMessage(world, {
+      subject: `${nationName(nation)} extend your contract`,
+      body: `The federation is pleased with your work and has extended your contract: ${euros(job.contract.wage)} a season, until June ${world.startYear + job.contract.untilSeason + 1}.`,
+      from,
+      category: 'career',
+    });
+    return;
+  }
+  leaveNationalJob(world, false);
+  postMessage(world, {
+    subject: `${nationName(nation)} will not renew your contract`,
+    body: `Your contract with the federation has run out, and it has decided not to renew it after ${won} wins and ${lost} defeats.`,
+    from,
+    category: 'career',
+  });
 }
 
 // ---- What the manager hears, and the papers --------------------------------------------------

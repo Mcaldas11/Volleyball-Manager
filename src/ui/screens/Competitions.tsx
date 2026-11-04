@@ -1,4 +1,5 @@
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
+import { pastCupEditions, seasonLabel } from '../../engine/season/pastSeasons.ts';
 import { compareTableRows } from '../../engine/model/club.ts';
 import { cupGroupTable, cupProgress, isCupCompetition, nextClubWorldYear, stageLabel } from '../../engine/season/cups.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
@@ -239,7 +240,7 @@ function ordinal(n: number): string {
 
 // ---- One competition ---------------------------------------------------------------
 
-type DetailTab = 'table' | 'groups' | 'knockout' | 'results' | 'stats';
+type DetailTab = 'table' | 'groups' | 'knockout' | 'results' | 'stats' | 'past';
 
 /** A competition's own page: its groups, its bracket, every result and its statistics. */
 export function CompetitionDetail(): JSX.Element | null {
@@ -260,6 +261,7 @@ export function CompetitionDetail(): JSX.Element | null {
   if (cup !== undefined) tabs.push(['knockout', 'Knockout']);
   tabs.push(['results', 'Fixtures & results']);
   if (league || cup !== undefined) tabs.push(['stats', 'Stats']);
+  if (!league) tabs.push(['past', 'Past editions']);
   const active = tabs.some(([t]) => t === tab) ? tab : tabs[0][0];
 
   return (
@@ -286,7 +288,7 @@ export function CompetitionDetail(): JSX.Element | null {
 
       {league && active === 'table' && <LeagueTableView comp={comp} titled={false} />}
 
-      {cup === undefined && !league && (
+      {cup === undefined && !league && active !== 'past' && (
         <Empty>
           {comp.kind === 'clubworld'
             ? `The World Club Cup is played every four years — the next one is in December ${nextClubWorldYear(world.startYear + world.season)}.`
@@ -313,6 +315,60 @@ export function CompetitionDetail(): JSX.Element | null {
       {active === 'results' && <ResultsList comp={comp} />}
 
       {active === 'stats' && <CompetitionStatsView comp={comp} />}
+
+      {active === 'past' && <PastCups comp={comp} />}
+    </div>
+  );
+}
+
+/** A cup's finished editions: who won each and how the final went, and any one's matches. */
+function PastCups({ comp }: { comp: Competition }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const editions = useMemo(() => pastCupEditions(world, comp.id), [world, comp.id, world.season]);
+  const [season, setSeason] = useState<number | null>(null);
+  if (editions.length === 0) return <Empty>No edition has finished yet.</Empty>;
+  const open = editions.find((e) => e.season === season) ?? editions[0];
+  return (
+    <div className="past-cups">
+      <section className="card">
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead><tr><th>Season</th><th>Winners</th><th className="num">Final</th><th>Against</th></tr></thead>
+            <tbody>
+              {editions.map((e) => {
+                const f = e.final;
+                const runnerUp = f === null ? -1 : f.home === e.winner ? f.away : f.home;
+                return (
+                  <tr key={e.season} className={`clickable${e === open ? ' row-on' : ''}${e.winner === world.userClubId ? ' me' : ''}`} onClick={() => setSeason(e.season)}>
+                    <td className="dim">{seasonLabel(world, e.season)}</td>
+                    <td>{e.winner >= 0 ? <ClubLink id={e.winner} /> : '—'}</td>
+                    <td className="num"><b>{f !== null ? `${Math.max(f.homeSets, f.awaySets)}–${Math.min(f.homeSets, f.awaySets)}` : '—'}</b></td>
+                    <td>{runnerUp >= 0 ? <ClubLink id={runnerUp} /> : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section className="card">
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead><tr><th>{seasonLabel(world, open.season)}</th><th className="num">Home</th><th className="num">Score</th><th>Away</th></tr></thead>
+            <tbody>
+              {open.matches.map((f) => (
+                <tr key={f.id} className={f.home === world.userClubId || f.away === world.userClubId ? 'me' : ''}>
+                  <td className="faint">{stageLabel(world, f)}</td>
+                  <td className="num"><span className={f.homeSets > f.awaySets ? 'strong' : ''}><ClubLink id={f.home} /></span></td>
+                  <td className="num"><b>{f.homeSets}–{f.awaySets}</b></td>
+                  <td><span className={f.awaySets > f.homeSets ? 'strong' : ''}><ClubLink id={f.away} /></span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
