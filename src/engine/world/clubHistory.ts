@@ -12,6 +12,9 @@ import { playedInMatch } from '../match/playerRating.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
+import { Position } from '../model/positions.ts';
+import { clubRecordHeadline, clubRecordOf } from './matchReports.ts';
+import { mainPosition } from './records.ts';
 import { postMessage } from './inbox.ts';
 import { inboxPrefsOf, type Fixture, type World } from './world.ts';
 
@@ -89,6 +92,19 @@ function noteClub(world: World, p: number, club: number, season: number): { flat
   return { flat, at: flat.length - SPELL_FIELDS };
 }
 
+/**
+ * What a milestone's report says he has done there, for his position: a hitter's
+ * points over the spell; a libero's or a setter's are next to nothing, so what
+ * he does is told from the box scores kept since the manager took charge.
+ */
+function milestoneNumbers(world: World, p: number, club: number, points: number): string {
+  const position = mainPosition(world, p);
+  const scorer = position !== Position.Libero && position !== Position.Setter;
+  const record = clubRecordOf(world, p, club);
+  return (scorer ? `, with ${points} points along the way.` : '.')
+    + (record !== null ? ` Since you took charge: ${clubRecordHeadline(position, record)}.` : '');
+}
+
 /** A club match played: everyone who got on court has it on his record at the club. */
 export function recordClubMatch(
   world: World, fixture: Fixture, homeStats: Map<number, PlayerMatchStats>, awayStats: Map<number, PlayerMatchStats>,
@@ -107,7 +123,7 @@ export function recordClubMatch(
         postMessage(world, {
           category: 'news', from: 'Club Media', playerIdx: p,
           subject: `${name}: ${games} games for ${world.clubs[club]?.name ?? 'the club'}`,
-          body: `${name} has played his ${games}th game for the club, with ${flat[at + POINTS]} points along the way. ` +
+          body: `${name} has played his ${games}th game for the club${milestoneNumbers(world, p, club, flat[at + POINTS])} ` +
             (games >= 200 ? 'A club great — the supporters gave him a standing ovation.' : 'The supporters gave him a warm round of applause.'),
         });
       }

@@ -7,6 +7,9 @@
  */
 
 import type { Club } from '../model/club.ts';
+import { Position } from '../model/positions.ts';
+import { clubRecordHeadline, clubRecordOf } from './matchReports.ts';
+import { mainPosition } from './records.ts';
 import type { GameMessage, World } from './world.ts';
 
 /** What a word of congratulation does for a man's morale — alone, and as one of a group. */
@@ -14,7 +17,16 @@ const ONE = 7;
 const GROUP = 4;
 
 /** A club milestone's subject: "Name: 100 games for Club". */
-const MILESTONE = /: \d+ games for /;
+const MILESTONE = /: (\d+) games for /;
+
+/** What a man says to being told well done on a milestone: each knows what his job is worth. */
+const MILESTONE_REPLY: Readonly<Record<Position, string>> = {
+  [Position.Libero]: 'Thanks, boss. Nobody counts the digs, so it means a lot that you do.',
+  [Position.Setter]: 'Thanks, boss. The hitters get the headlines, so it means a lot that you noticed.',
+  [Position.MiddleBlocker]: 'Thanks, boss. Plenty more blocks in me yet.',
+  [Position.OutsideHitter]: 'Thanks, boss. It means a lot, coming from you.',
+  [Position.Opposite]: 'Thanks, boss. Keep the balls coming and I will keep putting them away.',
+};
 
 /** The manager's own players a message honours, in the order it names them. */
 export function honouredIn(world: World, m: GameMessage): number[] {
@@ -57,6 +69,17 @@ export function congratulate(world: World, club: Club, m: GameMessage): { ok: bo
   (world.congratulated ??= {})[m.id] = true;
   if (who.length === 1) {
     const name = store.fullName(who[0]);
+    const games = m.playerIdx === who[0] ? MILESTONE.exec(m.subject)?.[1] : undefined;
+    if (games !== undefined) {
+      const position = mainPosition(world, who[0]);
+      const record = clubRecordOf(world, who[0], club.id);
+      const numbers = record !== null ? `, and on ${clubRecordHeadline(position, record)} since you took charge` : '';
+      return {
+        ok: true,
+        text: `You congratulate ${name} on ${games} games for the club${numbers}. He is clearly touched that you took the time.`,
+        reply: MILESTONE_REPLY[position],
+      };
+    }
     return {
       ok: true,
       text: `You congratulate ${name}. He is clearly touched that you took the time.`,

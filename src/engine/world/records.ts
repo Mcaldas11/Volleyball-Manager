@@ -92,6 +92,12 @@ export function positionsPlayed(lines: readonly CompetitionRecord[]): Array<{ po
   return [...all].map(([position, matches]) => ({ position, matches })).sort((a, b) => b.matches - a.matches);
 }
 
+/** The position a player has played the most for his clubs, as far as the kept lines say — else his own. */
+export function mainPosition(world: World, p: number): Position {
+  const club = (world.competitionRecords.get(p) ?? []).filter((l) => world.competitions[l.competitionId]?.kind !== 'international');
+  return positionsPlayed(club)[0]?.position ?? (world.players.position[p] as Position);
+}
+
 /** How many past ratings the form guide remembers. */
 export const FORM_LENGTH = 5;
 

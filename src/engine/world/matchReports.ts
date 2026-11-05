@@ -12,6 +12,7 @@
 
 import type { MatchResult, RallyLogEntry } from '../match/engine.ts';
 import { newPlayerStats, newRotationStats, newTeamStats, type PlayerMatchStats, type TeamMatchStats } from '../match/stats.ts';
+import { Position } from '../model/positions.ts';
 import type { Fixture, World } from './world.ts';
 
 /** A player's line, in the order it is packed. */
@@ -158,7 +159,12 @@ export interface ClubRecord {
   digs: number;
   passes: number;
   goodPasses: number;
+  perfectPasses: number;
+  passErrors: number;
   assists: number;
+  /** Balls set, and those that went astray. */
+  setsMade: number;
+  setErrors: number;
 }
 
 /**
@@ -171,7 +177,7 @@ export function clubRecordOf(world: World, p: number, clubId: number): ClubRecor
   const byId = new Map<number, Fixture>();
   for (const f of world.fixtures) if (reports.has(f.id)) byId.set(f.id, f);
   const r: ClubRecord = {
-    games: 0, sets: 0, points: 0, kills: 0, attacks: 0, attackErrors: 0, aces: 0, blocks: 0, digs: 0, passes: 0, goodPasses: 0, assists: 0,
+    games: 0, sets: 0, points: 0, kills: 0, attacks: 0, attackErrors: 0, aces: 0, blocks: 0, digs: 0, passes: 0, goodPasses: 0, perfectPasses: 0, passErrors: 0, assists: 0, setsMade: 0, setErrors: 0,
   };
   const at = (k: (typeof PLAYER_FIELDS)[number]): number => 2 + PLAYER_FIELDS.indexOf(k);
   for (const [id, report] of reports) {
@@ -192,8 +198,90 @@ export function clubRecordOf(world: World, p: number, clubId: number): ClubRecor
     r.digs += v('digsTotal');
     r.passes += v('receptionsTotal');
     r.goodPasses += v('receptionPerfect') + v('receptionPositive');
+    r.perfectPasses += v('receptionPerfect');
+    r.passErrors += v('receptionErrors');
     r.assists += v('setAssists');
+    r.setsMade += v('setsMade');
+    r.setErrors += v('setErrors');
   }
   r.points = r.kills + r.aces + r.blocks;
   return r.games > 0 ? r : null;
+}
+
+const one = (v: number): string => v.toFixed(1);
+const pct = (a: number, b: number): string => `${Math.round((a / Math.max(1, b)) * 100)}%`;
+
+/** A club record drawn up for the job: big numbers in rows, then the lines beneath. */
+export interface ClubRecordSheet {
+  figures: Array<Array<[label: string, value: string | number]>>;
+  rows: Array<[label: string, text: string]>;
+}
+
+/**
+ * A player's club record as it should be read for his position: what a libero
+ * did is digs and passes, what a setter did is assists — points say next to
+ * nothing about either.
+ */
+export function clubRecordSheet(position: Position, r: ClubRecord): ClubRecordSheet {
+  const sets = Math.max(1, r.sets);
+  const attack: [string, string] = ['Attack', `${pct(r.kills, r.attacks)} kills · ${one(r.kills / sets)} a set · efficiency ${pct(r.kills - r.attackErrors, r.attacks)}`];
+  const serve: [string, string] = ['Serve', `${one(r.aces / sets)} aces a set`];
+  const block: [string, string] = ['Block', `${one(r.blocks / sets)} a set`];
+  const digs: [string, string] = ['Digs', `${r.digs} · ${one(r.digs / sets)} a set`];
+  const reception: [string, string] = ['Reception', `${pct(r.goodPasses, r.passes)} good · ${r.passes} passes`];
+  const when = (on: boolean, row: [string, string]): Array<[string, string]> => (on ? [row] : []);
+  switch (position) {
+    case Position.Libero:
+      return {
+        figures: [
+          [['Digs', r.digs], ['Digs a set', one(r.digs / sets)], ['Digs a game', one(r.digs / r.games)]],
+          [['Passes', r.passes], ['Good passes', pct(r.goodPasses, r.passes)], ['Perfect passes', pct(r.perfectPasses, r.passes)]],
+        ],
+        rows: when(r.passes > 0, ['Reception', `${one(r.passes / sets)} passes a set · ${r.passErrors} errors (${pct(r.passErrors, r.passes)})`]),
+      };
+    case Position.Setter:
+      return {
+        figures: [
+          [['Assists', r.assists], ['Assists a set', one(r.assists / sets)], ['Assists a game', one(r.assists / r.games)]],
+          [['Balls set', r.setsMade], ['Set into kills', pct(r.assists, r.setsMade)], ['Setting errors', r.setErrors]],
+        ],
+        rows: [serve, block, ...when(r.digs > 0, digs), ['Points', `${r.points} · ${one(r.points / sets)} a set`]],
+      };
+    case Position.MiddleBlocker:
+      return {
+        figures: [
+          [['Blocks', r.blocks], ['Blocks a set', one(r.blocks / sets)], ['Points a set', one(r.points / sets)]],
+          [['Points', r.points], ['Kills', r.kills], ['Aces', r.aces]],
+        ],
+        rows: [...when(r.attacks > 0, attack), serve],
+      };
+    case Position.OutsideHitter:
+      return {
+        figures: [
+          [['Points', r.points], ['Points a set', one(r.points / sets)], ['Kills', r.kills]],
+          [['Good passes', pct(r.goodPasses, r.passes)], ['Digs a set', one(r.digs / sets)], ['Aces', r.aces]],
+        ],
+        rows: [...when(r.attacks > 0, attack), ...when(r.passes > 0, reception), ...when(r.digs > 0, digs), serve, block],
+      };
+    default:
+      return {
+        figures: [
+          [['Points', r.points], ['Points a game', one(r.points / r.games)], ['Points a set', one(r.points / sets)]],
+          [['Kills', r.kills], ['Aces', r.aces], ['Blocks', r.blocks]],
+        ],
+        rows: [...when(r.attacks > 0, attack), serve, block, ...when(r.digs > 0, digs)],
+      };
+  }
+}
+
+/** The same record in a phrase, for the words said about him. */
+export function clubRecordHeadline(position: Position, r: ClubRecord): string {
+  const sets = Math.max(1, r.sets);
+  switch (position) {
+    case Position.Libero: return `${r.digs} digs and ${pct(r.goodPasses, r.passes)} of his passes good`;
+    case Position.Setter: return `${r.assists} assists, ${one(r.assists / sets)} a set`;
+    case Position.MiddleBlocker: return `${r.blocks} blocks and ${r.kills} kills`;
+    case Position.OutsideHitter: return `${r.points} points and ${pct(r.goodPasses, r.passes)} of his passes good`;
+    default: return `${r.points} points, ${one(r.points / sets)} a set`;
+  }
 }
