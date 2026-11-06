@@ -10,6 +10,7 @@ import { DEFAULT_LOOK, OUTFITS } from './coachLook.ts';
 
 const KEY = 'vm.managerProfile';
 
+
 /** A look as it was kept: anything missing or broken from the default. */
 function lookFrom(v: Partial<ManagerLook> | undefined): ManagerLook | undefined {
   if (v === undefined || v === null || typeof v !== 'object') return undefined;
