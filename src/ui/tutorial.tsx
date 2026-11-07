@@ -389,7 +389,8 @@ export const TUTORIAL: readonly TutorialStep[] = [
     id: 'finish-match', chapter: 'Matchday', title: 'Play it out',
     body: 'Watch at 1×, 1.5× or 2× — or skip to the result. At the set breaks you get the team sheet and another team talk.',
     todo: 'Finish the match — play it out, or press Skip to result.',
-    target: '[data-tour="skip-result"]',
+    // A final has its trophy lifted first, and its own Continue to the report.
+    target: ['.trophy-banner .primary', '[data-tour="skip-result"]'],
     free: true,
     done: (g) => g.matchday === null,
   },
@@ -404,19 +405,61 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
 ];
 
-/** Where a card goes beside what it points at — or, without room, centred low. */
-function cardPlace(rect: DOMRect | null, w: number, h: number): CSSProperties {
+/**
+ * What the card must never sit on: what a step's target opens, and what the game asks of the player
+ * on the way — a press conference's answers, a final's trophy and its Continue, a dialog.
+ */
+const AVOID = '.press-answers, .trophy-banner, .trophy-card, .hol-card, .menu-pop, .dd-menu';
+
+interface Box { left: number; top: number; right: number; bottom: number }
+
+function overlap(a: Box, b: Box): number {
+  return Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+}
+
+/**
+ * Where the card goes: beside what it points at, on whichever side has room — else in a corner —
+ * the first place that covers neither the target nor anything in `avoid`, or the one that covers least.
+ */
+function cardPlace(rect: Box | null, w: number, h: number, avoid: readonly Box[]): CSSProperties {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const gap = 18;
-  if (rect === null) return { left: (vw - w) / 2, top: Math.max(16, (vh - h) / 2) };
+  const m = 16;
   const clampTop = (t: number): number => Math.max(12, Math.min(vh - h - 12, t));
   const clampLeft = (l: number): number => Math.max(12, Math.min(vw - w - 12, l));
-  if (rect.right + gap + w < vw - 8) return { left: rect.right + gap, top: clampTop(rect.top + rect.height / 2 - h / 2) };
-  if (rect.left - gap - w > 8) return { left: rect.left - gap - w, top: clampTop(rect.top + rect.height / 2 - h / 2) };
-  if (rect.bottom + gap + h < vh - 8) return { left: clampLeft(rect.left + rect.width / 2 - w / 2), top: rect.bottom + gap };
-  if (rect.top - gap - h > 8) return { left: clampLeft(rect.left + rect.width / 2 - w / 2), top: rect.top - gap - h };
-  return { left: vw - w - 20, top: vh - h - 20 };
+  const spots: Array<[number, number]> = [];
+  if (rect === null) {
+    spots.push([(vw - w) / 2, Math.max(m, (vh - h) / 2)]);
+  } else {
+    const midTop = clampTop((rect.top + rect.bottom) / 2 - h / 2);
+    const midLeft = clampLeft((rect.left + rect.right) / 2 - w / 2);
+    if (rect.right + gap + w < vw - 8) spots.push([rect.right + gap, midTop]);
+    if (rect.left - gap - w > 8) spots.push([rect.left - gap - w, midTop]);
+    if (rect.bottom + gap + h < vh - 8) spots.push([midLeft, rect.bottom + gap]);
+    if (rect.top - gap - h > 8) spots.push([midLeft, rect.top - gap - h]);
+  }
+  spots.push([vw - w - m, vh - h - m], [m, vh - h - m], [vw - w - m, m], [m, m]);
+  let best = spots[0];
+  let bestCost = Infinity;
+  for (const [left, top] of spots) {
+    const card = { left, top, right: left + w, bottom: top + h };
+    const cost = (rect !== null ? overlap(card, rect) * 4 : 0) + avoid.reduce((s, a) => s + overlap(card, a), 0);
+    if (cost < bestCost) {
+      best = [left, top];
+      bestCost = cost;
+      if (cost === 0) break;
+    }
+  }
+  return { left: best[0], top: best[1] };
+}
+
+/** Not yet faded in — a final's trophy banner waits for the lift — or faded out: there, but not to be seen. */
+function faded(el: HTMLElement): boolean {
+  for (let n: HTMLElement | null = el; n !== null && n !== document.body; n = n.parentElement) {
+    if (Number(getComputedStyle(n).opacity) < 0.1) return true;
+  }
+  return false;
 }
 
 /** The first match of `selector` that is on screen. */
@@ -425,7 +468,7 @@ function findTarget(selector: string | readonly string[] | undefined): HTMLEleme
   for (const sel of typeof selector === 'string' ? [selector] : selector) {
     for (const el of document.querySelectorAll<HTMLElement>(sel)) {
       const r = el.getBoundingClientRect();
-      if (r.width > 2 && r.height > 2) return el;
+      if (r.width > 2 && r.height > 2 && !faded(el)) return el;
     }
   }
   return null;
@@ -451,6 +494,11 @@ export function TutorialOverlay(): JSX.Element | null {
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState({ w: 360, h: 220 });
   const targetRef = useRef<HTMLElement | null>(null);
+  const [avoid, setAvoid] = useState<{ key: string; boxes: Box[] }>({ key: '', boxes: [] });
+  // A step gone back to with Back: read again, on with Next — never straight on again because it is
+  // done already, which would make Back do nothing.
+  const [review, setReview] = useState<number | null>(null);
+  const reviewing = review !== null && review === index;
 
   // A first career in this browser: the tutorial, once the manager has a club.
   useEffect(() => {
@@ -466,6 +514,14 @@ export function TutorialOverlay(): JSX.Element | null {
       targetRef.current = el;
       const r = el?.getBoundingClientRect() ?? null;
       setRect((old) => (same(old, r) ? old : r));
+      const boxes: Box[] = [];
+      for (const a of document.querySelectorAll(AVOID)) {
+        if (a.closest('.tut') !== null) continue;
+        const b = a.getBoundingClientRect();
+        if (b.width > 2 && b.height > 2) boxes.push({ left: b.left, top: b.top, right: b.right, bottom: b.bottom });
+      }
+      const key = boxes.map((b) => `${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.right)},${Math.round(b.bottom)}`).join(';');
+      setAvoid((old) => (old.key === key ? old : { key, boxes }));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -478,15 +534,27 @@ export function TutorialOverlay(): JSX.Element | null {
       setCardSize({ w: el.offsetWidth, h: el.offsetHeight });
     }
   });
+  // Its size changes behind React's back too — the text put into Portuguese or Spanish after it is
+  // drawn — and a card placed by its old height runs off the window.
+  const cardOn = step !== undefined;
+  useEffect(() => {
+    const el = cardRef.current;
+    if (el === null || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      setCardSize((old) => (Math.abs(el.offsetWidth - old.w) > 1 || Math.abs(el.offsetHeight - old.h) > 1 ? { w: el.offsetWidth, h: el.offsetHeight } : old));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [cardOn]);
 
   // Done — or wandered off what the step needs: on, or back.
   useEffect(() => {
     if (step === undefined || index === undefined) return;
-    // A new step: note what it starts from, before anything can count as done.
-    if (g.tutorialStart.step !== index) {
-      g.markTutorialStart(index, step.snapshot?.(g) ?? '');
-      return;
-    }
+    // A new step: note what it starts from, before anything can count as done. Then read on in the
+    // same pass — nothing may redraw until the player does something, and a step that is off its
+    // screen already has to send him back now, not on his next click.
+    if (g.tutorialStart.step !== index) g.markTutorialStart(index, step.snapshot?.(g) ?? '');
+    if (reviewing) return;
     if (step.needs !== undefined && step.backTo !== undefined && !step.needs(g) && !(step.done?.(g, g.tutorialStart) ?? false)) {
       const back = TUTORIAL.findIndex((s) => s.id === step.backTo);
       if (back >= 0 && back < (index ?? 0)) g.tutorialGoTo(back);
@@ -499,8 +567,8 @@ export function TutorialOverlay(): JSX.Element | null {
   });
 
   // While a step waits on the player, only what it points at can be used.
-  const waiting = step?.done !== undefined && rect !== null && step.free !== true;
-  const reading = step !== undefined && step.done === undefined;
+  const waiting = step?.done !== undefined && rect !== null && step.free !== true && !reviewing;
+  const reading = step !== undefined && (step.done === undefined || reviewing);
   useEffect(() => {
     if (!waiting && !reading) return;
     const hold = (e: Event): void => {
@@ -516,6 +584,11 @@ export function TutorialOverlay(): JSX.Element | null {
     return () => { for (const k of kinds) document.removeEventListener(k, hold, true); };
   }, [waiting, reading, step?.id]);
 
+  const goTo = (to: number, again: boolean): void => {
+    setReview(again ? to : null);
+    g.tutorialGoTo(to);
+  };
+
   if (world === null || step === undefined || index === undefined) return null;
   const total = TUTORIAL.length;
   const first = index === 0;
@@ -526,7 +599,10 @@ export function TutorialOverlay(): JSX.Element | null {
     : null;
   // Steps through screens of their own leave the screen undimmed.
   const shade = !(step.free === true && step.done !== undefined);
-  const place = cardPlace(hole !== null ? new DOMRect(hole.left, hole.top, hole.width, hole.height) : null, cardSize.w, cardSize.h);
+  const place = cardPlace(
+    hole !== null ? { left: hole.left, top: hole.top, right: hole.left + hole.width, bottom: hole.top + hole.height } : null,
+    cardSize.w, cardSize.h, avoid.boxes,
+  );
 
   return (
     <div className="tut">
@@ -552,7 +628,7 @@ export function TutorialOverlay(): JSX.Element | null {
         {step.todo !== undefined && (
           <p className="tut-todo"><Icon name="arrowRight" size={13} /> {step.todo}</p>
         )}
-        {step.target !== undefined && rect === null && step.done !== undefined && (
+        {step.target !== undefined && rect === null && step.done !== undefined && !reviewing && (
           <p className="tut-lost faint">Can't see it on this screen? Go back a step.</p>
         )}
         <footer className="tut-foot">
@@ -568,9 +644,9 @@ export function TutorialOverlay(): JSX.Element | null {
                 ? <button className="sm ghost" onClick={() => g.endTutorial()}>I know the game</button>
                 : <button className="sm ghost" onClick={() => setConfirmSkip(true)}>Skip tutorial</button>}
               <span className="flex-spacer" />
-              {!first && <button className="sm" onClick={() => g.tutorialGoTo(index - 1)}><Icon name="back" size={12} /> Back</button>}
-              {step.done === undefined && (
-                <button className="sm primary" onClick={() => (last ? g.endTutorial() : g.tutorialGoTo(index + 1))}>
+              {!first && <button className="sm" onClick={() => goTo(index - 1, true)}><Icon name="back" size={12} /> Back</button>}
+              {(step.done === undefined || reviewing) && (
+                <button className="sm primary" onClick={() => (last ? g.endTutorial() : goTo(index + 1, false))}>
                   {first ? 'Start the tutorial' : last ? 'Finish' : 'Next'}
                 </button>
               )}
