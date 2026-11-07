@@ -6,6 +6,7 @@
 import { useState, type JSX, type ReactNode } from 'react';
 import { Icon } from './icons.tsx';
 import { useGame, type ScreenId } from './state.ts';
+import { tutorialAvailable } from './tutorial.tsx';
 
 interface HelpTopic {
   id: string;
@@ -131,7 +132,7 @@ export function HelpDialog(): JSX.Element | null {
             {TOPICS.map((x) => (
               <button key={x.id} className={x.id === t.id ? 'active' : ''} onClick={() => setTopic(x.id)}>{x.title}</button>
             ))}
-            {g.club !== null && (
+            {tutorialAvailable(g) && (
               <button className="help-tour" onClick={() => { g.closeHelp(); g.startTutorial(); }}>
                 <Icon name="playOutline" size={13} /> The tutorial
               </button>

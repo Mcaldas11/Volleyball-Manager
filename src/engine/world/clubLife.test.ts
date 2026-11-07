@@ -87,6 +87,15 @@ test('team talks: praise after a set won lands, criticism after one won annoys, 
   assert.ok(giveTalk(world, club, six, 'demand', fav, false, 3).team > giveTalk(world, club, six, 'demand', dog, false, 3).team);
 });
 
+test('a national team\'s talk has no club behind it: it is given, the most capped carrying it', () => {
+  const { world, club } = managed(65);
+  const six = club.players.slice(0, 7);
+  const won: TalkContext = { moment: 'setbreak', favourite: 0, setsFor: 1, setsAgainst: 0, lastSet: { won: true, margin: 5 }, importance: 0.5 };
+  const talk = giveTalk(world, null, six, 'praise', won, false, 1);
+  assert.equal(talk.reactions.length, six.length);
+  assert.ok(talk.multiplier > 1);
+});
+
 test('one-to-one: praise in form lifts him; a promise kept or broken; a player kept unhappy asks to leave', () => {
   const { world, club } = managed(64);
   const store = world.players;

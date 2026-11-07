@@ -9,6 +9,7 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { DAYS_PER_SEASON, TRANSFER_WINDOWS } from '../engine/world/world.ts';
 import { calendarOf } from '../engine/world/calendar.ts';
+import { NATIONS } from '../engine/world/nations.ts';
 import {
   DEFAULT_HOLIDAY, holidayDays, JOB_TARGETS, type HolidayPlan, type HolidayReturn, type JobTarget, type OfferPolicy,
 } from '../engine/world/holiday.ts';
@@ -62,6 +63,22 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
       label: `Next match — ${next.home === world.userClubId ? 'vs' : 'at'} ${opp?.shortName ?? '?'} (${g.dateLabelForDay(next.day)})`,
       day: next.day,
     });
+  }
+  // The national team's: the day its squad is due, and its next match.
+  const nat = g.nationalDates();
+  if (nat !== null) {
+    if (nat.callUp !== null) {
+      presets.push({ key: 'squad', label: `Squad due for the ${nat.tournament} (${g.dateLabelForDay(nat.callUp)})`, day: nat.callUp });
+    }
+    if (nat.match !== null && nat.match > today && nat.match !== next?.day) {
+      presets.push({
+        key: 'national',
+        label: nat.opponent >= 0
+          ? `Next national match — vs ${NATIONS[nat.opponent]?.name ?? '?'} (${g.dateLabelForDay(nat.match)})`
+          : `Next national match — ${nat.tournament} (${g.dateLabelForDay(nat.match)})`,
+        day: nat.match,
+      });
+    }
   }
   presets.push({ key: 'tomorrow', label: `Tomorrow (${g.dateLabelForDay(today + 1)})`, day: today + 1 });
   presets.push({ key: 'week', label: `Next week (${g.dateLabelForDay(today + 7)})`, day: today + 7 });

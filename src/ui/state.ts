@@ -3236,8 +3236,8 @@ class Game {
     const previous = md.stage === 'setBreak'
       ? md.talks?.sets[(snap?.set ?? 0) - 1] ?? (snap?.set === 1 ? md.talks?.prematch : undefined)
       : undefined;
-    const fallback = world.clubs[world.userClubId];
-    const result = giveTalk(world, club ?? fallback!, players, tone, {
+    // A national match is the national team's: not the club's dressing room, which may not even exist.
+    const result = giveTalk(world, club ?? null, players, tone, {
       moment, favourite: favouriteness(own, theirs), setsFor, setsAgainst, lastSet, importance: md.fixture.importance,
     }, previous?.tone === tone, (snap?.set ?? 0) + (md.log.length << 3));
     md.talks ??= { sets: {} };
@@ -4693,6 +4693,30 @@ class Game {
   // ---- The national team --------------------------------------------------
 
   /** The manager's nation's match today and its tournament, if it is still to be played. */
+  /**
+   * The national team's next dates — the day its squad is due, if it is still to be named, and its
+   * next match (the tournament's first day while the draw is still to come) — or null with none ahead.
+   */
+  nationalDates(): { tournament: string; callUp: number | null; match: number | null; opponent: number } | null {
+    const world = this.world;
+    if (world === null) return null;
+    const nation = userNation(world);
+    if (nation < 0) return null;
+    const t = nextTournamentFor(world, nation);
+    if (t === undefined) return null;
+    const next = t.matches
+      .filter((m) => !m.played && (m.home === nation || m.away === nation) && m.day >= world.day)
+      .sort((a, b) => a.day - b.day)[0];
+    const match = next?.day ?? (t.startDay >= world.day ? t.startDay : null);
+    const named = world.internationals?.chosen?.tournamentId === t.id;
+    return {
+      tournament: t.name,
+      callUp: t.status === 'planned' && !named && t.callUpDay > world.day ? t.callUpDay : null,
+      match,
+      opponent: next === undefined ? -1 : next.home === nation ? next.away : next.home,
+    };
+  }
+
   nationalMatchToday(): { t: Tournament; m: IntlMatch } | null {
     return this.world === null ? null : userMatchToday(this.world);
   }

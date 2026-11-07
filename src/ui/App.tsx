@@ -662,6 +662,9 @@ function ContinueButton(): JSX.Element {
   const inInbox = g.screen === 'inbox' && g.selectedPlayer === null && g.selectedClub === null &&
     g.selectedReview === null && g.negotiation === null && g.staffNegotiation === null && g.incomingOffer === null;
 
+  // No club match ahead: the national team's next, for a manager who has one.
+  const nat = next === null ? g.nationalDates() : null;
+  const natDay = nat?.match ?? null;
   const opponentId = next === null ? -1 : next.home === world.userClubId ? next.away : next.home;
   const opponent = world.clubs[opponentId];
 
@@ -722,13 +725,23 @@ function ContinueButton(): JSX.Element {
           <button onClick={() => { setOpen(false); g.openHoliday(); }}>
             <Icon name="calendar" size={15} /> Go on holiday…
           </button>
-          <button disabled={next === null} onClick={() => { g.openMatchday(); setOpen(false); }}>
+          <button disabled={next === null && natDay === null} onClick={() => {
+            setOpen(false);
+            if (next !== null) g.openMatchday();
+            else if (natDay !== null && natDay <= world.day) g.openNationalMatchday();
+            else if (natDay !== null) g.openHoliday(natDay);
+          }}>
             <Icon name="fastForward" size={15} />
             <span className="menu-pop-stack">
-              <span>{next === null ? 'No fixture scheduled' : matchToday ? 'Play match' : 'Holiday until the next match…'}</span>
+              <span>{next === null && natDay === null ? 'No fixture scheduled' : matchToday ? 'Play match' : 'Holiday until the next match…'}</span>
               {next !== null && opponent !== undefined && (
                 <span className="faint">
                   {next.home === world.userClubId ? 'vs' : 'at'} {opponent.shortName} · {g.dateLabelForDay(next.day)}
+                </span>
+              )}
+              {next === null && nat !== null && natDay !== null && (
+                <span className="faint">
+                  {nat.opponent >= 0 ? `vs ${NATIONS[nat.opponent]?.name ?? '?'}` : nat.tournament} · {g.dateLabelForDay(natDay)}
                 </span>
               )}
             </span>

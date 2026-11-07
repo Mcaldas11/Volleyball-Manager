@@ -118,11 +118,16 @@ function labelOf(score: number, tone: TalkTone): ReactionLabel {
  * the same words as last time; `salt` keeps one talk's dice apart from the next.
  */
 export function giveTalk(
-  world: World, club: Club, players: readonly number[], tone: TalkTone, c: TalkContext, repeat: boolean, salt: number,
+  world: World,
+  /** The club whose dressing room it is — null for a national team, which has none of its own. */
+  club: Club | null,
+  players: readonly number[], tone: TalkTone, c: TalkContext, repeat: boolean, salt: number,
 ): TalkResult {
   const rng = new Rng((world.seed ^ Math.imul(world.day + 1, 0x9e3779b1) ^ Math.imul(salt + 1, 0x85ebca6b)) >>> 0);
-  const room = dressingRoom(world, club);
-  const weight = new Map(room.members.map((m) => [m.p, m.tier === 'leader' ? 3 : m.tier === 'influential' ? 2 : 1]));
+  // Whose word carries: a club's leaders — or, in a national team, the most capped.
+  const weight = club !== null
+    ? new Map(dressingRoom(world, club).members.map((m) => [m.p, m.tier === 'leader' ? 3 : m.tier === 'influential' ? 2 : 1]))
+    : new Map([...players].sort((a, b) => world.players.nationalCaps[b] - world.players.nationalCaps[a]).map((p, i) => [p, i < 3 ? 3 : i < 6 ? 2 : 1]));
   const base = fit(tone, c) * (repeat ? STALE : 1);
   const reactions = players.map((p) => {
     const score = Math.max(-1, Math.min(1, base + personal(world, p, tone) + rng.gaussian(0, 0.12)));

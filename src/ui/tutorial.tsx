@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import { nextTournamentFor, userNation } from '../engine/world/internationals.ts';
 import { planOf } from '../engine/world/training.ts';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
@@ -203,8 +204,9 @@ export const TUTORIAL: readonly TutorialStep[] = [
     target: '.tboard-body',
     needs: (g) => plainScreen(g, 'tactics'),
     backTo: 'instructions',
-    snapshot: (g) => JSON.stringify(g.club?.tactics ?? null),
-    done: (g, s) => JSON.stringify(g.club?.tactics ?? null) !== s.snap,
+    // The instructions of the team on screen: the club's, or the national team's.
+    snapshot: (g) => JSON.stringify(g.activeTactics()),
+    done: (g, s) => JSON.stringify(g.activeTactics()) !== s.snap,
   },
   {
     id: 'rotations', chapter: 'Picking the team', title: 'Rotation by rotation',
@@ -405,6 +407,166 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
 ];
 
+// ---- The national team ----------------------------------------------------------------------
+
+const clubStep = (id: string): TutorialStep => TUTORIAL.find((s) => s.id === id)!;
+const nationalScreen = (g: Game, screen: string): boolean => plainScreen(g, screen) && g.nationalView();
+const frameOf = (g: Game): string => JSON.stringify(g.world?.internationals?.frame?.players ?? []);
+/** The squad named for the national team's next tournament — or none ahead to name one for. */
+const squadNamed = (g: Game): boolean => {
+  const world = g.world;
+  if (world === null) return false;
+  const t = nextTournamentFor(world, userNation(world));
+  return t === undefined || t.status !== 'planned' || world.internationals?.chosen?.tournamentId === t.id;
+};
+
+/** The national team's own screens: its squad, the players in contention, its team sheet, its tournaments. */
+const NATIONAL_CHAPTER: readonly TutorialStep[] = [
+  {
+    id: 'nat-squad', chapter: 'Your national team', title: 'The national squad',
+    body: 'Anyone who can play for your country, wherever he plays his club volleyball, can be called up.',
+    todo: 'Open Squad.',
+    target: '[data-tour="nav-squad"]',
+    done: (g) => nationalScreen(g, 'squad'),
+  },
+  {
+    id: 'nat-pool', chapter: 'Your national team', title: 'Who goes',
+    target: '.nat-squad-grid',
+    body: 'On the left, the fourteen your assistant would take now — the squad itself, once you have named it. On the right, everyone in contention for a place: his club, his ability, his form and his caps.',
+    needs: (g) => nationalScreen(g, 'squad'),
+    backTo: 'nat-squad',
+  },
+  {
+    id: 'nat-frame', chapter: 'Your national team', title: 'The provisional squad',
+    body: 'Up to 25 names you are keeping an eye on — your assistant picks from them first. The button beside the star sends you to watch his club\'s matches, so you know his form.',
+    todo: 'Click a star to put a player in your provisional squad.',
+    target: '.nat-squad-grid',
+    needs: (g) => nationalScreen(g, 'squad'),
+    backTo: 'nat-squad',
+    snapshot: frameOf,
+    done: (g, s) => frameOf(g) !== s.snap,
+  },
+];
+
+const NATIONAL_TOURNAMENTS: readonly TutorialStep[] = [
+  {
+    id: 'nat-tournaments', chapter: 'Your national team', title: 'The tournaments',
+    body: 'Your nation\'s summer and spring: the Nations Cup, the continental championships, the World Championship and the Summer Games.',
+    todo: 'Open Competitions, then the International tab.',
+    target: ['[data-tour="tab-internationals"]', '[data-tour="nav-competitions"]'],
+    done: (g) => plainScreen(g, 'internationals'),
+  },
+  {
+    id: 'nat-calendar', chapter: 'Your national team', title: 'Groups, knockouts and the ranking',
+    body: 'Every tournament on the calendar, the draw, the groups and the knockout rounds — click one for all of it. Every result moves your nation up or down the world ranking, and the ranking decides who qualifies.',
+    needs: (g) => plainScreen(g, 'internationals'),
+    backTo: 'nat-tournaments',
+  },
+];
+
+/** A national team only: its squad and team sheet, its tournaments, the call-up — and its first match. */
+const NATIONAL_TOUR: readonly TutorialStep[] = [
+  {
+    id: 'welcome', chapter: 'Welcome', title: 'Welcome, coach',
+    body: 'This tutorial takes you through your first weeks with the national team — and you do every part of it yourself. The lit-up part of the screen is what to use; the card tells you what it does and what to do. You can leave it at any point, and start it again from the Help (?).',
+  },
+  {
+    id: 'home', chapter: 'Welcome', title: 'Home',
+    target: '.home-page',
+    body: 'Your national team at a glance: the next tournament, when the squad is due, the world ranking and the federation\'s mood. Come back here whenever you want the big picture.',
+    needs: (g) => plainScreen(g, 'home'),
+  },
+  clubStep('inbox'),
+  clubStep('message'),
+  ...NATIONAL_CHAPTER,
+  {
+    id: 'nat-player', chapter: 'Your national team', title: 'A player\'s profile',
+    body: 'Everything about one player is in his profile.',
+    todo: 'Click a player\'s name.',
+    target: '.nat-squad-grid',
+    needs: (g) => g.screen === 'squad' && g.playerTalk === null,
+    backTo: 'nat-squad',
+    done: (g) => g.selectedPlayer !== null,
+  },
+  {
+    id: 'nat-attributes', chapter: 'Your national team', title: 'Attributes',
+    target: '.profile-attrs',
+    body: 'Each attribute runs from 1 to 20 — technical, mental and physical — and they are what the match engine plays with. He belongs to his club: you can\'t talk him round or sign him. What you can do is pick him, or leave him out.',
+    needs: (g) => g.selectedPlayer !== null,
+    backTo: 'nat-player',
+  },
+  { ...clubStep('lineup'), body: 'The national team has a team sheet of its own — the starting point for every national match, from the fourteen named for the tournament.' },
+  clubStep('sheet'),
+  clubStep('instructions'),
+  clubStep('instruction'),
+  clubStep('rotations'),
+  ...NATIONAL_TOURNAMENTS,
+  clubStep('continue'),
+  {
+    id: 'callup', chapter: 'Your national team', title: 'Name your fourteen',
+    body: 'A week before each tournament the federation asks for your squad, and Continue stops on the day. The arrow beside it can take you there on holiday. Leave it to the holiday and your assistant names it.',
+    todo: 'Get to the day the squad is due, and name your fourteen in the federation\'s message — your own, or the Assistant\'s pick — then Confirm squad.',
+    target: '[data-tour="continue"]',
+    free: true,
+    done: squadNamed,
+  },
+  {
+    ...clubStep('to-match'),
+    body: 'On a match day the button says Play match. The arrow beside it can take you straight there — a holiday until the next match.',
+  },
+  ...TUTORIAL.slice(TUTORIAL.findIndex((s) => s.id === 'team-talk'), TUTORIAL.findIndex((s) => s.id === 'done')),
+  {
+    id: 'done', chapter: 'All set', title: 'Over to you',
+    body: 'That is the job: watch the players, name the right fourteen, pick the team, win matches — and climb the world ranking. The ? at the top opens the help any time, and this tutorial again.',
+  },
+];
+
+/** A club and a country: the club's tutorial, with the national team's chapter before the first match. */
+const BOTH_TOUR: readonly TutorialStep[] = [
+  ...TUTORIAL.slice(0, TUTORIAL.findIndex((s) => s.id === 'continue')),
+  {
+    id: 'nat-switch', chapter: 'Your national team', title: 'Club and country',
+    body: 'You run a club and a national team. This switch says which of the two the team screens — Squad and Lineup — are about. A club match always shows the club, a national one the country.',
+    todo: 'Switch to the national team.',
+    target: '.side-team-switch',
+    done: (g) => g.nationalView(),
+  },
+  ...NATIONAL_CHAPTER.map((s) => ({ ...s, needs: s.needs === undefined ? undefined : (g: Game) => g.nationalView() && s.needs!(g) })),
+  {
+    id: 'nat-lineup', chapter: 'Your national team', title: 'Its own team sheet',
+    body: 'The national team has its own team sheet and instructions, kept apart from the club\'s — the starting point for every national match.',
+    todo: 'Open Lineup.',
+    target: '[data-tour="nav-lineup"]',
+    needs: (g) => g.nationalView(),
+    backTo: 'nat-switch',
+    done: (g) => nationalScreen(g, 'lineup'),
+  },
+  ...NATIONAL_TOURNAMENTS,
+  {
+    id: 'nat-back', chapter: 'Your national team', title: 'Back to the club',
+    body: 'Squads are named a week before each tournament — the federation asks in the inbox, and Continue stops for it. Until then the club comes first.',
+    todo: 'Switch back to the club.',
+    target: '.side-team-switch',
+    done: (g) => !g.nationalView(),
+  },
+  ...TUTORIAL.slice(TUTORIAL.findIndex((s) => s.id === 'continue')),
+];
+
+/** The tutorial for the career in play: a club's, a national team's, or both. */
+export function tourFor(g: Game): readonly TutorialStep[] {
+  const world = g.world;
+  if (world === null) return TUTORIAL;
+  const nation = userNation(world) >= 0;
+  if (g.club === null) return nation ? NATIONAL_TOUR : TUTORIAL;
+  return nation ? BOTH_TOUR : TUTORIAL;
+}
+
+/** Whether there is a tutorial to give now: a team to manage, and no draft still to be made. */
+export function tutorialAvailable(g: Game): boolean {
+  const world = g.world;
+  return world !== null && world.draft === undefined && (g.club !== null || userNation(world) >= 0);
+}
+
 /**
  * What the card must never sit on: what a step's target opens, and what the game asks of the player
  * on the way — a press conference's answers, a final's trophy and its Continue, a dialog.
@@ -488,7 +650,10 @@ export function TutorialOverlay(): JSX.Element | null {
   const g = useGame();
   const world = g.world;
   const index = world?.tutorial;
-  const step = index !== undefined ? TUTORIAL[index] : undefined;
+  // A club's, a national team's, or both — and nothing at all while a created club still drafts its
+  // squad: its screen is the draft, and a tutorial over it could neither be done nor get out of the way.
+  const tour = tourFor(g);
+  const step = index !== undefined && tutorialAvailable(g) ? tour[index] : undefined;
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [confirmSkip, setConfirmSkip] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -500,9 +665,9 @@ export function TutorialOverlay(): JSX.Element | null {
   const [review, setReview] = useState<number | null>(null);
   const reviewing = review !== null && review === index;
 
-  // A first career in this browser: the tutorial, once the manager has a club.
+  // A new career: the tutorial, once the manager has a team — and a created club its players.
   useEffect(() => {
-    if (g.welcomeOpen && g.club !== null && world !== null && world.tutorial === undefined) g.startTutorial();
+    if (g.welcomeOpen && tutorialAvailable(g) && world !== null && world.tutorial === undefined) g.startTutorial();
   });
 
   // Keep the spotlight on the target as the screen moves under it.
@@ -556,12 +721,12 @@ export function TutorialOverlay(): JSX.Element | null {
     if (g.tutorialStart.step !== index) g.markTutorialStart(index, step.snapshot?.(g) ?? '');
     if (reviewing) return;
     if (step.needs !== undefined && step.backTo !== undefined && !step.needs(g) && !(step.done?.(g, g.tutorialStart) ?? false)) {
-      const back = TUTORIAL.findIndex((s) => s.id === step.backTo);
+      const back = tour.findIndex((s) => s.id === step.backTo);
       if (back >= 0 && back < (index ?? 0)) g.tutorialGoTo(back);
       return;
     }
     if (step.done !== undefined && step.done(g, g.tutorialStart)) {
-      const t = setTimeout(() => (index + 1 < TUTORIAL.length ? g.tutorialGoTo(index + 1) : g.endTutorial()), 350);
+      const t = setTimeout(() => (index + 1 < tour.length ? g.tutorialGoTo(index + 1) : g.endTutorial()), 350);
       return () => clearTimeout(t);
     }
   });
@@ -590,7 +755,7 @@ export function TutorialOverlay(): JSX.Element | null {
   };
 
   if (world === null || step === undefined || index === undefined) return null;
-  const total = TUTORIAL.length;
+  const total = tour.length;
   const first = index === 0;
   const last = index === total - 1;
   const pad = 6;
@@ -617,7 +782,7 @@ export function TutorialOverlay(): JSX.Element | null {
       )}
       {hole !== null && <div className={`tut-hole${step.done !== undefined ? ' act' : ''}`} style={hole} />}
       {hole === null && shade && <div className="tut-shade" style={{ inset: 0 }} />}
-      <div ref={cardRef} className="tut-card" style={place} role="dialog" aria-label="Tutorial">
+      <div ref={cardRef} className="tut-card" style={place} role="dialog" aria-label="Tutorial" data-step={step.id}>
         <div className="tut-top">
           <span className="tut-chapter">{step.chapter}</span>
           <span className="tut-count">{index + 1} / {total}</span>
