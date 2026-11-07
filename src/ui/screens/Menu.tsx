@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { CoachPreview, type CoachPreviewHandle } from '../coachPreview.tsx';
+import { ConfirmDialog } from '../confirmDialog.tsx';
 import type { Kit } from '../figure3d.ts';
 import { LookEditor } from '../lookEditor.tsx';
 import { splashDue } from '../splash.tsx';
@@ -304,6 +305,7 @@ function Wizard({
 
 export function LoadGameList(): JSX.Element {
   const g = useGame();
+  const [deleting, setDeleting] = useState<(typeof g.saves)[number] | null>(null);
 
   useEffect(() => {
     void g.refreshSaves();
@@ -346,9 +348,7 @@ export function LoadGameList(): JSX.Element {
                         className="sm danger"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`Delete the save for ${s.managerName}?`)) {
-                            void g.deleteSave(s.id);
-                          }
+                          setDeleting(s);
                         }}
                       >
                         Delete
@@ -372,6 +372,17 @@ export function LoadGameList(): JSX.Element {
         </label>
       </div>
       {g.notice !== '' && <p className="menu-notice">{g.notice}</p>}
+      {deleting !== null && (
+        <ConfirmDialog
+          title="Delete career"
+          icon="save"
+          message={`Delete the save for ${deleting.managerName}?`}
+          detail="This cannot be undone. Export it first if you may want it back."
+          confirmLabel="Delete"
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => { void g.deleteSave(deleting.id); setDeleting(null); }}
+        />
+      )}
     </Wizard>
   );
 }

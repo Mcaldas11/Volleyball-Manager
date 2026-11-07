@@ -12,6 +12,7 @@ import {
 } from '../../engine/world/staffMarket.ts';
 import { contractEndSeason, seasonEndYear } from '../../engine/world/world.ts';
 import { Bar, Card, ClubCrest, Empty, Flag, money, Segmented, StatTile } from '../components.tsx';
+import { ConfirmDialog } from '../confirmDialog.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -144,12 +145,8 @@ function StaffRow({ s, first, rows }: { s: Staff; first: boolean; rows: number }
   const world = g.world!;
   const ends = contractEndSeason(s.contractUntil);
   const expiring = ends <= world.season;
-  const release = (): void => {
-    const cost = g.staffSeverance(s.id);
-    if (window.confirm(`Release ${staffName(s)}? ${cost > 0 ? `Paying up the rest of his contract costs ${money(cost)}.` : 'His contract is up, so it costs nothing.'}`)) {
-      g.releaseStaffMember(s.id);
-    }
-  };
+  /** What it would cost to let him go, while that is being asked. */
+  const [releasing, setReleasing] = useState<number | null>(null);
   const talks = g.staffTalksWith(s.id);
   return (
     <tr className={talks !== null ? 'selected' : undefined}>
@@ -169,8 +166,19 @@ function StaffRow({ s, first, rows }: { s: Staff; first: boolean; rows: number }
           <button className="sm icon-btn" title={talks !== null ? 'Contract talks' : 'Offer a new contract'} onClick={() => g.openStaffTalks(s.id)}><Icon name="contract" size={13} /></button>
           <button className={`sm icon-btn${s.listed === true ? ' on' : ''}`} title={s.listed === true ? 'Take him off the list' : 'Make him available — other clubs will come in for him'}
             onClick={() => g.toggleStaffListed(s.id)}><Icon name="transfers" size={13} /></button>
-          <button className="sm icon-btn danger" title="Release him — paying up his contract" onClick={release}><Icon name="close" size={13} /></button>
+          <button className="sm icon-btn danger" title="Release him — paying up his contract" onClick={() => setReleasing(g.staffSeverance(s.id))}><Icon name="close" size={13} /></button>
         </span>
+        {releasing !== null && (
+          <ConfirmDialog
+            title="Release staff member"
+            icon="user"
+            message={`Release ${staffName(s)}?`}
+            detail={releasing > 0 ? `Paying up the rest of his contract costs ${money(releasing)}.` : 'His contract is up, so it costs nothing.'}
+            confirmLabel="Release"
+            onCancel={() => setReleasing(null)}
+            onConfirm={() => { setReleasing(null); g.releaseStaffMember(s.id); }}
+          />
+        )}
       </td>
     </tr>
   );
