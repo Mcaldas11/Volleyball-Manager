@@ -10,6 +10,7 @@ import { abilityTimeline } from '../engine/world/abilityHistory.ts';
 import { seasonLabel } from './screens/Squad.tsx';
 import { useSize } from './screens/Analysis.tsx';
 import { useGame } from './state.ts';
+ 
 
 export function AbilityChart({ p, potential }: { p: number; potential?: number }): JSX.Element {
   const g = useGame();
