@@ -8,7 +8,8 @@
     "sync": "node scripts/sync.mjs",
     "dev": "npm run sync && vite",
     "build": "npm run sync && vite build",
-    "apk": "npm run build && node scripts/apk.mjs"
+    "apk": "npm run build && node scripts/apk.mjs",
+    "emulator": "scripts\\emulator.bat"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.0",
