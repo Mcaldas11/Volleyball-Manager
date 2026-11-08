@@ -1,0 +1,161 @@
+/*
+ * The phone's own layout, over the computer's stylesheet (src/ui/styles.css, copied in).
+ *
+ * The page is a computer's window, drawn smaller (screen.ts). On a tablet that is all; a phone's is
+ * about 470 px tall, so html.phone is a compact layout — a slimmer header and sidebar, tighter
+ * cards — where every screen still fits the screen, as on a computer: what does not fit scrolls
+ * inside its own panel.
+ */
+
+/* ---- Fingers: no hover to lean on, nothing to select by accident, no grey flash on a tap ---- */
+html { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+/* The search's keyboard shortcut means nothing without a keyboard. */
+.search-kbd { display: none; }
+.search-input { padding-right: 12px; }
+/* A second tap while the splash fades must not land on the menu under it (and start a career). */
+.splash.leaving { pointer-events: auto; }
+/* Dragging a blocker on the 3D court must move the blocker, not the page. */
+:is(.bp3-stage, .bp3-slim) canvas { touch-action: none; }
+
+/* ---- The sidebar: icons only ---- */
+html.phone .app { --side-w: 52px; }
+html.phone .sidebar .side-brand-text,
+html.phone .sidebar .side-item-label,
+html.phone .sidebar .side-manager-caret,
+html.phone .sidebar .side-group-label { display: none; }
+html.phone .side-brand { flex-direction: column; justify-content: center; height: auto; padding: 8px 0 4px; gap: 4px; }
+html.phone .side-item { justify-content: center; padding: 0; }
+html.phone .side-manager-btn { justify-content: center; padding: 4px 0; }
+html.phone .side-badge { position: absolute; top: 1px; right: 2px; min-width: 15px; height: 15px; padding: 0 4px; font-size: 9px; }
+html.phone .side-team-switch { flex: none; flex-direction: column; gap: 2px; margin: 3px 4px; padding: 2px; }
+html.phone .side-team-switch span { display: none; }
+html.phone .side-collapse,
+html.phone .side-history { display: none; }
+html.phone .menu-pop-up { right: auto; min-width: 220px; }
+/* Its items at a size a finger can hit — sliding, as the phone's height can't hold them all. */
+html.phone .side-nav { overflow-y: auto; scrollbar-width: none; }
+html.phone .side-nav::-webkit-scrollbar { display: none; }
+html.phone .side-group { flex: none; min-height: auto; }
+html.phone .side-item { flex: none; height: 34px; min-height: 34px; }
+
+/* ---- The header: one slim line ---- */
+html.phone .hdr-top { height: 50px; gap: 10px; padding: 0 10px; }
+html.phone .hdr-divider,
+html.phone .hdr-club-text > span,
+html.phone .search,
+html.phone .hdr-date-sub { display: none; }
+html.phone .hdr-h1 { font-size: 18px; }
+html.phone .hdr-tabs { gap: 18px; padding: 0 12px; }
+html.phone .hdr-tab { padding: 7px 0 8px; }
+html.phone .continue-main, html.phone .continue-more { height: 36px; }
+html.phone .continue-main { min-width: 120px; padding: 0 12px; }
+
+/* ---- Every screen fits ---- */
+html.phone .content { padding: 12px 14px; }
+/* A screen nobody has fitted still scrolls rather than cutting anything off. */
+html.phone .content-fill > .view-fade { overflow-y: auto; }
+html.phone .page-intro { display: none; }
+
+/* Home: the cards keep their rows; a card with more than its room scrolls inside. */
+html.phone .home-page { gap: 10px; }
+html.phone .home-page .hm-card { min-height: 0; overflow-y: auto; }
+html.phone .home-page .hm-card > * { flex-shrink: 0; }
+html.phone .home-page .hm-attrs { flex: none; grid-auto-rows: auto; margin-top: 8px; }
+
+/* A player's page: a slimmer header, the six figures on one line, the three columns side by side. */
+html.phone .profile-hero { padding: 8px 16px; margin-bottom: 8px; gap: 16px; }
+html.phone .profile-hero .player-face { width: 48px; height: 48px; }
+html.phone .profile-name { font-size: 24px; }
+html.phone .profile .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+html.phone .profile .tiles .stat-tile { padding: 6px 10px; }
+html.phone .content-fill .profile-grid {
+  grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) minmax(200px, 250px);
+  grid-template-rows: minmax(0, 1fr); gap: 10px; min-height: 0;
+}
+html.phone .content-fill .profile-grid > * { min-height: 0; overflow-y: auto; }
+html.phone .content-fill .profile-grid .card-body { min-height: 0; overflow-y: auto; }
+html.phone .content-fill .profile-grid .card-body > * { flex-shrink: 0; }
+html.phone .content-fill .profile-attrs .attr-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 14px; }
+
+/* Training: the week and the side cards scroll inside. */
+html.phone .tr-layout > * { min-height: 0; overflow-y: auto; }
+html.phone .tr-layout > * > * { flex-shrink: 0; }
+
+/* Finances and the like: the cards of a page side by side, filling what is left, scrolling inside. */
+html.phone .content-fill > .view-fade > .tiles { gap: 10px; margin-bottom: 10px; }
+html.phone .content-fill > .view-fade > .tiles .stat-tile { padding: 8px 12px; }
+html.phone .content-fill > .view-fade > .grid3 {
+  flex: 1 1 0; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: 10px;
+}
+html.phone .content-fill > .view-fade > :is(.grid2, .grid3) > .card { min-height: 0; overflow-y: auto; }
+
+/* Scouting: every filter on one line. */
+html.phone .filter-bar { grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 8px 10px; }
+html.phone .content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout, .staff-layout) { min-height: 0; }
+
+/* ---- The team sheet — the default one and the one before a match ----
+   A one-line bar above it, a court with a thinner frame and no row titles, and cards as big as the
+   height left allows; the liberos beside the court, the bench scrolling inside its card. */
+html.phone .lineup-bar { flex-wrap: nowrap; gap: 12px; padding: 6px 12px; }
+html.phone .lineup-bar-text { min-width: 0; }
+html.phone .lineup-bar-text .dim { display: none; }
+html.phone .md-banner { padding: 6px 14px; gap: 14px; }
+html.phone .md-setup { gap: 8px; }
+html.phone .md-strength { display: none; }
+html.phone .content-fill .lineup-page > .ts { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+html.phone :is(.lineup-page, .md-setup) .ts { gap: 10px; }
+html.phone :is(.lineup-page, .md-setup) .ts-main { container-type: size; flex-wrap: nowrap; align-items: center; gap: 10px; }
+html.phone :is(.lineup-page, .md-setup) .ts-main > * {
+  --card-h: clamp(90px, min((100cqh - 64px) / 2, (100cqi - 170px) / 4), 174px);
+  --card-w: calc(var(--card-h) * 0.8);
+}
+html.phone :is(.lineup-page, .md-setup) .ts-court {
+  padding: 18px 10px 8px; gap: 3px; margin: 10px;
+  outline-width: 10px; box-shadow: 0 0 0 12px rgba(0, 0, 0, 0.35);
+}
+html.phone :is(.lineup-page, .md-setup) .ts-row-label { display: none; }
+html.phone :is(.lineup-page, .md-setup) .ts-row { gap: 8px; }
+html.phone :is(.lineup-page, .md-setup) .ts-attack-line { width: calc(100% + 40px); margin: 3px 0; }
+html.phone :is(.lineup-page, .md-setup) .ts-liberos { flex-direction: row; gap: 8px; }
+html.phone :is(.lineup-page, .md-setup) .ts-libero { padding: 8px; gap: 4px; }
+html.phone :is(.lineup-page, .md-setup) .ts-libero-note { display: none; }
+html.phone :is(.lineup-page, .md-setup) .ts-bench { display: flex; flex-direction: column; min-height: 0; max-height: 100%; }
+html.phone :is(.lineup-page, .md-setup) .ts-bench-hint { display: none; }
+html.phone :is(.lineup-page, .md-setup) .ts-bench-list { flex: 1 1 auto; min-height: 0; max-height: none; }
+/* A small card keeps room for the name and the numbers: the photo gives way. */
+html.phone :is(.lineup-page, .md-setup) .lineup-card-photo { height: calc(100% - 36px); }
+html.phone :is(.lineup-page, .md-setup) .lineup-card-info { height: 32px; padding: 2px 6px 4px; gap: 1px; }
+html.phone :is(.lineup-page, .md-setup) .lineup-card:has(.lineup-card-select) .lineup-card-info { padding-right: 20px; }
+html.phone :is(.lineup-page, .md-setup) .lineup-card .lineup-card-select { bottom: 5px; right: 3px; }
+
+/* ---- Tactics: the zone court drawn smaller, the instruction cards scrolling beside it ---- */
+html.phone .tactics-page .tboard-body { gap: 10px; }
+html.phone .tactics-page .zcourt { zoom: 0.72; }
+html.phone .tactics-page .tboard-body > * { min-height: 0; max-height: 100%; overflow-y: auto; }
+/* An instruction's choices open under the cards, below the screen's edge: held in sight at the
+   foot of the column while open. */
+html.phone .tactics-page .tboard-pick {
+  position: sticky; bottom: 0; z-index: 2;
+  background: var(--surface-2); box-shadow: 0 -10px 18px -6px rgba(0, 0, 0, 0.8);
+}
+
+/* ---- The live match: the court gets the room ---- */
+html.phone .content-live { padding: 8px 10px; }
+html.phone .content-live > .view-fade:has(> .md-setup) { min-height: 0; overflow: hidden; }
+html.phone .lv-main { grid-template-columns: 180px minmax(0, 1fr) 180px; gap: 8px; }
+html.phone .lv-momentum { display: none; }
+html.phone .lv-top { gap: 2px; }
+html.phone .lv-points { font-size: 30px; }
+/* The side columns scroll inside, so their lower cards keep their size. */
+html.phone .lv-col { overflow-y: auto; }
+html.phone .lv-col > * { flex: none; }
+/* Every button the coach has, in one row that slides sideways rather than running off the screen. */
+html.phone .lv-coachbar { gap: 6px; padding: 5px 8px; overflow-x: auto; scrollbar-width: none; }
+html.phone .lv-coachbar::-webkit-scrollbar { display: none; }
+html.phone .lv-coachbar > * { flex: none; }
+html.phone .lv-coach-label { display: none; }
+
+/* ---- The tutorial's card: never taller than the screen ---- */
+html.phone .tut-card { max-height: calc(var(--app-h, 100vh) - 24px); overflow-y: auto; }

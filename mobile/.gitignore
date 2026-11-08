@@ -1,0 +1,10 @@
+# Copied in from the computer version by npm run sync — never edited here.
+/src/
+/public/
+# Built.
+node_modules/
+/dist/
+/release/
+# The key the app is signed with, and its passwords: kept on this computer only (back them up —
+# every update of the app must be signed with the same key).
+/keystore/

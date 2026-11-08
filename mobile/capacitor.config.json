@@ -1,0 +1,9 @@
+{
+  "appId": "com.miguelcaldas.volleyballmanager",
+  "appName": "Volleyball Manager",
+  "webDir": "dist",
+  "backgroundColor": "#04070d",
+  "android": {
+    "backgroundColor": "#04070d"
+  }
+}

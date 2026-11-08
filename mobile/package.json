@@ -1,0 +1,30 @@
+{
+  "name": "volleyball-manager-mobile",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Volleyball Manager for Android phones and tablets, held sideways.",
+  "scripts": {
+    "sync": "node scripts/sync.mjs",
+    "dev": "npm run sync && vite",
+    "build": "npm run sync && vite build",
+    "apk": "npm run build && node scripts/apk.mjs"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@types/three": "^0.170.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/core": "^7.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0"
+  }
+}
