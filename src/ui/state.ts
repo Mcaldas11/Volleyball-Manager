@@ -501,10 +501,25 @@ export interface ServeSubPlan {
   on: { middle: number; set: number } | null;
 }
 
+/**
+ * A reception specialist, planned: on for an outside once he is in the back row and the side is to receive
+ * — he serves himself first — and off for him again the moment the specialist comes round to the net.
+ */
+export interface ReceiveSubPlan {
+  /** The outside he comes on for, and the bench player who comes on to pass. */
+  hitter: number;
+  receiver: number;
+  armed: boolean;
+  /** While he is on: the set it was made in. */
+  on: { set: number } | null;
+}
+
 /** The user's planned substitutions — set up in the Substitutions panel, made by themselves when their moment comes. */
 export interface SubPlans {
   doubleSwitch: DoubleSwitchPlan | null;
   serveSub: ServeSubPlan | null;
+  /** Absent on matches from before it. */
+  receiveSub?: ReceiveSubPlan | null;
 }
 
 /** The tactic as it stood at kickoff — the side's, with its saved tactics and team sheet — to go back to once the match is over. */
@@ -4227,7 +4242,7 @@ class Game {
   planDoubleSwitch(setter: number | null, opposite: number | null): void {
     const md = this.matchday;
     if (md === null) return;
-    md.subPlans ??= { doubleSwitch: null, serveSub: null };
+    md.subPlans ??= { doubleSwitch: null, serveSub: null, receiveSub: null };
     const was = md.subPlans.doubleSwitch;
     if (setter === null || opposite === null) {
       // Called off: anything still on comes back as planned, nothing new is made.
@@ -4243,13 +4258,28 @@ class Game {
   planServeSub(server: number | null): void {
     const md = this.matchday;
     if (md === null) return;
-    md.subPlans ??= { doubleSwitch: null, serveSub: null };
+    md.subPlans ??= { doubleSwitch: null, serveSub: null, receiveSub: null };
     const was = md.subPlans.serveSub;
     if (server === null) {
       md.subPlans.serveSub = was?.on != null ? { ...was, armed: false } : null;
     } else {
       md.subPlans.serveSub = was?.on != null ? { ...was, armed: true } : { server, armed: true, on: null };
       this.warmUpForPlan([server]);
+    }
+    this.emit();
+  }
+
+  /** Plan a reception specialist for an outside — the outside and the passer to bring on for him — or, with null, call it off. */
+  planReceiveSub(hitter: number | null, receiver: number | null): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.subPlans ??= { doubleSwitch: null, serveSub: null, receiveSub: null };
+    const was = md.subPlans.receiveSub ?? null;
+    if (hitter === null || receiver === null) {
+      md.subPlans.receiveSub = was?.on != null ? { ...was, armed: false } : null;
+    } else {
+      md.subPlans.receiveSub = was?.on != null ? { ...was, armed: true } : { hitter, receiver, armed: true, on: null };
+      this.warmUpForPlan([receiver]);
     }
     this.emit();
   }
@@ -4279,6 +4309,15 @@ class Game {
       if (sim.subsRemaining(team) < 4) return 'Waiting — it needs 4 substitutions left this set, to switch back';
       return 'Armed — made as your setter reaches zone 4 with the opposite in zone 1';
     }
+    if (kind === 'receiveSub') {
+      const rs = plan as ReceiveSubPlan;
+      if (rs.on !== null) return `On — ${store.shortName(rs.hitter)} comes back as ${store.shortName(rs.receiver)} reaches the net`;
+      if (sim.subsRemaining(team) < 2) return 'Waiting — it needs 2 substitutions left this set';
+      // One of the two already swapped with someone else this set: it can't be made until the next.
+      const tied = [rs.hitter, rs.receiver].find((p) => { const q = sim.subPartnerOf(team, p); return q !== undefined && q !== rs.hitter && q !== rs.receiver; });
+      if (tied !== undefined) return `Waiting — ${store.shortName(tied)} swapped with someone else this set; made from the next`;
+      return `Armed — made once ${store.shortName(rs.hitter)} is in the back row and you are to receive`;
+    }
     const ss = plan as ServeSubPlan;
     if (ss.on !== null) return `On — ${store.shortName(ss.on.middle)} comes back once you lose the serve`;
     if (sim.subsRemaining(team) < 2) return 'Waiting — it needs 2 substitutions left this set';
@@ -4297,8 +4336,10 @@ class Game {
     // A new set starts from its team sheet: nothing planned is on any more.
     const ds = plans.doubleSwitch;
     const ss = plans.serveSub;
+    const rs = plans.receiveSub ?? null;
     if (ds?.on != null && ds.on.set !== snap.set) ds.on = null;
     if (ss?.on != null && ss.on.set !== snap.set) ss.on = null;
+    if (rs?.on != null && rs.on.set !== snap.set) rs.on = null;
 
     if (ds != null) {
       if (ds.on !== null) {
@@ -4337,6 +4378,30 @@ class Game {
           sim.subsRemaining(team) >= 2 + (plans.doubleSwitch?.on != null ? 2 : 0) &&
           this.planSwaps(team, [[middle, ss.server, Position.MiddleBlocker]], 'Serving sub')) {
           ss.on = { middle, set: now.set };
+        }
+      }
+    }
+
+    if (rs != null) {
+      const now = md.snapshot!;
+      const courtNow = team === 0 ? now.homeCourt : now.awayCourt;
+      if (rs.on !== null) {
+        // Round to the net: the outside back on for him.
+        const z = courtNow.indexOf(rs.receiver);
+        if (z >= 1 && z <= 3 &&
+          this.planSwaps(team, [[rs.receiver, rs.hitter, Position.OutsideHitter]], 'Reception sub — back on')) {
+          rs.on = null;
+          if (!rs.armed) plans.receiveSub = null;
+        }
+      } else if (rs.armed) {
+        // The outside in the back row, his serve gone, the side to receive: the specialist on to pass. Two to
+        // bring him on and off — and those the other plans on court still need to come back.
+        const z = courtNow.indexOf(rs.hitter);
+        const reserved = (plans.doubleSwitch?.on != null ? 2 : 0) + (plans.serveSub?.on != null ? 1 : 0);
+        if ((z === 0 || z >= 4) && now.serving !== team && sim.roles[rs.hitter] === Position.OutsideHitter &&
+          sim.subsRemaining(team) >= 2 + reserved &&
+          this.planSwaps(team, [[rs.hitter, rs.receiver, Position.OutsideHitter]], 'Reception sub')) {
+          rs.on = { set: now.set };
         }
       }
     }
@@ -4551,6 +4616,17 @@ class Game {
       }
     }
     return out;
+  }
+
+  /**
+   * Whoever this player of the user's side has swapped with this set — the one man he may still come on
+   * for — or undefined if he has been part of no substitution this set.
+   */
+  subPartner(p: number): number | undefined {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    if (md === null || sim === null) return undefined;
+    return sim.subPartnerOf(md.userIsHome ? 0 : 1, p);
   }
 
   /** Substitutions left this set for the user's own side — the engine resets this every set. */

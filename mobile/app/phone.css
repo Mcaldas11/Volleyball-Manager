@@ -201,3 +201,16 @@ html.phone .wizard .form-grid { gap: 8px 18px; }
 
 /* ---- The tutorial's card: never taller than the screen ---- */
 html.phone .tut-card { max-height: calc(var(--app-h, 100vh) - 24px); overflow-y: auto; }
+
+/* ---- Rotations: the play and the instructions side by side; the play's drawing shows who is where ---- */
+html.phone .content-fill > .view-fade > .rot-layout { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; }
+html.phone .rot-layout > .card:first-child { display: none; }
+html.phone .rot-plays { grid-column: auto; }
+html.phone .rot-bar { margin-bottom: 8px; }
+html.phone .play-picks { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+html.phone .play-pick { padding: 6px 2px; font-size: 10.5px; }
+html.phone .play-pick .play-diagram { display: none; }
+html.phone .play-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+html.phone .play-about b { font-size: 15px; }
+html.phone .play-about p { font-size: 11.5px; }
+html.phone .play-key { display: none; }

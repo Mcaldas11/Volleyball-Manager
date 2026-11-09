@@ -8293,3 +8293,64 @@ input:is([type="checkbox"], [type="radio"]) { width: 16px; height: 16px; min-wid
 .past-cups .card { min-height: 0; }
 tr.clickable { cursor: pointer; }
 tr.row-on td { background: var(--surface-3); }
+
+/* ---- Rotations: the combination each rotation runs, drawn (playDiagram.tsx) ---- */
+@media (min-width: 1181px) {
+  .rot-layout { grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1.1fr) minmax(280px, 1fr); }
+}
+@media (max-width: 1180px) {
+  .rot-plays { grid-column: 1 / -1; }
+}
+.rot-plays .card-body { display: flex; flex-direction: column; gap: 10px; }
+.play-picks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.play-pick {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 5px 4px 6px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); color: var(--text-dim);
+  font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center;
+}
+.play-pick:hover { border-color: var(--line-strong); color: var(--text); }
+.play-pick.on { border-color: var(--gold); color: #fff; box-shadow: 0 0 14px -6px rgba(255, 199, 44, 0.8); background: linear-gradient(180deg, rgba(255, 199, 44, 0.12), var(--surface-2)); }
+.play-pick.off { opacity: 0.5; }
+.play-pick span { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.play-main { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.play-about { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.play-about b { font: 700 18px/1.1 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; color: #fff; }
+.play-about p { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--text-dim); }
+.play-run { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.play-warn { color: var(--warn) !important; }
+.play-note { font-size: 11.5px !important; }
+.play-key { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; }
+.play-key span { display: inline-flex; align-items: center; gap: 5px; }
+.pd-key { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.pd-key.setter { border-color: var(--text-faint); border-top-style: dashed; }
+.pd-key.decoy { border-color: #fff; border-top-style: dashed; }
+.pd-key.hitter { border-color: var(--gold); }
+
+.play-diagram { display: block; width: 100%; height: auto; }
+.play-diagram .pd-court { fill: rgba(255, 255, 255, 0.03); stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }
+.play-diagram .pd-net { stroke: rgba(255, 255, 255, 0.85); stroke-width: 2.5; }
+.play-diagram .pd-attack { stroke: rgba(255, 255, 255, 0.28); stroke-width: 1; stroke-dasharray: 4 3; }
+.play-diagram .pd-arrow { fill: none; stroke-width: 2.2; stroke-linecap: round; }
+.play-diagram .pd-arrow.setter { stroke: var(--text-faint); stroke-width: 1.4; stroke-dasharray: 3 3; }
+.play-diagram .pd-arrow.decoy { stroke: #fff; stroke-dasharray: 5 3; }
+.play-diagram .pd-arrow.hitter { stroke: var(--gold); stroke-width: 2.8; }
+.play-diagram .pd-head.setter { fill: var(--text-faint); }
+.play-diagram .pd-head.decoy { fill: #fff; }
+.play-diagram .pd-head.hitter { fill: var(--gold); }
+.play-diagram .pd-player circle { fill: #10151f; stroke: rgba(255, 255, 255, 0.75); stroke-width: 1.4; }
+.play-diagram .pd-player.setter circle { fill: #fff; }
+.play-diagram .pd-player.moving circle { stroke: var(--gold); }
+.play-diagram .pd-player text { fill: #fff; font: 700 8.5px var(--font-body); }
+.play-diagram .pd-player.setter text { fill: #10151f; }
+.play-diagram.small .pd-arrow { stroke-width: 3.2; }
+.play-diagram.small .pd-player text { display: none; }
+.play-diagram.small .pd-player circle { r: 7; }
+.play-diagram.off { opacity: 0.55; }
+@media (max-width: 1500px) {
+  .rot-layout .rot-zone .player-face { display: none; }
+  .rot-layout .rot-zone { padding-top: 18px; }
+}
+/* The three cards take the height the window has left, each scrolling inside should it need more. */
+.content-fill > .view-fade > .rot-layout { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.content-fill > .view-fade > .rot-layout > .card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.content-fill > .view-fade > .rot-layout > .card > .card-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

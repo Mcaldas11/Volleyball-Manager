@@ -210,7 +210,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'rotations', chapter: 'Picking the team', title: 'Rotation by rotation',
-    body: 'Each of the six rotations can have its own preferred attacker, serve target and block — the setter at the net leaves only two attackers up front.',
+    body: 'Each of the six rotations can have its own combination play — the between, the up and down, the scissors, the pipe — and its own preferred attacker, serve target and block. The setter at the net leaves only two attackers up front.',
     todo: 'Open the Rotations tab.',
     target: '[data-tour="tab-rotations"]',
     needs: (g) => g.screen === 'tactics' || g.screen === 'rotations' || g.screen === 'lineup',

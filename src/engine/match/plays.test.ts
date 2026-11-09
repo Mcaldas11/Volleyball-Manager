@@ -184,3 +184,39 @@ test("a zone's plan is the coach's: the middle off a deep pass, or the opposite 
   for (const z of ['A', 'B', 'C'] as const) toOpp[z] = { ...toOpp[z], target: ZoneTarget.Opposite };
   assert.ok(share({ zones: toOpp }) > share({}) + 0.03, 'the opposite gets more of the ball');
 });
+
+test('a combination picked for each rotation is run there — by the hitter it is drawn for, the middle the decoy', () => {
+  const picked = (play: 'between' | 'upDown' | 'scissors' | 'pipe', middleRun?: 'tensa' | 'sete'): Partial<TeamTactics> => {
+    const t = defaultTactics();
+    for (const r of t.rotations) { r.play = play; r.middleRun = middleRun; }
+    return { rotations: t.rotations };
+  };
+  const roleOf = (p: number): Position => world.players.position[p] as Position;
+  const cases = [
+    { play: 'between', call: 'between', hitter: Position.OutsideHitter },
+    { play: 'upDown', call: 'upDown', hitter: Position.OutsideHitter },
+    { play: 'scissors', call: 'scissors', hitter: Position.Opposite },
+    { play: 'pipe', call: 'pipeQuick', hitter: Position.OutsideHitter },
+  ] as const;
+  for (const { play, call, hitter } of cases) {
+    const runs = attacks(picked(play, 'sete'), [1, 2, 3]).filter((c) => c.play === call);
+    // The pipe only when the outside is in zone 6 behind a middle at the net: two rotations in six.
+    assert.ok(runs.length >= (play === 'pipe' ? 3 : 8), `${play}: run ${runs.length} times`);
+    for (const c of runs) {
+      assert.equal(roleOf(c.player), hitter, `${play} hit by the ${hitter}`);
+      assert.ok(c.decoy !== undefined && roleOf(c.decoy) === Position.MiddleBlocker, `${play}: the middle the decoy`);
+      assert.ok(isCombination(c.play));
+      if (play === 'between' || play === 'scissors') assert.equal(c.run, 'sete', `${play}: the middle runs the sete`);
+    }
+  }
+  // Left to the setter, none of the three new ones is ever run.
+  assert.equal(attacks({}, [1, 2, 3]).filter((c) => c.play === 'between' || c.play === 'upDown' || c.play === 'scissors').length, 0);
+});
+
+test('a picked combination is run even by a side that runs no others', () => {
+  const t = defaultTactics();
+  for (const r of t.rotations) r.play = 'scissors';
+  const runs = attacks({ rotations: t.rotations, combinations: Combinations.Off }, [4, 5]);
+  assert.ok(runs.some((c) => c.play === 'scissors'), 'the scissors');
+  assert.equal(runs.filter((c) => c.play === 'x' || c.play === 'tandem' || c.play === 'shoot').length, 0, 'and none of the setter’s own');
+});

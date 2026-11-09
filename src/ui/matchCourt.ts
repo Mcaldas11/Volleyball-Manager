@@ -33,7 +33,7 @@
 
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
 import { SECOND_BALL, type RallyContact, type Shot } from '../engine/match/engine.ts';
-import { passZone, Tempo, type PlayCall } from '../engine/match/tactics.ts';
+import { passZone, Tempo, type MiddleRun, type PlayCall } from '../engine/match/tactics.ts';
 import {
   receivePlansOf, receiveSpots, SERVE_ZONE_U, serveKindOf, serveZoneFor, type ReceivePlans, type ServeKind as LineFacing,
   type ServerOrdersMap, type ServeStyle, type ServeZone,
@@ -273,12 +273,25 @@ const PLAY_POINT: Partial<Record<PlayCall, (lane: string | undefined) => Local &
   tandem: () => ({ u: 0.5, v: 0.09, setArc: 0.6 }),
   shoot: (lane) => ({ u: lane === 'Opposite' ? 0.9 : 0.1, v: 0.07, setArc: 0.55 }),
   pipeQuick: () => ({ u: 0.5, v: 0.36, setArc: 0.75 }),
+  // The coach's picked combinations: the outside in at the setter's head (the between), a half-ball
+  // just left of the middle's quick at the head (the up and down), the opposite crossed in to the head
+  // (the scissors).
+  between: () => ({ u: 0.6, v: 0.08, setArc: 0.5 }),
+  upDown: () => ({ u: 0.5, v: 0.08, setArc: 0.55 }),
+  scissors: () => ({ u: 0.6, v: 0.08, setArc: 0.5 }),
   // A fast, flat set out to the pin the hitter is on.
   fastSet: (lane) => ({ ...(HIT_POINT[lane ?? 'Outside'] ?? HIT_POINT.Outside), setArc: 0.7 }),
 };
 
 /** Where the middle jumps for the quick as the decoy. */
 const DECOY_POINT: Local = { u: 0.56, v: 0.07 };
+
+/** Where the decoy jumps in a picked combination: at the setter's head in the up and down, else the tensa or, further out, the sete. */
+function decoyPoint(play: PlayCall | undefined, run: MiddleRun | undefined): Local {
+  if (play === 'upDown') return { u: 0.62, v: 0.07 };
+  if (play === 'between' || play === 'scissors') return run === 'sete' ? { u: 0.4, v: 0.07 } : { u: 0.53, v: 0.07 };
+  return DECOY_POINT;
+}
 
 interface Team {
   /** Plays in the half closest to the camera. */
@@ -819,7 +832,7 @@ export function rallyBeats(
   // set it from where.
   let needsSet = false;
   // The middle going up for the quick as the decoy, as the next set goes out.
-  let decoyNext: number | null = null;
+  let decoyNext: { p: number; at: Local } | null = null;
   // The last attack: where it went and from where — for whoever digs it, or covers it.
   let lastAttack: { shot?: Shot; hu: number; team: 0 | 1; speed?: number; from: Ball3; land?: Landing } | null = null;
   let pass: { spot: ReturnType<typeof passSpot>; ms: number } | null = null;
@@ -915,10 +928,10 @@ export function rallyBeats(
     // The decoy runs in and jumps for the quick just as the setter takes it.
     const decoy = decoyNext;
     decoyNext = null;
-    if (decoy !== null && decoy !== setter && forms[t].has(decoy)) forms[t].set(decoy, { ...DECOY_POINT });
+    if (decoy !== null && decoy.p !== setter && forms[t].has(decoy.p)) forms[t].set(decoy.p, { ...decoy.at });
     push(air(t, spot.at, spot.z), setter >= 0 ? setter : null, ms, arc, [
       ...(setter >= 0 ? [[setter, bump ? 'pass' : 'set'] as [number, Pose]] : []),
-      ...(decoy !== null && decoy !== setter ? [[decoy, 'spike'] as [number, Pose]] : []),
+      ...(decoy !== null && decoy.p !== setter ? [[decoy.p, 'spike'] as [number, Pose]] : []),
     ]);
     needsSet = false;
     pass = null;
@@ -1078,7 +1091,7 @@ export function rallyBeats(
         const { f, hit, setArc: plainArc } = attackFormation(teams[t], c.player, dump ? undefined : c.detail, c.play);
         // As high as the side's tempo has it — a slow one gives the hitter, and the block, time.
         const setArc = dump ? plainArc : plainArc * teams[t].setHeight;
-        if (c.decoy !== undefined) decoyNext = c.decoy;
+        if (c.decoy !== undefined) decoyNext = { p: c.decoy, at: decoyPoint(c.play, c.run) };
         if (dump) {
           if (pass !== null) f.set(c.player, { u: pass.spot.at.u, v: 0.06 });
           if (pass !== null) hit.u = pass.spot.at.u;
@@ -1089,7 +1102,7 @@ export function rallyBeats(
           setterRun = null;
         } else if (needsSet) setBall(t, c.player, c.detail === 'Quick (middle)' || c.play !== undefined);
         // The decoy lands where he jumped, out of the hitter's way.
-        if (c.decoy !== undefined && c.decoy !== c.player) f.set(c.decoy, { u: DECOY_POINT.u, v: 0.16 });
+        if (c.decoy !== undefined && c.decoy !== c.player) f.set(c.decoy, { u: decoyPoint(c.play, c.run).u, v: 0.16 });
         // Whoever set stays where they set from, to cover.
         if (setFrom !== null && setFrom.p !== c.player) f.set(setFrom.p, { ...setFrom.at });
         setFrom = null;

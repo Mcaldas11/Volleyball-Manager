@@ -76,6 +76,12 @@ import {
   zonePlansOf,
   ZoneTarget,
   type TeamTactics,
+  type RotationTactics,
+  type RotationPlay,
+  type MiddleRun,
+  type PipeBall,
+  ROTATION_PLAY_CALL,
+  Combinations,
 } from './tactics.ts';
 import {
   newTeamStats,
@@ -99,6 +105,16 @@ const FAST_SET_BLOCK = 0.94;
  * rehearsed, it costs the timing instead (see the attack).
  */
 const COMBO_EDGE = 0.1;
+/** A combination the coach picked for a rotation is run this much more often than the side's others. */
+const PICKED_PLAY_PULL = 1.5;
+/**
+ * The lane each picked combination is hit from: the outside at the setter's head (the between), just left
+ * of the middle (the up and down), the opposite at the setter's head (the scissors), the outside from
+ * zone 6 (the pipe).
+ */
+const PLAY_HITTER_LANE: Readonly<Record<Exclude<RotationPlay, 'auto'>, number>> = {
+  between: AttackLane.OutsideHigh, upDown: AttackLane.SecondTempoOutside, scissors: AttackLane.OppositeRight, pipe: AttackLane.Pipe,
+};
 /** How much a setter–hitter pair's understanding (0-1, around a fair 0.5) puts the set on the hitter — see chemistry.ts. */
 const CHEMISTRY_SET = 0.14;
 const COMBO_BLOCK_EDGE = 0.07;
@@ -271,6 +287,10 @@ export interface RallyContact {
   /** The play the setter called for an attack — and, for a combination, the middle who jumped for the quick as the decoy. */
   play?: PlayCall;
   decoy?: number;
+  /** In the between and the scissors: where the decoy ran — the tensa or the sete. */
+  run?: MiddleRun;
+  /** In a picked pipe: which of its balls — to the left, in the middle, behind the setter. */
+  pipe?: PipeBall;
   /** How many went up to block it. */
   blockers?: number;
   /** Against a pin or the pipe: where the block set up — the coach's plan, or where it ended up when it read it wrong. */
@@ -1550,6 +1570,41 @@ export class MatchSimulator {
     return undefined;
   }
 
+  /**
+   * The combination the coach picked for this rotation, if the setter runs it on this ball: off a pass
+   * the zone's plan allows combinations from and good enough for one, as often as the side runs
+   * combinations — a little more, the coach having picked it — with the middle at the net to jump as
+   * the decoy and its hitter where it is hit from. Null: the setter's own choice, as ever.
+   */
+  private rotationPlay(
+    atk: TeamRuntime, rotTac: RotationTactics, setQuality: number, plan: ZonePlan,
+  ): { lane: number; call: PlayCall } | null {
+    const play = rotTac.play ?? 'auto';
+    if (play === 'auto' || !plan.combos || setQuality < 0.55) return null;
+    const middle = this.laneAttacker[AttackLane.QuickMiddle];
+    if (middle < 0) return null;
+    const lane = PLAY_HITTER_LANE[play];
+    if (play === 'pipe') {
+      // The pipe from wherever the outside stands in the back row — zone 5, 6 or 1 — if the zone's plan has the pipe on.
+      if (plan.backRow !== BackRowOption.Both && plan.backRow !== BackRowOption.Pipe) return null;
+      const pos = this.roles;
+      for (const z of [5, 4, 0]) {
+        const p = effectivePlayerAt(atk.court, z, pos, atk.liberoIdx, atk.onServe);
+        if (p >= 0 && pos[p] === Position.OutsideHitter) { this.laneAttacker[AttackLane.Pipe] = p; break; }
+      }
+    }
+    const hitter = this.laneAttacker[lane];
+    if (hitter < 0 || hitter === middle) return null;
+    // Only the hitter the play is drawn for: the outside for the between, the up and down and the pipe, the opposite for the scissors.
+    const want = play === 'scissors' ? Position.Opposite : Position.OutsideHitter;
+    if (this.roles[hitter] !== want) return null;
+    // Picked for this rotation, it is run even by a side that runs no others.
+    const runs = combinationsOf(atk.tactics);
+    const rate = Math.min(0.7, COMBINATION_PROFILE[runs === Combinations.Off ? Combinations.Some : runs].rate * PICKED_PLAY_PULL);
+    if (!this.rng.chance(rate)) return null;
+    return { lane, call: ROTATION_PLAY_CALL[play] };
+  }
+
   /** Who covers a hitter's recycled ball: the libero if he is on, else whoever is behind the hitter in the back row. */
   private coverFor(atk: TeamRuntime, attacker: number): number {
     const pos = this.roles;
@@ -1772,6 +1827,14 @@ export class MatchSimulator {
 
   subsRemaining(team: 0 | 1): number {
     return SUBS_PER_SET - this.subsUsedThisSet[team];
+  }
+
+  /**
+   * Whoever this player has swapped with this set — the only one he may now come on or go off for —
+   * or undefined if he hasn't been part of a substitution this set.
+   */
+  subPartnerOf(team: 0 | 1, p: number): number | undefined {
+    return this.subPairing[team].get(p);
   }
 
   /**
@@ -2341,7 +2404,10 @@ export class MatchSimulator {
     const setterZone = atk.court.indexOf(setter);
     const setterFront = this.roles[setter] === Position.Setter && setterZone >= 1 && setterZone <= 3;
     const middle = middleOptionFor(plan, setterFront);
-    const lane = this.chooseLane(atk, grade, rotTac, setQuality, setter, plan, middle);
+    const chosen = this.chooseLane(atk, grade, rotTac, setQuality, setter, plan, middle);
+    // The combination the coach picked for this rotation, run off a pass good enough for it.
+    const planned = chosen === -1 ? null : this.rotationPlay(atk, rotTac, setQuality, plan);
+    const lane = planned?.lane ?? chosen;
     if (lane === -1) {
       // No attacker available: send a free ball over and concede the initiative.
       this.push({ kind: 'freeball', team: attacking, player: setter });
@@ -2357,7 +2423,7 @@ export class MatchSimulator {
     // for the quick as the decoy. A combination beats the block if the side
     // has rehearsed it; if not, the timing goes, and the ball is hit off a
     // worse set.
-    const call = this.callPlay(atk, lane, setQuality, plan, middle, setterFront);
+    const call = planned?.call ?? this.callPlay(atk, lane, setQuality, plan, middle, setterFront);
     const combo = isCombination(call);
     const decoy = combo ? this.laneAttacker[AttackLane.QuickMiddle] : -1;
     const rehearsed = atk.prep.combinations ?? 0;
@@ -2496,7 +2562,10 @@ export class MatchSimulator {
     );
     // What every contact of this attack says about it.
     const tags = {
-      play: call, decoy: decoy >= 0 ? decoy : undefined, blockers: blockCount,
+      play: call, decoy: decoy >= 0 ? decoy : undefined,
+      run: planned !== null && (call === 'between' || call === 'scissors') ? rotTac.middleRun ?? 'tensa' : undefined,
+      pipe: planned !== null && call === 'pipeQuick' ? rotTac.pipeBall ?? 'middle' : undefined,
+      blockers: blockCount,
       ...(target !== null ? { blockFocus: lean > 0.33 ? 'line' as const : lean < -0.33 ? 'cross' as const : 'read' as const } : {}),
       ...(lateMiddle ? { lateMiddle: true } : {}),
       ...(misread ? { misread: true } : {}),

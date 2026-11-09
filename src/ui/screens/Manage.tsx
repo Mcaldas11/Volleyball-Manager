@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import { receiveLineOf } from '../../engine/match/receiveLine.ts';
-import type { ReceptionFormation } from '../../engine/match/tactics.ts';
+import type { MiddleRun, ReceptionFormation, RotationPlay, RotationTactics } from '../../engine/match/tactics.ts';
 import {
-  BlockAssignment, Combinations, DefensiveShape, DefensiveSystem, Formation, OffensiveSystem,
-  ServeStrategy, ServeTarget, Tempo,
+  BlockAssignment, Combinations, DefensiveShape, DefensiveSystem, Formation, formationOf, lineupSlotPositions,
+  MIDDLE_RUN_NAMES, OffensiveSystem, playHasMiddleRun, ROTATION_PLAY_NAMES, ROTATION_PLAYS, ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
 import {
-  MAX_SQUAD, POSITION_NAMES, POSITION_SHORT, POSITIONS, type Position,
+  MAX_SQUAD, POSITION_NAMES, POSITION_SHORT, POSITIONS, Position,
 } from '../../engine/model/positions.ts';
+import { PlayDiagram, playDescription, playUnavailable, type PlayCast } from '../playDiagram.tsx';
 import { buildScoutReport, formatEstimate, totalMatchesWatched } from '../../engine/world/scouting.ts';
 import { clubBooks } from '../../engine/season/books.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
@@ -166,6 +167,13 @@ export function RotationsScreen(): JSX.Element {
   const zoneOrder = [3, 2, 1, 4, 5, 0]; // display order: 4,3,2 front then 5,6,1 back
   const zoneLabels = ['1', '2', '3', '4', '5', '6'];
   const setterFront = rot >= 1 && rot <= 3;
+  // What each zone's man plays — his slot's position — the libero in for the middle in the back row.
+  const slots = lineupSlotPositions(formationOf(tactics));
+  const zoneRoles = Array.from({ length: 6 }, (_, z) => {
+    const role = slots[(z - rot + 6) % 6];
+    const back = z === 0 || z >= 4;
+    return back && role === Position.MiddleBlocker && (selection.libero ?? -1) >= 0 ? Position.Libero : role;
+  });
 
   return (
     <>
@@ -212,6 +220,8 @@ export function RotationsScreen(): JSX.Element {
             libero may not serve — and the moment the serve is lost the libero comes on for him.
           </p>
         </Card>
+
+        <PlayCard rotation={r} cast={{ roles: zoneRoles }} rot={rot} onChange={() => g.touch()} />
 
         <Card title={`Instructions for P${rot + 1}`} icon="whistle">
           <ChoiceField
@@ -268,6 +278,65 @@ export function RotationsScreen(): JSX.Element {
         </Card>
       </div>
     </>
+  );
+}
+
+/**
+ * The combination a rotation runs, picked off the coach's clipboard: each play drawn for this rotation's
+ * men — the setter, the middle as the decoy, the hitter — and, for the between and the scissors, where
+ * the middle runs.
+ */
+function PlayCard({ rotation, cast, rot, onChange }: {
+  rotation: RotationTactics; cast: PlayCast; rot: number; onChange: () => void;
+}): JSX.Element {
+  const play = rotation.play ?? 'auto';
+  const run = rotation.middleRun ?? 'tensa';
+  const why = playUnavailable(play, cast);
+  const pick = (p: RotationPlay): void => {
+    rotation.play = p === 'auto' ? undefined : p;
+    onChange();
+  };
+  return (
+    <Card title={`Combination play — P${rot + 1}`} icon="tactics" className="rot-plays">
+      <div className="play-picks" role="radiogroup" aria-label="Combination play">
+        {ROTATION_PLAYS.map((p) => {
+          const off = playUnavailable(p, cast);
+          return (
+            <button key={p} role="radio" aria-checked={p === play} className={`play-pick${p === play ? ' on' : ''}${off !== null ? ' off' : ''}`}
+              title={off ?? playDescription(p, run)} onClick={() => pick(p)}>
+              <PlayDiagram play={p} run={run} cast={cast} small />
+              <span>{ROTATION_PLAY_NAMES[p]}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="play-main">
+        <PlayDiagram play={play} run={run} cast={cast} />
+        <div className="play-about">
+          <b>{ROTATION_PLAY_NAMES[play]}</b>
+          <p>{playDescription(play, run)}</p>
+          {playHasMiddleRun(play) && (
+            <div className="play-run">
+              <span className="faint">The middle runs</span>
+              <Segmented<MiddleRun> size="sm" value={run}
+                options={(['tensa', 'sete'] as const).map((m) => [m, MIDDLE_RUN_NAMES[m]] as const)}
+                onChange={(m) => { rotation.middleRun = m === 'tensa' ? undefined : m; onChange(); }} />
+            </div>
+          )}
+          {why !== null && (
+            <p className="play-warn"><Icon name="alert" size={13} /> <span>{why}</span> <span>{`Not run in P${rot + 1}: the setter's choice instead.`}</span></p>
+          )}
+          {play !== 'auto' && why === null && (
+            <p className="faint play-note">Run off a good pass, a little more often than the side's other combinations — even with them off.</p>
+          )}
+        </div>
+      </div>
+      <div className="play-key faint">
+        <span><i className="pd-key setter" /> Setter</span>
+        <span><i className="pd-key decoy" /> Middle, the decoy</span>
+        <span><i className="pd-key hitter" /> Hitter</span>
+      </div>
+    </Card>
   );
 }
 

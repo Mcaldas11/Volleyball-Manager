@@ -2143,7 +2143,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
           </p>
         </div>
 
-        {mode === 'planned' && userSide ? <PlannedSubs bench={bench} roles={roles} /> : (<>
+        {mode === 'planned' && userSide ? <PlannedSubs bench={bench} roles={roles} onCourt={onCourt} /> : (<>
         <div className="sub-cols">
           <div className="sub-col">
             <div className="section-label">On court — pick who comes off</div>
@@ -2269,8 +2269,8 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
 }
 
 /** How many planned substitutions are set up, armed or on. */
-function plannedCount(md: { subPlans?: { doubleSwitch: unknown; serveSub: unknown } }): number {
-  return Number(md.subPlans?.doubleSwitch != null) + Number(md.subPlans?.serveSub != null);
+function plannedCount(md: { subPlans?: { doubleSwitch: unknown; serveSub: unknown; receiveSub?: unknown } }): number {
+  return Number(md.subPlans?.doubleSwitch != null) + Number(md.subPlans?.serveSub != null) + Number(md.subPlans?.receiveSub != null);
 }
 
 /** A bench player's serve, 1-20: his best kind of serve, with its accuracy and power. */
@@ -2283,17 +2283,22 @@ function serveRating(store: PlayerStore, p: number): number {
  * The planned substitutions: a double switch, and a serving specialist for the middles — each picked
  * once, and made by itself when its moment comes, as a coach has them ready on his clipboard.
  */
-function PlannedSubs({ bench, roles }: { bench: number[]; roles: Uint8Array }): JSX.Element {
+function PlannedSubs({ bench: allBench, roles, onCourt }: { bench: number[]; roles: Uint8Array; onCourt: number[] }): JSX.Element {
   const g = useGame();
   const md = g.matchday!;
   const store = g.world!.players;
   const ds = md.subPlans?.doubleSwitch ?? null;
   const ss = md.subPlans?.serveSub ?? null;
-  // A player can be in one plan only: each leaves out whoever the other has planned.
+  const rs = md.subPlans?.receiveSub ?? null;
+  // One who has come off this set can only come back for whoever replaced him: no plan can bring him
+  // on for anyone else, so none offers him.
+  const cameOff = allBench.filter((p) => g.subPartner(p) !== undefined);
+  const bench = allBench.filter((p) => g.subPartner(p) === undefined);
+  // A player can be in one plan only: each leaves out whoever the others have planned.
   const inSwitch = new Set(ds !== null ? [ds.setter, ds.opposite] : []);
   // Anyone on the bench may come on to set, and anyone to hit at opposite — his own position or
   // not, playing it as well as he can: those who play it first, then the rest by how they set or hit.
-  const free = bench.filter((p) => p !== ss?.server);
+  const free = bench.filter((p) => p !== ss?.server && p !== rs?.receiver);
   const byFit = (role: Position, attr: AttributeName) => (a: number, b: number): number =>
     Number(roles[b] === role) - Number(roles[a] === role) || store.getAttr(b, attr) - store.getAttr(a, attr);
   const setters = [...free].sort(byFit(Position.Setter, 'setting'));
@@ -2310,9 +2315,19 @@ function PlannedSubs({ bench, roles }: { bench: number[]; roles: Uint8Array }): 
     setOpposite(p);
   };
   const picked = new Set(ds !== null ? inSwitch : [setter, opposite]);
-  const servers = bench.filter((p) => !picked.has(p) || p === ss?.server).sort((a, b) => serveRating(store, b) - serveRating(store, a));
+  const servers = bench.filter((p) => (!picked.has(p) && p !== rs?.receiver) || p === ss?.server)
+    .sort((a, b) => serveRating(store, b) - serveRating(store, a));
   const [server, setServer] = useState<number | null>(ss?.server ?? null);
   const serverPick = server !== null && servers.includes(server) ? server : servers[0] ?? null;
+  // The reception specialist: on for an outside on court — or, while he is on, the outside he came on for.
+  // Not one who has already swapped with someone this set: he can only go off for that man.
+  const hitters = rs?.on != null ? [rs.hitter] : onCourt.filter((p) => roles[p] === Position.OutsideHitter && g.subPartner(p) === undefined);
+  const [hitter, setHitter] = useState<number | null>(rs?.hitter ?? null);
+  const hitterPick = hitter !== null && hitters.includes(hitter) ? hitter : hitters[0] ?? null;
+  const receivers = bench.filter((p) => (!picked.has(p) && p !== serverPick && p !== ss?.server) || p === rs?.receiver)
+    .sort((a, b) => store.getAttr(b, 'reception') - store.getAttr(a, 'reception'));
+  const [receiver, setReceiver] = useState<number | null>(rs?.receiver ?? null);
+  const receiverPick = receiver !== null && receivers.includes(receiver) ? receiver : receivers[0] ?? null;
   const who = (p: number, extra?: string): { value: number; label: string } => ({
     value: p, label: `${store.shortName(p)} · ${POSITION_SHORT[roles[p] as Position]}${extra ?? ''}`,
   });
@@ -2379,6 +2394,45 @@ function PlannedSubs({ bench, roles }: { bench: number[]; roles: Uint8Array }): 
         </div>
         <footer className="subplan-foot faint">{g.subPlanStatus('serveSub')}</footer>
       </section>
+
+      <section className="subplan-card" title="An outside in the back row, the side to receive: a passer on for him — off again as soon as he reaches the net.">
+        <header className="subplan-head">
+          <Icon name="user" size={15} /> <b>Reception sub for an outside</b>{state(rs)}
+          {rs?.armed === true
+            ? <button className="sm" onClick={() => g.planReceiveSub(null, null)}>Call off</button>
+            : <button className="sm primary" disabled={hitterPick === null || receiverPick === null} onClick={() => g.planReceiveSub(hitterPick, receiverPick)}>
+              <Icon name="check" size={13} /> Plan it
+            </button>}
+        </header>
+        <p className="field-hint" title="Two substitutions each time: on as the outside goes back to receive, off as the passer reaches the net.">
+          Your outside in the back row, the side to receive: a passer on for him, only to take the serve — off for him
+          again as soon as he reaches the net. Two substitutions each time.
+        </p>
+        <div className="subplan-picks">
+          <label className="subplan-pick">
+            <span>For the outside</span>
+            {hitters.length === 0 ? <span className="faint">No outside on court</span> : (
+              <Dropdown size="sm" value={hitterPick} onChange={setHitter} disabled={rs?.armed === true}
+                options={hitters.map((p) => who(p, ` · attack ${store.getAttr(p, 'spikeTechnique')}`))} />
+            )}
+          </label>
+          <label className="subplan-pick">
+            <span>Passer on</span>
+            {receivers.length === 0 ? <span className="faint">Nobody on the bench</span> : (
+              <Dropdown size="sm" value={receiverPick} onChange={setReceiver} disabled={rs?.armed === true}
+                options={receivers.map((p) => who(p, ` · reception ${store.getAttr(p, 'reception')}`))} />
+            )}
+          </label>
+        </div>
+        <footer className="subplan-foot faint">{g.subPlanStatus('receiveSub')}</footer>
+      </section>
+
+      {cameOff.length > 0 && (
+        <p className="field-hint subplan-off">
+          Not offered: {cameOff.map((p) => store.shortName(p)).join(', ')} — off this set, each can only come back
+          for whoever replaced him.
+        </p>
+      )}
     </div>
   );
 }

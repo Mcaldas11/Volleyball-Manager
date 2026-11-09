@@ -61,6 +61,9 @@ const PLAY_CALLOUTS: Partial<Record<PlayCall, readonly string[]>> = {
   tandem: ['TANDEM!'],
   shoot: ['SHOOT!', 'TOO FAST!'],
   pipeQuick: ['PIPE!'],
+  between: ['BETWEEN!', 'RIGHT BETWEEN THEM!'],
+  upDown: ['UP AND DOWN!'],
+  scissors: ['SCISSORS!', 'CROSSED THEM UP!'],
 };
 
 function pick(options: readonly string[]): string {
