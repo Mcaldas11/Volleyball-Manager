@@ -7,8 +7,11 @@
  * inside its own panel.
  */
 
+/* ---- An iPhone's notch, at one side when held sideways: the game kept clear of it (0 elsewhere) ---- */
+body { box-sizing: border-box; padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
+
 /* ---- Fingers: no hover to lean on, nothing to select by accident, no grey flash on a tap ---- */
-html { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+html { -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
 input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
 /* The search's keyboard shortcut means nothing without a keyboard. */
@@ -95,6 +98,18 @@ html.phone .content-fill > .view-fade > :is(.grid2, .grid3) > .card { min-height
 html.phone .filter-bar { grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 8px 10px; }
 html.phone .content-fill :is(.scout-layout, .club-grid, .profile-grid, .fixtures-layout, .staff-layout) { min-height: 0; }
 
+/* ---- The default team sheet on a tablet (the computer's layout): it takes the height left under its
+   bar, the cards as big as that allows, the liberos side by side, the bench scrolling inside ---- */
+.content-fill .lineup-page > .ts { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+.content-fill .lineup-page .ts-main { container-type: size; flex-wrap: nowrap; align-items: center; }
+.content-fill .lineup-page .ts-main > * {
+  --card-h: clamp(84px, min((100cqh - 170px) / 2, (100cqi - 240px) / 3.565), 174px);
+  --card-w: calc(var(--card-h) * 0.713);
+}
+.content-fill .lineup-page .ts-liberos { flex-direction: row; }
+.content-fill .lineup-page .ts-bench { display: flex; flex-direction: column; min-height: 0; max-height: 100%; }
+.content-fill .lineup-page .ts-bench-list { flex: 1 1 auto; min-height: 0; max-height: none; }
+
 /* ---- The team sheet — the default one and the one before a match ----
    A one-line bar above it, a court with a thinner frame and no row titles, and cards as big as the
    height left allows; the liberos beside the court, the bench scrolling inside its card. */
@@ -157,31 +172,32 @@ html.phone .lv-coachbar::-webkit-scrollbar { display: none; }
 html.phone .lv-coachbar > * { flex: none; }
 html.phone .lv-coach-label { display: none; }
 
-/* ---- A new career's pages: tighter, so Back and Continue sit on the screen ---- */
+/* ---- A new career's pages: the screen's height (a tablet's too), Back and Continue always on it ---- */
 /* The page is the screen's height; what a page holds more of slides inside it, and Back and Continue
    stay at its foot. */
-html.phone .wizard-page { height: var(--app-h, 100vh); min-height: 0; display: flex; flex-direction: column; padding: 10px 20px 0; overflow: hidden; }
-html.phone .wizard-page > .wizard { flex: 1 1 0; min-height: 0; width: 100%; display: flex; flex-direction: column; overflow-y: auto; }
-html.phone .wizard > * { flex-shrink: 0; }
+.wizard-page { height: var(--app-h, 100vh); min-height: 0; display: flex; flex-direction: column; padding: 28px 24px 0; overflow: hidden; }
+html.phone .wizard-page { padding: 10px 20px 0; }
+.wizard-page > .wizard { flex: 1 1 0; min-height: 0; width: 100%; display: flex; flex-direction: column; overflow-y: auto; }
+.wizard > * { flex-shrink: 0; }
 html.phone .wizard-top { margin-bottom: 8px; }
 html.phone .wizard-title { font-size: 24px; }
 html.phone .wizard-sub { display: none; }
 html.phone .wizard .card-head { padding-top: 10px; padding-bottom: 6px; }
 html.phone .wizard .form-grid { gap: 8px 18px; }
-html.phone .wizard-actions { position: sticky; bottom: 0; z-index: 3; margin-top: auto; padding: 8px 0 10px; background: var(--bg); }
+.wizard-actions { position: sticky; bottom: 0; z-index: 3; margin-top: auto; padding: 8px 0 10px; background: var(--bg); }
 /* Your look: the figure beside its options, the options sliding inside their card. */
-html.phone .look-editor { flex: 1 1 0; min-height: 0; margin-top: 6px; }
-html.phone .look-editor > .card { min-height: 0; max-height: 100%; overflow-y: auto; }
+.look-editor { flex: 1 1 0; min-height: 0; margin-top: 6px; }
+.look-editor > .card { min-height: 0; max-height: 100%; overflow-y: auto; }
 /* Choose a club: the clubs beside the one picked, the clubs sliding inside their card. */
-html.phone .club-select {
+.club-select {
   flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 290px);
   grid-template-rows: minmax(0, 1fr); gap: 10px; margin-bottom: 10px;
 }
-html.phone .club-select > .card { min-height: 0; max-height: 100%; }
-html.phone .club-select > .club-browser { display: flex; flex-direction: column; overflow: hidden; }
-html.phone .club-select > .club-browser > * { flex-shrink: 0; }
-html.phone .club-select > .club-browser > :last-child { flex: 1 1 0; min-height: 0; overflow-y: auto; }
-html.phone .club-select > .club-preview { overflow-y: auto; }
+.club-select > .card { min-height: 0; max-height: 100%; }
+.club-select > .club-browser { display: flex; flex-direction: column; overflow: hidden; }
+.club-select > .club-browser > * { flex-shrink: 0; }
+.club-select > .club-browser > :last-child { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.club-select > .club-preview { overflow-y: auto; }
 
 /* ---- The tutorial's card: never taller than the screen ---- */
 html.phone .tut-card { max-height: calc(var(--app-h, 100vh) - 24px); overflow-y: auto; }

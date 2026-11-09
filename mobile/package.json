@@ -3,12 +3,13 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Volleyball Manager for Android phones and tablets, held sideways.",
+  "description": "Volleyball Manager for phones and tablets (Android and iPhone/iPad), held sideways.",
   "scripts": {
     "sync": "node scripts/sync.mjs",
     "dev": "npm run sync && vite",
     "build": "npm run sync && vite build",
     "apk": "npm run build && node scripts/apk.mjs",
+    "ios": "npm run build && cap sync ios",
     "emulator": "scripts\\emulator.bat"
   },
   "devDependencies": {
@@ -24,6 +25,7 @@
   "dependencies": {
     "@capacitor/android": "^7.4.0",
     "@capacitor/core": "^7.4.0",
+    "@capacitor/ios": "^7.6.10",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.170.0"

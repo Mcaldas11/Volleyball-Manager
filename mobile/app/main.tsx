@@ -12,8 +12,10 @@ import './phone.css';
 import { startLanguage } from '../src/ui/language.ts';
 import { applyPreferences, loadPreferences } from '../src/ui/preferences.ts';
 import { watchScreen } from './screen.ts';
+import { keepTutorialOnScreen } from './keepTutorialOnScreen.ts';
 
 watchScreen();
+keepTutorialOnScreen();
 applyPreferences(loadPreferences());
 startLanguage();
 

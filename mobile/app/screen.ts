@@ -30,7 +30,8 @@ function fitViewport(): void {
     document.head.appendChild(meta);
   }
   // Only the width: the app (MainActivity.java) draws a page that wide to fit its own width exactly.
-  const content = `width=${width}, user-scalable=no`;
+  // viewport-fit=cover: drawn edge to edge, phone.css keeping the game clear of an iPhone's notch.
+  const content = `width=${width}, user-scalable=no, viewport-fit=cover`;
   if (meta.content !== content) meta.content = content;
   document.documentElement.classList.toggle('phone', phone);
 }
