@@ -23,21 +23,24 @@ test('everyone starts a match on 6.0, and stays within 1-10', () => {
   assert.ok(bad < 5 && bad >= 1, `a disastrous match rates poorly (${bad})`);
 });
 
-test('an ordinary night ends a little above 6, a great one is rare, a 9 rarer still — the same on both engines', () => {
+test('an ordinary night ends in the yellow, around 6.6, a good one past 7, an 8 rare and a 9 rarer still — the same on both engines', () => {
   const report = runRatingReport(80, 77);
   for (const samples of [report.detailed, report.quick]) {
     const all = [...samples.values()].flatMap((s) => s.ratings).sort((a, b) => a - b);
     const mean = all.reduce((s, x) => s + x, 0) / all.length;
     const sd = Math.sqrt(all.reduce((s, x) => s + (x - mean) ** 2, 0) / all.length);
-    assert.ok(mean > 6.05 && mean < 6.5, `a little above 6 (${mean.toFixed(2)})`);
+    assert.ok(mean > 6.45 && mean < 6.8, `around 6.6 (${mean.toFixed(2)})`);
     assert.ok(sd > 0.6 && sd < 1.1, `spread ${sd.toFixed(2)}`);
-    assert.ok(all[Math.floor(all.length * 0.95)] <= 8.2, 'nineteen in twenty under 8.2');
-    assert.ok(all.filter((r) => r >= 8).length / all.length < 0.08, 'an 8 is a night to remember');
+    assert.ok(all[Math.floor(all.length * 0.95)] <= 8.3, 'nineteen in twenty under 8.3');
+    assert.ok(all.filter((r) => r >= 8).length / all.length < 0.1, 'an 8 is a night to remember');
+    // A good night is no rarity: a fair share of players end it in the green.
+    const green = all.filter((r) => r >= 7).length / all.length;
+    assert.ok(green > 0.2 && green < 0.45, `past 7: ${(green * 100).toFixed(0)}%`);
     assert.ok(all.filter((r) => r >= 9).length / all.length < 0.01);
     // Every position on the same footing.
     for (const s of samples.values()) {
       const m = s.ratings.reduce((a, b) => a + b, 0) / s.ratings.length;
-      assert.ok(Math.abs(m - 6.25) < 0.3, `a position averages ${m.toFixed(2)}`);
+      assert.ok(Math.abs(m - 6.6) < 0.3, `a position averages ${m.toFixed(2)}`);
     }
   }
 });

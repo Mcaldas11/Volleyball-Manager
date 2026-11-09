@@ -32,11 +32,14 @@ import type { PlayerMatchStats } from './stats.ts';
 /** Where every player starts a match, and where an unremarkable one ends it. */
 export const NEUTRAL_RATING = 6.0;
 
-/** Where each colour band of the scale starts: a standout night is one in twenty-five, a great one one in seven. */
-export const RATING_BANDS = { star: 8.0, great: 7.2, good: 6.6, ok: 6.0, poor: 5.3 } as const;
+/**
+ * Where each colour band of the scale starts: blue from 8 (a night to remember), green from 7 (a good one),
+ * yellow from 6.5 (an ordinary one), orange from 6 — and red below it.
+ */
+export const RATING_BANDS = { star: 8.0, good: 7.0, ok: 6.5, poor: 6.0 } as const;
 
-/** Where an ordinary full match ends — a little above the 6.0 everyone starts on. */
-export const TYPICAL_RATING = 6.3;
+/** Where an ordinary full match ends — in the yellow, a little above the 6.0 everyone starts on. */
+export const TYPICAL_RATING = 6.6;
 
 /** Which engine a match was played through: the full rally engine, or the background quick-sim. */
 export type RatingPath = 'full' | 'quick';
@@ -55,18 +58,18 @@ const EVIDENCE_HALF = 22;
  */
 const POSITION_BASELINE: Readonly<Record<RatingPath, Readonly<Record<Position, number>>>> = {
   full: {
-    [Position.Setter]: 1.89,
-    [Position.Opposite]: 2.68,
-    [Position.OutsideHitter]: 1.76,
-    [Position.MiddleBlocker]: 1.93,
-    [Position.Libero]: 2.51,
+    [Position.Setter]: 2.76,
+    [Position.Opposite]: 2.99,
+    [Position.OutsideHitter]: 1.75,
+    [Position.MiddleBlocker]: 1.8,
+    [Position.Libero]: 3.54,
   },
   quick: {
-    [Position.Setter]: 1.78,
-    [Position.Opposite]: 2.62,
-    [Position.OutsideHitter]: 2.62,
-    [Position.MiddleBlocker]: 2.18,
-    [Position.Libero]: 3.14,
+    [Position.Setter]: 2.02,
+    [Position.Opposite]: 2.52,
+    [Position.OutsideHitter]: 2.66,
+    [Position.MiddleBlocker]: 2.11,
+    [Position.Libero]: 4.3,
   },
 };
 
@@ -103,23 +106,25 @@ const RATING_REACH = 3.6;
 const RAMP_RALLIES = 90;
 
 /** What playing a full match the ordinary way is worth in itself: it ends a little above 6.0. */
-const COURT_LIFT = 0.25;
+const COURT_LIFT = 0.6;
 
 /** Total value of one stat line, before any normalisation. */
 export function ratingValue(s: PlayerMatchStats): number {
   return (
-    s.attackKills * 1.0
-    + s.serveAces * 1.3
-    + s.blockPoints * 1.3
-    + s.blockTouches * 0.25
+    // A point is worth a lot — but not everything: the pass, the dig, the touch on the block and the
+    // errors a hitter makes count too, so the top scorer is not always the best player on the night.
+    s.attackKills * 0.85
+    + s.serveAces * 1.15
+    + s.blockPoints * 1.15
+    + s.blockTouches * 0.35
     - s.attackErrors * 1.1
     - s.attackBlocked * 0.9
-    - s.serveErrors * 0.7
+    - s.serveErrors * 0.6
     - s.receptionErrors * 1.1
-    + s.receptionPerfect * 0.35
-    + s.receptionPositive * 0.15
+    + s.receptionPerfect * 0.45
+    + s.receptionPositive * 0.2
     - s.receptionPoor * 0.3
-    + s.digsTotal * 0.35
+    + s.digsTotal * 0.45
     - s.digErrors * 0.5
     + s.setAssists * 0.12
     - s.setErrors * 1.1

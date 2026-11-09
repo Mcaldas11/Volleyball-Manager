@@ -1130,7 +1130,7 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .rating-lg { min-width: 52px; padding: 3px 10px; font-size: 22px; border-radius: 7px; }
 .rt-star { background: #4f9dff; color: #fff; }
 .rt-great { background: #2fbf63; }
-.rt-good { background: #8fd65a; }
+.rt-good { background: #2fbf63; }
 .rt-ok { background: #e8c547; }
 .rt-poor { background: #f0913d; }
 .rt-bad { background: #ec5a52; color: #fff; }

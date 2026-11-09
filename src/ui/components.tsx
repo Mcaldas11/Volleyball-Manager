@@ -151,7 +151,6 @@ export function StarMeter({ value, max = 2000, size = 14 }: { value: number; max
 /** Colour band for a 0-10 match rating — every player starts on 6.0 — from a poor night to a standout one. */
 export function ratingClass(r: number): string {
   if (r >= RATING_BANDS.star) return 'rt-star';
-  if (r >= RATING_BANDS.great) return 'rt-great';
   if (r >= RATING_BANDS.good) return 'rt-good';
   if (r >= RATING_BANDS.ok) return 'rt-ok';
   if (r >= RATING_BANDS.poor) return 'rt-poor';

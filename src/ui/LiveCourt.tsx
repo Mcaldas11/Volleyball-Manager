@@ -46,8 +46,7 @@ type P3 = [number, number, number];
 
 function ratingColour(r: number): string {
   if (r >= RATING_BANDS.star) return '#4f9dff';
-  if (r >= RATING_BANDS.great) return '#2fbf63';
-  if (r >= RATING_BANDS.good) return '#8fd65a';
+  if (r >= RATING_BANDS.good) return '#2fbf63';
   if (r >= RATING_BANDS.ok) return '#e8c547';
   if (r >= RATING_BANDS.poor) return '#f0913d';
   return '#ec5a52';

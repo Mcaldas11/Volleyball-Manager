@@ -38,7 +38,7 @@ import { pressureOf, rateRally, type Highlight } from './highlights.ts';
 import {
   aggravate, drawInjury, injuryRiskPerRally, KNOCK_HAMPER, MATCH_INJURIES, AGGRAVATE_PER_RALLY, type MatchInjury,
 } from './injury.ts';
-import { matchRating } from './playerRating.ts';
+import { matchRating, playedInMatch } from './playerRating.ts';
 import { computeRatings, contest, type PlayerMatchRatings } from './ratings.ts';
 import {
   overheadReception, receiveFit, receivePlansOf, serveKindOf, serveRating, serveStyleFor, type ServeStyle,
@@ -330,7 +330,7 @@ export interface MatchResult {
   stats: { home: TeamMatchStats; away: TeamMatchStats };
   log: RallyLogEntry[] | null;
   totalRallies: number;
-  /** Match MVP: highest scoring impact. Player index, or -1. */
+  /** Match MVP: the winning side's best match rating. Player index, or -1. */
   mvp: number;
   /** The position each player in the two squads played — or would have, off the bench. */
   roles?: Map<number, Position>;
@@ -3189,10 +3189,14 @@ export class MatchSimulator {
     let best = -1;
     let bestScore = -Infinity;
     const winner = this.teams[0].setsWon > this.teams[1].setsWon ? 0 : 1;
+    const won = this.teams[winner].setsWon;
+    const lost = this.teams[1 - winner].setsWon;
+    // The winning side's best player on the night: the best match rating — the pass, the dig and the errors
+    // counted as well as the points — not simply the most points. Points made only break a tie.
     for (const s of this.teams[winner].stats.players.values()) {
-      const score =
-        s.attackKills + s.serveAces * 1.4 + s.blockPoints * 1.3 - s.attackErrors * 0.7 -
-        s.serveErrors * 0.5;
+      if (!playedInMatch(s)) continue;
+      const score = matchRating(s, this.roles[s.playerIdx] as Position, won, lost, 'full') +
+        (s.attackKills + s.serveAces + s.blockPoints) * 0.001;
       if (score > bestScore) {
         bestScore = score;
         best = s.playerIdx;

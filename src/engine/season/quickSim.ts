@@ -25,6 +25,7 @@ import type { PlayerStore } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import { newPlayerStats } from '../match/stats.ts';
+import { matchRating, playedInMatch } from '../match/playerRating.ts';
 
 /**
  * Baseline side-out rate for evenly matched sides, taken from the calibrated
@@ -126,7 +127,7 @@ export function quickSimulate(
     setScores,
     homeStats,
     awayStats,
-    mvp: pickMvp(homeSets > awaySets ? homeStats : awayStats),
+    mvp: homeSets > awaySets ? pickMvp(store, homeStats, homeSets, awaySets) : pickMvp(store, awayStats, awaySets, homeSets),
   };
 }
 
@@ -382,11 +383,15 @@ function distribute(
   }
 }
 
-function pickMvp(stats: Map<number, PlayerMatchStats>): number {
+/** The winning side's best player on the night: the best match rating — not simply the most points. */
+function pickMvp(store: PlayerStore, stats: Map<number, PlayerMatchStats>, setsFor: number, setsAgainst: number): number {
   let best = -1;
   let bestScore = -Infinity;
   for (const [p, s] of stats) {
-    const score = s.attackKills + s.serveAces * 1.4 + s.blockPoints * 1.3;
+    if (!playedInMatch(s)) continue;
+    // The rating, with the points made only to break a tie.
+    const score = matchRating(s, store.position[p] as Position, setsFor, setsAgainst, 'quick') +
+      (s.attackKills + s.serveAces + s.blockPoints) * 0.001;
     if (score > bestScore) {
       bestScore = score;
       best = p;
