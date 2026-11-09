@@ -241,28 +241,28 @@ export enum Combinations {
  *  combination, or a fast set out to a pin. */
 export type PlayCall =
   | 'quick' | 'backQuick' | 'slide' | 'x' | 'tandem' | 'shoot' | 'pipeQuick' | 'fastSet'
-  | 'between' | 'upDown' | 'scissors';
+  | 'between' | 'upDown' | 'scissors' | 'gap';
 
 export const PLAY_NAMES: Readonly<Record<PlayCall, string>> = {
   quick: 'Quick', backQuick: 'Back quick', slide: 'Slide', x: 'X play', tandem: 'Tandem', shoot: 'Shoot',
   pipeQuick: 'Pipe off the quick', fastSet: 'Fast set',
-  between: 'Between', upDown: 'Up and down', scissors: 'Scissors',
+  between: 'Between', upDown: 'Up and down', scissors: 'Scissors', gap: '31',
 };
 
 /**
  * The combination a rotation runs, picked by the coach for it — or left to the setter ('auto'):
  *
- * - between: the middle runs the tensa or the sete, and the outside comes in to hit at the setter's head,
- *   in between them;
+ * - between: the middle runs the 31 (the tensa, or the sete: the same ball) out in front of the setter towards zone 4
+ *   — and the outside comes in to hit at the setter's head, in between them;
  * - up and down: the middle hits the quick right at the setter's head, and the outside comes in just to
  *   his left for a half-ball;
- * - scissors: the middle runs the tensa or the sete, and the opposite crosses in to hit a half-ball at the
- *   setter's head;
+ * - scissors: the middle runs the 31, and the hitter on the right — the opposite, or in P1 the outside who
+ *   attacks from zone 2 — comes in to hit a half-ball at the setter's head;
  * - pipe: the middle jumps for the quick, and an outside in the back row — in zone 5, 6 or 1 — hits one of
  *   the pipe's three balls: to the left, in the middle or behind the setter.
  *
  * Each needs its men where it is run from: the between and the up and down an outside and a middle at the
- * net, in any rotation; the scissors the opposite at the net too; the pipe an outside in the back row, behind
+ * net, in any rotation; the scissors a hitter on the right at the net, the setter in the back row; the pipe an outside in the back row, behind
  * a middle at the net.
  */
 export type RotationPlay = 'auto' | 'between' | 'upDown' | 'scissors' | 'pipe';
@@ -276,24 +276,11 @@ export const ROTATION_PLAY_CALL: Readonly<Record<Exclude<RotationPlay, 'auto'>, 
 };
 
 /**
- * Where the middle runs as the decoy in the between and the scissors — the same fast ball in front of the
- * setter, the sete nearer him and the tensa further out towards zone 4. (In the up and down he hits the
- * quick at the setter's head.)
- */
-export type MiddleRun = 'tensa' | 'sete';
-export const MIDDLE_RUN_NAMES: Readonly<Record<MiddleRun, string>> = { tensa: 'Tensa', sete: 'Sete' };
-
-/**
  * Which of the pipe's three balls the outside in the back row hits: to the left, in the middle, or behind
  * the setter (the costas) — from zone 5, 6 or 1, wherever he stands.
  */
 export type PipeBall = 'left' | 'middle' | 'back';
-export const PIPE_BALL_NAMES: Readonly<Record<PipeBall, string>> = { left: 'Left', middle: 'Middle', back: 'Behind the setter' };
-
-/** Whether a picked combination has the middle choose between the tensa and the sete. */
-export function playHasMiddleRun(play: RotationPlay): boolean {
-  return play === 'between' || play === 'scissors';
-}
+export const PIPE_BALL_NAMES: Readonly<Record<PipeBall, string>> = { left: 'Left', middle: 'Middle', back: 'Behind' };
 
 // ---- Where the pass comes down --------------------------------------------------------------
 //
@@ -321,6 +308,8 @@ export enum MiddleOption {
   BackQuick = 2,
   Slide = 3,
   None = 4,
+  /** The 31: the same fast ball, further out in front of the setter towards zone 4 (the tensa). */
+  Gap = 5,
 }
 
 /** How the ball goes out to the pins: high, fast and flat, or the setter's choice by the set he has. */
@@ -450,8 +439,6 @@ export interface RotationTactics {
   receivers?: ReceptionFormation;
   /** The combination this rotation runs off a good pass — see RotationPlay. Absent: the setter's choice. */
   play?: RotationPlay;
-  /** In the between and the scissors: where the middle runs as the decoy. Absent: the tensa. */
-  middleRun?: MiddleRun;
   /** In the pipe: which of its balls the outside hits. Absent: the middle one. */
   pipeBall?: PipeBall;
 }

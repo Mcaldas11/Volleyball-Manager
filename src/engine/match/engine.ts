@@ -78,7 +78,6 @@ import {
   type TeamTactics,
   type RotationTactics,
   type RotationPlay,
-  type MiddleRun,
   type PipeBall,
   ROTATION_PLAY_CALL,
   Combinations,
@@ -287,8 +286,6 @@ export interface RallyContact {
   /** The play the setter called for an attack — and, for a combination, the middle who jumped for the quick as the decoy. */
   play?: PlayCall;
   decoy?: number;
-  /** In the between and the scissors: where the decoy ran — the tensa or the sete. */
-  run?: MiddleRun;
   /** In a picked pipe: which of its balls — to the left, in the middle, behind the setter. */
   pipe?: PipeBall;
   /** How many went up to block it. */
@@ -1546,6 +1543,7 @@ export class MatchSimulator {
     const rng = this.rng;
     if (lane === AttackLane.QuickMiddle) {
       if (middle === MiddleOption.Quick) return 'quick';
+      if (middle === MiddleOption.Gap) return 'gap';
       // The slide runs behind a setter at the net — only then is the right side free.
       if (middle === MiddleOption.Slide) return setterFront ? 'slide' : 'quick';
       if (middle === MiddleOption.BackQuick) return setQuality >= 0.45 ? 'backQuick' : 'quick';
@@ -1595,9 +1593,10 @@ export class MatchSimulator {
     }
     const hitter = this.laneAttacker[lane];
     if (hitter < 0 || hitter === middle) return null;
-    // Only the hitter the play is drawn for: the outside for the between, the up and down and the pipe, the opposite for the scissors.
-    const want = play === 'scissors' ? Position.Opposite : Position.OutsideHitter;
-    if (this.roles[hitter] !== want) return null;
+    // Only the hitter the play is drawn for: the outside for the between, the up and down and the pipe; for the
+    // scissors whoever attacks on the right — the opposite, or in P1 the outside who keeps his place in zone 2.
+    const role = this.roles[hitter];
+    if (play === 'scissors' ? role !== Position.Opposite && role !== Position.OutsideHitter : role !== Position.OutsideHitter) return null;
     // Picked for this rotation, it is run even by a side that runs no others.
     const runs = combinationsOf(atk.tactics);
     const rate = Math.min(0.7, COMBINATION_PROFILE[runs === Combinations.Off ? Combinations.Some : runs].rate * PICKED_PLAY_PULL);
@@ -2563,7 +2562,6 @@ export class MatchSimulator {
     // What every contact of this attack says about it.
     const tags = {
       play: call, decoy: decoy >= 0 ? decoy : undefined,
-      run: planned !== null && (call === 'between' || call === 'scissors') ? rotTac.middleRun ?? 'tensa' : undefined,
       pipe: planned !== null && call === 'pipeQuick' ? rotTac.pipeBall ?? 'middle' : undefined,
       blockers: blockCount,
       ...(target !== null ? { blockFocus: lean > 0.33 ? 'line' as const : lean < -0.33 ? 'cross' as const : 'read' as const } : {}),

@@ -8354,3 +8354,11 @@ tr.row-on td { background: var(--surface-3); }
 .content-fill > .view-fade > .rot-layout { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); }
 .content-fill > .view-fade > .rot-layout > .card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .content-fill > .view-fade > .rot-layout > .card > .card-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Instructions: the cards' column scrolls inside its own height, an open card's choices held at its foot
+   — in sight, and the page never sliding down. */
+.content-fill .tactics-page .tboard-cards { min-height: 0; max-height: 100%; overflow-y: auto; }
+.content-fill .tactics-page .tboard-pick {
+  position: sticky; bottom: 0; z-index: 2;
+  background: var(--surface-2); box-shadow: 0 -10px 18px -6px rgba(0, 0, 0, 0.8);
+}

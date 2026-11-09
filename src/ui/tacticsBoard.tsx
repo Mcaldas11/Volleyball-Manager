@@ -48,7 +48,8 @@ import {
 
 export const MIDDLE_ZONE_OPTIONS: Array<[MiddleOption, string]> = [
   [MiddleOption.Any, 'Any'],
-  [MiddleOption.Quick, 'Quick (tensa)'],
+  [MiddleOption.Quick, 'Quick (head)'],
+  [MiddleOption.Gap, '31'],
   [MiddleOption.BackQuick, 'Back quick'],
   [MiddleOption.Slide, 'Slide (china)'],
   [MiddleOption.None, 'No middle'],
@@ -86,7 +87,7 @@ const HINTS: Readonly<Record<string, string>> = {
   offense: 'How the setter shares the ball out across the attack lanes.',
   tempo: 'Faster tempo beats the block but asks more of the pass and the setter — the set lower and flatter; a slow one puts the ball up high, giving the hitter time, and the block too.',
   combos: 'How often a pin attack off a good pass is run as a combination off the middle — X, tandem, shoot, pipe. Rehearse them in training.',
-  middle: 'With the setter at the net — P2, P3, P4 — the right side is free: the quick in front (tensa), the back quick (costas) or the slide behind him (china). Any: the setter mixes them.',
+  middle: 'With the setter at the net — P2, P3, P4 — the right side is free: the quick at his head (the 1), the 31 further out in front, the back quick (costas) or the slide behind him (china). Any: the setter mixes them.',
   middleBack: 'With the setter in the back row — P1, P6, P5 — the opposite is up at the net on the right, so there is no slide: the quick in front or the back quick.',
   pins: 'A high ball gives the hitter time and the block time too; a fast, flat set beats the block but is harder to hit.',
   zoneCombos: 'Whether combinations may be run off a pass coming down in this zone.',
@@ -211,7 +212,7 @@ function middleVisual(m: MiddleOption, front: boolean): JSX.Element {
   // Along the net, left to right: the setter's spot, and where the middle hits;
   // the setter's rotations along the bottom.
   const setter = 51;
-  const spots = m === MiddleOption.Quick ? [42] : m === MiddleOption.BackQuick ? [61] : m === MiddleOption.Slide ? [72]
+  const spots = m === MiddleOption.Quick ? [42] : m === MiddleOption.Gap ? [28] : m === MiddleOption.BackQuick ? [61] : m === MiddleOption.Slide ? [72]
     : m === MiddleOption.Any ? [42, 61, 72] : [];
   return (
     <>
@@ -220,7 +221,8 @@ function middleVisual(m: MiddleOption, front: boolean): JSX.Element {
       {spots.map((x) => <circle key={x} cx={x} cy="14" r="4.5" fill={C.lit} opacity={m === MiddleOption.Any ? 0.75 : 1} />)}
       {m === MiddleOption.Slide && <path d="M 40 32 Q 58 26 70 18" fill="none" stroke={C.lit} strokeWidth="2" strokeDasharray="3 2" />}
       {m === MiddleOption.None && <path d="M 30 18 L 50 38 M 50 18 L 30 38" stroke="#e5484d" strokeWidth="3" />}
-      {m !== MiddleOption.None && m !== MiddleOption.Slide && <line x1="42" y1="34" x2="42" y2="22" stroke={C.line} strokeWidth="2" />}
+      {m !== MiddleOption.None && m !== MiddleOption.Slide && m !== MiddleOption.Gap && <line x1="42" y1="34" x2="42" y2="22" stroke={C.line} strokeWidth="2" />}
+      {m === MiddleOption.Gap && <path d="M 42 34 Q 36 26 30 20" fill="none" stroke={C.line} strokeWidth="2" />}
       {!front && <path d="M 51 40 L 51 22" stroke={C.gold} strokeWidth="1.5" strokeDasharray="2 2" />}
       <text x="6" y="45" fontSize="7.5" fontWeight="700" fill={C.line}>{front ? 'P2 · P3 · P4' : 'P1 · P6 · P5'}</text>
     </>

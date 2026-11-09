@@ -33,7 +33,7 @@
 
 import { effectivePlayerAt, isFrontRow, receptionUnit } from '../engine/match/court.ts';
 import { SECOND_BALL, type RallyContact, type Shot } from '../engine/match/engine.ts';
-import { passZone, Tempo, type MiddleRun, type PlayCall } from '../engine/match/tactics.ts';
+import { passZone, Tempo, type PipeBall, type PlayCall } from '../engine/match/tactics.ts';
 import {
   receivePlansOf, receiveSpots, SERVE_ZONE_U, serveKindOf, serveZoneFor, type ReceivePlans, type ServeKind as LineFacing,
   type ServerOrdersMap, type ServeStyle, type ServeZone,
@@ -268,6 +268,8 @@ const HIT_POINT: Readonly<Record<string, Local & { setArc: number }>> = {
  */
 const PLAY_POINT: Partial<Record<PlayCall, (lane: string | undefined) => Local & { setArc: number }>> = {
   backQuick: () => ({ u: 0.77, v: 0.07, setArc: 0.3 }),
+  // The 31: the same fast ball, further out in front of the setter.
+  gap: () => ({ u: 0.4, v: 0.07, setArc: 0.3 }),
   slide: () => ({ u: 0.91, v: 0.09, setArc: 0.45 }),
   x: () => ({ u: 0.44, v: 0.08, setArc: 0.6 }),
   tandem: () => ({ u: 0.5, v: 0.09, setArc: 0.6 }),
@@ -283,13 +285,16 @@ const PLAY_POINT: Partial<Record<PlayCall, (lane: string | undefined) => Local &
   fastSet: (lane) => ({ ...(HIT_POINT[lane ?? 'Outside'] ?? HIT_POINT.Outside), setArc: 0.7 }),
 };
 
+/** Across the court, where each of the pipe's balls is hit: to the left, in the middle, behind the setter. */
+const PIPE_BALL_U: Readonly<Record<PipeBall, number>> = { left: 0.3, middle: 0.5, back: 0.76 };
+
 /** Where the middle jumps for the quick as the decoy. */
 const DECOY_POINT: Local = { u: 0.56, v: 0.07 };
 
-/** Where the decoy jumps in a picked combination: at the setter's head in the up and down, else the tensa or, further out, the sete. */
-function decoyPoint(play: PlayCall | undefined, run: MiddleRun | undefined): Local {
+/** Where the decoy jumps in a picked combination: the quick at the setter's head in the up and down, the tensa — the sete — out in front towards zone 4 in the between and the scissors. */
+function decoyPoint(play: PlayCall | undefined): Local {
   if (play === 'upDown') return { u: 0.62, v: 0.07 };
-  if (play === 'between' || play === 'scissors') return run === 'sete' ? { u: 0.4, v: 0.07 } : { u: 0.53, v: 0.07 };
+  if (play === 'between' || play === 'scissors') return { u: 0.4, v: 0.07 };
   return DECOY_POINT;
 }
 
@@ -512,9 +517,12 @@ function attackFormation(
   attacker: number,
   lane: string | undefined,
   play?: PlayCall,
+  /** In a picked pipe: which of its balls. */
+  pipe?: PipeBall,
 ): { f: Formation; hit: Local; setArc: number } {
   const f = offenceFormation(t);
-  const called = play !== undefined ? PLAY_POINT[play]?.(lane) : undefined;
+  const called = pipe !== undefined && play === 'pipeQuick' ? { u: PIPE_BALL_U[pipe], v: 0.36, setArc: 0.75 }
+    : play !== undefined ? PLAY_POINT[play]?.(lane) : undefined;
   const known = called ?? (lane !== undefined ? HIT_POINT[lane] : undefined);
   const hit: Local = known ?? { u: f.get(attacker)?.u ?? 0.5, v: 0.07 };
   for (const [p, l] of f) {
@@ -1088,10 +1096,10 @@ export function rallyBeats(
       case 'blocked': {
         // The setter's second ball: no set — the pass comes to him at the net and he plays it over.
         const dump = c.detail === SECOND_BALL;
-        const { f, hit, setArc: plainArc } = attackFormation(teams[t], c.player, dump ? undefined : c.detail, c.play);
+        const { f, hit, setArc: plainArc } = attackFormation(teams[t], c.player, dump ? undefined : c.detail, c.play, c.pipe);
         // As high as the side's tempo has it — a slow one gives the hitter, and the block, time.
         const setArc = dump ? plainArc : plainArc * teams[t].setHeight;
-        if (c.decoy !== undefined) decoyNext = { p: c.decoy, at: decoyPoint(c.play, c.run) };
+        if (c.decoy !== undefined) decoyNext = { p: c.decoy, at: decoyPoint(c.play) };
         if (dump) {
           if (pass !== null) f.set(c.player, { u: pass.spot.at.u, v: 0.06 });
           if (pass !== null) hit.u = pass.spot.at.u;
@@ -1102,7 +1110,7 @@ export function rallyBeats(
           setterRun = null;
         } else if (needsSet) setBall(t, c.player, c.detail === 'Quick (middle)' || c.play !== undefined);
         // The decoy lands where he jumped, out of the hitter's way.
-        if (c.decoy !== undefined && c.decoy !== c.player) f.set(c.decoy, { u: decoyPoint(c.play, c.run).u, v: 0.16 });
+        if (c.decoy !== undefined && c.decoy !== c.player) f.set(c.decoy, { u: decoyPoint(c.play).u, v: 0.16 });
         // Whoever set stays where they set from, to cover.
         if (setFrom !== null && setFrom.p !== c.player) f.set(setFrom.p, { ...setFrom.at });
         setFrom = null;

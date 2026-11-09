@@ -6,7 +6,7 @@
 
 import type { JSX } from 'react';
 import { Position } from '../engine/model/positions.ts';
-import type { MiddleRun, RotationPlay } from '../engine/match/tactics.ts';
+import type { PipeBall, RotationPlay } from '../engine/match/tactics.ts';
 
 /** Where each zone (index 0 for zone 1) stands on the drawing. */
 const ZONE_AT: ReadonlyArray<readonly [number, number]> = [
@@ -14,11 +14,13 @@ const ZONE_AT: ReadonlyArray<readonly [number, number]> = [
 ];
 const NET_Y = 12;
 const ATTACK_Y = 22;
-/** Along the net: where the setter sets from, his head, the tensa, the sete. */
+/** Along the net: where the setter sets from, the 1 — the quick at his head — and the 31 out in front. */
 const SETTER_X = 128;
 const HEAD_X = 116;
-const TENSA_X = 100;
-const SETE_X = 76;
+const GAP_X = 76;
+/** Behind the 3 m line: where each of the pipe's balls is hit. */
+const PIPE_X: Readonly<Record<PipeBall, number>> = { left: 58, middle: 100, back: 146 };
+const PIPE_Y = 62;
 
 const LETTER: Readonly<Record<number, string>> = {
   [Position.Setter]: 'S', [Position.OutsideHitter]: 'OH', [Position.MiddleBlocker]: 'M', [Position.Opposite]: 'O', [Position.Libero]: 'L',
@@ -32,56 +34,66 @@ export interface PlayCast {
 
 /** The zone (index) of the first of `role` in the front row, or the back row, or -1. */
 function zoneOf(cast: PlayCast, role: Position, front: boolean): number {
-  for (let z = 0; z < 6; z++) {
-    const isFront = z >= 1 && z <= 3;
-    if (isFront === front && cast.roles[z] === role) return z;
-  }
+  // The back row looked at as the engine does: zone 6, then 5, then 1.
+  const order = front ? [1, 2, 3] : [5, 4, 0];
+  for (const z of order) if (cast.roles[z] === role) return z;
   return -1;
+}
+
+/**
+ * Who attacks on the right at the net, for the scissors: with the setter in zone 1 and an outside in zone 2 the
+ * front row keeps its places, so it is that outside; otherwise the opposite — while the setter is in the back row.
+ */
+function rightHitter(cast: PlayCast): number {
+  if (cast.roles[0] === Position.Setter && cast.roles[1] === Position.OutsideHitter) return 1;
+  const setter = cast.roles.findIndex((r) => r === Position.Setter);
+  if (setter >= 1 && setter <= 3) return -1;
+  return zoneOf(cast, Position.Opposite, true);
 }
 
 /** Why a play can't be run in this rotation, or null if it can. */
 export function playUnavailable(play: RotationPlay, cast: PlayCast): string | null {
   if (play === 'auto') return null;
-  const middle = zoneOf(cast, Position.MiddleBlocker, true);
-  if (middle < 0) return 'Needs a middle at the net to jump as the decoy.';
-  if (play === 'scissors') return zoneOf(cast, Position.Opposite, true) < 0 ? 'Needs the opposite at the net — the setter in the back row (P1, P6, P5).' : null;
-  if (play === 'pipe') return cast.roles[5] !== Position.OutsideHitter ? 'Needs an outside in zone 6, behind the middle at the net.' : null;
+  if (zoneOf(cast, Position.MiddleBlocker, true) < 0) return 'Needs a middle at the net to jump as the decoy.';
+  if (play === 'scissors') return rightHitter(cast) < 0 ? 'Needs a hitter on the right at the net — the setter in the back row (P1, P6, P5).' : null;
+  if (play === 'pipe') return zoneOf(cast, Position.OutsideHitter, false) < 0 ? 'Needs an outside in the back row, behind the middle at the net.' : null;
   return zoneOf(cast, Position.OutsideHitter, true) < 0 ? 'Needs an outside at the net.' : null;
 }
 
 /** What a play is, in a sentence. */
-export function playDescription(play: RotationPlay, run: MiddleRun): string {
+export function playDescription(play: RotationPlay, pipe: PipeBall): string {
   switch (play) {
     case 'auto': return "Left to the setter: he runs the side's usual combinations, as often as the team instructions say.";
-    case 'between': return run === 'sete'
-      ? "The middle runs the sete; the outside comes in to hit at the setter's head, in between them."
-      : "The middle runs the tensa; the outside comes in to hit at the setter's head, in between them.";
+    case 'between': return "The middle runs the 31 out in front; the outside comes in to hit at the setter's head, in between them.";
     case 'upDown': return "The middle hits the quick at the setter's head; the outside comes in just to his left for a half-ball.";
-    case 'scissors': return run === 'sete'
-      ? "The middle runs the sete; the opposite crosses in behind him to hit a half-ball at the setter's head."
-      : "The middle runs the tensa; the opposite crosses in behind him to hit a half-ball at the setter's head.";
-    case 'pipe': return 'The middle jumps for the quick; the outside in zone 6 hits the pipe from behind the 3 m line.';
+    case 'scissors': return "The middle runs the 31 out in front; the hitter on the right comes in to hit a half-ball at the setter's head.";
+    case 'pipe': return pipe === 'left'
+      ? 'The middle jumps for the quick; the outside in the back row hits the pipe to the left, from behind the 3 m line.'
+      : pipe === 'back'
+        ? 'The middle jumps for the quick; the outside in the back row hits the pipe behind the setter, from behind the 3 m line.'
+        : 'The middle jumps for the quick; the outside in the back row hits the pipe in the middle, from behind the 3 m line.';
   }
 }
 
 interface Arrow { from: readonly [number, number]; to: readonly [number, number]; kind: 'setter' | 'decoy' | 'hitter' }
 
 /** The arrows of a play in a rotation. */
-function arrowsFor(play: RotationPlay, run: MiddleRun, cast: PlayCast): Arrow[] {
+function arrowsFor(play: RotationPlay, pipe: PipeBall, cast: PlayCast): Arrow[] {
   const out: Arrow[] = [];
   const setter = cast.roles.findIndex((r) => r === Position.Setter);
   if (setter >= 0) out.push({ from: ZONE_AT[setter], to: [SETTER_X, ATTACK_Y + 2], kind: 'setter' });
   if (play === 'auto' || playUnavailable(play, cast) !== null) return out;
   const middle = zoneOf(cast, Position.MiddleBlocker, true);
-  const runX = play === 'upDown' ? HEAD_X : run === 'sete' ? SETE_X : TENSA_X;
+  // The 1 at the setter's head in the up and down and the pipe; the 31, out in front, in the between and the scissors.
+  const runX = play === 'upDown' || play === 'pipe' ? HEAD_X : GAP_X;
   out.push({ from: ZONE_AT[middle], to: [runX, ATTACK_Y], kind: 'decoy' });
   if (play === 'pipe') {
-    out.push({ from: ZONE_AT[5], to: [100, 62], kind: 'hitter' });
+    out.push({ from: ZONE_AT[zoneOf(cast, Position.OutsideHitter, false)], to: [PIPE_X[pipe], PIPE_Y], kind: 'hitter' });
   } else if (play === 'scissors') {
-    out.push({ from: ZONE_AT[zoneOf(cast, Position.Opposite, true)], to: [HEAD_X, ATTACK_Y + 4], kind: 'hitter' });
+    out.push({ from: ZONE_AT[rightHitter(cast)], to: [HEAD_X, ATTACK_Y + 4], kind: 'hitter' });
   } else {
     const oh = zoneOf(cast, Position.OutsideHitter, true);
-    out.push({ from: ZONE_AT[oh], to: play === 'upDown' ? [HEAD_X - 22, ATTACK_Y + 2] : [HEAD_X - 6, ATTACK_Y + 6], kind: 'hitter' });
+    out.push({ from: ZONE_AT[oh], to: play === 'upDown' ? [HEAD_X - 22, ATTACK_Y + 2] : [HEAD_X - 8, ATTACK_Y + 6], kind: 'hitter' });
   }
   return out;
 }
@@ -99,10 +111,10 @@ function arrowPath(a: Arrow): string {
   return `M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
 }
 
-export function PlayDiagram({ play, run, cast, small }: {
-  play: RotationPlay; run: MiddleRun; cast: PlayCast; small?: boolean;
+export function PlayDiagram({ play, pipe, cast, small }: {
+  play: RotationPlay; pipe: PipeBall; cast: PlayCast; small?: boolean;
 }): JSX.Element {
-  const arrows = arrowsFor(play, run, cast);
+  const arrows = arrowsFor(play, pipe, cast);
   const off = playUnavailable(play, cast) !== null;
   return (
     <svg className={`play-diagram${small === true ? ' small' : ''}${off ? ' off' : ''}`} viewBox="0 0 200 124" role="img"

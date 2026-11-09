@@ -186,9 +186,9 @@ test("a zone's plan is the coach's: the middle off a deep pass, or the opposite 
 });
 
 test('a combination picked for each rotation is run there — by the hitter it is drawn for, the middle the decoy', () => {
-  const picked = (play: 'between' | 'upDown' | 'scissors' | 'pipe', middleRun?: 'tensa' | 'sete'): Partial<TeamTactics> => {
+  const picked = (play: 'between' | 'upDown' | 'scissors' | 'pipe', pipeBall?: 'left' | 'middle' | 'back'): Partial<TeamTactics> => {
     const t = defaultTactics();
-    for (const r of t.rotations) { r.play = play; r.middleRun = middleRun; }
+    for (const r of t.rotations) { r.play = play; r.pipeBall = pipeBall; }
     return { rotations: t.rotations };
   };
   const roleOf = (p: number): Position => world.players.position[p] as Position;
@@ -199,14 +199,16 @@ test('a combination picked for each rotation is run there — by the hitter it i
     { play: 'pipe', call: 'pipeQuick', hitter: Position.OutsideHitter },
   ] as const;
   for (const { play, call, hitter } of cases) {
-    const runs = attacks(picked(play, 'sete'), [1, 2, 3]).filter((c) => c.play === call);
-    // The pipe only when the outside is in zone 6 behind a middle at the net: two rotations in six.
-    assert.ok(runs.length >= (play === 'pipe' ? 3 : 8), `${play}: run ${runs.length} times`);
+    // The pipe off the setter's own choice now and then too: only the picked ones carry the ball picked.
+    const runs = attacks(picked(play, 'back'), [1, 2, 3]).filter((c) => c.play === call && (play !== 'pipe' || c.pipe !== undefined));
+    assert.ok(runs.length >= 8, `${play}: run ${runs.length} times`);
     for (const c of runs) {
-      assert.equal(roleOf(c.player), hitter, `${play} hit by the ${hitter}`);
+      // The scissors by whoever attacks on the right: the opposite — or in P1 the outside in zone 2.
+      if (play === 'scissors') assert.ok(roleOf(c.player) === Position.Opposite || roleOf(c.player) === Position.OutsideHitter);
+      else assert.equal(roleOf(c.player), hitter, `${play} hit by the ${hitter}`);
       assert.ok(c.decoy !== undefined && roleOf(c.decoy) === Position.MiddleBlocker, `${play}: the middle the decoy`);
       assert.ok(isCombination(c.play));
-      if (play === 'between' || play === 'scissors') assert.equal(c.run, 'sete', `${play}: the middle runs the sete`);
+      if (play === 'pipe') assert.equal(c.pipe, 'back', 'the pipe behind the setter, as picked');
     }
   }
   // Left to the setter, none of the three new ones is ever run.
@@ -219,4 +221,38 @@ test('a picked combination is run even by a side that runs no others', () => {
   const runs = attacks({ rotations: t.rotations, combinations: Combinations.Off }, [4, 5]);
   assert.ok(runs.some((c) => c.play === 'scissors'), 'the scissors');
   assert.equal(runs.filter((c) => c.play === 'x' || c.play === 'tandem' || c.play === 'shoot').length, 0, 'and none of the setter’s own');
+});
+
+test('the picked pipe is hit by an outside from anywhere in the back row — zone 5, 6 or 1', () => {
+  const t = defaultTactics();
+  for (const r of t.rotations) r.play = 'pipe';
+  const zones = new Set<number>();
+  for (const { c, rot } of attacksIn({ rotations: t.rotations }, [1, 2, 3, 4])) {
+    if (c.play !== 'pipeQuick' || c.pipe === undefined) continue;
+    // Where the hitter stood: the rotation moves the P1 lineup on by rot.
+    zones.add(rot);
+  }
+  // An outside is in the back row in every rotation of a 5-1: the pipe is run in all six.
+  assert.ok(zones.size >= 5, `run in ${zones.size} rotations: ${[...zones].join(', ')}`);
+});
+
+test('the scissors is run by the hitter on the right: the opposite with the setter in P6 and P5, the outside in zone 2 in P1', () => {
+  const t = defaultTactics();
+  for (const r of t.rotations) r.play = 'scissors';
+  const runs = attacksIn({ rotations: t.rotations }, [1, 2, 3]).filter(({ c }) => c.play === 'scissors');
+  const roleOf = (p: number): Position => world.players.position[p] as Position;
+  assert.ok(runs.every(({ rot }) => !setterAtNet(rot)), 'only with the setter in the back row');
+  const byOutside = runs.filter(({ c }) => roleOf(c.player) === Position.OutsideHitter);
+  assert.ok(byOutside.length > 0, 'the outside runs it in P1');
+  assert.ok(byOutside.every(({ rot }) => rot === 0), 'the outside only in P1');
+  assert.ok(runs.some(({ c }) => roleOf(c.player) === Position.Opposite), 'the opposite runs it too');
+});
+
+test('told to hit the 31, the middle hits the 31 — the same fast ball, further out in front', () => {
+  const zones = defaultZonePlans();
+  zones.A = { ...zones.A, middle: MiddleOption.Gap, middleBack: MiddleOption.Gap };
+  const quick = attacks({ zones }, [1, 2]).filter((c) => c.detail === 'Quick (middle)');
+  const gaps = quick.filter((c) => c.play === 'gap');
+  assert.ok(gaps.length >= 10, `the 31 ${gaps.length} times`);
+  assert.ok(gaps.every((c) => world.players.position[c.player] === Position.MiddleBlocker), 'by the middle');
 });

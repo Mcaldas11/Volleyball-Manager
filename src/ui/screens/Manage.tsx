@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import { receiveLineOf } from '../../engine/match/receiveLine.ts';
-import type { MiddleRun, ReceptionFormation, RotationPlay, RotationTactics } from '../../engine/match/tactics.ts';
+import type { PipeBall, ReceptionFormation, RotationPlay, RotationTactics } from '../../engine/match/tactics.ts';
 import {
   BlockAssignment, Combinations, DefensiveShape, DefensiveSystem, Formation, formationOf, lineupSlotPositions,
-  MIDDLE_RUN_NAMES, OffensiveSystem, playHasMiddleRun, ROTATION_PLAY_NAMES, ROTATION_PLAYS, ServeStrategy, ServeTarget, Tempo,
+  OffensiveSystem, PIPE_BALL_NAMES, ROTATION_PLAY_NAMES, ROTATION_PLAYS, ServeStrategy, ServeTarget, Tempo,
 } from '../../engine/match/tactics.ts';
 import {
   MAX_SQUAD, POSITION_NAMES, POSITION_SHORT, POSITIONS, Position,
@@ -283,14 +283,13 @@ export function RotationsScreen(): JSX.Element {
 
 /**
  * The combination a rotation runs, picked off the coach's clipboard: each play drawn for this rotation's
- * men — the setter, the middle as the decoy, the hitter — and, for the between and the scissors, where
- * the middle runs.
+ * men — the setter, the middle as the decoy, the hitter — and, for the pipe, which of its three balls.
  */
 function PlayCard({ rotation, cast, rot, onChange }: {
   rotation: RotationTactics; cast: PlayCast; rot: number; onChange: () => void;
 }): JSX.Element {
   const play = rotation.play ?? 'auto';
-  const run = rotation.middleRun ?? 'tensa';
+  const pipe = rotation.pipeBall ?? 'middle';
   const why = playUnavailable(play, cast);
   const pick = (p: RotationPlay): void => {
     rotation.play = p === 'auto' ? undefined : p;
@@ -303,24 +302,24 @@ function PlayCard({ rotation, cast, rot, onChange }: {
           const off = playUnavailable(p, cast);
           return (
             <button key={p} role="radio" aria-checked={p === play} className={`play-pick${p === play ? ' on' : ''}${off !== null ? ' off' : ''}`}
-              title={off ?? playDescription(p, run)} onClick={() => pick(p)}>
-              <PlayDiagram play={p} run={run} cast={cast} small />
+              title={off ?? playDescription(p, pipe)} onClick={() => pick(p)}>
+              <PlayDiagram play={p} pipe={pipe} cast={cast} small />
               <span>{ROTATION_PLAY_NAMES[p]}</span>
             </button>
           );
         })}
       </div>
       <div className="play-main">
-        <PlayDiagram play={play} run={run} cast={cast} />
+        <PlayDiagram play={play} pipe={pipe} cast={cast} />
         <div className="play-about">
           <b>{ROTATION_PLAY_NAMES[play]}</b>
-          <p>{playDescription(play, run)}</p>
-          {playHasMiddleRun(play) && (
+          <p>{playDescription(play, pipe)}</p>
+          {play === 'pipe' && (
             <div className="play-run">
-              <span className="faint">The middle runs</span>
-              <Segmented<MiddleRun> size="sm" value={run}
-                options={(['tensa', 'sete'] as const).map((m) => [m, MIDDLE_RUN_NAMES[m]] as const)}
-                onChange={(m) => { rotation.middleRun = m === 'tensa' ? undefined : m; onChange(); }} />
+              <span className="faint">The pipe ball</span>
+              <Segmented<PipeBall> size="sm" value={pipe}
+                options={(['left', 'middle', 'back'] as const).map((b) => [b, PIPE_BALL_NAMES[b]] as const)}
+                onChange={(b) => { rotation.pipeBall = b === 'middle' ? undefined : b; onChange(); }} />
             </div>
           )}
           {why !== null && (
