@@ -8362,3 +8362,80 @@ tr.row-on td { background: var(--surface-3); }
   position: sticky; bottom: 0; z-index: 2;
   background: var(--surface-2); box-shadow: 0 -10px 18px -6px rgba(0, 0, 0, 0.8);
 }
+
+/* ---- The teams come out: each side's starting six before the first serve (Matchday.tsx, MatchIntro) ---- */
+.lv { position: relative; }
+.mi {
+  position: absolute; inset: 0; z-index: 80; display: flex; flex-direction: column; gap: 16px; padding: 22px 28px 18px;
+  overflow: hidden; cursor: pointer; border-radius: var(--radius);
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.07) 0 18%, transparent 18% 34%, rgba(255, 255, 255, 0.05) 34% 36%, transparent 36%),
+    radial-gradient(ellipse 70% 90% at 30% 20%, #2d56d8, transparent 70%),
+    linear-gradient(160deg, #1a3fb4, #0b1e63 60%, #07123b);
+  animation: mi-in 0.45s ease both;
+}
+@keyframes mi-in { from { opacity: 0; transform: translateX(-3%); } to { opacity: 1; transform: none; } }
+.mi-head { display: flex; align-items: center; gap: 22px; flex: none; }
+.mi-crest { display: flex; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45)); }
+.mi-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mi-title b { font: 800 clamp(26px, 3.4vw, 44px)/1 var(--font-display); text-transform: uppercase; color: #fff; letter-spacing: 0.01em; }
+.mi-title span { font: 700 16px/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.72); }
+.mi-side { margin-left: auto; padding: 5px 12px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 999px; font: 700 12px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: #fff; }
+.mi-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(150px, 0.55fr) minmax(220px, 1fr); gap: 16px; align-items: stretch; }
+.mi-court, .mi-staff {
+  position: relative; display: grid; gap: 10px; padding: 12px 12px 12px 26px; min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 6px; background: rgba(6, 18, 70, 0.35);
+}
+/* The net, down the left side of the court. */
+.mi-court::before {
+  content: ''; position: absolute; left: 8px; top: 8px; bottom: 8px; width: 9px;
+  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.85) 0 1px, transparent 1px 4px);
+  border-radius: 2px; opacity: 0.85;
+}
+.mi-court { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+.mi-court::after { content: ''; position: absolute; top: 8px; bottom: 8px; left: calc(50% + 7px); border-left: 1px solid rgba(255, 255, 255, 0.22); }
+.mi-staff { grid-template-rows: repeat(2, minmax(0, 1fr)); padding-left: 12px; }
+.mi-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0;
+  animation: mi-card 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes mi-card { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: none; } }
+.mi-card .player-face { border: 2px solid rgba(255, 255, 255, 0.8); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35); }
+.mi-tag { display: flex; align-items: center; gap: 4px; }
+.mi-tag i, .mi-bench-row i {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 20px; padding: 0 6px; border-radius: 3px;
+  font: 800 11px/1 var(--font-display); font-style: normal; letter-spacing: 0.04em; color: #0b1430;
+}
+.mi-tag .mi-tag-coach { background: #fff; min-width: 0; }
+.mi-name {
+  max-width: 100%; padding: 4px 12px; overflow: hidden; border-radius: 3px; background: rgba(140, 170, 255, 0.85);
+  font-size: 13px; font-weight: 700; color: #fff; text-align: center; text-overflow: ellipsis; white-space: nowrap;
+}
+.mi-coach-face {
+  display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8); background: #0c1b55; font: 800 22px/1 var(--font-display); color: #fff;
+}
+.mi-bench { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.mi-bench-title { flex: none; margin-bottom: 4px; font: 700 18px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: #fff; text-align: center; }
+.mi-bench-row {
+  flex: 0 1 auto; display: flex; align-items: center; gap: 8px; min-height: 0; padding: 5px 10px; border-radius: 3px;
+  background: rgba(225, 233, 255, 0.92); color: #0b1430; font-size: 14px; font-weight: 700;
+  animation: mi-row 0.4s ease both;
+}
+.mi-bench-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes mi-row { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+.mi-next { position: absolute; right: 18px; bottom: 14px; }
+.mi-name { font-size: 14.5px; padding: 5px 16px; }
+.mi-coach-face { width: 84px; height: 84px; font-size: 28px; }
+@media (max-height: 760px) {
+  .mi .player-face { width: 62px !important; height: 62px !important; }
+  .mi-coach-face { width: 62px; height: 62px; font-size: 22px; }
+  .mi-head { gap: 16px; }
+}
+
+/* The combination play in the live match's rotations: names for the picks, one drawing — room for the rest. */
+.lv-rot-play { margin-bottom: 10px; }
+.lv-rot-play .play-pick .play-diagram, .lv-rot-play .play-key { display: none; }
+.lv-rot-play .play-pick { padding: 8px 4px; }
+.lv-rot-play .play-main { grid-template-columns: minmax(0, 250px) minmax(0, 1fr); }

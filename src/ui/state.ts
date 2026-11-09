@@ -43,7 +43,7 @@ import { careerFileName, careerFileStream, exportCareer, importCareer } from './
 import { bidTurnedDown } from '../engine/world/offerStance.ts';
 import { bareResult, reportResult } from '../engine/world/matchReports.ts';
 import {
-  MatchFormat, MatchSimulator, registeredLiberos, simulateMatch, SUBS_PER_SET, type MatchResult, type RallyLogEntry, type ShoutKind,
+  MatchFormat, MatchSimulator, registeredLiberos, rotationSteps, simulateMatch, SUBS_PER_SET, type MatchResult, type RallyLogEntry, type ShoutKind,
   type SubstitutionPlan, type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
 import { bestByAbility } from '../engine/model/ability.ts';
@@ -128,7 +128,7 @@ import {
 import {
   acceptContractOffer as signContractOffer, acceptJobOffer as takeJobOffer, appointManager, askForContract, startOutOfWork as startOutOfWorkCareer,
   applyForJob as sendApplication, applicationBlock, declineContractOffer as turnDownContractOffer,
-  declineJobOffer as turnDownJobOffer, isUnemployed, resign as resignFromClub,
+  declineJobOffer as turnDownJobOffer, headCoachOf, isUnemployed, resign as resignFromClub,
 } from '../engine/world/career.ts';
 import { positionTarget, setPositionTarget } from '../engine/world/training.ts';
 import { effectivePlayerAt } from '../engine/match/court.ts';
@@ -514,8 +514,13 @@ export interface ReceiveSubPlan {
   on: { set: number } | null;
 }
 
-/** The user's planned substitutions — set up in the Substitutions panel, made by themselves when their moment comes. */
+/**
+ * The user's planned substitutions — set up in the Substitutions panel, made by themselves when their moment
+ * comes, for the set they are set up in only: the next starts with none.
+ */
 export interface SubPlans {
+  /** The set they were set up for. Absent on matches from before: the set under way. */
+  set?: number;
   doubleSwitch: DoubleSwitchPlan | null;
   serveSub: ServeSubPlan | null;
   /** Absent on matches from before it. */
@@ -558,6 +563,15 @@ export interface MatchdayState {
   /** The user's side, regardless of home/away; edited pre-kickoff and again
    *  at every set break. */
   homeLineup: number[];
+  /**
+   * Before the first serve: the starting sixes shown, the home side's and then the away side's — the match
+   * waits on it. Absent once it is over (or on matches from before it).
+   */
+  intro?: 0 | 1;
+  /** The introduction has been shown: it is not shown again, at a set break or after a reload. */
+  introShown?: boolean;
+  /** The rotation the user's side starts each set in (0 for P1) — its coach's to pick on the team sheet. Absent: P1. */
+  startRotation?: number;
   /** The reception libero — the only libero, unless a defensive one is named. */
   homeLibero: number;
   /** Second libero who plays whenever the team serves, or -1. */
@@ -2878,6 +2892,7 @@ class Game {
       clubId: club.id,
       name: club.name,
       lineup: md.homeLineup,
+      startingRotation: rotationSteps(md.startRotation ?? 0),
       libero: md.homeLibero,
       defensiveLibero: md.homeDefensiveLibero,
       bench: md.homeBench,
@@ -2967,7 +2982,51 @@ class Game {
     this.lastTimeoutAtRally = -Infinity;
     this.lastAISubAtRally = -Infinity;
     md.snapshot = this.liveSim.snapshot();
+    // The teams come out: the home side's six, then the away side's, before the first serve.
+    if (md.introShown !== true) {
+      md.introShown = true;
+      md.intro = 0;
+      md.paused = true;
+      md.pauseUntil = null;
+    }
     this.emit();
+  }
+
+  /** On from one side's starting six to the other's — and, after the away side's, to the first serve. */
+  nextIntro(): void {
+    const md = this.matchday;
+    if (md === null || md.intro === undefined) return;
+    if (md.intro === 0) {
+      md.intro = 1;
+    } else {
+      md.intro = undefined;
+      if (md.paused && md.pauseUntil === null && md.timeoutActive === null && md.injury == null && md.coachPanel !== true) md.paused = false;
+    }
+    this.emit();
+  }
+
+  /**
+   * A side as it comes out, for the introduction: its name, its six where they start the set, its libero(s), its
+   * bench and its head coach.
+   */
+  introSheet(team: 0 | 1): {
+    side: MatchSide; court: number[]; liberos: number[]; bench: number[]; coach: string | null;
+  } | null {
+    const md = this.matchday;
+    const sim = this.liveSim;
+    const world = this.world;
+    if (md === null || sim === null || world === null) return null;
+    const snap = md.snapshot ?? sim.snapshot();
+    const court = [...(team === 0 ? snap.homeCourt : snap.awayCourt)];
+    const lib = sim.liberos(team);
+    const liberos = [lib.reception, lib.defence].filter((p) => p >= 0);
+    const bench = sim.squadFor(team).filter((p) => !court.includes(p) && !liberos.includes(p));
+    const side = md.sides[team];
+    const userSide = team === (md.userIsHome ? 0 : 1);
+    const club = side.clubId >= 0 ? world.clubs[side.clubId] : undefined;
+    const staff = club !== undefined && !userSide ? headCoachOf(world, club) : undefined;
+    const coach = userSide ? `${world.manager.firstName} ${world.manager.lastName}` : staff !== undefined ? `${staff.firstName} ${staff.lastName}` : null;
+    return { side, court, liberos, bench, coach };
   }
 
   setSpeed(speed: 1 | 1.5 | 2): void {
@@ -4138,13 +4197,21 @@ class Game {
     this.emit();
   }
 
+  /** The rotation the user's side starts each set in, from the next to be played (0 for P1). */
+  setStartRotation(r: number): void {
+    const md = this.matchday;
+    if (md === null || md.stage === 'live') return;
+    md.startRotation = ((r % 6) + 6) % 6;
+    this.emit();
+  }
+
   /** Hand in the team sheet from the set break and play on. */
   startNextSet(): void {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null || md.stage !== 'setBreak') return;
     const team: 0 | 1 = md.userIsHome ? 0 : 1;
-    const result = sim.setStartingLineup(team, md.homeLineup, md.homeLibero, md.homeDefensiveLibero);
+    const result = sim.setStartingLineup(team, md.homeLineup, md.homeLibero, md.homeDefensiveLibero, rotationSteps(md.startRotation ?? 0));
     if (!result.ok) {
       this.notice = result.reason ?? 'That line-up is not allowed.';
       this.emit();
@@ -4243,6 +4310,10 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.subPlans ??= { doubleSwitch: null, serveSub: null, receiveSub: null };
+    // Plans are for the set under way: any left from an earlier one go.
+    const setNow = md.snapshot?.set ?? 0;
+    if ((md.subPlans.set ?? setNow) !== setNow) md.subPlans = { doubleSwitch: null, serveSub: null, receiveSub: null };
+    md.subPlans.set = setNow;
     const was = md.subPlans.doubleSwitch;
     if (setter === null || opposite === null) {
       // Called off: anything still on comes back as planned, nothing new is made.
@@ -4259,6 +4330,10 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.subPlans ??= { doubleSwitch: null, serveSub: null, receiveSub: null };
+    // Plans are for the set under way: any left from an earlier one go.
+    const setNow = md.snapshot?.set ?? 0;
+    if ((md.subPlans.set ?? setNow) !== setNow) md.subPlans = { doubleSwitch: null, serveSub: null, receiveSub: null };
+    md.subPlans.set = setNow;
     const was = md.subPlans.serveSub;
     if (server === null) {
       md.subPlans.serveSub = was?.on != null ? { ...was, armed: false } : null;
@@ -4274,6 +4349,10 @@ class Game {
     const md = this.matchday;
     if (md === null) return;
     md.subPlans ??= { doubleSwitch: null, serveSub: null, receiveSub: null };
+    // Plans are for the set under way: any left from an earlier one go.
+    const setNow = md.snapshot?.set ?? 0;
+    if ((md.subPlans.set ?? setNow) !== setNow) md.subPlans = { doubleSwitch: null, serveSub: null, receiveSub: null };
+    md.subPlans.set = setNow;
     const was = md.subPlans.receiveSub ?? null;
     if (hitter === null || receiver === null) {
       md.subPlans.receiveSub = was?.on != null ? { ...was, armed: false } : null;
@@ -4336,6 +4415,12 @@ class Game {
     // A new set starts from its team sheet: nothing planned is on any more.
     const ds = plans.doubleSwitch;
     const ss = plans.serveSub;
+    // Set up for one set only: the next starts with nothing planned.
+    plans.set ??= snap.set;
+    if (plans.set !== snap.set) {
+      md.subPlans = { doubleSwitch: null, serveSub: null, receiveSub: null, set: snap.set };
+      return;
+    }
     const rs = plans.receiveSub ?? null;
     if (ds?.on != null && ds.on.set !== snap.set) ds.on = null;
     if (ss?.on != null && ss.on.set !== snap.set) ss.on = null;
@@ -4991,6 +5076,7 @@ class Game {
       clubId: -1,
       name: nationName(nation),
       lineup: md.homeLineup,
+      startingRotation: rotationSteps(md.startRotation ?? 0),
       libero: md.homeLibero,
       defensiveLibero: md.homeDefensiveLibero,
       bench: md.homeBench,

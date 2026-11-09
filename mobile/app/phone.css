@@ -214,3 +214,22 @@ html.phone .play-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); ga
 html.phone .play-about b { font-size: 15px; }
 html.phone .play-about p { font-size: 11.5px; }
 html.phone .play-key { display: none; }
+
+/* ---- The teams coming out, on a phone: the same broadcast card, smaller ---- */
+html.phone .mi { padding: 10px 16px 10px; gap: 8px; }
+html.phone .mi-crest { zoom: 0.5; }
+html.phone .mi-head { gap: 12px; }
+html.phone .mi-title b { font-size: 26px; }
+html.phone .mi-title span { font-size: 12px; }
+html.phone .mi-body { gap: 10px; }
+html.phone .mi-court, html.phone .mi-staff { gap: 4px; padding: 6px 6px 6px 22px; }
+html.phone .mi-staff { padding-left: 6px; }
+html.phone .mi-card { gap: 2px; }
+html.phone .mi .player-face { width: 40px !important; height: 40px !important; }
+html.phone .mi-coach-face { width: 40px; height: 40px; font-size: 15px; }
+html.phone .mi-tag i { height: 16px; min-width: 22px; font-size: 9.5px; }
+html.phone .mi-name { padding: 2px 8px; font-size: 11px; }
+html.phone .mi-bench { gap: 3px; }
+html.phone .mi-bench-title { margin-bottom: 2px; font-size: 14px; }
+html.phone .mi-bench-row { padding: 2px 8px; font-size: 12px; }
+html.phone .mi-next { right: 12px; bottom: 8px; }

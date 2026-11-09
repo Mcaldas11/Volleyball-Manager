@@ -285,7 +285,7 @@ export function RotationsScreen(): JSX.Element {
  * The combination a rotation runs, picked off the coach's clipboard: each play drawn for this rotation's
  * men — the setter, the middle as the decoy, the hitter — and, for the pipe, which of its three balls.
  */
-function PlayCard({ rotation, cast, rot, onChange }: {
+export function PlayCard({ rotation, cast, rot, onChange }: {
   rotation: RotationTactics; cast: PlayCast; rot: number; onChange: () => void;
 }): JSX.Element {
   const play = rotation.play ?? 'auto';

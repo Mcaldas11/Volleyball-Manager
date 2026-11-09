@@ -26,9 +26,10 @@ import { bigPlayMs, playBeats, RADAR_MS, sleep, type BigPlay } from '../rallyPla
 import { PlayClock } from '../playClock.ts';
 import type { Kit } from '../court3d.ts';
 import { TeamSheet } from '../teamSheet.tsx';
+import { ShirtNumber } from '../shirtNumber.tsx';
 import {
   ATTACKER_OPTIONS, BLOCK_OPTIONS, COMBINATION_OPTIONS, DEFENSE_OPTIONS, OFFENSE_OPTIONS, RECEPTION_OPTIONS, SERVE_OPTIONS,
-  SERVE_TARGET_OPTIONS, SHAPE_OPTIONS, SliderField, TEMPO_OPTIONS,
+  PlayCard, SERVE_TARGET_OPTIONS, SHAPE_OPTIONS, SliderField, TEMPO_OPTIONS,
 } from './Manage.tsx';
 import {
   combinationsOf, Formation, FORMATION_NAMES, formationOf, lineupSlotPositions, type TeamTactics,
@@ -277,6 +278,7 @@ function LineupSetup(): JSX.Element {
           </div>
           {md.national === null && <MatchdayTacticSelect />}
           <MatchdayFormation />
+          <MatchdayStartRotation />
           <TeamTalkButton />
           <button className="primary lg" onClick={() => g.kickOff()} data-tour="kickoff">
             <Icon name="whistle" size={18} /> Kick off
@@ -335,6 +337,19 @@ function MatchdayTacticSelect(): JSX.Element | null {
 }
 
 /** The 5-1 / 4-2 switch of the team-sheet screens — before kickoff, or for the next set. */
+/** The rotation the side starts each set in: P1, the setter in zone 1, or any of the others. */
+function MatchdayStartRotation(): JSX.Element {
+  const g = useGame();
+  const md = g.matchday!;
+  return (
+    <div className="md-formation" title="The rotation your side starts the set in — named, as ever, for the zone the setter stands in.">
+      <span className="faint">Start in</span>
+      <Dropdown size="sm" value={md.startRotation ?? 0} onChange={(r) => g.setStartRotation(r)}
+        options={[0, 1, 2, 3, 4, 5].map((r) => ({ value: r, label: `P${r + 1}`, hint: r >= 1 && r <= 3 ? 'Setter front' : 'Setter back' }))} />
+    </div>
+  );
+}
+
 function MatchdayFormation(): JSX.Element {
   const g = useGame();
   return (
@@ -429,6 +444,7 @@ function SetBreak(): JSX.Element {
           </div>
           {md.national === null && <MatchdayTacticSelect />}
           <MatchdayFormation />
+          <MatchdayStartRotation />
           <TeamTalkButton />
           <button className="primary lg" onClick={() => g.startNextSet()}>
             <Icon name="whistle" size={18} /> Start set {setsPlayed + 1}
@@ -1203,6 +1219,18 @@ function LiveRotations({ tactics, current }: { tactics: TeamTactics; current: nu
     for (let i = 0; i < tactics.rotations.length; i++) if (i !== rot) tactics.rotations[i] = { ...r };
     g.touch();
   };
+  // Who stands where in this rotation: the six on court now, walked round to it — the libero in for
+  // the middle in the back row — for the combination play's drawing.
+  const md = g.matchday!;
+  const courtNow = (md.userIsHome ? md.snapshot?.homeCourt : md.snapshot?.awayCourt) ?? [];
+  const roles = g.liveRoles();
+  const hasLibero = g.liveLiberos().reception >= 0;
+  const zoneRoles = Array.from({ length: 6 }, (_, z) => {
+    const p = courtNow[((z - rot + current) % 6 + 6) % 6];
+    const role = (p !== undefined ? roles[p] : Position.OutsideHitter) as Position;
+    const back = z === 0 || z >= 4;
+    return back && role === Position.MiddleBlocker && hasLibero ? Position.Libero : role;
+  });
   return (
     <div className="lv-rot">
       <div className="lv-rot-tabs">
@@ -1220,6 +1248,9 @@ function LiveRotations({ tactics, current }: { tactics: TeamTactics; current: nu
         <button className="sm ghost" onClick={copyToAll} title={`Every rotation gets P${rot + 1}'s instructions`}>
           <Icon name="swap" size={13} /> Use for every rotation
         </button>
+      </div>
+      <div className="lv-rot-play">
+        <PlayCard rotation={r} cast={{ roles: zoneRoles }} rot={rot} onChange={() => g.touch()} />
       </div>
       <div className="grid2 timeout-fields lv-rot-fields">
         <ChoiceField label="Preferred attacker" value={r.preferredAttacker} onChange={(v) => { r.preferredAttacker = v; g.touch(); }} options={ATTACKER_OPTIONS} />
@@ -1286,6 +1317,83 @@ function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | nul
           )
           : <LiveRotations tactics={t} current={rotation} />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The teams come out, before the first serve — as the broadcast shows it: the home side's starting six where
+ * they start the set, its libero and head coach, and its bench; then the away side's. On by itself after a
+ * few seconds, or at a click.
+ */
+function MatchIntro({ team }: { team: 0 | 1 }): JSX.Element | null {
+  const g = useGame();
+  const store = g.world!.players;
+  const sheet = g.introSheet(team);
+  const roles = g.liveRoles();
+  useEffect(() => {
+    const t = setTimeout(() => g.nextIntro(), 6500);
+    return () => clearTimeout(t);
+  }, [team]);
+  if (sheet === null) return null;
+  // Next to the net (on the left) the front row, zones 4, 3, 2 from the top; behind it the back row, 5, 6, 1.
+  const order = [3, 4, 2, 5, 1, 0];
+  const role = (p: number): Position => roles[p] as Position;
+  const tag = (p: number): string => (role(p) === Position.Opposite ? 'OP' : POSITION_SHORT[role(p)]);
+  return (
+    <div className="mi" key={team} onClick={() => g.nextIntro()} role="dialog" aria-label="Starting six">
+      <div className="mi-head">
+        <span className="mi-crest"><SideCrest side={sheet.side} size={92} /></span>
+        <div className="mi-title">
+          <b>{sheet.side.name}</b>
+          <span>Starting six</span>
+        </div>
+        <span className="mi-side">{team === 0 ? 'Home' : 'Away'}</span>
+      </div>
+      <div className="mi-body">
+        <div className="mi-court">
+          {order.map((z, i) => {
+            const p = sheet.court[z];
+            if (p === undefined || p < 0) return <div key={z} className="mi-card" />;
+            return (
+              <div key={z} className="mi-card" style={{ animationDelay: `${120 + i * 110}ms` } as CSSProperties}>
+                <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={84} />
+                <span className="mi-tag"><i style={{ background: POSITION_ACCENT[role(p)] }}>{tag(p)}</i><ShirtNumber p={p} /></span>
+                <span className="mi-name">{store.shortName(p)}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mi-staff">
+          {sheet.coach !== null && (
+            <div className="mi-card mi-coach" style={{ animationDelay: '820ms' } as CSSProperties}>
+              <span className="mi-coach-face">{sheet.coach.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>
+              <span className="mi-tag"><i className="mi-tag-coach">Head coach</i></span>
+              <span className="mi-name">{sheet.coach}</span>
+            </div>
+          )}
+          {sheet.liberos.map((p, i) => (
+            <div key={p} className="mi-card" style={{ animationDelay: `${940 + i * 110}ms` } as CSSProperties}>
+              <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={84} />
+              <span className="mi-tag"><i style={{ background: POSITION_ACCENT[Position.Libero] }}>L</i><ShirtNumber p={p} /></span>
+              <span className="mi-name">{store.shortName(p)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mi-bench">
+          <span className="mi-bench-title">On the bench</span>
+          {sheet.bench.map((p, i) => (
+            <div key={p} className="mi-bench-row" style={{ animationDelay: `${1100 + i * 70}ms` } as CSSProperties}>
+              <i style={{ background: POSITION_ACCENT[role(p)] }}>{tag(p)}</i>
+              <ShirtNumber p={p} />
+              <span>{store.fullName(p)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <button className="mi-next sm" onClick={(e) => { e.stopPropagation(); g.nextIntro(); }}>
+        {team === 0 ? 'Next' : 'To the first serve'} <Icon name="chevronRight" size={13} />
+      </button>
     </div>
   );
 }
@@ -1697,6 +1805,7 @@ function LiveMatchView(): JSX.Element {
 
   return (
     <div className="lv" style={{ ["--lv-home" as string]: kits[0].shirt, ["--lv-away" as string]: kits[1].shirt } as CSSProperties}>
+      {md.intro !== undefined && <MatchIntro team={md.intro} />}
       <div className="lv-top">
         <div className="lv-score">
           <div className="lv-score-meta">
@@ -2138,7 +2247,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
           )}
           <p className="field-hint">
             {mode === 'planned'
-              ? 'Set a change up once — it is made by itself the moment its rotation comes round.'
+              ? 'Set a change up once — it is made by itself the moment its rotation comes round. For this set only: the next starts with nothing planned.'
               : 'Drag a bench player onto someone on court, or pick both and confirm. A player who comes off can only return for whoever replaced them.'}
           </p>
         </div>

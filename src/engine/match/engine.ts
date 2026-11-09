@@ -204,7 +204,10 @@ export interface TeamSetup {
   /** The liberos named for the match, at most two — see registeredLiberos. Absent: worked out from the rest. */
   liberos?: number[];
   tactics: TeamTactics;
-  /** Rotation the team starts each set in, 0-5. */
+  /**
+   * How many rotations on from its sheet (the setter in zone 1, P1) the team starts each set, 0-5 —
+   * see rotationSteps for the rotation a coach names.
+   */
   startingRotation?: number;
   /**
    * How well the opposition has this side's tactic worked out, 0-1 — see
@@ -661,7 +664,8 @@ class TeamRuntime {
   readonly outForMatch = new Set<number>();
   /** Knocks the engine's coach has already weighed up — and let him play on with. */
   readonly knockWeighed = new Set<MatchInjury>();
-  private readonly startRotation: number;
+  /** How many rotations on from its sheet the side starts each set — see startingRotation. */
+  startRotation: number;
 
   constructor(
     readonly setup: TeamSetup,
@@ -769,6 +773,14 @@ class TeamRuntime {
     }
     return this.setterIdx;
   }
+}
+
+/**
+ * The rotate() steps from a sheet (the setter in zone 1, P1) to the rotation a coach names — the setter in
+ * zone r + 1 (Pr+1): each rotation walks him one zone down the numbers, so P6 is one step on, P2 five.
+ */
+export function rotationSteps(r: number): number {
+  return (6 - (((r % 6) + 6) % 6)) % 6;
 }
 
 export class MatchSimulator {
@@ -2050,6 +2062,8 @@ export class MatchSimulator {
     lineup: readonly number[],
     libero: number,
     defensiveLibero = -1,
+    /** How many rotations on from the sheet the side starts the set — absent: as it started the last. */
+    startingRotation?: number,
   ): { ok: boolean; reason?: string } {
     this.startIfNeeded();
     const t = this.teams[team];
@@ -2076,6 +2090,7 @@ export class MatchSimulator {
     }
 
     t.startLineup = lineup.slice();
+    if (startingRotation !== undefined) t.startRotation = ((startingRotation % 6) + 6) % 6;
     t.receptionLibero = libero;
     t.defensiveLibero = defensiveLibero;
     t.takePositions(t.startLineup, libero, defensiveLibero);
