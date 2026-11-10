@@ -19,12 +19,13 @@
 import { Rng } from '../core/rng.ts';
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
-import { Position } from '../model/positions.ts';
+import { MAX_SQUAD, Position } from '../model/positions.ts';
 import { roundRobin } from '../season/schedule.ts';
 import { postMessage } from './inbox.ts';
+import { PLAYING_TIME_NAMES, playingTimeOnOffer, squadSize, startLoan, type LoanPlayingTime } from './loans.ts';
 import { newsTransfer } from './news.ts';
 import { payFee } from './negotiation.ts';
-import { dayOfSeason, logTransfer, seasonEndDay, type World } from './world.ts';
+import { dayOfSeason, logTransfer, seasonEndDay, transferWindowOn, type World } from './world.ts';
 
 export interface YouthRow {
   clubId: number;
@@ -323,4 +324,82 @@ export function sellAcademyPlayer(world: World, p: number, buyerId: number): { o
   const text = `${store.fullName(p)} has left the academy for ${buyer.name}, for ${feeText(offer.fee)}.`;
   postMessage(world, { subject: `${store.fullName(p)} sold to ${buyer.name}`, body: text, clubId: buyer.id, category: 'offer' });
   return { ok: true, text };
+}
+
+// ---- Lending a prospect for senior games ----------------------------------------------
+
+export interface AcademyLoanOffer {
+  clubId: number;
+  /** The games they can promise him: their squad decides it. */
+  playingTime: LoanPlayingTime;
+}
+
+/** The youngest a prospect can be sent out to play senior volleyball. */
+export const ACADEMY_LOAN_AGE = 16;
+
+/** Why an academy player can't go out on loan just now — or null when he can. */
+export function academyLoanBlock(world: World, p: number): string | null {
+  const store = world.players;
+  if (store.ageOn(p, world.year, 181) < ACADEMY_LOAN_AGE) return `Too young — senior loans from ${ACADEMY_LOAN_AGE}`;
+  if (store.injuryDaysLeft[p] > 0) return 'Injured';
+  if (transferWindowOn(world.day) === null) return 'Loans only in a transfer window';
+  return null;
+}
+
+/**
+ * Smaller clubs of his country who would take one of the manager's academy
+ * players for the rest of the season, paying his wage, and the games they can
+ * promise — a starting place first. The same clubs for the rest of the week.
+ */
+export function academyLoanOffers(world: World, p: number): AcademyLoanOffer[] {
+  const store = world.players;
+  const own = world.clubs[world.userClubId];
+  if (own === undefined || !own.youthPlayers.includes(p) || academyLoanBlock(world, p) !== null) return [];
+  const rng = new Rng(store.id[p] * 53 + Math.floor(world.day / 7) * 6007 + 11);
+  const rank: Record<LoanPlayingTime, number> = { starter: 0, rotation: 1, backup: 2 };
+  return world.clubs
+    .filter((c) => c.id !== own.id && c.nation === own.nation && c.players.length > 0 &&
+      c.reputation <= own.reputation * 0.95 && squadSize(world, c) < MAX_SQUAD)
+    .map((c) => ({ clubId: c.id, playingTime: playingTimeOnOffer(world, c, p), pull: c.reputation * rng.range(0.7, 1.3) }))
+    .filter((o) => o.playingTime !== 'backup')
+    .sort((a, b) => rank[a.playingTime] - rank[b.playingTime] || b.pull - a.pull)
+    .slice(0, 4)
+    .map(({ clubId, playingTime }) => ({ clubId, playingTime }));
+}
+
+/**
+ * Lend an academy player to a club that offered: he plays senior volleyball
+ * there to the end of the season — the games that make training stick — and
+ * comes back to the academy. His loan is followed like any other: reports,
+ * the games promised, a recall if they don't keep their word.
+ */
+export function loanAcademyPlayer(world: World, p: number, clubId: number): { ok: boolean; text: string } {
+  const own = world.clubs[world.userClubId];
+  const borrower = world.clubs[clubId];
+  const offer = academyLoanOffers(world, p).find((o) => o.clubId === clubId);
+  if (own === undefined || borrower === undefined || offer === undefined) {
+    return { ok: false, text: academyLoanBlock(world, p) ?? 'That loan is no longer on offer.' };
+  }
+  const store = world.players;
+  own.youthPlayers = own.youthPlayers.filter((x) => x !== p);
+  store.setFlag(p, PlayerFlag.Youth, false);
+  const loan = startLoan(world, own, borrower, p, 1, seasonEndDay(world.season), offer.playingTime);
+  loan.academy = true;
+  const games = PLAYING_TIME_NAMES[offer.playingTime].toLowerCase();
+  const text = `${store.fullName(p)} goes on loan to ${borrower.name} until the end of the season, ` +
+    `promised games as a ${games}. They pay his wage; he comes back to the academy in the summer.`;
+  postMessage(world, { subject: `${store.fullName(p)} loaned to ${borrower.name}`, body: text, playerIdx: p, clubId: borrower.id, category: 'offer' });
+  return { ok: true, text };
+}
+
+/** Let an academy player go: he leaves the club, free to join anyone. */
+export function releaseAcademyPlayer(world: World, p: number): { ok: boolean; text: string } {
+  const own = world.clubs[world.userClubId];
+  if (own === undefined || !own.youthPlayers.includes(p)) return { ok: false, text: 'He is not in your academy.' };
+  const store = world.players;
+  own.youthPlayers = own.youthPlayers.filter((x) => x !== p);
+  store.clubId[p] = -1;
+  store.setFlag(p, PlayerFlag.Youth, false);
+  store.wage[p] = 0;
+  return { ok: true, text: `${store.fullName(p)} has been released from the academy.` };
 }

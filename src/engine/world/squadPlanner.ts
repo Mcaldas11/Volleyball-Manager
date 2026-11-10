@@ -132,7 +132,8 @@ export function squadPlan(world: World, club: Club): SquadPlan {
   const store = world.players;
   const s0 = world.season;
   const seasons = Array.from({ length: PLAN_SEASONS }, (_, i) => s0 + i);
-  const away = loansOutOf(world, club.id).map((l) => l.playerIdx);
+  // Academy prospects out on loan go back to the academy, not into the squad.
+  const away = loansOutOf(world, club.id).filter((l) => l.academy !== true).map((l) => l.playerIdx);
   const joining = world.pendingMoves
     .filter((m) => m.kind === 'transfer' && m.toClubId === club.id)
     .map((m) => m.playerIdx);

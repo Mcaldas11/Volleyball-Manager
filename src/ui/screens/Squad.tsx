@@ -4,7 +4,8 @@ import { DirectorDialog } from './Recruitment.tsx';
 import { PlayerCompare } from './Compare.tsx';
 import { AbilityChart } from '../abilityChart.tsx';
 import { feeText, youthRound, youthRoundDay, youthTable, type YouthLeague } from '../../engine/world/youth.ts';
-import { Dropdown } from '../dropdown.tsx';
+import { Dropdown, type DropOption } from '../dropdown.tsx';
+import { ConfirmDialog } from '../confirmDialog.tsx';
 import {
   ATTR_LABELS, HIDDEN_ATTR_SET, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS,
   type AttributeName,
@@ -1126,7 +1127,29 @@ export function YouthScreen(): JSX.Element {
   const youth = g.youthSquad();
   const league = g.youthLeague();
   const [tab, setTab] = useState<AcademyTab>('players');
+  const [releasing, setReleasing] = useState<number | null>(null);
+  const lent = g.academyLoans();
   const bestPotential = youth.length > 0 ? store.potentialAbility[youth[0]] : 0;
+
+  /** The actions menu: who would buy him, who would take him on loan, and letting him go. */
+  const academyActions = (p: number, offers: ReturnType<typeof g.academyOffers>): Array<DropOption<number>> => {
+    const crest = (id: number): JSX.Element | undefined => {
+      const c = world.clubs[id];
+      return c !== undefined ? <ClubCrest club={c} size={16} /> : undefined;
+    };
+    const sell: Array<DropOption<number>> = offers.length > 0
+      ? offers.map((o) => ({ value: o.clubId, group: 'Sell to', label: world.clubs[o.clubId]?.name ?? '?', icon: crest(o.clubId), hint: feeText(o.fee) }))
+      : [{ value: NO_SALE, group: 'Sell to', label: 'No club has made an offer', disabled: true }];
+    const block = g.academyLoanBlock(p);
+    const loans = block === null ? g.academyLoanOffers(p) : [];
+    const loan: Array<DropOption<number>> = loans.length > 0
+      ? loans.map((o) => ({
+        value: LOAN_BASE + o.clubId, group: 'Loan to — senior games, to the end of the season',
+        label: world.clubs[o.clubId]?.name ?? '?', icon: crest(o.clubId), hint: PLAYING_TIME_NAMES[o.playingTime],
+      }))
+      : [{ value: NO_LOAN, group: 'Loan to — senior games, to the end of the season', label: block ?? 'No club can promise him games', disabled: true }];
+    return [...sell, ...loan, { value: RELEASE, group: 'Let him go', label: 'Release from the academy' }];
+  };
   const stats = world.youth?.stats;
   const position = league !== undefined ? youthTable(league).findIndex((r) => r.clubId === club.id) + 1 : 0;
 
@@ -1135,7 +1158,7 @@ export function YouthScreen(): JSX.Element {
       <div className="tiles">
         <StatTile label="Youth facilities" value={`${club.youthFacilities}/20`} sub={<Bar value={club.youthFacilities} max={20} wide />} />
         <StatTile label="Recruitment reach" value={`${club.youthRecruitment}/20`} sub={<Bar value={club.youthRecruitment} max={20} wide />} />
-        <StatTile label="Prospects" value={youth.length} sub="in the academy" />
+        <StatTile label="Prospects" value={youth.length} sub={lent.length > 0 ? `in the academy · ${lent.length} on loan` : 'in the academy'} />
         <StatTile
           label="Best potential"
           value={youth.length > 0 ? <span className={abilityClass(bestPotential)}>{bestPotential}</span> : '—'}
@@ -1211,23 +1234,18 @@ export function YouthScreen(): JSX.Element {
                               <button className="sm" onClick={() => g.promotePlayer(p)}>Promote</button>
                               <Dropdown<number>
                                 size="sm"
-                                className="academy-sell"
-                                placeholder={offers.length > 0 ? 'Sell' : 'No offers'}
-                                disabled={offers.length === 0}
+                                className="academy-more"
+                                placeholder="Actions"
                                 value={null}
-                                menuWidth={250}
+                                menuWidth={290}
                                 searchable={false}
-                                title="Clubs who would take him, and what they would pay"
-                                onChange={(buyer) => g.sellAcademyPlayer(p, buyer)}
-                                options={offers.map((o) => {
-                                  const buyer = world.clubs[o.clubId];
-                                  return {
-                                    value: o.clubId,
-                                    label: buyer?.name ?? '?',
-                                    icon: buyer !== undefined ? <ClubCrest club={buyer} size={16} /> : undefined,
-                                    hint: feeText(o.fee),
-                                  };
-                                })}
+                                title="Sell him, send him on loan for senior games, or let him go"
+                                onChange={(v) => {
+                                  if (v === RELEASE) setReleasing(p);
+                                  else if (v >= LOAN_BASE) g.loanAcademyPlayer(p, v - LOAN_BASE);
+                                  else if (v >= 0) g.sellAcademyPlayer(p, v);
+                                }}
+                                options={academyActions(p, offers)}
                               />
                             </span>
                           </td>
@@ -1242,9 +1260,79 @@ export function YouthScreen(): JSX.Element {
       ) : league === undefined
         ? <Empty>Your club has no youth league this season.</Empty>
         : <YouthLeagueView league={league} />}
+
+      {tab === 'players' && lent.length > 0 && (
+        <Card title="On Loan" icon="transfers" flush className="academy-card academy-loans"
+          actions={<span className="faint">Senior games elsewhere — back in the academy in the summer</span>}>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th />
+                  <th>Name</th>
+                  <th>Pos</th>
+                  <th>At</th>
+                  <th>Promised</th>
+                  <th className="num" title="Matches played of the club's matches">Apps</th>
+                  <th className="num" title="Average rating">Avg</th>
+                  <th className="num" title="Ability now, and since he went">Ability</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {lent.map((l) => {
+                  const p = l.playerIdx;
+                  const s = l.stats;
+                  const now = store.currentAbility[p];
+                  const gain = now - (l.startAbility ?? now);
+                  const at = world.clubs[l.loanClubId];
+                  return (
+                    <tr key={p} className="clickable" onClick={() => g.select(p)}>
+                      <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                      <td className="strong">{store.fullName(p)}</td>
+                      <td><Pos pos={store.position[p] as Position} /></td>
+                      <td>{at !== undefined ? <ClubLink id={at.id} /> : '—'}</td>
+                      <td>{l.playingTime !== undefined ? PLAYING_TIME_NAMES[l.playingTime] : '—'}</td>
+                      <td className="num">{s !== undefined ? `${s.apps}/${s.clubMatches}` : '—'}</td>
+                      <td className="num">{s !== undefined && s.apps > 0 ? <RatingBadge value={s.ratingSum / s.apps} size="sm" /> : <span className="dim">—</span>}</td>
+                      <td className={`num ${abilityClass(now)}`}>
+                        {now}{gain !== 0 && <span className={gain > 0 ? 'pos' : 'neg'}> {gain > 0 ? '+' : ''}{gain}</span>}
+                      </td>
+                      <td className="num" onClick={(e) => e.stopPropagation()}>
+                        <button className="sm" disabled={!canRecall(world, p)} onClick={() => g.recallFromLoan(p)}
+                          title={canRecall(world, p) ? 'They have not given him the games they promised' : 'You can recall him if they don\'t give him the games they promised'}>
+                          Recall
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {releasing !== null && (
+        <ConfirmDialog
+          title="Release from the academy"
+          icon="youth"
+          message={`Release ${store.fullName(releasing)}?`}
+          detail="He leaves the club and is free to join anyone. This can't be undone."
+          confirmLabel="Release"
+          onConfirm={() => { g.releaseAcademyPlayer(releasing); setReleasing(null); }}
+          onCancel={() => setReleasing(null)}
+        />
+      )}
     </div>
   );
 }
+
+/** The actions menu's values: a club's id to sell to it, LOAN_BASE + its id to lend to it. */
+const LOAN_BASE = 1_000_000;
+const RELEASE = -1;
+const NO_SALE = -2;
+const NO_LOAN = -3;
 
 function ordinalSuffix(n: number): string {
   return n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';

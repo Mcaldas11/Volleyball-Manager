@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './icons.tsx';
+import { pageRect, pageSize } from './zoom.ts';
 
 export interface DropOption<T extends string | number> {
   value: T;
@@ -88,14 +89,19 @@ export function Dropdown<T extends string | number>({
   // Below the box, or above it when there is no room underneath.
   useLayoutEffect(() => {
     if (!open || trigger.current === null) return;
-    const r = trigger.current.getBoundingClientRect();
+    // In the page's own units: with a bigger text size the page is zoomed (see zoom.ts).
+    const r = pageRect(trigger.current);
+    const view = pageSize();
     // Never so narrow that a country's name is cut short.
     const width = Math.max(r.width, menuWidth ?? 200);
-    const left = Math.min(r.left, window.innerWidth - width - 8);
-    const below = window.innerHeight - r.bottom - 12;
-    const up = below < Math.min(MENU_MAX, 40 + options.length * 34) && r.top > below;
+    // Under the box from its left edge — or, without room for that on the right, its right edge.
+    const left = Math.max(8, r.left + width > view.width - 8 ? Math.min(r.right - width, view.width - width - 8) : r.left);
+    const below = view.height - r.bottom - 12;
+    // How tall the list wants to be: its options, and the headings of its groups.
+    const groups = new Set(options.map((o) => o.group).filter((x) => x !== undefined)).size;
+    const up = below < Math.min(MENU_MAX, 40 + options.length * 34 + groups * 34) && r.top > below;
     setPlace(up
-      ? { left, width, bottom: window.innerHeight - r.top + 6, maxHeight: Math.min(MENU_MAX, r.top - 12) }
+      ? { left, width, bottom: view.height - r.top + 6, maxHeight: Math.min(MENU_MAX, r.top - 12) }
       : { left, width, top: r.bottom + 6, maxHeight: Math.min(MENU_MAX, below) });
   }, [open, menuWidth, options.length]);
 

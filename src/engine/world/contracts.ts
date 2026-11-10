@@ -57,7 +57,7 @@ export function contractNotices(world: World): void {
   // here on loan, whose contract is his own club's business.
   const ours = [
     ...club.players.filter((p) => loanOf(world, p) === undefined),
-    ...loansOutOf(world, club.id).map((l) => l.playerIdx),
+    ...loansOutOf(world, club.id).filter((l) => l.academy !== true).map((l) => l.playerIdx),
   ];
   const expiring = ours.filter((p) => contractEndSeason(store.contractUntil[p]) <= world.season);
   const ends = `30 June ${seasonEndYear(world, world.season)}`;

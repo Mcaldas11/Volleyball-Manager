@@ -138,7 +138,8 @@ import type { CourtSideline, InjuryPhase } from './courtMotion.ts';
 import type { MatchInjury } from '../engine/match/injury.ts';
 import type { Highlight } from '../engine/match/highlights.ts';
 import {
-  academyOffers, sellAcademyPlayer, userYouthLeague, type AcademyOffer, type YouthLeague,
+  academyLoanBlock, academyLoanOffers, academyOffers, loanAcademyPlayer, releaseAcademyPlayer, sellAcademyPlayer,
+  userYouthLeague, type AcademyLoanOffer, type AcademyOffer, type YouthLeague,
 } from '../engine/world/youth.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
@@ -5414,6 +5415,39 @@ class Game {
     if (world === null) return;
     this.notice = sellAcademyPlayer(world, p, buyerId).text;
     this.emit();
+  }
+
+  /** The clubs who would take an academy player on loan for senior games, and the games they promise. */
+  academyLoanOffers(p: number): AcademyLoanOffer[] {
+    return this.world === null ? [] : academyLoanOffers(this.world, p);
+  }
+
+  /** Why an academy player can't go out on loan now, or null. */
+  academyLoanBlock(p: number): string | null {
+    return this.world === null ? null : academyLoanBlock(this.world, p);
+  }
+
+  /** Lend an academy player to a club that offered, to the end of the season. */
+  loanAcademyPlayer(p: number, clubId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = loanAcademyPlayer(world, p, clubId).text;
+    this.emit();
+  }
+
+  /** Release an academy player. */
+  releaseAcademyPlayer(p: number): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = releaseAcademyPlayer(world, p).text;
+    this.emit();
+  }
+
+  /** The academy's prospects out on loan. */
+  academyLoans(): Loan[] {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? [] : loansOutOf(world, club.id).filter((l) => l.academy === true);
   }
 
   /** The manager's academy side's league this season. */

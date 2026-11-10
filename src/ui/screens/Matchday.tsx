@@ -37,6 +37,7 @@ import {
 import { TacticsBoard } from '../tacticsBoard.tsx';
 import { defenceLayoutsOf, type DefenceLayouts } from '../../engine/match/defence.ts';
 import { describeRallyHighlight } from './Match.tsx';
+import { pageRect, pageSize } from '../zoom.ts';
 import { useGame, WARM_READY, type LiveInjury, type MatchdayLogEntry, type MatchdaySnapshot, type MatchSide, type VideoReview } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
@@ -981,7 +982,7 @@ function LiveTeamCard({ team, serving, ratings, onPick }: {
             <div
               key={p}
               className={`lv-team-row${onPick !== undefined ? ' pickable' : ''}`}
-              onClick={(e) => (onPick !== undefined ? onPick(p, e.currentTarget.getBoundingClientRect()) : g.select(p))}
+              onClick={(e) => (onPick !== undefined ? onPick(p, pageRect(e.currentTarget)) : g.select(p))}
               title={onPick !== undefined ? `${store.fullName(p)} — click to change him` : store.fullName(p)}
             >
               <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={22} />
@@ -1018,7 +1019,7 @@ function QuickSub({ at, onClose }: {
   const ref = useDismiss(true, onClose);
   const width = 300;
   const left = at.side === 'left' ? at.x : at.x - width;
-  const top = Math.max(8, Math.min(at.y, window.innerHeight - 360));
+  const top = Math.max(8, Math.min(at.y, pageSize().height - 360));
   return (
     <div ref={ref} className="lv-quicksub" style={{ left, top, width }}>
       <header className="lv-quicksub-head">

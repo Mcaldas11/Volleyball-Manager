@@ -17,6 +17,7 @@ import { nextTournamentFor, userNation } from '../engine/world/internationals.ts
 import { planOf } from '../engine/world/training.ts';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
+import { pageRect, pageSize } from './zoom.ts';
 
 type Game = ReturnType<typeof useGame>;
 
@@ -584,8 +585,7 @@ function overlap(a: Box, b: Box): number {
  * the first place that covers neither the target nor anything in `avoid`, or the one that covers least.
  */
 function cardPlace(rect: Box | null, w: number, h: number, avoid: readonly Box[]): CSSProperties {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  const { width: vw, height: vh } = pageSize();
   const gap = 18;
   const m = 16;
   const clampTop = (t: number): number => Math.max(12, Math.min(vh - h - 12, t));
@@ -677,12 +677,12 @@ export function TutorialOverlay(): JSX.Element | null {
     const tick = (): void => {
       const el = findTarget(step.target);
       targetRef.current = el;
-      const r = el?.getBoundingClientRect() ?? null;
+      const r = el != null ? pageRect(el) : null;
       setRect((old) => (same(old, r) ? old : r));
       const boxes: Box[] = [];
       for (const a of document.querySelectorAll(AVOID)) {
         if (a.closest('.tut') !== null) continue;
-        const b = a.getBoundingClientRect();
+        const b = pageRect(a);
         if (b.width > 2 && b.height > 2) boxes.push({ left: b.left, top: b.top, right: b.right, bottom: b.bottom });
       }
       const key = boxes.map((b) => `${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.right)},${Math.round(b.bottom)}`).join(';');

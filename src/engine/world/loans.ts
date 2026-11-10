@@ -144,6 +144,8 @@ export interface Loan {
   monthAbility?: number;
   /** Day the user last spoke to the loan club's coach about him. */
   coachTalkOn?: number;
+  /** One of the academy's prospects, lent for senior games: he goes back to the academy, not the squad. */
+  academy?: boolean;
 }
 
 /** A snapshot of a loan, compiled into a report for the inbox. */
@@ -226,7 +228,9 @@ export function wageRoom(world: World, club: Club): number {
  *  its own players out on loan, who will be back at the end of the season,
  *  and anyone who has agreed to join and is waiting on the window. */
 export function squadSize(world: World, club: Club): number {
-  return club.players.length + loansOutOf(world, club.id).length + arrivalsFor(world, club.id).length;
+  // An academy prospect out on loan goes back to the academy: he is no place in the squad.
+  const lent = loansOutOf(world, club.id).filter((l) => l.academy !== true).length;
+  return club.players.length + lent + arrivalsFor(world, club.id).length;
 }
 
 /** Send a player out on loan — until the end of the season, unless told otherwise. */
@@ -274,8 +278,13 @@ export function endLoan(world: World, loan: Loan): void {
     store.clubId[p] = -1;
     return;
   }
-  if (!parent.players.includes(p)) parent.players.push(p);
   store.clubId[p] = parent.id;
+  if (loan.academy === true) {
+    if (!parent.youthPlayers.includes(p)) parent.youthPlayers.push(p);
+    store.setFlag(p, PlayerFlag.Youth, true);
+    return;
+  }
+  if (!parent.players.includes(p)) parent.players.push(p);
 }
 
 /** The season is over: every player on loan goes home, and the user hears who. */
@@ -291,7 +300,7 @@ export function returnLoans(world: World): void {
     if (loan.parentClubId === world.userClubId && borrower !== undefined) {
       say(world, {
         subject: `${name} returns from loan`,
-        body: `${name}'s loan at ${borrower.name} is over, and he is back with the squad. ` +
+        body: `${name}'s loan at ${borrower.name} is over, and he is back ${loan.academy === true ? 'in the academy' : 'with the squad'}. ` +
           'The staff have compiled his matches there.',
         playerIdx: loan.playerIdx,
         clubId: borrower.id,
@@ -801,7 +810,7 @@ export function recallFromLoan(world: World, playerIdx: number): boolean {
   say(world, {
     subject: `${name} recalled from ${club?.name ?? 'his loan'}`,
     body: `You have recalled ${name} from his loan at ${club?.name ?? 'his loan club'}: they did not give him the ` +
-      'playing time they promised. He is back with the squad.',
+      'playing time they promised. ' + (loan.academy === true ? 'He is back in the academy.' : 'He is back with the squad.'),
     playerIdx,
     clubId: club?.id,
     loanReport: report,

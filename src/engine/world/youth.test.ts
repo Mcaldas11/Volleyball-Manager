@@ -4,7 +4,12 @@ import { generateWorld } from './worldGen.ts';
 import { stubManager, type World } from './world.ts';
 import { appointManager } from './career.ts';
 import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
-import { academyOffers, sellAcademyPlayer, userYouthLeague, youthState, youthTable } from './youth.ts';
+import {
+  ACADEMY_LOAN_AGE, academyLoanBlock, academyLoanOffers, academyOffers, loanAcademyPlayer, releaseAcademyPlayer, sellAcademyPlayer,
+  userYouthLeague, youthState, youthTable,
+} from './youth.ts';
+import { loanOf, returnLoans, squadSize } from './loans.ts';
+import { PlayerFlag } from '../model/players.ts';
 import { generateYouthIntake } from './progression.ts';
 
 function managed(seed: number): { world: World; run: (days: number) => void } {
@@ -57,4 +62,48 @@ test("an academy player the manager doesn't want can be sold to a club that offe
   assert.equal(mine.finances.balance, balance + best.fee);
   assert.ok(world.news.some((n) => n.kind === 'transfer' && n.playerIdx === p), 'the paper has it');
   assert.equal(sellAcademyPlayer(world, p, best.clubId).ok, false, 'not twice');
+});
+
+test('an academy player can go on loan to a smaller club for senior games, and comes back to the academy', () => {
+  const { world } = managed(83);
+  const store = world.players;
+  const mine = world.clubs[world.userClubId];
+  const p = mine.youthPlayers.find((q) => store.ageOn(q, world.year, 181) >= ACADEMY_LOAN_AGE && store.injuryDaysLeft[q] === 0)!;
+  assert.ok(p !== undefined, 'a prospect old enough');
+  assert.equal(academyLoanBlock(world, p), null, 'the summer window is open');
+  const offers = academyLoanOffers(world, p);
+  assert.ok(offers.length > 0, 'somebody will play him');
+  for (const o of offers) {
+    assert.ok(world.clubs[o.clubId].reputation <= mine.reputation, 'a smaller club');
+    assert.notEqual(o.playingTime, 'backup', 'games, not a bench');
+  }
+  const size = squadSize(world, mine);
+  const borrower = world.clubs[offers[0].clubId];
+  assert.equal(loanAcademyPlayer(world, p, borrower.id).ok, true);
+  const loan = loanOf(world, p)!;
+  assert.ok(loan.academy === true && loan.parentClubId === mine.id && loan.loanClubId === borrower.id);
+  assert.ok(!mine.youthPlayers.includes(p) && borrower.players.includes(p));
+  assert.equal(store.hasFlag(p, PlayerFlag.Youth), false, 'a senior player while he is there');
+  assert.equal(squadSize(world, mine), size, 'no place in the senior squad');
+  // The season over, he is back — in the academy, not the squad.
+  returnLoans(world);
+  assert.ok(mine.youthPlayers.includes(p) && !mine.players.includes(p) && !borrower.players.includes(p));
+  assert.equal(store.hasFlag(p, PlayerFlag.Youth), true);
+  assert.equal(store.clubId[p], mine.id);
+});
+
+test('an academy player can be released, and a too-young one is not sent out', () => {
+  const { world } = managed(84);
+  const store = world.players;
+  const mine = world.clubs[world.userClubId];
+  const young = mine.youthPlayers.find((q) => store.ageOn(q, world.year, 181) < ACADEMY_LOAN_AGE);
+  if (young !== undefined) {
+    assert.notEqual(academyLoanBlock(world, young), null);
+    assert.deepEqual(academyLoanOffers(world, young), []);
+  }
+  const p = mine.youthPlayers[0];
+  assert.equal(releaseAcademyPlayer(world, p).ok, true);
+  assert.ok(!mine.youthPlayers.includes(p));
+  assert.equal(store.clubId[p], -1);
+  assert.equal(releaseAcademyPlayer(world, p).ok, false, 'not twice');
 });

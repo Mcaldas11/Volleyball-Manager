@@ -5855,7 +5855,12 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .academy-card > .card-body { flex: 1 1 0; min-height: 0; overflow-y: auto; }
 .academy-card .table-wrap { max-height: none; }
 .academy-actions { display: inline-flex; align-items: center; gap: 6px; }
-.academy-sell { min-width: 104px; }
+.academy-more { min-width: 104px; }
+/* The prospects out on loan: below the academy's own list, a few rows high, scrolling inside. */
+.academy > .academy-card.academy-loans { flex: 0 0 auto; max-height: 36%; }
+.academy-loans > .card-body { flex: 1 1 auto; }
+.academy-loans .pos { color: var(--good); font-size: 11px; font-weight: 600; }
+.academy-loans .neg { color: var(--bad); font-size: 11px; font-weight: 600; }
 .academy-league { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 14px; }
 .academy-side { min-height: 0; display: flex; flex-direction: column; gap: 14px; }
 .academy-side > .academy-card { flex: 1 1 0; }

@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import { MAX_NUMBER, MIN_NUMBER } from '../engine/world/squadNumbers.ts';
 import { useDismiss } from './components.tsx';
 import { useGame } from './state.ts';
+import { pageRect, pageSize } from './zoom.ts';
 
 export function ShirtNumber({ p, editable = false, size = 'sm' }: { p: number; editable?: boolean; size?: 'sm' | 'lg' }): JSX.Element | null {
   const g = useGame();
@@ -45,13 +46,14 @@ function NumberGrid({ p, anchor, close }: { p: number; anchor: HTMLElement | nul
 
   // Below the badge, or above it when there is no room; never off the side of the window.
   useLayoutEffect(() => {
-    const r = anchor?.getBoundingClientRect();
+    const r = anchor != null ? pageRect(anchor) : undefined;
     const el = ref.current;
     if (r === undefined || el === null) return;
+    const view = pageSize();
     const h = el.offsetHeight;
     const w = el.offsetWidth;
-    const top = r.bottom + 6 + h < window.innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - 6 - h);
-    setPlace({ top, left: Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) });
+    const top = r.bottom + 6 + h < view.height - 8 ? r.bottom + 6 : Math.max(8, r.top - 6 - h);
+    setPlace({ top, left: Math.max(8, Math.min(view.width - w - 8, r.left)) });
   }, [anchor]);
 
   const pick = (n: number): void => {
