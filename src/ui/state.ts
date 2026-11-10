@@ -8,6 +8,7 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import { deletePortraitsOf } from './portraits.ts';
 import {
   addMission, cancelMission, isShortlisted, missionsOf, scoutEstimate, shortlistOf, toggleShortlist, type MissionSpec, type ScoutMission,
 } from '../engine/world/recruitment.ts';
@@ -1197,6 +1198,8 @@ class Game {
   async deleteSave(id: string): Promise<void> {
     try {
       await deleteSaveFromDb(id);
+      // Its portraits go with it.
+      await deletePortraitsOf(id).catch(() => {});
     } catch {
       this.notice = 'Could not delete that save.';
     }

@@ -1,3 +1,4 @@
+import { PortraitButton } from '../portraitEditor.tsx';
 import { useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { DirectorDialog } from './Recruitment.tsx';
 import { PlayerCompare } from './Compare.tsx';
@@ -618,7 +619,10 @@ export function PlayerDetail(): JSX.Element | null {
   return (
     <div className="profile">
       <div className="profile-hero">
-        <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={104} />
+        <span className="profile-face">
+          <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={104} />
+          <PortraitButton playerId={store.id[p]} name={store.fullName(p)} hasPlayer={(id) => store.id.subarray(0, store.count).includes(id)} />
+        </span>
         <div className="profile-id">
           <div className="profile-tags">
             <Pos pos={natural} />

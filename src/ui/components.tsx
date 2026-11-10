@@ -17,6 +17,7 @@ import { INJURY_NAMES, PlayerFlag, type PlayerStore } from '../engine/model/play
 import type { ManagerProfile } from '../engine/world/world.ts';
 import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/nations.ts';
 import { playerFaceUrl, portraitUrl } from './faces.ts';
+import { usePortrait } from './portraits.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { useGame } from './state.ts';
 import { Dropdown } from './dropdown.tsx';
@@ -370,6 +371,8 @@ export function PersonFace({
   size?: number;
 }): JSX.Element {
   const [failed, setFailed] = useState(false);
+  // A new photo (a portrait picked, say) gets its own chance to load.
+  useEffect(() => setFailed(false), [photoUrl]);
 
   return (
     <span className="player-face" style={{ width: size, height: size }}>
@@ -401,7 +404,9 @@ export function PlayerFace({
   name: string;
   size?: number;
 }): JSX.Element {
-  return <PersonFace photoUrl={playerFaceUrl(playerId)} name={name} size={size} />;
+  // A portrait the manager picked for him, if there is one — else the photo the game gives him.
+  const custom = usePortrait(playerId);
+  return <PersonFace photoUrl={custom ?? playerFaceUrl(playerId)} name={name} size={size} />;
 }
 
 /** A stable portrait for the manager's own likeness — there is no photo field

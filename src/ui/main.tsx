@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import './styles.css';
 import { watchWindowFit } from './fitWindow.ts';
+import { watchRangeFill } from './rangeFill.ts';
 import { startLanguage } from './language.ts';
 import { applyPreferences, loadPreferences } from './preferences.ts';
 
@@ -12,6 +13,8 @@ applyPreferences(loadPreferences());
 watchWindowFit();
 // The language chosen in this browser, if not English: the words turned as they appear.
 startLanguage();
+// Every slider drawn the game's way, gold up to its value.
+watchRangeFill();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

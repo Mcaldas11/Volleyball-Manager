@@ -7,7 +7,7 @@
 import type { JSX } from 'react';
 
 export type IconName =
-  | 'home' | 'squad' | 'tactics' | 'training' | 'youth' | 'schedule' | 'trophy'
+  | 'pencil' | 'home' | 'squad' | 'tactics' | 'training' | 'youth' | 'schedule' | 'trophy'
   | 'scouting' | 'transfers' | 'staff' | 'finances' | 'world' | 'club'
   | 'back' | 'forward' | 'search' | 'menu' | 'chevronDown' | 'chevronRight'
   | 'play' | 'pause' | 'save' | 'exit' | 'close' | 'news' | 'task' | 'offer'
@@ -51,6 +51,7 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   news: <><path d="M4.5 5.5h12v14h-10a2 2 0 0 1-2-2v-12Z" /><path d="M16.5 9h3v8.5a2 2 0 0 1-2 2" /><path d="M7.5 9h6M7.5 12.5h6M7.5 16h4" /></>,
   task: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m8 12.3 2.7 2.7L16.5 9" /></>,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  pencil: <><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" /><path d="m14.5 7.5 3 3" /></>,
   offer: <><path d="M3.5 12.5 11 5h7.5v7.5L11 20l-7.5-7.5Z" /><circle cx="15" cy="8.8" r="1.3" /></>,
   press: <><rect x="9" y="3.5" width="6" height="10" rx="3" /><path d="M6 11a6 6 0 0 0 12 0" /><path d="M12 17v3.5M9 20.5h6" /></>,
   whistle: <><circle cx="9" cy="14" r="5" /><path d="M13 11.5 20 8v4h-5" /><path d="M9 6V3.5" /></>,

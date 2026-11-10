@@ -7,6 +7,10 @@
 type Row = readonly [en: string, pt: string, es: string];
 
 export const PHRASES: readonly Row[] = [
+  // The board's welcome, its league named (the shorter form, without it, is in translationsText.ts).
+  ['The board welcomes you as head coach of {0}. We expect a finish of {1} or better in the {2}. You have {3} to spend on transfers and a wage budget of {4} a season. Good luck.',
+    'A direção dá-te as boas-vindas como treinador principal de {0}. Esperamos terminar em {1} ou melhor na {2}. Tens {3} para gastar em transferências e um orçamento salarial de {4} por época. Boa sorte.',
+    'La directiva te da la bienvenida como primer entrenador de {0}. Esperamos terminar {1} o mejor en la {2}. Tienes {3} para fichajes y un presupuesto salarial de {4} por temporada. Buena suerte.'],
   // ---- The navigation ----
   ['Head coach', 'Treinador principal', 'Primer entrenador'],
   ['Out of work', 'Desempregado', 'Sin trabajo'],

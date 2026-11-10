@@ -1,3 +1,4 @@
+import { openPortraits } from './portraits.ts';
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import { StaffRole } from '../engine/model/staff.ts';
 import logo from './logo.png';
@@ -194,6 +195,8 @@ function readCollapsed(): boolean {
 
 export function App(): JSX.Element {
   const g = useGame();
+  // The open career's own portraits, loaded as it opens.
+  useEffect(() => { void openPortraits(g.world !== null ? g.currentSaveId : null); }, [g.currentSaveId, g.world]);
   // As the game opens, before the menu: the splash.
   const [splash, setSplash] = useState(() => g.world === null && splashDue());
   return (

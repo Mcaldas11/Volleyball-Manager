@@ -1,7 +1,8 @@
 #!/bin/sh
 # The download zips, rebuilt in the background after every commit (run by .git/hooks/post-commit —
-# `npm run hooks` puts the hook in place): itch/volleyball-manager-web.zip and
-# release/volleyball-manager-<version>-windows.zip. The commit itself never waits.
+# `npm run hooks` puts the hook in place): itch/volleyball-manager-web.zip,
+# release/volleyball-manager-<version>-windows.zip and release/volleyball-manager-<version>-android.apk.
+# The commit itself never waits.
 #
 # Commits in quick succession don't start builds side by side: one runs, and if more commits came
 # in meanwhile it builds once more at the end, from the latest. Progress and errors go to
@@ -30,6 +31,22 @@ fi
       echo "=== done: itch/volleyball-manager-web.zip and release/*-windows.zip are up to date"
     else
       echo "=== FAILED — see the errors above; the zips were left as they were"
+    fi
+    # The Android app, from the same commit: built in mobile/, then put beside the Windows zip (the
+    # older versions' .apk taken away). A failure here leaves the zips above as they are.
+    if (cd mobile && npm run apk); then
+      rm -f release/volleyball-manager-*-android.apk
+      cp mobile/release/volleyball-manager-*-android.apk release/ 2>/dev/null
+      ls -t mobile/release/volleyball-manager-*-android.apk | tail -n +2 | xargs rm -f
+      echo "=== done: release/*-android.apk is up to date"
+    else
+      echo "=== APK FAILED — see the errors above; the old .apk was left as it was"
+    fi
+    # Another commit came in meanwhile: one more round, and this one isn't the last word.
+    if [ -f "$STATE/pending" ]; then
+      echo "=== another commit came in — building again"
+    else
+      echo "=== ALL DONE $(date '+%Y-%m-%d %H:%M:%S') — web zip, Windows zip and APK ready"
     fi
   done
   rm -f "$STATE/running"

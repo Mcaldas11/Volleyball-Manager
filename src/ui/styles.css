@@ -5325,7 +5325,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .dd-sm .dd-trigger { height: 28px; padding: 0 8px 0 10px; font-size: 12.5px; border-radius: 7px; }
 
 .dd-menu {
-  position: fixed; z-index: 400; display: flex; flex-direction: column; min-height: 0; padding: 5px;
+  position: fixed; z-index: 9000; display: flex; flex-direction: column; min-height: 0; padding: 5px;
   background: linear-gradient(180deg, #152133, #0f1926); border: 1px solid #2c3b52; border-radius: 10px;
   box-shadow: 0 18px 40px -10px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(215, 167, 63, 0.06);
   animation: dd-in 0.12s ease;
@@ -7387,7 +7387,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .prefs-tab.on, .prefs-tab.on:hover:not(:disabled) { background: var(--gold-soft); border-color: rgba(215, 167, 63, 0.45); color: var(--gold-bright); }
 .prefs-panel { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow-y: auto; }
 .prefs-dd { flex: none; width: 300px; }
-.prefs-range { flex: none; width: 220px; accent-color: var(--gold); }
+.prefs-range { flex: none; width: 220px; }
 .settings-row .seg { flex: none; }
 
 /* The frame-rate counter, in a corner, over everything. */
@@ -8439,3 +8439,77 @@ tr.row-on td { background: var(--surface-3); }
 .lv-rot-play .play-pick .play-diagram, .lv-rot-play .play-key { display: none; }
 .lv-rot-play .play-pick { padding: 8px 4px; }
 .lv-rot-play .play-main { grid-template-columns: minmax(0, 250px) minmax(0, 1fr); }
+
+/* ---- Custom portraits (portraitEditor.tsx): the pencil on the photo, and the editor ---- */
+.profile-face { position: relative; display: inline-flex; flex: none; }
+.portrait-btn {
+  position: absolute; right: -2px; bottom: -2px; display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border-radius: 50%; border: 2px solid var(--surface);
+  background: var(--club-bright, var(--gold)); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  opacity: 0.9; cursor: pointer;
+}
+.portrait-btn:hover { opacity: 1; transform: scale(1.06); }
+.portrait-card { width: min(720px, 100%); }
+.portrait-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 22px 14px; border-bottom: 1px solid var(--line); }
+.portrait-head > div { display: flex; flex-direction: column; gap: 4px; }
+.portrait-kicker { font: 700 11px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--club-bright, var(--gold)); }
+.portrait-head b { font: 800 26px/1.1 var(--font-display); color: #fff; }
+.portrait-sub { font-size: 13px; color: var(--text-dim); }
+.portrait-body { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; padding: 18px 22px; }
+.portrait-frame { aspect-ratio: 1; overflow: hidden; border: 2px solid var(--club-bright, var(--gold)); border-radius: 8px; background: var(--surface-2); }
+.portrait-frame img, .portrait-canvas { display: block; width: 100%; height: 100%; object-fit: cover; }
+.portrait-canvas { cursor: grab; touch-action: none; }
+.portrait-canvas:active { cursor: grabbing; }
+.portrait-side { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; }
+.portrait-zoom { display: flex; align-items: center; gap: 10px; width: 100%; font-weight: 700; }
+.portrait-zoom input { flex: 1; }
+.portrait-howto { font-size: 14px; }
+.portrait-hint, .portrait-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
+.portrait-note { color: var(--text); }
+.portrait-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 22px 6px; border-top: 1px solid var(--line); }
+.portrait-gap { flex: 1; }
+.portrait-foot-note { margin: 0; padding: 0 22px 14px; font-size: 11.5px; color: var(--text-faint); }
+
+/* ---- Sliders: every range in the game drawn by the game, not the browser — a dark track, gold up to
+   the value (--fill, kept up to date by rangeFill.ts) and a gold handle. ---- */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 22px;
+  min-width: 80px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  accent-color: var(--gold);
+  cursor: pointer;
+  --track: linear-gradient(90deg, var(--gold) 0 var(--fill, 0%), #26324a var(--fill, 0%) 100%);
+}
+input[type="range"]:focus { box-shadow: none; outline: none; }
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 999px; background: var(--track); border: 1px solid rgba(255, 255, 255, 0.06);
+}
+input[type="range"]::-moz-range-track { height: 6px; border-radius: 999px; background: #26324a; }
+input[type="range"]::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--gold); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; margin-top: -6px; border-radius: 50%;
+  background: var(--gold); border: 2px solid #0b111c; box-shadow: 0 0 0 1px var(--gold-deep), 0 2px 6px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s ease;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--gold); border: 2px solid #0b111c; box-shadow: 0 0 0 1px var(--gold-deep);
+}
+input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb { transform: scale(1.15); }
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--gold-soft); }
+input[type="range"]:disabled { cursor: default; opacity: 0.45; }
+/* The club colour: its track the colour wheel itself, the handle showing where on it. */
+.ed-hue input[type="range"] {
+  --track: linear-gradient(90deg, hsl(0 70% 50%), hsl(60 70% 50%), hsl(120 70% 45%), hsl(180 70% 45%), hsl(240 70% 55%), hsl(300 70% 50%), hsl(359 70% 50%));
+}
+.ed-hue input[type="range"]::-moz-range-track { background: var(--track); }
+.ed-hue input[type="range"]::-moz-range-progress { background: transparent; }
+.ed-hue input[type="range"]::-webkit-slider-thumb { background: #fff; }

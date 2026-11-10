@@ -15,6 +15,7 @@
  */
 
 import { CONTEXTUAL, PATTERNS, PHRASES } from './translations.ts';
+import { TEXT_PHRASES } from './translationsText.ts';
 
 export type Language = 'en' | 'pt' | 'es';
 
@@ -38,6 +39,8 @@ interface Template {
   /** Which hole each capture is: "{1} of {0}" captures 1 first. */
   holes: number[];
   to: string;
+  /** Its longest stretch of plain words: a text without it cannot be this row. */
+  key: string;
 }
 /** Kept by the row's first word, or — when it starts with a hole — its last. */
 let byFirst = new Map<string, Template[]>();
@@ -65,7 +68,8 @@ function template(en: string, to: string): Template {
     holes.push(Number(hole[1]));
     return "(.*?)";
   }).join('');
-  return { re: new RegExp(`^${source}$`), holes, to, dotted: en.includes(' · ') };
+  const key = en.split(/\{\d\}/).reduce((a, b) => (b.trim().length > a.length ? b.trim() : a), '');
+  return { re: new RegExp(`^${source}$`), holes, to, dotted: en.includes(' · '), key };
 }
 
 function file(map: Map<string, Template[]>, key: string, t: Template): void {
@@ -81,15 +85,20 @@ function build(lang: Language): void {
   open = [];
   if (lang === 'en') return;
   const col = COLUMN[lang];
-  for (const row of PHRASES) {
+  // The screens' words first: a row there wins over the same English in the game's written text.
+  const have = new Set(PHRASES.map((r) => r[0]));
+  for (const row of [...PHRASES, ...TEXT_PHRASES.filter((r) => !have.has(r[0]))]) {
     if (!/\{\d\}/.test(row[0])) {
       dictionary.set(row[0], row[col]);
       continue;
     }
     const t = template(row[0], row[col]);
     const words = row[0].split(' ');
-    if (!/^\{\d\}/.test(row[0])) file(byFirst, words[0], t);
-    else if (!/\{\d\}$/.test(row[0])) file(byLast, words[words.length - 1], t);
+    // Filed by a first or last word with no hole in it — "Out{0}." or "the {2}." can be found by neither.
+    const first = words[0];
+    const last = words[words.length - 1];
+    if (!/\{\d\}/.test(first)) file(byFirst, first, t);
+    else if (!/\{\d\}/.test(last)) file(byLast, last, t);
     else open.push(t);
   }
 }
@@ -99,6 +108,8 @@ function fill(core: string, dotted: boolean): string | null {
   const candidates = [...(byFirst.get(words[0]) ?? []), ...(byLast.get(words[words.length - 1]) ?? []), ...open];
   for (const t of candidates) {
     if (dotted && !t.dotted) continue;
+    // A quick look for the row's plain words before its pattern is tried.
+    if (!core.includes(t.key)) continue;
     const m = t.re.exec(core);
     if (m === null) continue;
     const held: string[] = [];
@@ -144,7 +155,27 @@ export function translate(text: string, where: Element | null = null): string {
   }
   const filled = fill(core, false);
   if (filled !== null) return lead + filled + trail;
+  // Lines one at a time.
+  if (core.includes('\n')) {
+    const lines = core.split('\n');
+    const turned = lines.map((l) => translate(l));
+    if (turned.some((l, i) => l !== lines[i])) return lead + turned.join('\n') + trail;
+    return text;
+  }
+  // A paragraph the game wrote a sentence at a time — a message, a report, a press question: each
+  // sentence on its own, when the whole is not in the dictionary.
+  const sentences = splitSentences(core);
+  if (sentences.length > 1) {
+    const turned = sentences.map((s) => translate(s));
+    if (turned.some((s, i) => s !== sentences[i])) return lead + turned.join(' ') + trail;
+  }
   return text;
+}
+
+/** A paragraph's sentences: split after a full stop, a question or an exclamation mark followed by a new one. */
+function splitSentences(text: string): string[] {
+  const parts = text.split(/(?<=[.!?…]["”’)]?)\s+(?=["“‘(]?[A-Z0-9ÀÁÂÉÍÓÚÜÑÇ])/);
+  return parts.length > 1 ? parts : [text];
 }
 
 // An input's placeholder is translated; what is typed in it is its value, which never is.

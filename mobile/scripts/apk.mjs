@@ -19,7 +19,9 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const win = process.platform === 'win32';
-const { version } = JSON.parse(readFileSync(path.join(here, 'package.json'), 'utf8'));
+// The game's own version (the computer version's package.json), so the .apk always says the same as the
+// Windows zip.
+const { version } = JSON.parse(readFileSync(path.join(here, '..', 'package.json'), 'utf8'));
 const [major, minor, patch] = version.split('.').map(Number);
 const versionCode = major * 10000 + minor * 100 + patch;
 

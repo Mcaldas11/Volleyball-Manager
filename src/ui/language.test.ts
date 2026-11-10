@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setLanguage, translate } from './language.ts';
 import { PHRASES } from './translations.ts';
+import { TEXT_PHRASES } from './translationsText.ts';
 
 test('the game in Portuguese and Spanish: whole pieces of text, their spacing kept — and the rest left in English', () => {
   setLanguage('pt');
@@ -32,9 +33,18 @@ test('the game in Portuguese and Spanish: whole pieces of text, their spacing ke
 
 test('every row of the dictionary has both translations, and no English is in it twice', () => {
   const seen = new Set<string>();
-  for (const [en, pt, es] of PHRASES) {
+  for (const [en, pt, es] of [...PHRASES, ...TEXT_PHRASES]) {
     assert.ok(pt.trim() !== '' && es.trim() !== '', `"${en}" is translated`);
     assert.ok(!seen.has(en), `"${en}" is in the dictionary once`);
     seen.add(en);
   }
+});
+
+test('the game own written text: a sentence with names in it, and a paragraph the game wrote a sentence at a time', () => {
+  setLanguage('es');
+  assert.equal(translate('Gwardia Radom face Siatkarz in the final.'), 'Gwardia Radom se enfrentan a Siatkarz en la final.');
+  assert.equal(translate('You have no club. The set is over.'), 'No tienes club. El set ha terminado.');
+  setLanguage('pt');
+  assert.equal(translate('The match is over.'), 'O jogo acabou.');
+  setLanguage('en');
 });
