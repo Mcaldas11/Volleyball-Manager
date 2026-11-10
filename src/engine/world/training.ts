@@ -32,6 +32,7 @@ import type { Club } from '../model/club.ts';
 import { Position } from '../model/positions.ts';
 import { Combinations, combinationsOf } from '../match/tactics.ts';
 import { FAMILIARITY_GAIN, learnTactic } from '../match/tacticFamiliarity.ts';
+import type { AcademyProgramme } from './academy.ts';
 import { postMessage } from './inbox.ts';
 import { DAYS_PER_SEASON, type Fixture, type World } from './world.ts';
 
@@ -368,6 +369,11 @@ export function assistantLoad(world: World, p: number): PlayerLoad {
 
 /** A player's programme as it stands: his own, or the assistant's — never harder than the doctor allows. */
 export function individualOf(world: World, club: Club, p: number): { focus: IndividualFocus; load: PlayerLoad; byAssistant: boolean } {
+  // An academy programme decides it while it runs: its area, and an intensive one's extra work.
+  const prog = academyProgramme(world, p);
+  if (prog !== undefined) {
+    return { focus: prog.area, load: doctorsLoad(world, p, prog.intensity === 'intensive' ? 'extra' : assistantLoad(world, p)), byAssistant: false };
+  }
   const plan = readPlan(world, club);
   const own = plan.individual[p];
   if (plan.assistantIndividual || own === undefined) {
@@ -378,9 +384,18 @@ export function individualOf(world: World, club: Club, p: number): { focus: Indi
 
 /** Just how hard a player's programme has him working — all the daily and injury sums need. */
 export function loadOf(world: World, club: Club, p: number): PlayerLoad {
+  const prog = academyProgramme(world, p);
+  if (prog !== undefined) return doctorsLoad(world, p, prog.intensity === 'intensive' ? 'extra' : assistantLoad(world, p));
   const plan = readPlan(world, club);
   const own = plan.individual[p];
   return doctorsLoad(world, p, plan.assistantIndividual || own === undefined ? assistantLoad(world, p) : own.load);
+}
+
+/** The academy programme a player is on (academy.ts), if any — while he is injured it waits. */
+function academyProgramme(world: World, p: number): AcademyProgramme | undefined {
+  const list = world.academy?.programmes;
+  if (list === undefined || list.length === 0) return undefined;
+  return list.find((x) => x.playerIdx === p);
 }
 
 /** On the doctor's word (the staff meeting), a player trains no harder than reduced for a fortnight. */

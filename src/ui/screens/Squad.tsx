@@ -6,6 +6,7 @@ import { AbilityChart } from '../abilityChart.tsx';
 import { feeText, youthRound, youthRoundDay, youthTable, type YouthLeague } from '../../engine/world/youth.ts';
 import { Dropdown, type DropOption } from '../dropdown.tsx';
 import { ConfirmDialog } from '../confirmDialog.tsx';
+import { AcademyDevelopment, AcademyFacilities, AcademyRecruitment } from './AcademyPlus.tsx';
 import {
   ATTR_LABELS, HIDDEN_ATTR_SET, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS,
   type AttributeName,
@@ -1112,7 +1113,7 @@ function assessment(pa: number): { text: string; cls: string } {
   return { text: 'Unlikely to make the grade', cls: 'dim' };
 }
 
-type AcademyTab = 'players' | 'league';
+type AcademyTab = 'players' | 'development' | 'recruitment' | 'facilities' | 'league';
 
 /**
  * The academy: its prospects — what they might become, how their season in
@@ -1172,15 +1173,21 @@ export function YouthScreen(): JSX.Element {
       </div>
 
       <div className="academy-tabs">
-        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
+        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['development', 'Development'], ['recruitment', 'Recruitment'], ['facilities', 'Facilities'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
         <span className="faint">
           {tab === 'players'
             ? 'A new intake arrives each summer. Who plays for the U19s gets the minutes that make training stick.'
+            : tab === 'development' ? 'Money and weeks put into one prospect at a time — no promise of a star.'
+            : tab === 'recruitment' ? "The scouts paid to find youngsters in other clubs' academies."
+            : tab === 'facilities' ? 'What the academy is built on — asked of the board.'
             : "Your academy side against the other clubs' — a round every week from late August."}
         </span>
       </div>
 
-      {tab === 'players' ? (
+      {tab === 'development' ? <AcademyDevelopment />
+        : tab === 'recruitment' ? <AcademyRecruitment />
+        : tab === 'facilities' ? <AcademyFacilities />
+        : tab === 'players' ? (
         <Card title="Academy Players" icon="youth" flush className="academy-card">
           {youth.length === 0
             ? <Empty>No youth players yet. The next intake arrives at the end of the season.</Empty>

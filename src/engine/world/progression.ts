@@ -284,6 +284,26 @@ export function extraDevelopment(world: World, i: number): boolean {
   return true;
 }
 
+/**
+ * A step of development pointed at some attributes — an academy programme's
+ * doing — for a player still short of his potential (never past it): `pull`
+ * multiplies the weight of the attributes named. Returns whether he took it.
+ */
+export function focusedDevelopment(world: World, i: number, attrs: readonly AttributeName[], pull = 6): boolean {
+  const store = world.players;
+  const age = store.ageOn(i, world.year, 181);
+  if (store.currentAbility[i] >= store.potentialAbility[i]) return false;
+  const bias = new Float64Array(ATTRIBUTES.length).fill(0.2);
+  for (const a of attrs) bias[ATTR_INDEX[a]] = pull;
+  applyAbilityDelta(store, i, 4, age, world.rng, bias);
+  return true;
+}
+
+/** How well a club coaches, 0-1: its best coach — the user himself at his own club. */
+export function clubCoaching(world: World, clubId: number): number {
+  return coachingQualityByClub(world)[clubId] ?? 0.3;
+}
+
 function coachingQualityByClub(world: World): Float64Array {
   const out = new Float64Array(world.clubs.length);
   for (const club of world.clubs) {

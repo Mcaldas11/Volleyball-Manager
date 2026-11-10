@@ -36,6 +36,7 @@ import type { NewsItem } from './news.ts';
 import type { Internationals, IntlReport } from './internationals.ts';
 import type { Formation, TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
+import type { AcademyState } from './academy.ts';
 import type { MonthAward } from './monthAwards.ts';
 import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { MatchReviewNote } from './postMatchReview.ts';
@@ -677,6 +678,8 @@ export interface World {
 
   /** Every club's youth side and its league this season — see youth.ts. Absent until the first is drawn up. */
   youth?: YouthState;
+  /** The manager's academy programmes, youth searches and their finds — see academy.ts. Absent until first used. */
+  academy?: AcademyState;
 
   /** Appearances and match ratings per player, per competition, for this
    *  season and the last — see records.ts. Keyed by player index. */

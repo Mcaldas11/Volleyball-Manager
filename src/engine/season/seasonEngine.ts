@@ -55,6 +55,7 @@ import { progressCups, scheduleCupSeason } from './cups.ts';
 import { friendliesDay, isFriendly } from './friendlies.ts';
 import { POSITION_MATCH, prepCoverage, trainingDay, trainPositions } from '../world/training.ts';
 import { youthDay } from '../world/youth.ts';
+import { academyDay } from '../world/academy.ts';
 import {
   applyMatchInjuries, matchInjuryRng, quickMatchInjuries, rollInjuries, weeklyTraining,
 } from '../world/progression.ts';
@@ -648,6 +649,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   trainingDay(world);
   campDay(world);
   youthDay(world);
+  academyDay(world);
 
   if (todays !== undefined) {
     for (const fid of todays) {

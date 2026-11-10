@@ -142,6 +142,11 @@ import {
   userYouthLeague, type AcademyLoanOffer, type AcademyOffer, type YouthLeague,
 } from '../engine/world/youth.ts';
 import {
+  academyState, dismissCandidate, programmeBlock, programmeCost, searchBlock, searchCost, signBlock, signCandidate,
+  startProgramme, startSearch, type AcademyCandidate, type AcademyState, type ProgrammeArea, type ProgrammeIntensity,
+  type SearchScope,
+} from '../engine/world/academy.ts';
+import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
   conferenceMatch,
@@ -5440,6 +5445,57 @@ class Game {
     const world = this.world;
     if (world === null) return;
     this.notice = releaseAcademyPlayer(world, p).text;
+    this.emit();
+  }
+
+  // ---- The academy's programmes, searches and facilities (academy.ts) ----
+
+  /** The academy's programmes, searches and finds as they stand. */
+  academyState(): AcademyState | null {
+    return this.world === null ? null : academyState(this.world);
+  }
+
+  programmeCost(intensity: ProgrammeIntensity): number {
+    return this.club === null ? 0 : programmeCost(this.club, intensity);
+  }
+
+  programmeBlock(p: number, intensity: ProgrammeIntensity): string | null {
+    return this.world === null ? null : programmeBlock(this.world, p, intensity);
+  }
+
+  startProgramme(p: number, area: ProgrammeArea, intensity: ProgrammeIntensity): void {
+    if (this.world === null) return;
+    this.notice = startProgramme(this.world, p, area, intensity).text;
+    this.emit();
+  }
+
+  searchCost(scope: SearchScope): number {
+    return this.club === null ? 0 : searchCost(this.club, scope);
+  }
+
+  searchBlock(scope: SearchScope): string | null {
+    return this.world === null ? null : searchBlock(this.world, scope);
+  }
+
+  startSearch(scope: SearchScope, position: number): void {
+    if (this.world === null) return;
+    this.notice = startSearch(this.world, scope, position).text;
+    this.emit();
+  }
+
+  signBlock(c: AcademyCandidate): string | null {
+    return this.world === null ? null : signBlock(this.world, c);
+  }
+
+  signCandidate(p: number): void {
+    if (this.world === null) return;
+    this.notice = signCandidate(this.world, p).text;
+    this.emit();
+  }
+
+  dismissCandidate(p: number): void {
+    if (this.world === null) return;
+    dismissCandidate(this.world, p);
     this.emit();
   }
 
