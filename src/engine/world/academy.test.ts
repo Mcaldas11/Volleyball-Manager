@@ -25,6 +25,7 @@ function managed(seed: number): { world: World; run: (days: number) => void } {
   return { world, run: (days) => { for (let i = 0; i < days; i++) advanceDay(world, ctx); } };
 }
 
+
 test('a development programme: paid up front, twelve weeks in its area, two at a time, one a season each', () => {
   const { world, run } = managed(91);
   const club = world.clubs[world.userClubId];
