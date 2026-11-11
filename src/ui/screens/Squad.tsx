@@ -6,6 +6,7 @@ import { AbilityChart } from '../abilityChart.tsx';
 import { feeText, youthRound, youthRoundDay, youthTable, type YouthLeague } from '../../engine/world/youth.ts';
 import { Dropdown, type DropOption } from '../dropdown.tsx';
 import { ConfirmDialog } from '../confirmDialog.tsx';
+import type { TimelineItem } from '../../engine/world/playerTimeline.ts';
 import { AcademyDevelopment, AcademyFacilities, AcademyRecruitment } from './AcademyPlus.tsx';
 import {
   ATTR_LABELS, HIDDEN_ATTR_SET, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS,
@@ -398,11 +399,61 @@ function PositionsCourt({ store, p }: { store: PlayerStore; p: number }): JSX.El
   );
 }
 
+/** Each kind of moment in a career: its icon and its colour. */
+const TIMELINE_LOOK: Readonly<Record<TimelineItem['kind'], { icon: IconName; tone: string }>> = {
+  club: { icon: 'club', tone: 'club' }, loan: { icon: 'transfers', tone: 'loan' }, season: { icon: 'stats', tone: 'season' },
+  title: { icon: 'trophy', tone: 'title' }, award: { icon: 'star', tone: 'award' }, debut: { icon: 'whistle', tone: 'debut' },
+  injury: { icon: 'medical', tone: 'injury' }, captain: { icon: 'board', tone: 'captain' }, promoted: { icon: 'youth', tone: 'debut' },
+  academy: { icon: 'youth', tone: 'club' },
+};
+
+/** A player's career, season by season: clubs, loans, titles, awards and the moments noted along the way — newest first. */
+function CareerTimeline({ p }: { p: number }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const items = g.playerTimeline(p);
+  // Season by season, the newest at the top.
+  const seasons = [...new Set(items.map((i) => i.season))].sort((a, b) => b - a);
+  const titles = items.filter((i) => i.kind === 'title').length;
+  const awards = items.filter((i) => i.kind === 'award').length;
+  const clubs = new Set(items.filter((i) => i.kind === 'club').map((i) => i.clubId)).size;
+  return (
+    <Card title="Career Timeline" icon="career" flush className="timeline-card"
+      actions={<span className="faint">{clubs} club{clubs === 1 ? '' : 's'} · {titles} title{titles === 1 ? '' : 's'} · {awards} award{awards === 1 ? '' : 's'}</span>}>
+      {items.length === 0 ? <Empty>Nothing on the record yet — his story starts with his first match.</Empty> : (
+        <div className="timeline">
+          {seasons.map((season) => (
+            <section key={season} className="tl-season">
+              <h4 className="tl-season-head">{seasonLabel(world, season)}</h4>
+              <ol className="tl-list">
+                {items.filter((i) => i.season === season).reverse().map((i, k) => {
+                  const look = TIMELINE_LOOK[i.kind];
+                  return (
+                    <li key={k} className={`tl-item tl-${look.tone}`}>
+                      <span className="tl-dot"><Icon name={look.icon} size={13} /></span>
+                      <span className="tl-text">
+                        <b>{i.title}</b>
+                        {i.detail !== undefined && <span className="faint">{i.detail}</span>}
+                      </span>
+                      {i.clubId !== undefined && world.clubs[i.clubId] !== undefined && <span className="tl-club"><ClubLink id={i.clubId} short /></span>}
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /** The player profile's tabs — one screen each, the way FM splits a profile. */
-type ProfileTab = 'overview' | 'stats' | 'details';
+type ProfileTab = 'overview' | 'stats' | 'timeline' | 'details';
 const PROFILE_TABS: ReadonlyArray<[ProfileTab, string, IconName]> = [
   ['overview', 'Overview', 'user'],
   ['stats', 'Statistics', 'stats'],
+  ['timeline', 'Career', 'career'],
   ['details', 'Contract & Career', 'finances'],
 ];
 
@@ -832,6 +883,8 @@ export function PlayerDetail(): JSX.Element | null {
           </Card>
         </div>
       )}
+
+      {tab === 'timeline' && <CareerTimeline p={p} />}
 
       {tab === 'overview' && (
         <div className="profile-grid">

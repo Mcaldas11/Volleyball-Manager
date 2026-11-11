@@ -52,7 +52,7 @@ import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
 import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { MATCHDAY_SQUAD, Position } from '../engine/model/positions.ts';
-import { StaffRole, staffName, type Staff } from '../engine/model/staff.ts';
+import { StaffRole, staffName, staffRating, type Staff } from '../engine/model/staff.ts';
 import {
   backroomOf, compensationFor, longestContract, releaseStaff, roleCount, severanceFor, STAFF_SLOTS, staffBudgetRoom,
   staffInterest, staffMarket, staffOfferBlock, staffWageAsk, type StaffInterest, type StaffListing,
@@ -146,6 +146,12 @@ import {
   startProgramme, startSearch, type AcademyCandidate, type AcademyState, type ProgrammeArea, type ProgrammeIntensity,
   type SearchScope,
 } from '../engine/world/academy.ts';
+import { notePlayerEvent, playerTimeline, type TimelineItem } from '../engine/world/playerTimeline.ts';
+import { diagnose, emptyStats, mergeStats, opponentCounter, playStats, type Diagnosis, type Finding, type TacticChange } from '../engine/match/assistant.ts';
+import { PREP_VARIANTS, runPrepLab, scoutOpponent, type LabResult, type ScoutedOpponent } from '../engine/world/prepLab.ts';
+import { currentFamiliarity, overallFamiliarity } from '../engine/match/tacticFamiliarity.ts';
+import { markUndone, noteDecision, type RecentPlay, type TacticDecision } from '../engine/world/tacticalDecisions.ts';
+import { seasonLabel as pastSeasonLabel } from '../engine/season/pastSeasons.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
   closeInterview as closeInterviewSession,
@@ -201,7 +207,8 @@ export type ScreenId =
   | 'transfers' | 'training' | 'finances' | 'staff' | 'scouting'
   | 'youth' | 'stats' | 'rankings' | 'halloffame' | 'career' | 'jobs' | 'news' | 'internationals'
   | 'dressing' | 'commercial' | 'facilities' | 'affiliates' | 'analysis' | 'owner' | 'achievements' | 'courses' | 'editor'
-  | 'planner' | 'meeting' | 'shortlist' | 'missions' | 'deadline' | 'director' | 'datahub' | 'social' | 'coaches';
+  | 'planner' | 'meeting' | 'shortlist' | 'missions' | 'deadline' | 'director' | 'datahub' | 'social' | 'coaches'
+  | 'diagnosis' | 'preplab';
 
 /** The screens that still make sense without a club — everything a manager
  *  between jobs can look at. */
@@ -653,6 +660,27 @@ export interface MatchdayState {
   trophy?: { team: 0 | 1; captain: number | null } | null;
   /** The stoppage for someone hurt under way — null when there is none. */
   injury?: LiveInjury | null;
+  /** What the other bench has changed against the manager's side this match: the set it came before, and what it was. */
+  opponentMoves?: Array<{ set: number; id: string; message: string; during?: boolean }>;
+  /** The changes made on the assistant's word this match: change id → the decision noted, and the tactic before it. */
+  assistantApplied?: Record<string, { decision: number; before: TeamTactics }>;
+  /** Coaching mode has stopped play at a moment worth a look: why. The view opens the assistant on it. */
+  assistantPrompt?: string | null;
+  /** The moments coaching mode has stopped for already, so as not to stop twice for one. */
+  assistantStops?: string[];
+}
+
+const COACHING_MODE_KEY = 'vm.coachingMode';
+/** Most changes the other bench makes in a match. */
+const MAX_OPPONENT_MOVES = 3;
+
+/** Coaching mode as last chosen: off unless it was turned on. */
+function readCoachingMode(): boolean {
+  try {
+    return window.localStorage.getItem(COACHING_MODE_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 /** Rallies' worth of warm-up from cold to ready, and how fast a substitute cools on the bench. */
@@ -2915,12 +2943,23 @@ class Game {
     };
     // The other side keeps any promise of games it has made a loanee — and
     // comes having prepared for the match, as it would anywhere else.
-    const theirs = (c: Club): TeamSetup => ({
-      ...toTeamSetup(world.players, c, loanStarters(world, c)), prep: matchPrep(world, c, md.fixture.day),
-      roomEdge: cohesionEdge(cohesionOf(world, c.id)), chemistry: chemistryFor(world),
-    });
+    const theirs = (c: Club): TeamSetup => {
+      const setup = toTeamSetup(world.players, c, loanStarters(world, c));
+      return {
+        ...setup,
+        // A copy: what its bench changes against the manager during the match is for the match.
+        tactics: structuredClone(setup.tactics),
+        prep: matchPrep(world, c, md.fixture.day),
+        roomEdge: cohesionEdge(cohesionOf(world, c.id)), chemistry: chemistryFor(world),
+      };
+    };
     const homeSetup = md.userIsHome ? userSetup : theirs(homeClub);
     const awaySetup = md.userIsHome ? theirs(awayClub) : userSetup;
+    this.opponentTactics = (md.userIsHome ? awaySetup : homeSetup).tactics;
+    md.opponentMoves = [];
+    md.assistantApplied = {};
+    md.assistantPrompt = null;
+    md.assistantStops = [];
 
     this.liveSim = new MatchSimulator(world.players, {
       home: homeSetup,
@@ -3171,7 +3210,289 @@ class Game {
     // Planned changes are made at the dead ball they are due — a time-out at it too, as the rules allow.
     if (md.videoReview == null && md.injury == null) this.runSubPlans();
     if (md.timeoutActive === null && md.videoReview == null && md.injury == null) this.maybeAIAct();
+    if (this.coachingMode) this.coachingModeCheck();
     this.emit();
+  }
+
+  // ---- Between matches: the tactical diagnosis and the preparation lab -----------------
+
+  /** The last change made from the Analysis, and the tactic before it — for its undo. */
+  private analysisUndo: { decision: number; changeId: string; before: TeamTactics } | null = null;
+  /** The lab's results, by fixture and variant. */
+  private labResults = new Map<string, LabResult>();
+
+  /** The assistant's reading of the last few matches, and the matches it is read from. */
+  seasonDiagnosis(): { d: Diagnosis | null; matches: RecentPlay[] } {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return { d: null, matches: [] };
+    const matches = world.recentPlay ?? [];
+    if (matches.length === 0) return { d: null, matches };
+    const ours = matches.reduce((s, m) => mergeStats(s, m.ours), emptyStats());
+    const theirs = matches.reduce((s, m) => mergeStats(s, m.theirs), emptyStats());
+    const store = world.players;
+    const d = diagnose(ours, club.tactics, {
+      positionOf: (p) => store.position[p] as Position,
+      nameOf: (p) => store.shortName(p),
+      eye: this.assistantEye(),
+      seed: Math.floor(world.day / 7),
+      live: false,
+    }, theirs);
+    return { d, matches };
+  }
+
+  /** What making a change would cost in familiarity, points overall (0-100). */
+  familiarityCost(change: TacticChange): number {
+    const club = this.club;
+    if (club === null) return 0;
+    const before = overallFamiliarity(currentFamiliarity(club.tactics));
+    const t = structuredClone(club.tactics);
+    change.apply(t);
+    return Math.max(0, before - overallFamiliarity(currentFamiliarity(t)));
+  }
+
+  /** Make a change to the tactic from the Analysis — for good, until changed again. */
+  applyTacticChange(finding: string, change: TacticChange): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null || (this.matchday !== null && this.matchday.stage !== 'lineup')) return;
+    const before = structuredClone(club.tactics);
+    change.apply(club.tactics);
+    const decision = noteDecision(world, { where: 'analysis', finding, change: change.label, changeId: change.id });
+    this.analysisUndo = { decision, changeId: change.id, before };
+    this.labResults.clear();
+    this.notice = `${change.label} — in the tactic from now on.`;
+    this.emit();
+  }
+
+  /** The change from the Analysis that can still be undone. */
+  undoableAnalysisChange(): string | null {
+    return this.analysisUndo?.changeId ?? null;
+  }
+
+  undoAnalysisChange(): void {
+    const world = this.world;
+    const club = this.club;
+    const u = this.analysisUndo;
+    if (world === null || club === null || u === null) return;
+    club.tactics = u.before;
+    markUndone(world, u.decision);
+    this.labResults.clear();
+    this.analysisUndo = null;
+    this.notice = 'Changed back.';
+    this.emit();
+  }
+
+  /** Every change made on the assistant's word, newest first. */
+  tacticDecisions(): TacticDecision[] {
+    return [...(this.world?.tacticDecisions ?? [])].reverse();
+  }
+
+  /** How well the staff read an opponent, 0-1: the best of the assistant, the analyst and the scouts. */
+  private scoutingAccuracy(): number {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return 0.4;
+    let best = this.assistantEye() * 20;
+    for (const sid of club.staff) {
+      const st = world.staff[sid];
+      if (st !== undefined && (st.role === StaffRole.Scout || st.role === StaffRole.HeadScout || st.role === StaffRole.RecruitmentAnalyst)) best = Math.max(best, staffRating(st));
+    }
+    return best / 20;
+  }
+
+  /** The next opponent, as the staff read him — the lab's subject. */
+  prepOpponent(): { fixture: Fixture; opp: Club; scouted: ScoutedOpponent } | null {
+    const world = this.world;
+    const club = this.club;
+    const fixture = this.nextFixture();
+    if (world === null || club === null || fixture === null) return null;
+    const opp = world.clubs[fixture.home === club.id ? fixture.away : fixture.home];
+    if (opp === undefined || opp.players.length < 7) return null;
+    return { fixture, opp, scouted: scoutOpponent(world, opp, this.scoutingAccuracy(), fixture.id * 977 + club.id) };
+  }
+
+  /** The lab's result for a variant against the next opponent, if it has been run. */
+  labResult(variantId: string): LabResult | null {
+    const prep = this.prepOpponent();
+    return prep === null ? null : this.labResults.get(`${prep.fixture.id}:${variantId}`) ?? null;
+  }
+
+  /** Play the practice matches for a variant. */
+  runPrepLab(variantId: string): LabResult | null {
+    const world = this.world;
+    const club = this.club;
+    const prep = this.prepOpponent();
+    const variant = PREP_VARIANTS.find((v) => v.id === variantId);
+    if (world === null || club === null || prep === null || variant === undefined) return null;
+    const result = runPrepLab(world, club, prep.opp, prep.scouted, variant);
+    this.labResults.set(`${prep.fixture.id}:${variantId}`, result);
+    this.emit();
+    return result;
+  }
+
+  // ---- The other bench, and the assistant ------------------------------------------------
+
+  /** The tactic the other side is playing this match — a copy of its own, its bench's to change. */
+  private opponentTactics: TeamTactics | null = null;
+
+  /**
+   * The other bench reads the manager's side — where it attacks, whom its
+   * serve finds weakest — and may move its block or its serve onto it: once a
+   * set at most, three times a match, the surer the better its coach. Returns
+   * what the manager's side sees, or null.
+   */
+  private opponentReacts(): string | null {
+    const md = this.matchday;
+    const world = this.world;
+    const theirs = this.opponentTactics;
+    if (md === null || world === null || theirs === null || md.national != null) return null;
+    const moves = (md.opponentMoves ??= []);
+    // At a set break, before the next set; at its timeout, during this one.
+    const during = md.stage === 'live' && md.setBreakPending !== true;
+    const set = (md.snapshot?.set ?? 0) + 1;
+    if (moves.length >= MAX_OPPONENT_MOVES || moves.some((m) => m.set === set)) return null;
+    const userTeam: 0 | 1 = md.userIsHome ? 0 : 1;
+    const theirClub = world.clubs[md.userIsHome ? md.fixture.away : md.fixture.home];
+    const coach = theirClub !== undefined ? headCoachOf(world, theirClub) : undefined;
+    const quality = coach !== undefined ? staffRating(coach) / 20 : 0.5;
+    const stats = playStats(md.log.map((l) => l.entry), userTeam);
+    const move = opponentCounter(stats, theirs, quality, md.fixture.id * 131 + set * 17 + md.log.length, new Set(moves.map((m) => m.id)));
+    if (move === null) return null;
+    move.apply(theirs);
+    moves.push({ set, id: move.id, message: move.message, ...(during ? { during: true } : {}) });
+    return move.message;
+  }
+
+  /** What the other bench has changed this match. */
+  opponentMovesThisMatch(): Array<{ set: number; id: string; message: string; during?: boolean }> {
+    return this.matchday?.opponentMoves ?? [];
+  }
+
+  /** How good the manager's assistant is at reading a match, 0-1: his best assistant or analyst. */
+  assistantEye(): number {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return 0.4;
+    let best = 7;
+    for (const sid of club.staff) {
+      const st = world.staff[sid];
+      if (st !== undefined && (st.role === StaffRole.AssistantCoach || st.role === StaffRole.PerformanceAnalyst)) best = Math.max(best, staffRating(st));
+    }
+    return best / 20;
+  }
+
+  /** The assistant's reading of the match so far. Null outside a live match. */
+  liveDiagnosis(): Diagnosis | null {
+    const md = this.matchday;
+    const world = this.world;
+    const sim = this.liveSim;
+    const t = this.matchTactics();
+    if (md === null || world === null || sim === null || t === null || md.stage === 'lineup') return null;
+    const userTeam: 0 | 1 = md.userIsHome ? 0 : 1;
+    const log = md.log.map((l) => l.entry);
+    const roles = sim.roles;
+    const store = world.players;
+    return diagnose(playStats(log, userTeam), t, {
+      positionOf: (p) => (roles[p] ?? store.position[p]) as Position,
+      nameOf: (p) => store.shortName(p),
+      eye: this.assistantEye(),
+      seed: md.fixture.id * 31 + (md.snapshot?.set ?? 0),
+      live: true,
+    }, playStats(log, (1 - userTeam) as 0 | 1));
+  }
+
+  /** Make a change the assistant suggested — for this match, as any change made during one. */
+  applyAssistantChange(f: Finding): void {
+    const md = this.matchday;
+    const world = this.world;
+    const t = this.matchTactics();
+    if (md === null || world === null || t === null || f.change === undefined) return;
+    const applied = (md.assistantApplied ??= {});
+    if (applied[f.change.id] !== undefined) return;
+    const before = structuredClone(t);
+    f.change.apply(t);
+    const decision = noteDecision(world, {
+      where: 'live', fixtureId: md.fixture.id, set: (md.snapshot?.set ?? 0) + 1,
+      finding: f.title, change: f.change.label, changeId: f.change.id,
+    });
+    applied[f.change.id] = { decision, before };
+    this.notice = `${f.change.label} — from the next rally, for this match.`;
+    this.emit();
+  }
+
+  /** Undo a change made on the assistant's word this match: the tactic as it was before it. */
+  undoAssistantChange(changeId: string): void {
+    const md = this.matchday;
+    const world = this.world;
+    const t = this.matchTactics();
+    const entry = md?.assistantApplied?.[changeId];
+    if (md === null || world === null || t === null || entry === undefined) return;
+    // The engine holds the tactic itself: put it back as it was, in place.
+    for (const key of Object.keys(t) as Array<keyof TeamTactics>) delete t[key];
+    Object.assign(t, structuredClone(entry.before));
+    // Anything changed after it went with it.
+    for (const [id, e] of Object.entries(md.assistantApplied!)) {
+      if (e.decision >= entry.decision) {
+        delete md.assistantApplied![id];
+        markUndone(world, e.decision);
+      }
+    }
+    this.notice = 'Changed back.';
+    this.emit();
+  }
+
+  /** Coaching mode: the assistant stops play at the moments worth a look. Remembered between matches. */
+  coachingMode: boolean = readCoachingMode();
+
+  setCoachingMode(on: boolean): void {
+    this.coachingMode = on;
+    try {
+      window.localStorage.setItem(COACHING_MODE_KEY, on ? '1' : '0');
+    } catch {
+      // A private window: the choice lasts the session.
+    }
+    this.emit();
+  }
+
+  /** The moment coaching mode stopped for has been looked at. */
+  clearAssistantPrompt(): void {
+    const md = this.matchday;
+    if (md === null) return;
+    md.assistantPrompt = null;
+    this.emit();
+  }
+
+  /**
+   * After a dead ball, in coaching mode: a run of four against, or a tight
+   * finish to a set, stops play and opens the assistant — once for each.
+   */
+  private coachingModeCheck(): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'live' || md.setEnding === true || md.assistantPrompt != null || md.timeoutActive !== null) return;
+    const userTeam: 0 | 1 = md.userIsHome ? 0 : 1;
+    const set = md.snapshot?.set ?? 0;
+    const stops = (md.assistantStops ??= []);
+    const recent = md.log.slice(-4);
+    const run = recent.length === 4 && recent.every((l) => l.entry.winner !== userTeam);
+    const runTag = `${set}:run:${Math.floor(md.log.length / 8)}`;
+    if (run && !stops.includes(runTag)) {
+      stops.push(runTag);
+      md.assistantPrompt = 'Four points in a row against us.';
+      return;
+    }
+    const snap = md.snapshot;
+    if (snap != null) {
+      const ours = userTeam === 0 ? snap.homeScore : snap.awayScore;
+      const theirs = userTeam === 0 ? snap.awayScore : snap.homeScore;
+      const target = set >= 4 ? 15 : 25;
+      const tight = Math.max(ours, theirs) >= target - 5 && Math.abs(ours - theirs) <= 2;
+      const tag = `${set}:tight`;
+      if (tight && !stops.includes(tag)) {
+        stops.push(tag);
+        md.assistantPrompt = 'A tight finish to the set.';
+      }
+    }
   }
 
   /** A timeout asked for with the ball in play, given now the ball is dead — if nothing else has play stopped. */
@@ -3207,6 +3528,7 @@ class Game {
     md.timeoutsUsed = [0, 0];
     md.setBreakPending = true;
     this.aiPicksNextSet();
+    this.opponentReacts();
     this.emit();
     return 'set';
   }
@@ -3685,12 +4007,19 @@ class Game {
     return world === null || club === null ? null : dressingRoom(world, club);
   }
 
+  /** A player's career as a timeline: clubs and loans, seasons, titles, awards and the moments noted along the way. */
+  playerTimeline(p: number): TimelineItem[] {
+    const world = this.world;
+    return world === null ? [] : playerTimeline(world, p, (s) => pastSeasonLabel(world, s));
+  }
+
   /** Give one of the squad the armband. */
   makeCaptain(p: number): void {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return;
     setCaptain(club, p);
+    if (club.captain === p) notePlayerEvent(world, p, { kind: 'captain', clubId: club.id });
     this.notice = `${world.players.fullName(p)} is the new captain.`;
     this.emit();
   }
@@ -4801,6 +5130,9 @@ class Game {
       md.log.length - this.lastTimeoutAtRally >= 6 && Math.random() < 0.4
     ) {
       this.startTimeout(aiTeam);
+      // A timeout is also a chance to change something.
+      const move = this.opponentReacts();
+      if (move !== null) this.notice = move;
       return;
     }
 
@@ -5463,9 +5795,9 @@ class Game {
     return this.world === null ? null : programmeBlock(this.world, p, intensity);
   }
 
-  startProgramme(p: number, area: ProgrammeArea, intensity: ProgrammeIntensity): void {
+  startProgramme(p: number, area: ProgrammeArea, intensity: ProgrammeIntensity, secondary?: ProgrammeArea): void {
     if (this.world === null) return;
-    this.notice = startProgramme(this.world, p, area, intensity).text;
+    this.notice = startProgramme(this.world, p, area, intensity, secondary).text;
     this.emit();
   }
 
@@ -6359,6 +6691,7 @@ class Game {
     club.players.push(playerIdx);
     world.players.setFlag(playerIdx, PlayerFlag.Youth, false);
     world.players.contractUntil[playerIdx] = seasonEndDay(world.season + 2);
+    notePlayerEvent(world, playerIdx, { kind: 'promoted', clubId: club.id });
     this.notice = `${world.players.fullName(playerIdx)} has been promoted to the first team.`;
     this.emit();
   }

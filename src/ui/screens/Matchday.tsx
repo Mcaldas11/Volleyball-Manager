@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import { AssistantDialog, AssistantReport } from '../assistantPanel.tsx';
 import { clubKit, kitFromHue, matchKits } from '../kits.ts';
 import { asItStands, liveTable, type AroundTheLeague, type Progress } from '../../engine/season/aroundTheLeague.ts';
 import { chemistryOf } from '../../engine/world/chemistry.ts';
@@ -447,6 +448,7 @@ function SetBreak(): JSX.Element {
           <MatchdayFormation />
           <MatchdayStartRotation />
           <TeamTalkButton />
+          <AssistantButton />
           <button className="primary lg" onClick={() => g.startNextSet()}>
             <Icon name="whistle" size={18} /> Start set {setsPlayed + 1}
           </button>
@@ -468,6 +470,26 @@ function SetBreak(): JSX.Element {
         chemistry={(s, h) => chemistryOf(world, s, h)}
       />
     </div>
+  );
+}
+
+/** The assistant's report at a set break — and, if the other bench has changed something, a word of it. */
+function AssistantButton(): JSX.Element {
+  const g = useGame();
+  const [open, setOpen] = useState(false);
+  const d = g.liveDiagnosis();
+  const moves = g.opponentMovesThisMatch();
+  const set = (g.matchday?.snapshot?.set ?? 0) + 1;
+  const fresh = moves.find((m) => m.set === set);
+  const flagged = d !== null && d.verdict === 'adjust';
+  return (
+    <>
+      <button className={`md-talk-btn${flagged ? ' flag' : ''}`} onClick={() => setOpen(true)} title={fresh?.message ?? d?.summary ?? "The assistant's report"}>
+        <Icon name="stats" size={15} /> Assistant{flagged ? ` · ${d!.findings.filter((f) => f.severity >= 2).length}` : ''}
+        {fresh !== undefined && <span className="md-opp-move"><Icon name="swap" size={11} /> They changed</span>}
+      </button>
+      {open && <AssistantDialog onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -1418,7 +1440,7 @@ function LiveMatchView(): JSX.Element {
   };
   const [scene, setScene] = useState<Scene>(() => sceneFor(md.snapshot, g.liveRoles(), nearTeam, store, tacticsNow));
   const [labels, setLabels] = useState<CourtLabels>('ratings');
-  const [overlay, setOverlay] = useState<'subs' | 'tactics' | null>(null);
+  const [overlay, setOverlay] = useState<'subs' | 'tactics' | 'assistant' | null>(null);
   /** One of the user's players clicked beside the court: his options, by the row. */
   const [quick, setQuick] = useState<{ p: number; x: number; y: number; side: 'left' | 'right' } | null>(null);
   const openSubs = (): void => {
@@ -1434,7 +1456,11 @@ function LiveMatchView(): JSX.Element {
   // The substitutions, a player's options or his profile: while any is open, play holds — and
   // going from one straight to another doesn't let a rally slip through in between.
   const [challengeOpen, setChallengeOpen] = useState(false);
-  const panelOpen = overlay === 'subs' || quick !== null || g.selectedPlayer !== null || challengeOpen;
+  const panelOpen = overlay === 'subs' || overlay === 'assistant' || quick !== null || g.selectedPlayer !== null || challengeOpen;
+  // Coaching mode has stopped play at a moment worth a look: the assistant opens on it.
+  useEffect(() => {
+    if (md.assistantPrompt != null && overlay !== 'assistant') setOverlay('assistant');
+  }, [md.assistantPrompt]);
   useEffect(() => {
     if (panelOpen) g.openCoachPanel();
     else g.closeCoachPanel();
@@ -1937,6 +1963,16 @@ function LiveMatchView(): JSX.Element {
               </div>
             )}
             {overlay === 'tactics' && <TacticsOverlay onClose={() => setOverlay(null)} />}
+            {overlay === 'assistant' && (
+              <div className="lv-overlay lv-assistant">
+                <header className="lv-overlay-head">
+                  <strong><Icon name="stats" size={16} /> Assistant</strong>
+                  <span className="faint">His reading of the match so far</span>
+                  <button className="icon-btn" onClick={() => { g.clearAssistantPrompt(); setOverlay(null); }} title="Close"><Icon name="close" size={16} /></button>
+                </header>
+                <div className="lv-overlay-body"><AssistantReport /></div>
+              </div>
+            )}
           </div>
           <div className="lv-caption">
             <span className="lv-caption-text">
@@ -2028,6 +2064,12 @@ function LiveMatchView(): JSX.Element {
         </div>
         <button className={overlay === 'tactics' ? 'on' : ''} onClick={() => setOverlay((o) => (o === 'tactics' ? null : 'tactics'))}>
           <Icon name="tactics" size={15} /> Tactics
+        </button>
+        <button className={overlay === 'assistant' ? 'on' : ''} data-tour="assistant"
+          onClick={() => { if (overlay === 'assistant') { g.clearAssistantPrompt(); setOverlay(null); } else setOverlay('assistant'); }}
+          title="The assistant's reading of the match, and the changes he would make">
+          <Icon name="stats" size={15} /> Assistant
+          {g.coachingMode && <span className="lv-badge" title="Coaching mode is on">C</span>}
         </button>
         <span className="flex-spacer" />
         {md.paused

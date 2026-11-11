@@ -11,8 +11,10 @@ import { boardMood } from '../../engine/world/career.ts';
 import {
   attrClass, Bar, ClubCrest, money, PlayerFace, RatingBadge, StarMeter,
 } from '../components.tsx';
-import { Icon } from '../icons.tsx';
-import { formatDate, useGame } from '../state.ts';
+import { Icon, type IconName } from '../icons.tsx';
+import { formatDate, useGame, type ScreenId } from '../state.ts';
+import { messageNeedsAction } from '../../engine/world/inbox.ts';
+import { contractEndSeason, dayOfSeason } from '../../engine/world/world.ts';
 import { UnemployedHome } from './Career.tsx';
 import { NationalHome } from './National.tsx';
 
@@ -48,6 +50,7 @@ export function HomeScreen(): JSX.Element {
         <TeamForm />
       </div>
       <div className="home-row home-row-2">
+        <ForToday />
         <TopScorer />
         <BoardCard />
         <FinancesCard />
@@ -295,6 +298,85 @@ function LastMatch({ fixtureId }: { fixtureId: number }): JSX.Element {
 }
 
 /** The club's leading points scorer this season, with his full line. */
+/** One thing on the manager's desk today: what it is, how pressing, and where to deal with it. */
+interface TodayItem {
+  key: string;
+  icon: IconName;
+  /** 3 needs a decision now, 2 soon, 1 worth knowing. */
+  urgency: 1 | 2 | 3;
+  text: string;
+  go: ScreenId;
+}
+
+/**
+ * The manager's desk: what needs him today, most pressing first — the offers
+ * and messages waiting on an answer, the injured, the contracts running out,
+ * tired legs before a match, the academy and the building work — each a click
+ * from where it is dealt with.
+ */
+function ForToday(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const store = world.players;
+  const items: TodayItem[] = [];
+
+  const waiting = world.messages.filter((m) => m.archived !== true && messageNeedsAction(world, m)).length;
+  if (waiting > 0) items.push({ key: 'inbox', icon: 'inbox', urgency: 3, go: 'inbox', text: `${waiting} message${waiting === 1 ? '' : 's'} waiting on your answer` });
+
+  const offers = world.incomingOffers.filter((o) => (o.status ?? 'open') === 'open' && club.players.includes(o.playerIdx)).length;
+  if (offers > 0) items.push({ key: 'offers', icon: 'offer', urgency: 3, go: 'transfers', text: `${offers} offer${offers === 1 ? '' : 's'} for your players to answer` });
+
+  const next = g.nextFixture();
+  if (next !== null) {
+    const days = next.day - world.day;
+    const tired = club.players.filter((p) => store.injuryDaysLeft[p] === 0 && store.condition[p] < 70).length;
+    if (days <= 2 && tired > 0) items.push({ key: 'tired', icon: 'training', urgency: 2, go: 'training', text: `${tired} player${tired === 1 ? '' : 's'} short of condition, ${days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `${days} days`} before the match` });
+  }
+
+  const injured = club.players.filter((p) => store.injuryDaysLeft[p] > 0);
+  if (injured.length > 0) {
+    const names = injured.slice(0, 3).map((p) => store.shortName(p)).join(', ');
+    items.push({ key: 'injured', icon: 'medical', urgency: 2, go: 'squad', text: `${injured.length} injured: ${names}${injured.length > 3 ? '…' : ''}` });
+  }
+
+  const expiring = club.players.filter((p) => contractEndSeason(store.contractUntil[p]) <= world.season).length;
+  if (expiring > 0) items.push({ key: 'contracts', icon: 'contract', urgency: dayOfSeason(world) > 240 ? 3 : 1, go: 'squad', text: `${expiring} contract${expiring === 1 ? '' : 's'} running out this summer` });
+
+  const academy = world.academy;
+  if (academy !== undefined) {
+    const ending = academy.programmes.filter((x) => x.endDay - world.day <= 7).length;
+    if (ending > 0) items.push({ key: 'programmes', icon: 'youth', urgency: 1, go: 'youth', text: `${ending} academy programme${ending === 1 ? '' : 's'} ending this week` });
+    if (academy.candidates.length > 0) items.push({ key: 'candidates', icon: 'scouting', urgency: 2, go: 'youth', text: `${academy.candidates.length} youngster${academy.candidates.length === 1 ? '' : 's'} found by the scouts, waiting on you` });
+    if (academy.search !== undefined) items.push({ key: 'search', icon: 'scouting', urgency: 1, go: 'youth', text: `Youth search: report in ${Math.max(0, academy.search.endDay - world.day)} days` });
+  }
+
+  const project = club.facilityProject;
+  if (project !== undefined) items.push({ key: 'facility', icon: 'club', urgency: 1, go: 'facilities', text: project.stage === 'asked' ? `The board is weighing up your facilities request — answer by ${g.dateLabelForDay(project.until)}` : `Building work under way — done ${g.dateLabelForDay(project.until)}` });
+
+  if (club.boardConfidence < 35) items.push({ key: 'board', icon: 'board', urgency: 3, go: 'home', text: `The board's confidence is low (${Math.round(club.boardConfidence)}%)` });
+
+  items.sort((a, b) => b.urgency - a.urgency);
+  return (
+    <section className="hm-card hm-today">
+      <header className="hm-card-head"><h3 className="gold">For today</h3><span className="faint">{items.length === 0 ? 'nothing waiting' : `${items.length} thing${items.length === 1 ? '' : 's'}`}</span></header>
+      {items.length === 0 ? <p className="hm-empty">Nothing needs you today. A good day to look at the tactics — or the academy.</p> : (
+        <ul className="hm-today-list">
+          {items.map((i) => (
+            <li key={i.key}>
+              <button className={`hm-today-item u${i.urgency}`} onClick={() => g.go(i.go)}>
+                <span className="hm-today-icon"><Icon name={i.icon} size={15} /></span>
+                <span className="hm-today-text">{i.text}</span>
+                <Icon name="chevronRight" size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function TopScorer(): JSX.Element {
   const g = useGame();
   const world = g.world!;

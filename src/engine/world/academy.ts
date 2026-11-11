@@ -29,6 +29,7 @@ import { injuryNotice, postMessage } from './inbox.ts';
 import { NATIONS } from './nations.ts';
 import { newsTransfer } from './news.ts';
 import { payFee } from './negotiation.ts';
+import { notePlayerEvent } from './playerTimeline.ts';
 import { clubCoaching, focusedDevelopment } from './progression.ts';
 import { FOCUS_ATTRS, FOCUS_LABELS, type IndividualFocus } from './training.ts';
 import { euros, logTransfer, seasonEndDay, type World } from './world.ts';
@@ -45,6 +46,8 @@ export const SCOPE_NAMES: Readonly<Record<SearchScope, string>> = { national: 'N
 export interface AcademyProgramme {
   playerIdx: number;
   area: ProgrammeArea;
+  /** A second area for a share of the work — 70/30 — or none. */
+  secondary?: ProgrammeArea;
   intensity: ProgrammeIntensity;
   startDay: number;
   endDay: number;
@@ -157,7 +160,7 @@ export function programmeBlock(world: World, p: number, intensity: ProgrammeInte
 }
 
 /** Put a prospect on a programme: paid now, twelve weeks from today. */
-export function startProgramme(world: World, p: number, area: ProgrammeArea, intensity: ProgrammeIntensity): { ok: boolean; text: string } {
+export function startProgramme(world: World, p: number, area: ProgrammeArea, intensity: ProgrammeIntensity, secondary?: ProgrammeArea): { ok: boolean; text: string } {
   const block = programmeBlock(world, p, intensity);
   const club = userClub(world);
   if (block !== null || club === undefined) return { ok: false, text: block ?? 'You have no club.' };
@@ -167,7 +170,7 @@ export function startProgramme(world: World, p: number, area: ProgrammeArea, int
   const store = world.players;
   const base = store.attrBase(p);
   a.programmes.push({
-    playerIdx: p, area, intensity, startDay: world.day, endDay: world.day + PROGRAMME_DAYS, startAbility: store.currentAbility[p], cost,
+    playerIdx: p, area, ...(secondary !== undefined && secondary !== area ? { secondary } : {}), intensity, startDay: world.day, endDay: world.day + PROGRAMME_DAYS, startAbility: store.currentAbility[p], cost,
     startAttrs: Array.from(store.attrs.subarray(base, base + ATTR_COUNT)), weeksLost: 0, knocks: 0,
   });
   a.trained.push(p);
@@ -190,6 +193,9 @@ function programmeYield(world: World, p: number): number {
   return (0.45 + minutes * 0.6) * (0.55 + coaching * 0.6) * (0.5 + drive * 0.7) * young * room * ahead;
 }
 
+/** A programme's second area takes this share of its steps — 70/30. */
+export const SECONDARY_SHARE = 0.3;
+
 /** An intensive programme's week: the chance of a knock — tiredness or a turned ankle — on top of the usual. */
 const INTENSIVE_KNOCK = 0.02;
 
@@ -207,7 +213,9 @@ export function programmeWeek(world: World, prog: AcademyProgramme, rng: Rng): {
   }
   let stepped = false;
   if (rng.chance(Math.min(0.95, STEP_CHANCE[prog.intensity] * programmeYield(world, p)))) {
-    stepped = focusedDevelopment(world, p, FOCUS_ATTRS[prog.area] as readonly AttributeName[]);
+    // Two areas: seven steps in ten in the first, three in the second.
+    const area = prog.secondary !== undefined && rng.chance(SECONDARY_SHARE) ? prog.secondary : prog.area;
+    stepped = focusedDevelopment(world, p, FOCUS_ATTRS[area] as readonly AttributeName[]);
   }
   let knock = 0;
   if (prog.intensity === 'intensive' && rng.chance(INTENSIVE_KNOCK * (0.7 + store.getAttr(p, 'injuryProneness') / 20 * 0.6))) {
@@ -261,7 +269,7 @@ function programmeReport(world: World, prog: AcademyProgramme, week: number, fin
   const store = world.players;
   const p = prog.playerIdx;
   const name = store.fullName(p);
-  const area = FOCUS_LABELS[prog.area].toLowerCase();
+  const area = FOCUS_LABELS[prog.area].toLowerCase() + (prog.secondary !== undefined ? ` and ${FOCUS_LABELS[prog.secondary].toLowerCase()}` : '');
   const now = store.currentAbility[p];
   const gain = now - prog.startAbility;
   const gains = attributeGains(world, prog).slice(0, 6).map(([a, d]) => `${ATTR_LABELS[a]} +${d}`);
@@ -413,6 +421,7 @@ export function signCandidate(world: World, p: number): { ok: boolean; text: str
   }
   club.youthPlayers.push(p);
   store.clubId[p] = club.id;
+  notePlayerEvent(world, p, { kind: 'academy', clubId: club.id });
   store.setFlag(p, PlayerFlag.Youth, true);
   store.setFlag(p, PlayerFlag.Transferable, false);
   store.contractUntil[p] = seasonEndDay(world.season + 2);

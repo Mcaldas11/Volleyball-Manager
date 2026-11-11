@@ -13,6 +13,7 @@
  */
 
 import { matchRating, playedInMatch, type RatingPath } from '../match/playerRating.ts';
+import { notePlayerEvent } from './playerTimeline.ts';
 import type { PlayerMatchStats } from '../match/stats.ts';
 import { POSITIONS, type Position } from '../model/positions.ts';
 import { courtShare, recordLoanMatch } from './loans.ts';
@@ -123,6 +124,9 @@ function recordSide(
     if (lines === undefined) {
       lines = [];
       world.competitionRecords.set(p, lines);
+      // His first match on record: a senior debut, at a club. (The world's players had careers before the save.)
+      const at = store.clubId[p];
+      if (at >= 0 && store.ageOn(p, world.year, 181) <= 21) notePlayerEvent(world, p, { kind: 'debut', clubId: at, competitionId: fixture.competitionId });
     }
     let line = lines.find((l) => l.season === world.season && l.competitionId === fixture.competitionId);
     if (line === undefined) {

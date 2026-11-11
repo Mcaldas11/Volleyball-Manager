@@ -14,6 +14,7 @@
 import type { MatchResult } from '../match/engine.ts';
 import { aggregateTeam, newRotationStats, type RotationStats } from '../match/stats.ts';
 import { reportResult } from './matchReports.ts';
+import { noteRecentPlay } from './tacticalDecisions.ts';
 import { DAYS_PER_SEASON, type Fixture, type World } from './world.ts';
 
 /** Cells across and deep. */
@@ -58,6 +59,7 @@ export function noteAnalysis(world: World, fixture: Fixture, result: MatchResult
   const club = world.userClubId;
   if (club < 0 || (fixture.home !== club && fixture.away !== club) || result.log === null) return;
   if (world.competitions[fixture.competitionId]?.kind === 'friendly') return;
+  noteRecentPlay(world, fixture, result);
   const all = (world.analysis ??= []);
   let a = analysisFor(world, club, world.season);
   if (a === undefined) {

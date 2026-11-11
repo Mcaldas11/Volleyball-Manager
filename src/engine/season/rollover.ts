@@ -12,6 +12,7 @@
  */
 
 import { growUniquePlayers, MIN_SIGNING_AGE } from '../world/uniquePlayers.ts';
+import { notePlayerEvent } from '../world/playerTimeline.ts';
 import { challengeSeasonEnd } from '../world/challenges.ts';
 import { honourPreContract } from '../world/agents.ts';
 import { judgePhilosophy } from '../world/board.ts';
@@ -320,6 +321,7 @@ function promoteYouth(world: World): void {
           club.players.length < 12;
         if (worthKeeping) {
           club.players.push(p);
+          notePlayerEvent(world, p, { kind: 'promoted', clubId: club.id });
           store.setFlag(p, PlayerFlag.Youth, false);
           store.contractUntil[p] = seasonEndDay(world.season + 2);
         } else {

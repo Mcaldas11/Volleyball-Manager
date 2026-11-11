@@ -1,4 +1,5 @@
 import { openPortraits } from './portraits.ts';
+import { DiagnosisScreen, PrepLabScreen } from './screens/TacticalLab.tsx';
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import { StaffRole } from '../engine/model/staff.ts';
 import logo from './logo.png';
@@ -114,7 +115,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
         tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
       },
       { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Training']] },
-      { id: 'analysis', label: 'Analysis', icon: 'stats', tabs: [['analysis', 'Analysis'], ['datahub', 'Data Hub']] },
+      { id: 'analysis', label: 'Analysis', icon: 'stats', tabs: [['analysis', 'Analysis'], ['diagnosis', 'Tactical Diagnosis'], ['preplab', 'Prep Lab'], ['datahub', 'Data Hub']] },
       { id: 'academy', label: 'Academy', icon: 'youth', tabs: [['youth', 'Youth Academy']] },
     ],
   },
@@ -321,6 +322,8 @@ function Screen(): JSX.Element {
   if (g.club === null && !CLUBLESS_SCREENS.has(g.screen) && !nationalTeamScreen) return <HomeScreen />;
   switch (g.screen) {
     case 'datahub': return <DataHubScreen />;
+    case 'diagnosis': return <DiagnosisScreen />;
+    case 'preplab': return <PrepLabScreen />;
     case 'social': return <SocialScreen />;
     case 'coaches': return <CoachesScreen />;
     case 'home': return <HomeScreen />;

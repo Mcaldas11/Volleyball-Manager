@@ -10,6 +10,7 @@
  */
 
 import { PlayerFlag } from '../model/players.ts';
+import { notePlayerEvent } from './playerTimeline.ts';
 import { MAX_SQUAD, POSITION_NAMES, POSITION_SHORT, Position, POSITIONS } from '../model/positions.ts';
 import { StaffRole, STAFF_ROLE_NAMES } from '../model/staff.ts';
 import { loadOf as matchLoadOf } from './fatigue.ts';
@@ -315,6 +316,7 @@ export function acceptSuggestion(world: World, meetingId: number, itemId: number
       if (!club.players.includes(p)) club.players.push(p);
       store.setFlag(p, PlayerFlag.Youth, false);
       store.contractUntil[p] = Math.max(store.contractUntil[p], seasonEndDay(world.season + 2));
+      notePlayerEvent(world, p, { kind: 'promoted', clubId: club.id });
       item.outcome = 'Promoted to the first team.';
       break;
     case 'loan':

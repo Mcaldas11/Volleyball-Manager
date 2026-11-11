@@ -37,6 +37,8 @@ import type { Internationals, IntlReport } from './internationals.ts';
 import type { Formation, TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
 import type { AcademyState } from './academy.ts';
+import type { PlayerEvent } from './playerTimeline.ts';
+import type { RecentPlay, TacticDecision } from './tacticalDecisions.ts';
 import type { MonthAward } from './monthAwards.ts';
 import type { CompetitionReview, DreamPick } from './competitionReview.ts';
 import type { MatchReviewNote } from './postMatchReview.ts';
@@ -680,6 +682,12 @@ export interface World {
   youth?: YouthState;
   /** The manager's academy programmes, youth searches and their finds — see academy.ts. Absent until first used. */
   academy?: AcademyState;
+  /** Moments in players' careers, noted as they happen, by player index — see playerTimeline.ts. */
+  playerEvents?: Record<number, PlayerEvent[]>;
+  /** The tactical changes the manager has made on the assistant's word, and undone — see tacticalDecisions.ts. */
+  tacticDecisions?: TacticDecision[];
+  /** The manager's last few matches, as the bench read them — for the diagnosis between matches. */
+  recentPlay?: RecentPlay[];
 
   /** Appearances and match ratings per player, per competition, for this
    *  season and the last — see records.ts. Keyed by player index. */

@@ -51,11 +51,11 @@ export function AcademyDevelopment(): JSX.Element {
   const store = world.players;
   const youth = g.youthSquad();
   const state = g.academyState();
-  const [picks, setPicks] = useState<Record<number, { area: ProgrammeArea; intensity: ProgrammeIntensity }>>({});
+  const [picks, setPicks] = useState<Record<number, { area: ProgrammeArea; intensity: ProgrammeIntensity; second: ProgrammeArea | 'none' }>>({});
   const active = state?.programmes ?? [];
-  const pick = (p: number): { area: ProgrammeArea; intensity: ProgrammeIntensity } =>
-    picks[p] ?? { area: DEFAULT_AREA[store.position[p] as Position] ?? 'physical', intensity: 'normal' };
-  const set = (p: number, change: Partial<{ area: ProgrammeArea; intensity: ProgrammeIntensity }>): void =>
+  const pick = (p: number): { area: ProgrammeArea; intensity: ProgrammeIntensity; second: ProgrammeArea | 'none' } =>
+    picks[p] ?? { area: DEFAULT_AREA[store.position[p] as Position] ?? 'physical', intensity: 'normal', second: 'none' };
+  const set = (p: number, change: Partial<{ area: ProgrammeArea; intensity: ProgrammeIntensity; second: ProgrammeArea | 'none' }>): void =>
     setPicks((old) => ({ ...old, [p]: { ...pick(p), ...change } }));
 
   return (
@@ -87,7 +87,7 @@ export function AcademyDevelopment(): JSX.Element {
                 {prog !== undefined ? (
                   <div className="acx-progress">
                     <span className="acx-status">
-                      <b className="pos">In progress</b> · {FOCUS_LABELS[prog.area]} · {INTENSITY_NAMES[prog.intensity]}
+                      <b className="pos">In progress</b> · {FOCUS_LABELS[prog.area]}{prog.secondary !== undefined && <> + {FOCUS_LABELS[prog.secondary]} <span className="faint">(70/30)</span></>} · {INTENSITY_NAMES[prog.intensity]}
                       <span className="faint"> · {(() => { const d = store.currentAbility[p] - prog.startAbility; return `${d >= 0 ? '+' : ''}${d} ability since it began`; })()}</span>
                     </span>
                     <Progress value={world.day - prog.startDay} max={PROGRAMME_DAYS} />
@@ -97,12 +97,15 @@ export function AcademyDevelopment(): JSX.Element {
                   <div className="acx-controls">
                     <Dropdown<ProgrammeArea> size="sm" value={choice.area} options={AREA_OPTIONS} searchable={false}
                       onChange={(v) => set(p, { area: v })} title="The part of his game it works on" />
+                    <Dropdown<ProgrammeArea | 'none'> size="sm" value={choice.second === choice.area ? 'none' : choice.second} searchable={false}
+                      options={[{ value: 'none' as const, label: 'No second area' }, ...AREA_OPTIONS.filter((o) => o.value !== choice.area).map((o) => ({ value: o.value, label: `+ ${o.label} (30%)` }))]}
+                      onChange={(v) => set(p, { second: v })} title="A second area for three steps in ten — 70/30" />
                     <Dropdown<ProgrammeIntensity> size="sm" value={choice.intensity} options={INTENSITY_OPTIONS} searchable={false}
                       onChange={(v) => set(p, { intensity: v })}
                       title="Intensive: more comes of it — and more tiredness, and more risk of a knock" />
                     <span className="acx-cost">{money(cost)}</span>
                     <button className="sm primary" disabled={block !== null} title={block ?? 'Start the twelve weeks'}
-                      onClick={() => g.startProgramme(p, choice.area, choice.intensity)}>
+                      onClick={() => g.startProgramme(p, choice.area, choice.intensity, choice.second === 'none' || choice.second === choice.area ? undefined : choice.second)}>
                       Start
                     </button>
                     {block !== null && <span className="faint acx-why">{block}</span>}
@@ -269,7 +272,7 @@ export function AcademyFacilities(): JSX.Element {
       {confirm !== null && (
         <div className="acx-confirm">
           <b>To confirm</b>
-          <span>{FACILITY_NAMES[confirm]} · {money(upgradeCost(club, confirm))} · paid only once the board approves it.</span>
+          <span>{`${FACILITY_NAMES[confirm]} · ${money(upgradeCost(club, confirm))} · paid only once the board approves it.`}</span>
           <span className="academy-actions">
             <button className="sm primary" onClick={() => { g.requestUpgrade(confirm); setConfirm(null); }}>Confirm</button>
             <button className="sm" onClick={() => setConfirm(null)}>Cancel</button>

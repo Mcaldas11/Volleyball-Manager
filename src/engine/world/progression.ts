@@ -34,6 +34,7 @@ import type { SeasonStats } from '../season/seasonEngine.ts';
 import { nationStrength } from './nations.ts';
 import { estimateValue, generatePlayer, rollPotential } from './playerGen.ts';
 import { injuryNotice } from './inbox.ts';
+import { notePlayerEvent, SERIOUS_INJURY_DAYS } from './playerTimeline.ts';
 import { loanOf } from './loans.ts';
 import { seasonEndDay, type World } from './world.ts';
 import { clubWeek, weekEffect, weekInjury, type ClubWeek } from './training.ts';
@@ -115,6 +116,7 @@ export function rollInjuries(world: World): void {
     store.setFlag(i, PlayerFlag.Injured, true);
     store.morale[i] = Math.max(10, store.morale[i] - rng.int(5, 20));
     newsInjury(world, i, def.type, days);
+    if (days >= SERIOUS_INJURY_DAYS) notePlayerEvent(world, i, { kind: 'injury', clubId: club, injury: def.type, days });
     if (club === world.userClubId) {
       injuryNotice(world, i, def.type, days);
     } else if (world.loans.length > 0 && world.userClubId >= 0 && loanOf(world, i)?.parentClubId === world.userClubId) {
@@ -151,6 +153,7 @@ export function applyMatchInjuries(world: World, injuries: readonly MatchInjury[
     store.morale[inj.p] = Math.max(10, store.morale[inj.p] - (inj.severity === 'serious' ? rng.int(5, 15) : rng.int(0, 4)));
     newsInjury(world, inj.p, out.type, out.days);
     const club = store.clubId[inj.p];
+    if (out.days >= SERIOUS_INJURY_DAYS && club >= 0) notePlayerEvent(world, inj.p, { kind: 'injury', clubId: club, injury: out.type, days: out.days });
     if (club >= 0 && club === world.userClubId) {
       injuryNotice(world, inj.p, out.type, out.days);
     } else if (club >= 0 && world.loans.length > 0 && world.userClubId >= 0 && loanOf(world, inj.p)?.parentClubId === world.userClubId) {
@@ -543,6 +546,7 @@ export function generateYouthIntake(world: World, rng: Rng = world.rng): number[
       });
       store.clubId[idx] = club.id;
       store.setFlag(idx, PlayerFlag.Youth, true);
+      notePlayerEvent(world, idx, { kind: 'academy', clubId: club.id });
       store.contractUntil[idx] = seasonEndDay(world.season + rng.int(2, 4));
       store.wage[idx] = Math.round(8_000 + (club.reputation / 10000) * 30_000);
       club.youthPlayers.push(idx);
