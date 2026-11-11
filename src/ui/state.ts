@@ -151,6 +151,7 @@ import { diagnose, emptyStats, mergeStats, opponentCounter, playStats, type Diag
 import { PREP_VARIANTS, runPrepLab, scoutOpponent, type LabResult, type ScoutedOpponent } from '../engine/world/prepLab.ts';
 import { currentFamiliarity, overallFamiliarity } from '../engine/match/tacticFamiliarity.ts';
 import { markUndone, noteDecision, type RecentPlay, type TacticDecision } from '../engine/world/tacticalDecisions.ts';
+import { planAdvice, planOf, setCareerPlan, type CareerPath, type CareerPlan } from '../engine/world/academyPlans.ts';
 import { seasonLabel as pastSeasonLabel } from '../engine/season/pastSeasons.ts';
 import {
   answerInterviewQuestion as resolveInterviewAnswer,
@@ -968,6 +969,16 @@ class Game {
   }
 
   /** From his profile: a new look for the manager, and a new portrait with it. */
+  /** The manager's own photo, cropped in the portrait editor — null to go back to the one he had. */
+  setManagerPhoto(data: string | null): void {
+    const world = this.world;
+    if (world === null) return;
+    if (data === null) delete world.manager.customPortrait;
+    else world.manager.customPortrait = data;
+    this.notice = data === null ? 'Your previous photo is back.' : 'Photo saved.';
+    this.emit();
+  }
+
   setManagerLook(look: ManagerLook, portrait: string | null): void {
     const world = this.world;
     if (world === null) return;
@@ -3346,16 +3357,24 @@ class Game {
     const md = this.matchday;
     const world = this.world;
     const theirs = this.opponentTactics;
-    if (md === null || world === null || theirs === null || md.national != null) return null;
+    if (md === null || world === null || theirs === null) return null;
     const moves = (md.opponentMoves ??= []);
     // At a set break, before the next set; at its timeout, during this one.
     const during = md.stage === 'live' && md.setBreakPending !== true;
     const set = (md.snapshot?.set ?? 0) + 1;
     if (moves.length >= MAX_OPPONENT_MOVES || moves.some((m) => m.set === set)) return null;
     const userTeam: 0 | 1 = md.userIsHome ? 0 : 1;
-    const theirClub = world.clubs[md.userIsHome ? md.fixture.away : md.fixture.home];
-    const coach = theirClub !== undefined ? headCoachOf(world, theirClub) : undefined;
-    const quality = coach !== undefined ? staffRating(coach) / 20 : 0.5;
+    let quality = 0.5;
+    if (md.national != null) {
+      // A national bench: as sharp as the nation is strong.
+      const other = md.sides[md.userIsHome ? 1 : 0];
+      const nation = NATIONS.findIndex((n) => n.name === other.name);
+      quality = nation >= 0 ? Math.min(1, 0.3 + (NATIONS[nation].strength / 100) * 0.6) : 0.5;
+    } else {
+      const theirClub = world.clubs[md.userIsHome ? md.fixture.away : md.fixture.home];
+      const coach = theirClub !== undefined ? headCoachOf(world, theirClub) : undefined;
+      quality = coach !== undefined ? staffRating(coach) / 20 : 0.5;
+    }
     const stats = playStats(md.log.map((l) => l.entry), userTeam);
     const move = opponentCounter(stats, theirs, quality, md.fixture.id * 131 + set * 17 + md.log.length, new Set(moves.map((m) => m.id)));
     if (move === null) return null;
@@ -5425,6 +5444,13 @@ class Game {
       tactics,
     };
     const opponent = nationSetup(world, t, md.userIsHome ? m.away : m.home);
+    // A copy: what the other bench changes against the manager is for the match.
+    opponent.tactics = structuredClone(opponent.tactics);
+    this.opponentTactics = opponent.tactics;
+    md.opponentMoves = [];
+    md.assistantApplied = {};
+    md.assistantPrompt = null;
+    md.assistantStops = [];
     this.liveSim = new MatchSimulator(world.players, {
       home: md.userIsHome ? userSetup : opponent,
       away: md.userIsHome ? opponent : userSetup,
@@ -5828,6 +5854,21 @@ class Game {
   dismissCandidate(p: number): void {
     if (this.world === null) return;
     dismissCandidate(this.world, p);
+    this.emit();
+  }
+
+  /** A prospect's career plan, and the head of youth's advice for him. */
+  careerPlan(p: number): CareerPlan | undefined {
+    return this.world === null ? undefined : planOf(this.world, p);
+  }
+
+  careerAdvice(p: number): { path: CareerPath; reason: string } | null {
+    return this.world === null ? null : planAdvice(this.world, p);
+  }
+
+  setCareerPlan(p: number, path: CareerPath | null): void {
+    if (this.world === null) return;
+    this.notice = setCareerPlan(this.world, p, path);
     this.emit();
   }
 

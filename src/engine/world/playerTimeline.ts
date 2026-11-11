@@ -33,8 +33,26 @@ const KEEP = 40;
 /** An injury worth a place in a career: out a month or more. */
 export const SERIOUS_INJURY_DAYS = 28;
 
+/** A player of real standing: his serious injuries are worth keeping wherever he plays. */
+const NOTABLE_ABILITY = 1450;
+
+/**
+ * Whether a moment is worth keeping: everything about the manager's own
+ * players; elsewhere, only what a career is remembered by — a debut, and a
+ * serious injury to a player of standing. (The world has thousands of
+ * players: noting every academy arrival and every injury in it would swell
+ * the save season after season.)
+ */
+function worthNoting(world: World, p: number, e: Pick<PlayerEvent, 'kind' | 'clubId'>): boolean {
+  if (e.clubId === world.userClubId && world.userClubId >= 0) return true;
+  if (e.kind === 'debut') return true;
+  if (e.kind === 'injury') return world.players.currentAbility[p] >= NOTABLE_ABILITY;
+  return e.kind === 'captain' || e.kind === 'promoted' ? world.userClubId === e.clubId : false;
+}
+
 /** Note a moment in a player's career. */
 export function notePlayerEvent(world: World, p: number, e: Omit<PlayerEvent, 'season' | 'day'> & { day?: number }): void {
+  if (!worthNoting(world, p, e)) return;
   const all = (world.playerEvents ??= {});
   const list = (all[p] ??= []);
   // One debut, one promotion: the first is the one that counts.

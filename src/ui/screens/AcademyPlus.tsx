@@ -11,8 +11,9 @@ import {
 } from '../../engine/world/academy.ts';
 import { buildDays, FACILITY_EFFECTS, FACILITY_NAMES, facilityLevel, upgradeCost, type FacilityKind } from '../../engine/world/facilities.ts';
 import { FOCUS_LABELS } from '../../engine/world/training.ts';
+import { CAREER_PATHS, PATH_NAMES, type CareerPath } from '../../engine/world/academyPlans.ts';
 import { Position, POSITION_NAMES, POSITIONS } from '../../engine/model/positions.ts';
-import { abilityClass, Bar, Card, ClubLink, Empty, Flag, money, PlayerFace, Pos, StarMeter } from '../components.tsx';
+import { abilityClass, Bar, Card, ClubLink, Empty, Flag, money, PlayerFace, PlayerLink, Pos, StarMeter } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -277,6 +278,89 @@ export function AcademyFacilities(): JSX.Element {
             <button className="sm primary" onClick={() => { g.requestUpgrade(confirm); setConfirm(null); }}>Confirm</button>
             <button className="sm" onClick={() => setConfirm(null)}>Cancel</button>
           </span>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---- Career plans ---------------------------------------------------------------------
+
+const PATH_OPTIONS = [{ value: 'none' as const, label: 'No plan' }, ...CAREER_PATHS.map((p) => ({ value: p, label: PATH_NAMES[p] }))];
+
+/**
+ * Each prospect's path: the head of youth's advice, the plan the club sets
+ * him on (which the head of youth then carries out), his mentor, and what the
+ * plan has brought so far.
+ */
+export function AcademyPlans(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const youth = g.youthSquad();
+  return (
+    <Card title="Career Plans" icon="career" flush className="academy-card acx-card"
+      actions={<span className="faint">the head of youth sees each plan through, and reports once a month</span>}>
+      <p className="acx-lead">
+        Set each prospect on a path. On a loan path he goes out when a window opens and a club will play him; on the promotion
+        path he comes up the day he is as good as the squad's bench. A veteran of 28 or over can mentor him.
+      </p>
+      {youth.length === 0 ? <Empty>No prospects in the academy.</Empty> : (
+        <div className="table-wrap">
+          <table className="data-table acx-plans">
+            <thead>
+              <tr>
+                <th />
+                <th>Name</th>
+                <th className="num">Age</th>
+                <th className="num">Ability</th>
+                <th className="num" title="U19 minutes, 0-100">Minutes</th>
+                <th>Head of youth's advice</th>
+                <th>Plan</th>
+                <th>Mentor</th>
+                <th className="num" title="Ability since the plan began">Since</th>
+              </tr>
+            </thead>
+            <tbody>
+              {youth.map((p) => {
+                const plan = g.careerPlan(p);
+                const advice = g.careerAdvice(p);
+                const mentor = g.mentorOf(p);
+                const candidates = g.mentorCandidates(p);
+                const gain = plan !== undefined ? store.currentAbility[p] - plan.startAbility : null;
+                const age = store.ageOn(p, world.year, 181);
+                return (
+                  <tr key={p}>
+                    <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                    <td className="strong"><PlayerLink idx={p} /></td>
+                    <td className="num">{age}</td>
+                    <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                    <td className="num">{store.playingTime[p]}</td>
+                    <td>
+                      {advice !== null && (
+                        <span className="acx-advice" title={advice.reason}>
+                          <b>{PATH_NAMES[advice.path]}</b>
+                          <span className="faint">{advice.reason}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <Dropdown<CareerPath | 'none'> size="sm" value={plan?.path ?? 'none'} options={PATH_OPTIONS} searchable={false}
+                        onChange={(v) => g.setCareerPlan(p, v === 'none' ? null : v)} title="The path the club sets him on" />
+                    </td>
+                    <td>
+                      {age > 23 ? <span className="faint">—</span> : (
+                        <Dropdown<number> size="sm" value={mentor ?? -1} searchable={false} title="A veteran of 28 or over takes him under his wing"
+                          options={[{ value: -1, label: 'No mentor' }, ...(mentor !== null && !candidates.includes(mentor) ? [mentor] : []).concat(candidates).map((m) => ({ value: m, label: store.shortName(m) }))]}
+                          onChange={(m) => g.setMentor(p, m < 0 ? null : m)} />
+                      )}
+                    </td>
+                    <td className="num">{gain === null ? <span className="dim">—</span> : <span className={gain > 0 ? 'pos' : gain < 0 ? 'neg' : ''}>{gain > 0 ? '+' : ''}{gain}</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </Card>

@@ -413,6 +413,7 @@ export function PlayerFace({
  *  on {@link ManagerProfile}, so one is derived deterministically from their
  *  name, the same way a player's face is derived from their store id. */
 export function managerPhotoUrl(manager: ManagerProfile): string {
+  if (manager.customPortrait !== undefined) return manager.customPortrait;
   if (manager.portrait !== undefined) return manager.portrait;
   const idx = hashString(`${manager.firstName} ${manager.lastName}`) % 100;
   return portraitUrl(idx, manager.gender === 'female' ? 'women' : 'men');

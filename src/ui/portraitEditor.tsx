@@ -31,10 +31,30 @@ export function PortraitButton({ playerId, name, hasPlayer }: {
   );
 }
 
-function PortraitEditor({ playerId, name, hasPlayer, onClose }: {
-  playerId: number; name: string; hasPlayer: (playerId: number) => boolean; onClose: () => void;
+/** The pencil on the manager's own photo: the same editor, the photo kept with the career. */
+export function ManagerPortraitButton({ name, current, fallback, onSave }: {
+  name: string; current: string | undefined; fallback: string; onSave: (data: string | null) => void;
 }): JSX.Element {
-  const custom = usePortrait(playerId);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="portrait-btn" title="Change your photo" aria-label="Change your photo"
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}>
+        <Icon name="pencil" size={14} />
+      </button>
+      {open && <PortraitEditor playerId={-1} name={name} hasPlayer={() => false} onClose={() => setOpen(false)}
+        own={{ current, fallback, onSave }} />}
+    </>
+  );
+}
+
+function PortraitEditor({ playerId, name, hasPlayer, onClose, own }: {
+  playerId: number; name: string; hasPlayer: (playerId: number) => boolean; onClose: () => void;
+  /** The manager's own photo: where it is kept, and the one he has without it. */
+  own?: { current: string | undefined; fallback: string; onSave: (data: string | null) => void };
+}): JSX.Element {
+  const stored = usePortrait(playerId);
+  const custom = own !== undefined ? own.current : stored;
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -96,7 +116,8 @@ function PortraitEditor({ playerId, name, hasPlayer, onClose }: {
     let data = out.toDataURL('image/webp', 0.86);
     // A browser that can't write WebP hands back a PNG: a JPEG is far smaller.
     if (!data.startsWith('data:image/webp')) data = out.toDataURL('image/jpeg', 0.88);
-    await setPortrait(playerId, data);
+    if (own !== undefined) own.onSave(data);
+    else await setPortrait(playerId, data);
     setImg(null);
     setNote('Photo saved.');
   };
@@ -144,7 +165,7 @@ function PortraitEditor({ playerId, name, hasPlayer, onClose }: {
           <div>
             <span className="portrait-kicker">Volleyball Manager · Portraits</span>
             <b>{name}</b>
-            <span className="portrait-sub">Customise his photo. It changes none of the player's data and turns no achievements off.</span>
+            <span className="portrait-sub">{own !== undefined ? 'Your own photo, for your profile and the touchline. It is kept with the career.' : "Customise his photo. It changes none of the player's data and turns no achievements off."}</span>
           </div>
           <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={18} /></button>
         </header>
@@ -153,7 +174,7 @@ function PortraitEditor({ playerId, name, hasPlayer, onClose }: {
             {img !== null
               ? <canvas ref={canvas} width={VIEW} height={VIEW} className="portrait-canvas"
                 onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} />
-              : <img src={custom ?? playerFaceUrl(playerId)} alt={name} />}
+              : <img src={custom ?? (own !== undefined ? own.fallback : playerFaceUrl(playerId))} alt={name} />}
           </div>
           <div className="portrait-side">
             <button className="primary portrait-choose" onClick={() => fileInput.current?.click()}>Choose photo…</button>
@@ -170,18 +191,18 @@ function PortraitEditor({ playerId, name, hasPlayer, onClose }: {
           </div>
         </div>
         <footer className="portrait-foot">
-          <button onClick={exportAll}>Export portraits</button>
-          <button onClick={() => importInput.current?.click()}>Import portraits</button>
+          {own === undefined && <button onClick={exportAll}>Export portraits</button>}
+          {own === undefined && <button onClick={() => importInput.current?.click()}>Import portraits</button>}
           <input ref={importInput} type="file" accept="application/json,.json" hidden
             onChange={(e) => { void importAll(e.target.files?.[0]); e.target.value = ''; }} />
           <span className="portrait-gap" />
           <button disabled={custom === undefined && img === null}
-            onClick={() => { void setPortrait(playerId, null); setImg(null); setNote('His own photo is back.'); }}>
+            onClick={() => { if (own !== undefined) own.onSave(null); else void setPortrait(playerId, null); setImg(null); setNote(own !== undefined ? 'Your previous photo is back.' : 'His own photo is back.'); }}>
             Restore original
           </button>
           <button className="primary" disabled={img === null} onClick={() => { void save(); }}>Save photo</button>
         </footer>
-        <p className="portrait-foot-note">When you export a career, export its portraits from here too: they are kept separately.</p>
+        {own === undefined && <p className="portrait-foot-note">When you export a career, export its portraits from here too: they are kept separately.</p>}
       </div>
     </div>,
     document.body,

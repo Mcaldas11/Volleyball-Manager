@@ -74,7 +74,6 @@ export const TEXT_PHRASES: ReadonlyArray<readonly [en: string, pt: string, es: s
   ['Asian Club Championship', 'Campeonato Asiático de Clubes', 'Campeonato Asiático de Clubes'],
   ['African Club Championship', 'Campeonato Africano de Clubes', 'Campeonato Africano de Clubes'],
   ['{0} Volleyball Federation', 'Federação de Voleibol de {0}', 'Federación de Voleibol de {0}'],
-  ['{0} Super Cup', 'Supertaça de {0}', 'Supercopa de {0}'],
   ['World Club Cup', 'Mundial de Clubes', 'Mundial de Clubes'],
   ['Relegation playoff', 'Play-off de descida', 'Promoción de descenso'],
   ['Placement playoff', 'Play-off de classificação', 'Play-off de clasificación'],

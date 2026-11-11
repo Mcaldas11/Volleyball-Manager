@@ -37,6 +37,7 @@ import type { Internationals, IntlReport } from './internationals.ts';
 import type { Formation, TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
 import type { AcademyState } from './academy.ts';
+import type { CareerPlan } from './academyPlans.ts';
 import type { PlayerEvent } from './playerTimeline.ts';
 import type { RecentPlay, TacticDecision } from './tacticalDecisions.ts';
 import type { MonthAward } from './monthAwards.ts';
@@ -510,6 +511,8 @@ export interface ManagerProfile {
   look?: ManagerLook;
   /** A portrait made from that look, as an image's data URL — absent: a photo picked for the name. */
   portrait?: string;
+  /** A photo of his own choosing, cropped in the portrait editor — it wins over the look's portrait. Kept with the career. */
+  customPortrait?: string;
 }
 
 /** What the manager wears on the touchline, and looks like. Colours are CSS hex; 'club' is the club's own. */
@@ -682,6 +685,8 @@ export interface World {
   youth?: YouthState;
   /** The manager's academy programmes, youth searches and their finds — see academy.ts. Absent until first used. */
   academy?: AcademyState;
+  /** The academy prospects' career plans, by player index — see academyPlans.ts. */
+  academyPlans?: Record<number, CareerPlan>;
   /** Moments in players' careers, noted as they happen, by player index — see playerTimeline.ts. */
   playerEvents?: Record<number, PlayerEvent[]>;
   /** The tactical changes the manager has made on the assistant's word, and undone — see tacticalDecisions.ts. */

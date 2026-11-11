@@ -460,9 +460,12 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
   }
   return {
     verdict: 'adjust',
-    summary: acting.some((f) => f.severity === 3)
-      ? (acting.length === 1 ? 'One thing is costing us points.' : `${acting.length} things worth acting on — one is costing us points now.`)
-      : (acting.length === 1 ? 'One thing worth acting on.' : `${acting.length} things worth acting on.`),
+    summary: ((): string => {
+      const costing = acting.filter((f) => f.severity === 3).length;
+      if (costing === acting.length) return costing === 1 ? 'One thing is costing us points.' : `${costing} things are costing us points.`;
+      if (costing > 0) return `${acting.length} things worth acting on — ${costing === 1 ? 'one is' : `${costing} are`} costing us points now.`;
+      return acting.length === 1 ? 'One thing worth acting on.' : `${acting.length} things worth acting on.`;
+    })(),
     findings,
     numbers,
   };

@@ -47,20 +47,21 @@ test("a player's career reads as a timeline: his clubs, each season's line, and 
   assert.ok(again.some((i) => i.kind === 'injury' && /weeks/.test(i.detail ?? '')));
 });
 
-test('the season notes debuts, serious injuries and academy arrivals by itself', () => {
-  const { world, run } = makeWithLongRun();
-  const events = Object.values(world.playerEvents ?? {}).flat();
-  assert.ok(events.some((e) => e.kind === 'academy'), 'the intake joins the academies');
-  assert.ok(events.some((e) => e.kind === 'injury' && (e.days ?? 0) >= 28), 'a serious injury is noted');
-  assert.ok(events.filter((e) => e.kind === 'injury').every((e) => (e.days ?? 0) >= 28), 'only the serious ones');
-  void run;
+test("the season notes the manager's own players' moments — and, elsewhere, only what a career is remembered by", () => {
+  const { world, run } = managed(72);
+  generateYouthIntake(world);
+  run(160);
+  const store = world.players;
+  const all = Object.entries(world.playerEvents ?? {}).flatMap(([p, list]) => list.map((e) => ({ p: Number(p), ...e })));
+  const academy = all.filter((e) => e.kind === 'academy');
+  assert.ok(academy.length > 0, 'his intake joins the academy');
+  assert.ok(academy.every((e) => e.clubId === world.userClubId), "only his club's academy arrivals");
+  const injuries = all.filter((e) => e.kind === 'injury');
+  assert.ok(injuries.every((e) => (e.days ?? 0) >= 28), 'only the serious ones');
+  assert.ok(injuries.every((e) => e.clubId === world.userClubId || store.currentAbility[e.p] >= 1400), 'elsewhere, players of standing');
+  // Far fewer than one for every player hurt or arriving anywhere in the world.
+  assert.ok(all.length < store.count / 4, `${all.length} moments for ${store.count} players`);
 });
-
-function makeWithLongRun(): { world: World; run: (days: number) => void } {
-  const m = managed(72);
-  m.run(160);
-  return m;
-}
 
 test('the preparation lab: a sure read is the truth, a practice run is the same twice, and says how sure it is', () => {
   const { world } = managed(73);

@@ -23,6 +23,7 @@ import { StaffSheet, TeamStyle } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { EditLookDialog } from '../lookEditor.tsx';
+import { ManagerPortraitButton } from '../portraitEditor.tsx';
 import { InterviewDialog } from './Insights.tsx';
 import { clubKit } from '../kits.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -323,7 +324,11 @@ export function CareerScreen(): JSX.Element {
         />
       )}
       <header className="cp-head" style={club !== null ? clubThemeStyle(club) : undefined}>
-        <span className="cp-photo"><PersonFace photoUrl={managerPhotoUrl(m)} name={name} size={58} /></span>
+        <span className="cp-photo profile-face">
+          <PersonFace photoUrl={managerPhotoUrl(m)} name={name} size={58} />
+          <ManagerPortraitButton name={name} current={m.customPortrait} fallback={managerPhotoUrl({ ...m, customPortrait: undefined })}
+            onSave={(data) => g.setManagerPhoto(data)} />
+        </span>
         <div className="cp-who">
           <h2>{name}</h2>
           <span>{world.year - m.birthYear} years old (born {m.birthYear})</span>
