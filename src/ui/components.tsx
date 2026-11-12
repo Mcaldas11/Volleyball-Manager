@@ -725,3 +725,173 @@ export function PlayerLink({ idx, short = false }: { idx: number; short?: boolea
     </span>
   );
 }
+
+/**
+ * A workspace's heading, in the 2026-11 redesign: a small gold eyebrow (the
+ * area), the screen's line, a sentence under it, and its actions on the right.
+ */
+export function WorkspaceHeading({ eyebrow, title, description, actions, children }: {
+  eyebrow?: ReactNode; title: ReactNode; description?: ReactNode; actions?: ReactNode; children?: ReactNode;
+}): JSX.Element {
+  return (
+    <header className="vm-section-header">
+      <div className="vm-section-heading">
+        {eyebrow !== undefined && <div className="vm-eyebrow">{eyebrow}</div>}
+        <h2>{title}</h2>
+        {description !== undefined && <p>{description}</p>}
+        {children}
+      </div>
+      {actions !== undefined && <div className="vm-section-actions">{actions}</div>}
+    </header>
+  );
+}
+
+/**
+ * A list fitted to its panel, never scrolled: the rows share the height the
+ * panel has (between `min` and `max` px each, set as `--row-h` on the panel),
+ * and when even the smallest rows will not all fit, the list goes a page at a
+ * time — `ListPager` turns them.
+ */
+export function useFitList(
+  wrapRef: RefObject<HTMLElement | null>, count: number, { min = 24, max = 44, head = 'thead' }: { min?: number; max?: number; head?: string } = {},
+): { from: number; to: number; page: number; pages: number; setPage: (p: number) => void } {
+  const [space, setSpace] = useState(0);
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (wrap === null) return;
+    const measure = (): void => {
+      const h = wrap.querySelector(head)?.getBoundingClientRect().height ?? 0;
+      setSpace(Math.max(0, wrap.clientHeight - h));
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    measure();
+    return () => ro.disconnect();
+  }, [wrapRef, head]);
+  const perPage = space <= 0 ? count : Math.max(1, Math.min(count, Math.floor(space / min)));
+  const pages = Math.max(1, Math.ceil(count / Math.max(1, perPage)));
+  const shownPage = Math.min(page, pages - 1);
+  const rowH = space <= 0 ? max : Math.max(min, Math.min(max, Math.floor(space / Math.max(1, Math.min(perPage, count))) - 1));
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (wrap === null) return;
+    wrap.style.setProperty('--row-h', `${rowH}px`);
+    // Tight rows drop their second line (styles key on it).
+    wrap.dataset.rows = rowH < 36 ? 'tight' : 'roomy';
+  }, [wrapRef, rowH]);
+  return { from: shownPage * perPage, to: Math.min(count, (shownPage + 1) * perPage), page: shownPage, pages, setPage };
+}
+
+/** The pages of a fitted list: back, "2 / 3", on. Nothing when it fits on one. */
+export function ListPager({ page, pages, setPage }: { page: number; pages: number; setPage: (p: number) => void }): JSX.Element | null {
+  if (pages <= 1) return null;
+  return (
+    <span className="list-pager">
+      <button className="icon-btn" disabled={page <= 0} onClick={() => setPage(page - 1)} title="Previous page"><Icon name="back" size={13} /></button>
+      <span>{page + 1} / {pages}</span>
+      <button className="icon-btn" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} title="Next page"><Icon name="forward" size={13} /></button>
+    </span>
+  );
+}
+
+/** Whether the window is a short one (fitWindow.ts marks it on <html>), kept up to date as it is resized. */
+export function useShortWindow(): boolean {
+  const read = (): boolean => document.documentElement.classList.contains('short-window');
+  const [short, setShort] = useState(read);
+  useEffect(() => {
+    const mo = new MutationObserver(() => setShort(read()));
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => mo.disconnect();
+  }, []);
+  return short;
+}
+
+/** A titled panel of the redesign: an eyebrow, a title and an action in its head. */
+export function Panel({ title, eyebrow, action, children, className = '' }: {
+  title?: ReactNode; eyebrow?: ReactNode; action?: ReactNode; children?: ReactNode; className?: string;
+}): JSX.Element {
+  const id = useId();
+  return (
+    <section className={`vm-panel ${className}`} aria-labelledby={title !== undefined ? id : undefined}>
+      {(title !== undefined || action !== undefined || eyebrow !== undefined) && (
+        <header className="vm-panel-heading">
+          <div>
+            {eyebrow !== undefined && <div className="vm-eyebrow">{eyebrow}</div>}
+            {title !== undefined && <h3 id={id}>{title}</h3>}
+          </div>
+          {action !== undefined && <div className="vm-panel-action">{action}</div>}
+        </header>
+      )}
+      <div className="vm-panel-body">{children}</div>
+    </section>
+  );
+}
+
+export type Tone = 'neutral' | 'good' | 'bad' | 'warn' | 'gold';
+
+/** A headline number: its label, the figure, a line under it. */
+export function Metric({ label, value, detail, tone = 'neutral' }: { label: ReactNode; value: ReactNode; detail?: ReactNode; tone?: Tone }): JSX.Element {
+  return (
+    <div className={`vm-metric tone-${tone}`}>
+      <span className="vm-metric-label">{label}</span>
+      <strong>{value}</strong>
+      {detail !== undefined && <span className="vm-metric-detail">{detail}</span>}
+    </div>
+  );
+}
+
+/** A small status pill with a dot. */
+export function StatusPill({ children, tone = 'neutral' }: { children: ReactNode; tone?: Tone }): JSX.Element {
+  return <span className={`vm-status tone-${tone}`}><i aria-hidden="true" />{children}</span>;
+}
+
+/** Nothing here yet — and what will fill it. */
+export function EmptyState({ title, description, action, icon = 'ball' }: { title: ReactNode; description?: ReactNode; action?: ReactNode; icon?: IconName }): JSX.Element {
+  return (
+    <div className="vm-empty-state">
+      <Icon name={icon} size={30} />
+      <strong>{title}</strong>
+      {description !== undefined && <p>{description}</p>}
+      {action}
+    </div>
+  );
+}
+
+/** A thin progress meter. */
+export function Progress({ value, max = 100, label, tone = 'gold' }: { value: number; max?: number; label: string; tone?: Tone }): JSX.Element {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  return (
+    <div className={`vm-progress tone-${tone}`} role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}
+      style={{ '--progress': `${pct}%` } as CSSProperties}>
+      <span />
+    </div>
+  );
+}
+
+/**
+ * A grid of cards fitted to its panel, never scrolled: as many columns as
+ * cards of `minWidth` fit across, as many rows as cards of `height` fit down,
+ * and the rest a page at a time (turned with `ListPager`).
+ */
+export function useFitGrid(
+  ref: RefObject<HTMLElement | null>, count: number, { minWidth, height, gap = 12 }: { minWidth: number; height: number; gap?: number },
+): { from: number; to: number; page: number; pages: number; setPage: (p: number) => void; cols: number } {
+  const [box, setBox] = useState<[number, number]>([0, 0]);
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const measure = (): void => setBox([el.clientWidth, el.clientHeight]);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, [ref]);
+  const cols = Math.max(1, Math.floor((box[0] + gap) / (minWidth + gap)));
+  const rows = Math.max(1, Math.floor((box[1] + gap) / (height + gap)));
+  const per = box[1] <= 0 ? count : cols * rows;
+  const pages = Math.max(1, Math.ceil(count / Math.max(1, per)));
+  const p = Math.min(page, pages - 1);
+  return { from: p * per, to: Math.min(count, (p + 1) * per), page: p, pages, setPage, cols };
+}

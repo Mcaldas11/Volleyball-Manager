@@ -91,6 +91,7 @@ export function InboxScreen(): JSX.Element {
   const world = g.world!;
   const [folder, setFolder] = useState<Folder>('inbox');
   const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const open = useCallback((id: number) => g.selectMessage(id), [g]);
 
@@ -115,6 +116,7 @@ export function InboxScreen(): JSX.Element {
       if (filter === 'action') return messageNeedsAction(world, m);
       return true;
     })
+    .filter((m) => query.trim() === '' || `${m.subject} ${m.body}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .reverse();
   // Drawn a page at a time — always as far down as the open message.
   const { shown: drawn, more } = useListPages(shown, `${folder}/${filter}`,
@@ -150,8 +152,20 @@ export function InboxScreen(): JSX.Element {
   };
 
   return (
-    <div className="mail">
-      <nav className="mail-folders">
+    <div className="mail desk-mail">
+      <header className="desk-mail-heading">
+        <div>
+          <span className="portal-eyebrow">Your communication centre</span>
+          <h1>The conversation behind the club.</h1>
+        </div>
+        <div className="desk-mail-stats">
+          <button onClick={() => { setFolder('inbox'); setFilter('unread'); }}><b>{unreadIn('inbox')}</b><small>Unread</small></button>
+          <button onClick={() => { setFolder('inbox'); setFilter('action'); }}>
+            <b>{world.messages.filter((m) => m.archived !== true && messageNeedsAction(world, m)).length}</b><small>Action needed</small>
+          </button>
+        </div>
+      </header>
+      <nav className="mail-folders" aria-label="Message categories">
         {folderButton('inbox', 'Inbox', 'var(--gold)')}
         {folderButton('starred', 'Starred', '#8f9bb0')}
         <div className="mail-folders-label">Categories</div>
@@ -161,6 +175,7 @@ export function InboxScreen(): JSX.Element {
         <InboxSettings />
       </nav>
 
+      <div className="desk-mail-columns">
       <section className="mail-list">
         <header className="mail-list-head">
           <h2 className="mail-list-title">{title}</h2>
@@ -179,6 +194,11 @@ export function InboxScreen(): JSX.Element {
             </button>
           ))}
         </div>
+        <label className="portal-mail-search">
+          <Icon name="search" size={14} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages" aria-label="Search messages" />
+          {query !== '' && <button onClick={() => setQuery('')} aria-label="Clear search"><Icon name="close" size={12} /></button>}
+        </label>
         <div className="mail-list-scroll" ref={listRef}>
           {groups.length === 0 && (
             <div className="mail-list-empty">
@@ -213,6 +233,7 @@ export function InboxScreen(): JSX.Element {
           )
           : <MessageSheet key={selected.id} message={selected} />}
       </section>
+      </div>
     </div>
   );
 }

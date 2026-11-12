@@ -80,13 +80,25 @@ function Flag({ nation }: { nation: number }): JSX.Element | null {
   return url !== null ? <img className="news-flag" src={url} alt="" /> : <Icon name="world" size={13} />;
 }
 
+/** A story another screen asked to open (Home's "Read the story"), taken by the next News screen. */
+let storyToOpen: number | null = null;
+
+/** Open the news on one story, with every filter off. */
+export function openNewsStory(id: number): void {
+  storyToOpen = id;
+}
+
 export function NewsScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const when = useNewsDate();
   const [filter, setFilter] = useState<Filter>('all');
   const [nation, setNation] = useState(ALL_COUNTRIES);
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(() => {
+    const id = storyToOpen;
+    storyToOpen = null;
+    return id;
+  });
 
   const kinds = FILTERS.find(([f]) => f === filter)?.[2] ?? [];
   const items = [...world.news].reverse().filter((n) =>

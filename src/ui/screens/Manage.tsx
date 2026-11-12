@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
+import { contractEndSeason } from '../../engine/world/world.ts';
 import { receiveLineOf } from '../../engine/match/receiveLine.ts';
 import type { PipeBall, ReceptionFormation, RotationPlay, RotationTactics } from '../../engine/match/tactics.ts';
 import {
@@ -14,7 +15,7 @@ import { clubBooks } from '../../engine/season/books.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import {
   abilityClass, Bar, Card, ChoiceField, ClubLink, Empty, Flag, KV, money, moneyShort, MoneyInput,
-  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useListPages, useSort,
+  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useShortWindow, useSort, WorkspaceHeading, useFitList, ListPager, Panel, Metric, StatusPill, EmptyState, Progress,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
@@ -102,15 +103,20 @@ export const SHAPE_OPTIONS: Array<[DefensiveShape, string]> = [
 export function TacticsScreen(): JSX.Element {
   const g = useGame();
   const tactics = g.activeTactics();
+  // A short window takes the board's compact form: the zones as buttons, the options under the cards.
+  const short = useShortWindow();
   if (tactics === null) return <Empty>No team to instruct.</Empty>;
   return (
     <div className="tactics-page">
-      <p className="page-intro">
-        {g.nationalView() && <b className="nat-only">National team only — your club keeps its own. </b>}
-        These instructions feed straight into the rally engine — what the setter can run off each pass, who he
-        looks for, how the block forms — not a hidden team rating.
-      </p>
-      <TacticsBoard tactics={tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} />
+      <div className="strategy-ribbon">
+        <div><span>System</span><strong>{FORMATION_OPTIONS.find(([f]) => f === formationOf(tactics))?.[1]}</strong></div>
+        <div><span>Offence</span><strong>{OFFENSE_OPTIONS.find(([o]) => o === tactics.offense)?.[1]}</strong></div>
+        <div><span>Tempo</span><strong>{TEMPO_OPTIONS.find(([o]) => o === tactics.tempo)?.[1]}</strong></div>
+        <div><span>Defence</span><strong>{DEFENSE_OPTIONS.find(([o]) => o === tactics.defense)?.[1]}</strong></div>
+        <button onClick={() => g.go('preplab')}><Icon name="stats" size={16} /> Compare tactical plans</button>
+      </div>
+      {g.nationalView() && <p className="nat-only">National team only — your club keeps its own.</p>}
+      <TacticsBoard tactics={tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} compact={short} />
     </div>
   );
 }
@@ -176,25 +182,37 @@ export function RotationsScreen(): JSX.Element {
   });
 
   return (
-    <>
-      <p className="page-intro">
-        {g.nationalView() && <b className="nat-only">National team only — your club keeps its own. </b>}
-        Rotations are named for the zone the setter stands in. When the setter is front row only two
-        attackers are available — those rotations score less and need different instructions.
-      </p>
+    <div className="tactical-rotations">
+      <WorkspaceHeading
+        eyebrow="ROTATION WORKSHOP"
+        title="A plan for every turn."
+        description="Set the attack, reception and defence for each rotation."
+        actions={<button onClick={() => g.go('lineup')}><Icon name="squad" size={15} /> Team sheet</button>}
+      />
+      <details className="tactical-rotation-help">
+        <summary>Understanding the rotations</summary>
+        <p>
+          {g.nationalView() && <b className="nat-only">National team only — your club keeps its own. </b>}
+          Rotations are named for the zone the setter stands in. When the setter is front row only two
+          attackers are available — those rotations score less and need different instructions.
+        </p>
+      </details>
 
       <div className="rot-bar">
-        <Segmented
-          options={[0, 1, 2, 3, 4, 5].map((i) => [i, `P${i + 1}`] as const)}
-          value={rot}
-          onChange={setRot}
-        />
+        <nav className="tactical-rotation-picker" aria-label="Rotations">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <button key={i} className={rot === i ? 'on' : ''} aria-pressed={rot === i} onClick={() => setRot(i)}>
+              <b>P{i + 1}</b>
+              <span>{i >= 1 && i <= 3 ? 'Setter front' : 'Setter back'}</span>
+            </button>
+          ))}
+        </nav>
         <span className={`rot-flag${setterFront ? ' warn' : ''}`}>
           {setterFront ? 'Setter front row · two attackers' : 'Setter back row · three attackers'}
         </span>
       </div>
 
-      <div className="rot-layout">
+      <div className="tactical-rotation-workspace">
         <Card title={`Rotation P${rot + 1}`} icon="tactics">
           <div className="rot-court">
             <div className="rot-net">Net</div>
@@ -277,7 +295,7 @@ export function RotationsScreen(): JSX.Element {
           />
         </Card>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -339,120 +357,276 @@ export function PlayCard({ rotation, cast, rot, onChange }: {
   );
 }
 
-/** A money line with a bar sized against the largest line in its card. */
-function MoneyLine({
-  label, value, max, tone,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  tone: 'income' | 'cost';
-}): JSX.Element {
-  const pct = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
+
+const RING_COLOURS = ['#f5c542', '#6aa8d8', '#9aa9bb', '#58b98a', '#c38be0', '#e08a5a'];
+
+/** The season's books as three bars: income, expenditure, and what is left. */
+function BooksChart({ income, costs, result }: { income: number; costs: number; result: number }): JSX.Element {
+  const top = Math.max(income, costs, result, 1) * 1.2;
+  const bottom = Math.min(0, result) * 1.3;
+  const y = (v: number): number => 210 - ((v - bottom) / (top - bottom)) * 180;
+  const zero = y(0);
+  const bars = [
+    { label: 'Season income', value: income, color: '#f5c542' },
+    { label: 'Season expenditure', value: costs, color: '#6298c1' },
+    { label: 'Result so far', value: result, color: result >= 0 ? 'var(--good)' : 'var(--bad)' },
+  ];
   return (
-    <div className="money-line">
-      <span className="money-line-label">{label}</span>
-      <span className={`money-line-bar ${tone}`}><span style={{ width: `${pct}%` }} /></span>
-      <span className={`money-line-value ${tone === 'income' ? 'good' : 'bad'}`}>
-        {tone === 'cost' && value !== 0 ? '-' : ''}{money(Math.abs(value))}
-      </span>
+    <div className="finance-books-chart">
+      <svg viewBox="0 0 800 255" role="img" aria-label="Season income, expenditure and result">
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+          const v = bottom + f * (top - bottom);
+          return (
+            <g key={f}>
+              <line x1="75" x2="770" y1={y(v)} y2={y(v)} stroke="#294159" strokeDasharray="3 4" />
+              <text x="61" y={y(v) + 4} textAnchor="end" className="finance-axis">{moneyShort(v)}</text>
+            </g>
+          );
+        })}
+        <line x1="75" x2="770" y1={zero} y2={zero} stroke="#71869c" />
+        {bars.map((b, i) => {
+          const top = y(b.value);
+          const x = 135 + i * 225;
+          return (
+            <g key={b.label}>
+              <rect x={x} y={Math.min(top, zero)} width="132" height={Math.max(1, Math.abs(top - zero))} rx="3" fill={b.color} opacity=".9">
+                <title>{b.label}: {money(b.value)}</title>
+              </rect>
+              <text x={x + 66} y={b.value >= 0 ? Math.max(16, top - 9) : top + 21} textAnchor="middle" className="finance-bar-value">{moneyShort(b.value)}</text>
+              <text x={x + 66} y="245" textAnchor="middle" className="finance-bar-label">{b.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/** The balance at each monthly statement, as a line. */
+function BalanceChart({ points }: { points: Array<{ label: string; value: number }> }): JSX.Element {
+  const lo = Math.min(...points.map((p) => p.value));
+  const hi = Math.max(...points.map((p) => p.value));
+  const pad = Math.max((hi - lo) * 0.15, Math.abs(hi) * 0.02, 1);
+  const min = lo - pad;
+  const max = hi + pad;
+  const x = (i: number): number => (points.length === 1 ? 420 : 85 + (i / (points.length - 1)) * 660);
+  const y = (v: number): number => 205 - ((v - min) / (max - min)) * 170;
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.value)}`).join(' ');
+  return (
+    <svg viewBox="0 0 800 255" role="img" aria-label="Recorded monthly balance history" className="finance-balance-chart">
+      {[0, 0.5, 1].map((f) => (
+        <g key={f}>
+          <line x1="80" x2="760" y1={205 - f * 170} y2={205 - f * 170} stroke="#294159" />
+          <text x="65" y={209 - f * 170} className="finance-axis" textAnchor="end">{moneyShort(min + f * (max - min))}</text>
+        </g>
+      ))}
+      {points.length > 1 && (
+        <>
+          <path d={`${path} L${x(points.length - 1)},205 L${x(0)},205 Z`} fill="#f5c5420d" />
+          <path d={path} stroke="#f5c542" strokeWidth="3" fill="none" />
+        </>
+      )}
+      {points.map((p, i) => (
+        <g key={`${p.label}-${i}`}>
+          <circle cx={x(i)} cy={y(p.value)} r="5" fill="#f5c542"><title>{p.label}: {money(p.value)}</title></circle>
+          <text x={x(i)} y="237" className="finance-axis" textAnchor="middle">{p.label.slice(0, 3)}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/** Where the money comes from, as a ring. */
+function IncomeRing({ lines, total }: { lines: Array<[string, number]>; total: number }): JSX.Element {
+  let at = 0;
+  const stops = lines.map(([, v], i) => {
+    const from = at;
+    at += total > 0 ? (v / total) * 100 : 0;
+    return `${RING_COLOURS[i % RING_COLOURS.length]} ${from}% ${at}%`;
+  });
+  return (
+    <div className="finance-ring" role="img" aria-label="Income distribution"
+      style={{ '--ring': stops.length > 0 ? `conic-gradient(${stops.join(',')})` : 'var(--surface-3)' } as CSSProperties}>
+      <div><strong>{moneyShort(total)}</strong><span>Season income</span></div>
     </div>
   );
 }
 
 export function FinancesScreen(): JSX.Element {
   const g = useGame();
+  const world = g.world!;
   const club = g.club!;
   const f = club.finances;
-  // Senior-squad wages only — matches the affordability check a transfer
-  // negotiation actually runs (see submitTermsOffer), so this is "room left
-  // to sign someone," not the club's total wage-type spend. Loans count for
-  // the share of the wage the club pays.
+  // Senior-squad wages only — what a transfer negotiation checks: room left to sign someone.
   const wages = g.wageBill();
-  // The season's books exactly as the rollover settles them (clubBooks), so
-  // this is a true preview of the season's result if it ended today.
-  const books = clubBooks(g.world!, club);
-  const totalIncome = books.totalIncome;
-  const totalCosts = books.totalCosts;
-  const result = totalIncome - totalCosts;
+  // The season's books exactly as the rollover settles them: a true preview of the result if it ended today.
+  const books = clubBooks(world, club);
+  const result = books.totalIncome - books.totalCosts;
   const envelope = f.wageBudget + f.transferBudget;
-  const wageShare = envelope > 0 ? (f.wageBudget / envelope) * 100 : 50;
-
-  // The streams that run with the season say so; the occasional ones show once there is something.
-  const SO_FAR: Readonly<Record<string, string>> = {
-    'Gate receipts': 'Gate receipts so far', 'Prize money': 'Prize money so far', 'Player bonuses': 'Bonuses so far', Travel: 'Travel so far',
-  };
-  const OCCASIONAL = new Set(['Prize money', 'Player bonuses', 'Affiliates']);
-  const lines = (from: Array<[string, number]>): Array<[string, number]> =>
-    from.filter(([k, v]) => v !== 0 || !OCCASIONAL.has(k)).map(([k, v]) => [SO_FAR[k] ?? k, v]);
-  const incomeLines = lines(books.income);
-  const costLines = lines(books.costs);
-  const maxLine = Math.max(...incomeLines.map(([, v]) => v), ...costLines.map(([, v]) => v), 1);
+  const wageUse = f.wageBudget > 0 ? (wages / f.wageBudget) * 100 : wages > 0 ? 100 : 0;
+  const statements = world.messages
+    .filter((m) => m.statement !== undefined && (m.clubId === undefined || m.clubId === club.id))
+    .sort((a, b) => a.day - b.day)
+    .slice(-8)
+    .map((m) => m.statement!);
+  const [chart, setChart] = useState<'books' | 'history'>(statements.length > 1 ? 'history' : 'books');
+  const store = world.players;
+  const topWages = [...club.players].sort((a, b) => store.wage[b] - store.wage[a]).slice(0, 4);
+  const expiring = club.players.filter((p) => contractEndSeason(store.contractUntil[p]) <= world.season);
+  const income = books.income.filter(([, v]) => v > 0);
+  const costs = books.costs.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
 
   return (
-    <>
+    <div className="finance-workspace">
+      <WorkspaceHeading
+        eyebrow="The business behind the club"
+        title="Build a future worth playing for."
+        description={`${world.year}/${String(world.year + 1).slice(-2)} · ${club.name}`}
+        actions={(
+          <>
+            <StatusPill tone={f.balance < 0 ? 'bad' : 'good'}>{f.balance < 0 ? 'Negative balance' : 'Positive balance'}</StatusPill>
+            <button onClick={() => g.go('commercial')}>Tickets & Sponsors <Icon name="arrowRight" size={14} /></button>
+          </>
+        )}
+      />
       {f.seasonsInDebt > 0 && (
         <div className="alert alert-bad">
           <Icon name="alert" size={18} />
-          <span>
-            {f.seasonsInDebt} consecutive season(s) in the red — three means dissolution.
-          </span>
+          <span>{f.seasonsInDebt} consecutive season(s) in the red — three means dissolution.</span>
         </div>
       )}
-
-      <div className="tiles">
-        <StatTile label="Balance" value={money(f.balance)} tone={f.balance < 0 ? 'bad' : 'good'} sub={`${club.arenaName}`} />
-        <StatTile label="Wage budget" value={money(f.wageBudget)} sub={`${money(f.wageBudget - wages)} unused`} />
-        <StatTile label="Transfer budget" value={money(f.transferBudget)} />
-        <StatTile
-          label="Projected result"
-          value={`${result >= 0 ? '+' : ''}${money(result)}`}
-          tone={result >= 0 ? 'good' : 'bad'}
-          sub="if the season ended today"
-        />
+      <section className="finance-headlines" aria-label="Financial overview">
+        <Metric label="Club balance" value={moneyShort(f.balance)} detail={club.arenaName} tone={f.balance < 0 ? 'bad' : 'neutral'} />
+        <Metric label="Transfer budget" value={moneyShort(f.transferBudget)} detail="Available for player transfers" />
+        <Metric label="Annual wage budget" value={moneyShort(f.wageBudget)} detail={<><span>{money(wages)}</span> <span>committed per season</span></>} />
+        <Metric label="Projected result" value={`${result >= 0 ? '+' : ''}${moneyShort(result)}`} detail="if the season ended today" tone={result >= 0 ? 'good' : 'bad'} />
+      </section>
+      <div className="finance-layout">
+        <div className="finance-analytics">
+          <Panel
+            className="finance-main-chart"
+            title="The financial picture"
+            eyebrow="Real books. Clear decisions."
+            action={(
+              <div className="seg">
+                <button className={chart === 'books' ? 'on' : ''} onClick={() => setChart('books')}>Season overview</button>
+                <button className={chart === 'history' ? 'on' : ''} onClick={() => setChart('history')}>Balance history</button>
+              </div>
+            )}
+          >
+            {chart === 'history'
+              ? statements.length > 0
+                ? <BalanceChart points={statements.map((s) => ({ label: s.month, value: s.balance }))} />
+                : <EmptyState icon="stats" title="Your history starts here." description="Monthly financial statements will build the balance history as the season progresses."
+                  action={<button onClick={() => g.go('inbox')}>Inbox <Icon name="arrowRight" size={14} /></button>} />
+              : <BooksChart income={books.totalIncome} costs={books.totalCosts} result={result} />}
+            <div className="finance-chart-caption">
+              <span>{chart === 'history' ? 'Recorded monthly statements' : 'Sponsorship and TV rights are seasonal. Gate receipts and travel accrue match by match.'}</span>
+              <span>{g.dateLabel()}</span>
+            </div>
+          </Panel>
+          <div className="finance-distributions">
+            <Panel title="Where income comes from" action={<strong>{moneyShort(books.totalIncome)}</strong>}>
+              <div className="finance-income-body">
+                <IncomeRing lines={income} total={books.totalIncome} />
+                <div className="finance-legend">
+                  {income.map(([k, v], i) => (
+                    <div key={k}><i style={{ background: RING_COLOURS[i % RING_COLOURS.length] }} /><span>{k}</span><b>{moneyShort(v)}</b></div>
+                  ))}
+                </div>
+              </div>
+              <p className="finance-note"><span>Per match (full house)</span> <b>{money(f.ticketIncomePerMatch)}</b></p>
+            </Panel>
+            <Panel title="Where the money goes" action={<strong>{moneyShort(books.totalCosts)}</strong>}>
+              <div className="finance-costs">
+                {costs.map(([k, v]) => (
+                  <div key={k} className="finance-cost">
+                    <span>{k}</span>
+                    <b>{moneyShort(v)}</b>
+                    <div><i style={{ width: `${Math.min(100, (v / Math.max(1, costs[0]?.[1] ?? 1)) * 100)}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          </div>
+        </div>
+        <aside className="finance-control">
+          <Panel title="Every euro has a purpose." eyebrow="Budgets and commitments">
+            <div className="finance-wage-head">
+              <span>Committed wages (senior squad)</span>
+              <strong className={wageUse > 100 ? 'bad' : ''}>{Math.round(wageUse)}%</strong>
+            </div>
+            <Progress label="Annual wage budget used" value={wages} max={Math.max(f.wageBudget, wages)} tone={wages > f.wageBudget ? 'bad' : 'gold'} />
+            <p className="finance-budget-caption"><b>{money(wages)}</b> / {money(f.wageBudget)} <span>per season</span></p>
+            <div className="finance-remaining">
+              <span>Remaining for signings</span>
+              <strong className={f.wageBudget - wages < 0 ? 'bad' : 'good'}>{money(f.wageBudget - wages)}</strong>
+            </div>
+            <div className="finance-budget-slider">
+              <div className="finance-split-heading">
+                <strong>Budget split</strong>
+                <span>Total available: {money(envelope)}</span>
+              </div>
+              <div className="finance-split-sides">
+                <div className="finance-split-side transfers">
+                  <span>Transfers</span>
+                  <strong>{money(f.transferBudget)}</strong>
+                  <small>{envelope > 0 ? Math.round((f.transferBudget / envelope) * 100) : 0} %</small>
+                </div>
+                <div className="finance-split-side wages">
+                  <span>Wages</span>
+                  <strong>{money(f.wageBudget)}</strong>
+                  <small>{envelope > 0 ? Math.round((f.wageBudget / envelope) * 100) : 0} %</small>
+                </div>
+              </div>
+              <input
+                className="finance-split-range"
+                type="range"
+                min={0}
+                max={Math.max(0, envelope)}
+                step={1000}
+                value={f.transferBudget}
+                disabled={envelope <= 0}
+                onChange={(e) => g.setTransferBudget(Number(e.currentTarget.value))}
+                aria-label="Share the budget between transfers and wages"
+                style={{ '--vm-split': `${envelope > 0 ? (f.transferBudget / envelope) * 100 : 0}%` } as CSSProperties}
+              />
+              <p className="finance-split-hint">Move the bar to share the money between transfers and wages. The club's total does not change.</p>
+            </div>
+            <div className="finance-budget-controls">
+              <label><span>Wage budget</span><MoneyInput value={f.wageBudget} onChange={(v) => g.setWageBudget(v)} /></label>
+              <label><span>Transfer budget</span><MoneyInput value={f.transferBudget} onChange={(v) => g.setTransferBudget(v)} /></label>
+            </div>
+          </Panel>
+          <Panel title="Key contracts" action={<button className="vm-text-action" onClick={() => g.go('squad')}>Squad <Icon name="arrowRight" size={13} /></button>}>
+            <div className="finance-contracts">
+              {topWages.map((p) => (
+                <button key={p} className="finance-contract" onClick={() => g.select(p)}>
+                  <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={36} />
+                  <span>
+                    <b translate="no">{store.fullName(p)}</b>
+                    <small>{money(store.wage[p])} <span>per season</span></small>
+                  </span>
+                  <strong className={contractEndSeason(store.contractUntil[p]) <= world.season ? 'warn' : ''}>
+                    {world.startYear + contractEndSeason(store.contractUntil[p]) + 1}
+                  </strong>
+                </button>
+              ))}
+            </div>
+            {expiring.length > 0 && (
+              <button className="finance-renewal" onClick={() => g.select(expiring[0])}>
+                <Icon name="contract" size={17} />
+                <span>
+                  <b>{expiring.length} <span>contracts expire this season</span></b>
+                  <small>Review your renewal priorities</small>
+                </span>
+                <Icon name="chevronRight" size={14} />
+              </button>
+            )}
+          </Panel>
+        </aside>
       </div>
-
-      <div className="grid3">
-        <Card title="Budgets" icon="finances">
-          <KV k="Wage budget"><MoneyInput value={f.wageBudget} onChange={(v) => g.setWageBudget(v)} /></KV>
-          <KV k="Transfer budget"><MoneyInput value={f.transferBudget} onChange={(v) => g.setTransferBudget(v)} /></KV>
-          <div className="split-bar" title="Wage / transfer split">
-            <span className="split-wage" style={{ width: `${wageShare}%` }} />
-            <span className="split-transfer" style={{ width: `${100 - wageShare}%` }} />
-          </div>
-          <div className="split-legend">
-            <span><i className="dot split-wage" /> Wages {wageShare.toFixed(0)}%</span>
-            <span><i className="dot split-transfer" /> Transfers {(100 - wageShare).toFixed(0)}%</span>
-          </div>
-          <KV k="Committed wages (senior squad)" cls="bad">{money(-wages)}</KV>
-          <KV k="Remaining for signings" cls={f.wageBudget - wages < 0 ? 'bad' : 'good'}>{money(f.wageBudget - wages)}</KV>
-          <p className="footnote">
-            The board sets {money(envelope)} to split between wages and transfers each season — moving
-            money into one side takes it from the other.
-          </p>
-        </Card>
-
-        <Card title="Income (annual)" icon="stats">
-          {incomeLines.map(([k, v]) => <MoneyLine key={k} label={k} value={v} max={maxLine} tone="income" />)}
-          <KV k="Per match (full house)" cls="good">{money(f.ticketIncomePerMatch)}</KV>
-          <div className="money-total"><span>Income so far</span><strong className="good">{money(totalIncome)}</strong></div>
-          <p className="footnote">
-            Sponsorship and TV rights are locked in for the season; gate receipts and travel costs accrue
-            match by match, so the result moves as the season goes on.
-          </p>
-        </Card>
-
-        <Card title="Expenditure (annual)" icon="stats">
-          {costLines.map(([k, v]) => <MoneyLine key={k} label={k} value={v} max={maxLine} tone="cost" />)}
-          <div className="money-total"><span>Costs so far</span><strong className="bad">{money(-totalCosts)}</strong></div>
-          {/* Income less costs — what the season comes to if it ended today. */}
-          <div className="money-total money-result">
-            <span>Result so far</span>
-            <strong className={result < 0 ? 'bad' : 'good'}>{money(result)}</strong>
-          </div>
-        </Card>
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -543,8 +717,12 @@ export function ScoutingScreen(): JSX.Element {
     }
   });
   // Drawn a page at a time — always as far down as the player picked.
-  const { shown, more } = useListPages(targets, `${JSON.stringify(filters)}/${JSON.stringify(sort)}`,
-    target !== null ? targets.indexOf(target) : -1, 8);
+  // As many rows as the panel holds, a page at a time — no scrolling.
+  const listRef = useRef<HTMLDivElement>(null);
+  const fit = useFitList(listRef, targets.length, { min: 28, max: 36 });
+  const listKey = `${JSON.stringify(filters)}/${JSON.stringify(sort)}`;
+  useEffect(() => { fit.setPage(0); }, [listKey]);
+  const shown = targets.slice(fit.from, fit.to);
   const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
   const report = target !== null && matchesWatched > 0
     ? buildScoutReport(world, world.userClubId, target, { matchesWatched })
@@ -555,17 +733,31 @@ export function ScoutingScreen(): JSX.Element {
     : undefined;
 
   return (
-    <>
-      <p className="page-intro">
-        Reports show ranges, not numbers, and stay blank until your scouts have actually seen the
-        player. Send a scout to watch more matches to narrow the estimate — potential is always harder
-        to judge than current ability.
-      </p>
+    <div className="recruitment-workspace">
+      <div className="recruitment-toolbar">
+        <div>
+          <strong>{targets.length}</strong> <span>players found</span>
+          <span className="recruitment-divider" />
+          <b>{world.scoutingQueue.length}</b> <span>reports in progress</span>
+        </div>
+        <div>
+          <button onClick={() => g.go('shortlist')}>Shortlist <Icon name="arrowRight" size={13} /></button>
+          <button onClick={() => g.go('missions')}>Scout Missions <Icon name="arrowRight" size={13} /></button>
+        </div>
+      </div>
+      <details className="recruitment-explainer">
+        <summary>How scouting knowledge works</summary>
+        <p className="page-intro">
+          Reports show ranges, not numbers, and stay blank until your scouts have actually seen the
+          player. Send a scout to watch more matches to narrow the estimate — potential is always harder
+          to judge than current ability.
+        </p>
+      </details>
 
       <Card
         title="Search Filters"
+        className="recruitment-filters"
         icon="search"
-        style={{ marginBottom: 16 }}
         actions={<button className="sm" disabled={!filtersActive} onClick={clearFilters}>Clear filters</button>}
       >
         <div className="filter-bar">
@@ -656,9 +848,9 @@ export function ScoutingScreen(): JSX.Element {
           title="Players"
           icon="squad"
           flush
-          actions={<span className="faint">{targets.length} found</span>}
+          actions={<span className="faint"><ListPager page={fit.page} pages={fit.pages} setPage={fit.setPage} /> {targets.length} found</span>}
         >
-          <div className="table-wrap scout-table">
+          <div className="table-wrap scout-table" ref={listRef}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -696,7 +888,6 @@ export function ScoutingScreen(): JSX.Element {
                     </tr>
                   );
                 })}
-                {more}
                 {targets.length === 0 && (
                   <tr><td colSpan={8}><Empty>No players match these filters.</Empty></td></tr>
                 )}
@@ -808,7 +999,7 @@ export function ScoutingScreen(): JSX.Element {
             )}
         </Card>
       </div>
-    </>
+    </div>
   );
 }
 

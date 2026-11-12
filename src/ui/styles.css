@@ -16,28 +16,28 @@
 :root {
   /* Night navy panels on a near-black floor, gold for anything that
      matters — the look of a modern volleyball management sim. */
-  --bg: #04070d;
-  --bg-deep: #080e17;
-  --surface: #0c1521;
-  --surface-2: #111c2a;
-  --surface-3: #1a2636;
-  --surface-hover: #132031;
-  --line: #19232f;
-  --line-soft: #131c27;
-  --line-strong: #263345;
-  --text: #e9ecf1;
-  --text-dim: #98a2b3;
-  --text-faint: #5f6b7d;
+  --bg: #071322;
+  --bg-deep: #08182a;
+  --surface: #0b1b2e;
+  --surface-2: #10253a;
+  --surface-3: #1b344c;
+  --surface-hover: #1c3851;
+  --line: #20354b;
+  --line-soft: #172b40;
+  --line-strong: #304961;
+  --text: #eff3f8;
+  --text-dim: #a3b3c5;
+  --text-faint: #8395ac;
   --active: #1c2129;
 
   /* Blue survives as the secondary accent — links, ratings, the away side. */
   --accent: #4f8dff;
   --accent-bright: #8db4ff;
   --accent-soft: rgba(79, 141, 255, 0.15);
-  --gold: #d7a73f;
-  --gold-bright: #f0c35a;
-  --gold-deep: #b0832a;
-  --gold-soft: rgba(215, 167, 63, 0.14);
+  --gold: #f5c542;
+  --gold-bright: #ffda69;
+  --gold-deep: #bc8e1d;
+  --gold-soft: rgba(245, 197, 66, 0.12);
 
   --good: #3fbd5f;
   --good-soft: rgba(63, 189, 95, 0.13);
@@ -56,17 +56,17 @@
 
   /* One colour per role, shared by badges, cards and court markers. */
   --pos-s: #f0c35a;
-  --pos-opp: #ff6b6b;
+  --pos-opp: #eac66e;
   --pos-oh: #4f9dff;
   --pos-mb: #b58cff;
-  --pos-l: #3fbd5f;
+  --pos-l: #77bedb;
 
   /* The two sides in a live match. */
   --home: #4f9dff;
   --away: #ffb020;
 
-  --radius: 10px;
-  --radius-sm: 7px;
+  --radius: 7px;
+  --radius-sm: 4px;
   --shadow-card: 0 12px 28px -22px rgba(0, 0, 0, 0.95);
   --shadow-pop: 0 20px 48px -12px rgba(0, 0, 0, 0.85);
 

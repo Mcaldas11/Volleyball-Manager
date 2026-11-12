@@ -1,11 +1,12 @@
 import { PortraitButton } from '../portraitEditor.tsx';
-import { useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { DirectorDialog } from './Recruitment.tsx';
 import { PlayerCompare } from './Compare.tsx';
 import { AbilityChart } from '../abilityChart.tsx';
 import { feeText, youthRound, youthRoundDay, youthTable, type YouthLeague } from '../../engine/world/youth.ts';
 import { Dropdown, type DropOption } from '../dropdown.tsx';
 import { ConfirmDialog } from '../confirmDialog.tsx';
+import { PATH_NAMES } from '../../engine/world/academyPlans.ts';
 import type { TimelineItem } from '../../engine/world/playerTimeline.ts';
 import { AcademyDevelopment, AcademyFacilities, AcademyPlans, AcademyRecruitment } from './AcademyPlus.tsx';
 import {
@@ -27,7 +28,7 @@ import { contractEndSeason, type World } from '../../engine/world/world.ts';
 import { AGENT_STYLE_NAMES, agentOf, extrasOf, optionBlock } from '../../engine/world/contractTerms.ts';
 import {
   abilityClass, attrClass, Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, Morale, PlayerFace, Pos,
-  RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useDismiss, useSort,
+  ListPager, RatingBadge, Segmented, SortTh, StarMeter, StatTile, Status, sortBy, useDismiss, useFitGrid, useFitList, useSort,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { ClubHistoryCard } from '../clubHistory.tsx';
@@ -45,42 +46,26 @@ export function seasonLabel(world: World, season: number): string {
   return `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
 }
 
-const POSITION_FILTERS: ReadonlyArray<readonly [number, string]> = [
-  [-1, 'All'],
-  ...POSITIONS.map((p) => [p, `${POSITION_NAMES[p]}s`] as const),
-];
 
-/** The row height last fitted for a list of so many rows. */
-const FITTED_ROWS = new Map<number, string>();
+type SquadView = 'sport' | 'physical' | 'contract';
 
-/**
- * Every row of a list in view: the rows take the height the panel has over
- * them, between a compact and a comfortable height, so the list never scrolls.
- */
-function useFitRows(wrapRef: RefObject<HTMLDivElement | null>, count: number): void {
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    if (wrap === null) return;
-    // The height the rows had last time, put on before the first paint: when it
-    // still fits, the fitting below changes nothing and the table is laid out once.
-    const known = FITTED_ROWS.get(count);
-    if (known !== undefined) wrap.style.setProperty('--row-h', known);
-    const fit = (): void => {
-      const head = wrap.querySelector('thead')?.getBoundingClientRect().height ?? 30;
-      // A pixel a row for its border.
-      const h = Math.floor((wrap.clientHeight - head) / Math.max(1, count)) - 1;
-      const rowH = `${Math.max(19, Math.min(40, h))}px`;
-      FITTED_ROWS.set(count, rowH);
-      if (wrap.style.getPropertyValue('--row-h') !== rowH) wrap.style.setProperty('--row-h', rowH);
-    };
-    // Fitted once the browser lays the panel out, not by asking it to now: a forced
-    // layout of the whole screen before its first paint, every time it opens.
-    const ro = new ResizeObserver(fit);
-    ro.observe(wrap);
-    return () => ro.disconnect();
-  }, [wrapRef, count]);
+/** What the squad screen was showing, per career: the player picked, the search, the filter, the view. */
+const SQUAD_VIEW = new WeakMap<World, { selected: number; query: string; position: number; view: SquadView }>();
+
+const SQUAD_POS_FILTER: ReadonlyArray<readonly [number, string]> = [[-1, 'All'], ...POSITIONS.map((p) => [p, POSITION_SHORT[p]] as const)];
+
+/** The four attributes the dossier shows for a player of each kind. */
+function keyAttrsFor(pos: Position): AttributeName[] {
+  if (pos === Position.Setter) return ['setting', 'ballControl', 'servingAccuracy', 'composure'];
+  if (pos === Position.Libero) return ['reception', 'digging', 'ballControl', 'agility'];
+  return ['spikeTechnique', 'blocking', 'servingPower', 'verticalJump'];
 }
 
+/**
+ * The first team as a workspace: the starting six on a court on the left, the
+ * roster in the middle (sporting, physical or contract view), and the player
+ * picked in it on the right — a click inspects him, a double-click opens him.
+ */
 export function SquadScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -89,36 +74,36 @@ export function SquadScreen(): JSX.Element {
   const squad = g.squad();
   const selection = g.clubLineup();
   const starters = new Set(selection?.lineup ?? []);
-  const libero = selection?.libero ?? -1;
-  const defensiveLibero = selection?.defensiveLibero ?? -1;
-  // Listed after the squad, greyed out: our players out on loan, who are still
-  // ours, and players who have agreed to join and are waiting on the window.
   const away = g.loanedOut();
   const awayAt = new Map(away.map((l) => [l.playerIdx, l]));
   const arriving = g.arrivals();
   const arrivingAt = new Map(arriving.map((m) => [m.playerIdx, m]));
   const borrowed = new Set(squad.filter((p) => g.loanOf(p) !== null));
-  const totals = new Map([...squad, ...awayAt.keys(), ...arrivingAt.keys()].map((p) => [p, seasonTotals(world, p)]));
-  const avgRating = (p: number): number => averageRating(totals.get(p)!);
-  const [posFilter, setPosFilter] = useState(-1);
+  const everyone = [...new Set([...squad, ...awayAt.keys(), ...arrivingAt.keys()])];
+  const totals = new Map(everyone.map((p) => [p, seasonTotals(world, p)]));
+  const remembered = SQUAD_VIEW.get(world);
+  const [posFilter, setPosFilter] = useState(remembered?.position ?? -1);
+  const [query, setQuery] = useState(remembered?.query ?? '');
+  const [view, setView] = useState<SquadView>(remembered?.view ?? 'sport');
+  const [picked, setPicked] = useState(() => remembered?.selected ?? squad[0] ?? -1);
   const [sort, onSort] = useSort<SquadSort>('ability');
+  SQUAD_VIEW.set(world, { selected: picked, query, position: posFilter, view });
   const wrapRef = useRef<HTMLDivElement>(null);
-  const everyone = [...squad, ...awayAt.keys(), ...arrivingAt.keys()];
-  useFitRows(wrapRef, posFilter < 0 ? everyone.length : everyone.filter((p) => store.position[p] === posFilter).length);
+  const shown = everyone.filter((p) => (posFilter < 0 || store.position[p] === posFilter) &&
+    store.fullName(p).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const fit = useFitList(wrapRef, shown.length, { min: 26, max: 46 });
 
   if (squad.length === 0) return <Empty>No players under contract.</Empty>;
 
+  const sel = everyone.includes(picked) ? picked : squad[0];
   const age = (p: number): number => store.ageOn(p, world.year, 181);
-  const wageBill = g.wageBill();
-  const squadSize = g.squadSize();
-  const avgAbility = Math.round(squad.reduce((s, p) => s + store.currentAbility[p], 0) / squad.length);
-  const avgAge = squad.reduce((s, p) => s + age(p), 0) / squad.length;
+  const avgRating = (p: number): number => averageRating(totals.get(p)!);
   const injured = squad.filter((p) => store.injuryDaysLeft[p] > 0).length;
+  const avgAge = squad.reduce((s, p) => s + age(p), 0) / squad.length;
+  const avgAbility = Math.round(squad.reduce((s, p) => s + store.currentAbility[p], 0) / squad.length);
+  const wageBill = g.wageBill();
   const endsThisSeason = (p: number): boolean => contractEndSeason(store.contractUntil[p]) <= world.season;
-  // Anyone here on loan is under contract to his own club.
   const expiring = [...squad, ...awayAt.keys()].filter((p) => !borrowed.has(p) && endsThisSeason(p)).length;
-
-  const byPos = (list: number[]): number[] => (posFilter < 0 ? list : list.filter((p) => store.position[p] === posFilter));
   const sorter = (p: number, k: SquadSort): number | string => {
     switch (k) {
       case 'number': return g.shirtNumber(p) ?? 100;
@@ -138,173 +123,289 @@ export function SquadScreen(): JSX.Element {
       default: return store.currentAbility[p];
     }
   };
-  const rows = sortBy(byPos(squad), sort, sorter);
-  const awayRows = sortBy(byPos([...arrivingAt.keys(), ...awayAt.keys()]), sort, sorter);
+  const rows = sortBy(shown, sort, sorter);
+  const keyAttrs = keyAttrsFor(store.position[sel] as Position);
+  const liberos = selection === null ? [] : [selection.libero, selection.defensiveLibero].filter((p, i, a) => p >= 0 && a.indexOf(p) === i);
 
   return (
-    <>
-      <div className="tiles squad-tiles">
-        <StatTile
-          label="Squad size"
-          value={`${squadSize}/${MAX_SQUAD}`}
-          sub={[
-            arriving.length > 0 ? `${arriving.length} arriving` : '',
-            away.length > 0 ? `${away.length} out on loan` : '',
-            `${MAX_SQUAD - squadSize} ${away.length + arriving.length > 0 ? 'free' : 'places free'}`,
-          ].filter((s) => s !== '').join(' · ')}
-        />
-        <StatTile label="Average age" value={avgAge.toFixed(1)} sub="years" />
-        <StatTile
-          label="Average ability"
-          value={<span className={abilityClass(avgAbility)}>{avgAbility}</span>}
-          sub={<StarMeter value={avgAbility} size={12} />}
-        />
-        <StatTile
-          label="Wage bill"
-          value={money(wageBill)}
-          sub={`of ${money(club.finances.wageBudget)} budget`}
-          tone={wageBill > club.finances.wageBudget ? 'bad' : undefined}
-        />
-        <StatTile
-          label="Unavailable"
-          value={injured}
-          sub={injured === 1 ? 'player injured' : 'players injured'}
-          tone={injured > 0 ? 'warn' : 'good'}
-        />
-        <StatTile
-          label="Expiring contracts"
-          value={expiring}
-          sub={`end on 30 Jun ${world.startYear + world.season + 1}`}
-          tone={expiring > 0 ? 'warn' : 'good'}
-        />
+    <div className="athlete-workspace">
+      <header className="athlete-heading">
+        <div>
+          <span className="athlete-eyebrow">SPORTING DEPARTMENT</span>
+          <h1>Your team. Your decisions.</h1>
+          <p>
+            <ClubCrest club={club} size={20} /> <span translate="no">{club.name}</span> <span>·</span>{' '}
+            <span>{squad.length} players</span> <span>·</span> <span>{squad.length - injured} available</span>
+          </p>
+        </div>
+        <div className="athlete-head-actions">
+          <button onClick={() => g.go('youth')}><Icon name="youth" size={16} /> Academy</button>
+          <button onClick={() => g.go('planner')}><Icon name="calendar" size={16} /> Squad plan</button>
+        </div>
+      </header>
+
+      <div className="athlete-summary">
+        <div>
+          <span>Squad size</span>
+          <b>{g.squadSize()}<small> / {MAX_SQUAD}</small></b>
+          <small>{arriving.length} arriving · {away.length} out on loan</small>
+        </div>
+        <div>
+          <span>Average ability</span>
+          <b>{avgAbility}</b>
+          <small><StarMeter value={avgAbility} size={12} /></small>
+        </div>
+        <div>
+          <span>Average age</span>
+          <b>{avgAge.toFixed(1)}</b>
+          <small>years</small>
+        </div>
+        <div>
+          <span>Wage bill</span>
+          <b className={wageBill > club.finances.wageBudget ? 'neg' : ''}>{money(wageBill)}</b>
+          <small>of {money(club.finances.wageBudget)} budget</small>
+        </div>
+        <button onClick={() => { setView('contract'); if (sort.key !== 'contract') onSort('contract'); }}>
+          <span>Expiring contracts</span>
+          <b>{expiring}</b>
+          <small>Review commitments <Icon name="arrowRight" size={12} /></small>
+        </button>
       </div>
 
-      <Card
-        title="Players"
-        icon="squad"
-        flush
-        className="squad-players"
-        actions={<Segmented size="sm" options={POSITION_FILTERS} value={posFilter} onChange={setPosFilter} />}
-      >
-        <div className="table-wrap" ref={wrapRef}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <SortTh k="number" sort={sort} onSort={onSort} title="Shirt number — click one to change it">No.</SortTh>
-                <th />
-                <SortTh k="name" sort={sort} onSort={onSort}>Name</SortTh>
-                <SortTh k="pos" sort={sort} onSort={onSort}>Pos</SortTh>
-                <SortTh k="age" sort={sort} onSort={onSort} num>Age</SortTh>
-                <th>Nat</th>
-                <SortTh k="height" sort={sort} onSort={onSort} num title="Height (cm)">Ht</SortTh>
-                <SortTh k="spike" sort={sort} onSort={onSort} num title="Spike reach (cm)" className="col-reach">Spike</SortTh>
-                <SortTh k="block" sort={sort} onSort={onSort} num title="Block reach (cm)" className="col-reach">Block</SortTh>
-                <SortTh k="ability" sort={sort} onSort={onSort}>Ability</SortTh>
-                <SortTh k="potential" sort={sort} onSort={onSort} num title="Potential ability">Pot</SortTh>
-                <SortTh k="condition" sort={sort} onSort={onSort}>Cond</SortTh>
-                <SortTh k="morale" sort={sort} onSort={onSort}>Morale</SortTh>
-                <th>Status</th>
-                <SortTh k="apps" sort={sort} onSort={onSort} num title="Matches this season: started, and off the bench in brackets">Apps</SortTh>
-                <SortTh k="rating" sort={sort} onSort={onSort} num title="Average match rating this season">Av Rat</SortTh>
-                <SortTh k="wage" sort={sort} onSort={onSort} num>Wage</SortTh>
-                <SortTh k="contract" sort={sort} onSort={onSort} num title="Contract ends on 30 June of">Ends</SortTh>
-              </tr>
-            </thead>
-            <tbody>
-              {[...rows, ...awayRows].map((p) => {
-                const out = awayAt.get(p);
-                const incoming = arrivingAt.get(p);
-                return (
-                  <tr
-                    key={p}
-                    className={`clickable${out !== undefined || incoming !== undefined ? ' row-away' : ''}`}
-                    onClick={() => g.select(p)}
-                  >
-                    <td className="no-cell">
-                      {out === undefined && incoming === undefined && !borrowed.has(p) ? <ShirtNumber p={p} editable /> : <ShirtNumber p={p} />}
-                    </td>
-                    <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
-                    <td>
-                      <span className="name-cell">
-                        <span className="strong">{store.fullName(p)}</span>
-                        {starters.has(p) && <span className="role-tag starter" title="In the starting six">XI</span>}
-                        {p === libero && (
-                          <span className="role-tag libero" title={defensiveLibero >= 0 ? 'Reception libero' : 'Starting libero'}>L</span>
-                        )}
-                        {p === defensiveLibero && <span className="role-tag libero" title="Defensive libero">DL</span>}
-                        <MarketTags p={p} borrowed={borrowed.has(p)} />
-                      </span>
-                    </td>
-                    <td><Pos pos={store.position[p] as Position} /></td>
-                    <td className="num">{age(p)}</td>
-                    <td><Flag nation={store.nation[p]} /></td>
-                    <td className="num dim">{store.heightCm[p]}</td>
-                    <td className="num dim col-reach">{store.spikeReachCm[p]}</td>
-                    <td className="num dim col-reach">{store.blockReachCm[p]}</td>
-                    <td>
-                      <span className="ability-cell">
-                        <StarMeter value={store.currentAbility[p]} size={11} />
-                        <span className={abilityClass(store.currentAbility[p])}>{store.currentAbility[p]}</span>
-                      </span>
-                    </td>
-                    <td className={`num ${abilityClass(store.potentialAbility[p])}`}>{store.potentialAbility[p]}</td>
-                    <td><span className="cond-cell"><Bar value={store.condition[p]} /><span className="dim">{store.condition[p]}%</span></span></td>
-                    <td><Morale value={store.morale[p]} /></td>
-                    <td>
-                      {out !== undefined
-                        ? (
-                          <span className="status-tag status-loan" title={`Back ${g.dateLabelForDay(out.endsOn)}`}>
-                            On loan · {world.clubs[out.loanClubId]?.shortName ?? '—'}
+      <div className="athlete-roster-grid">
+        <aside className="athlete-lineup">
+          <header>
+            <div>
+              <span className="athlete-eyebrow">MATCH PREPARATION</span>
+              <h2>Starting six</h2>
+            </div>
+            <button className="icon-btn" onClick={() => g.go('lineup')} title="Edit team sheet"><Icon name="tactics" size={18} /></button>
+          </header>
+          {selection !== null ? (
+            <>
+              <div className="athlete-court" aria-label="Starting six on court">
+                <span className="athlete-net" />
+                <span className="athlete-attack-line" />
+                {[3, 2, 1, 4, 5, 0].map((zone) => {
+                  const p = selection.lineup[zone];
+                  return p >= 0 ? (
+                    <button key={zone} className={`athlete-court-player${sel === p ? ' selected' : ''}`} onClick={() => setPicked(p)} title={store.fullName(p)}>
+                      <small className="athlete-zone">{zone + 1}</small>
+                      <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={48} />
+                      <strong>{store.surname(p)}</strong>
+                      <Pos pos={store.position[p] as Position} />
+                    </button>
+                  ) : <span key={zone} className="athlete-empty-zone">{zone + 1}</span>;
+                })}
+              </div>
+              <div className="athlete-libero-strip">
+                <span>Libero</span>
+                {liberos.map((p) => (
+                  <button key={p} className={sel === p ? 'selected' : ''} onClick={() => setPicked(p)}>
+                    <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} />
+                    <b>{store.surname(p)}</b>
+                    <Pos pos={Position.Libero} />
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : <Empty>No team sheet selected.</Empty>}
+          <p className="athlete-court-note">The libero replaces a back-row player.</p>
+          <button className="primary athlete-wide" onClick={() => g.go('lineup')}>Edit team sheet <Icon name="arrowRight" size={15} /></button>
+          <div className="athlete-availability">
+            <span>Squad availability</span>
+            <b>{squad.length - injured}/{squad.length}</b>
+            <Bar value={((squad.length - injured) / squad.length) * 100} wide />
+            {injured > 0 && <small className="warn-text">{injured} players injured</small>}
+          </div>
+          <button className="athlete-wide" onClick={() => g.go('training')}><Icon name="training" size={16} /> Individual training</button>
+        </aside>
+
+        <section className="athlete-roster">
+          <header className="athlete-roster-head">
+            <h2>First team</h2>
+            <span>{rows.length} / {everyone.length}</span>
+            <Dropdown<SquadView>
+              value={view}
+              onChange={setView}
+              searchable={false}
+              size="sm"
+              options={[
+                { value: 'sport', label: 'Sporting view' },
+                { value: 'physical', label: 'Physical profile' },
+                { value: 'contract', label: 'Contracts and status' },
+              ]}
+            />
+          </header>
+          <div className="athlete-toolbar">
+            <label className="athlete-search">
+              <Icon name="search" size={15} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a player" aria-label="Find a player" />
+            </label>
+            <Segmented size="sm" options={SQUAD_POS_FILTER} value={posFilter} onChange={setPosFilter} />
+          </div>
+          <div className="table-wrap athlete-table-wrap" ref={wrapRef}>
+            <table className={`data-table athlete-roster-table view-${view}`}>
+              <thead>
+                <tr>
+                  <SortTh k="number" sort={sort} onSort={onSort} title="Shirt number — click one to change it">No.</SortTh>
+                  <SortTh k="name" sort={sort} onSort={onSort}>Player</SortTh>
+                  <SortTh k="pos" sort={sort} onSort={onSort}>Pos</SortTh>
+                  {view === 'sport' && (
+                    <>
+                      <SortTh k="ability" sort={sort} onSort={onSort} num>Ability</SortTh>
+                      <SortTh k="potential" sort={sort} onSort={onSort} num>Pot</SortTh>
+                      <SortTh k="condition" sort={sort} onSort={onSort}>Cond</SortTh>
+                      <SortTh k="morale" sort={sort} onSort={onSort}>Morale</SortTh>
+                      <SortTh k="apps" sort={sort} onSort={onSort} num title="Matches this season: started, and off the bench in brackets">Apps</SortTh>
+                      <SortTh k="rating" sort={sort} onSort={onSort} num title="Average match rating this season">Av Rat</SortTh>
+                    </>
+                  )}
+                  {view === 'physical' && (
+                    <>
+                      <SortTh k="age" sort={sort} onSort={onSort} num>Age</SortTh>
+                      <th>Nat</th>
+                      <SortTh k="height" sort={sort} onSort={onSort} num>Height</SortTh>
+                      <SortTh k="spike" sort={sort} onSort={onSort} num title="Spike reach">Spike</SortTh>
+                      <SortTh k="block" sort={sort} onSort={onSort} num title="Block reach">Block</SortTh>
+                      <SortTh k="condition" sort={sort} onSort={onSort}>Cond</SortTh>
+                    </>
+                  )}
+                  {view === 'contract' && (
+                    <>
+                      <SortTh k="wage" sort={sort} onSort={onSort} num>Wage</SortTh>
+                      <SortTh k="contract" sort={sort} onSort={onSort} num title="Contract ends on 30 June of">Ends</SortTh>
+                      <th>Status</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(fit.from, fit.to).map((p) => {
+                  const out = awayAt.get(p);
+                  const incoming = arrivingAt.get(p);
+                  return (
+                    <tr
+                      key={p}
+                      className={`clickable${sel === p ? ' selected' : ''}${out !== undefined || incoming !== undefined ? ' row-away' : ''}`}
+                      onClick={() => setPicked(p)}
+                      onDoubleClick={() => g.select(p)}
+                      aria-selected={sel === p}
+                    >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <ShirtNumber p={p} editable={out === undefined && incoming === undefined && !borrowed.has(p)} />
+                      </td>
+                      <td>
+                        <button className="athlete-player-cell" onClick={() => setPicked(p)}>
+                          <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={34} />
+                          <span>
+                            <b translate="no">{store.fullName(p)}</b>
+                            <small>
+                              {age(p)} <span>years</span>
+                              {starters.has(p) && <span className="athlete-starter">VI</span>}
+                              <MarketTags p={p} borrowed={borrowed.has(p)} />
+                            </small>
                           </span>
-                        )
-                        : incoming !== undefined
-                          ? (
-                            <span className="status-tag status-loan" title="Agreed to join — he arrives when the window opens">
-                              Joins {g.dateLabelForDay(incoming.movesOn)}
-                            </span>
-                          )
-                          : <Status store={store} i={p} />}
-                    </td>
-                    <td className="num dim">{appsLabel(seasonRecords(world, p, world.season))}</td>
-                    <td className="num"><RatingBadge value={avgRating(p)} size="sm" /></td>
-                    <td className="num dim">{money(incoming?.kind === 'transfer' ? incoming.wage : store.wage[p])}</td>
-                    {incoming !== undefined
-                      ? (
-                        <td className="num dim">
-                          {incoming.kind === 'loan' ? 'Loan' : world.startYear + contractEndSeason(incoming.contractEnd) + 1}
-                        </td>
-                      )
-                      : borrowed.has(p)
-                        ? <td className="num dim" title="Under contract to his own club — here until the end of the season">Loan</td>
-                        : (
-                          <td
-                            className={`num ${endsThisSeason(p) ? 'warn-text' : 'dim'}`}
-                            title={endsThisSeason(p) ? 'Contract expires this season' : undefined}
-                          >
-                            {world.startYear + contractEndSeason(store.contractUntil[p]) + 1}
+                        </button>
+                      </td>
+                      <td><Pos pos={store.position[p] as Position} /></td>
+                      {view === 'sport' && (
+                        <>
+                          <td className={`num athlete-rating ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                          <td className="num athlete-potential">{store.potentialAbility[p]}</td>
+                          <td><span className="cond-cell"><Bar value={store.condition[p]} /><span>{store.condition[p]}%</span></span></td>
+                          <td><Morale value={store.morale[p]} /></td>
+                          <td className="num dim">{appsLabel(seasonRecords(world, p, world.season))}</td>
+                          <td className="num"><RatingBadge value={avgRating(p)} size="sm" /></td>
+                        </>
+                      )}
+                      {view === 'physical' && (
+                        <>
+                          <td className="num">{age(p)}</td>
+                          <td><Flag nation={store.nation[p]} /></td>
+                          <td className="num">{store.heightCm[p]} <small>cm</small></td>
+                          <td className="num">{store.spikeReachCm[p]} <small>cm</small></td>
+                          <td className="num">{store.blockReachCm[p]} <small>cm</small></td>
+                          <td><span className="cond-cell"><Bar value={store.condition[p]} /><span>{store.condition[p]}%</span></span></td>
+                        </>
+                      )}
+                      {view === 'contract' && (
+                        <>
+                          <td className="num">{money(incoming?.kind === 'transfer' ? incoming.wage : store.wage[p])}</td>
+                          <td className={`num ${endsThisSeason(p) ? 'warn-text' : ''}`}>
+                            {incoming?.kind === 'loan' || borrowed.has(p)
+                              ? 'Loan'
+                              : world.startYear + contractEndSeason(incoming?.kind === 'transfer' ? incoming.contractEnd : store.contractUntil[p]) + 1}
                           </td>
-                        )}
-                  </tr>
-                );
-              })}
-              {rows.length + awayRows.length === 0 && (
-                <tr><td colSpan={18}><Empty>No players in this position.</Empty></td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-      <p className="legend squad-legend">
-        <span className="role-tag starter">XI</span> starting six
-        <span className="role-tag libero">L</span> starting libero
-        <span className="role-tag libero">DL</span> defensive libero
-        <span className="role-tag loan">LOAN</span> here on loan
-        <span className="role-tag leaving">OUT</span> leaving when the window opens
-        <span className="role-tag listed">TL</span> transfer listed
-        <span className="role-tag listed">LL</span> available for loan
-        <span className="faint">· Click a column heading to sort, a player to open their profile.</span>
-      </p>
-    </>
+                          <td>
+                            {out !== undefined
+                              ? <span className="status-tag status-loan">On loan · {world.clubs[out.loanClubId]?.shortName}</span>
+                              : incoming !== undefined
+                                ? <span className="status-tag status-loan">Joins {g.dateLabelForDay(incoming.movesOn)}</span>
+                                : <Status store={store} i={p} />}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+                {rows.length === 0 && <tr><td colSpan={9}><Empty>No players match your search.</Empty></td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <footer className="athlete-roster-footer">
+            <span>Click to inspect · double-click for the full profile</span>
+            <ListPager page={fit.page} pages={fit.pages} setPage={fit.setPage} />
+            <span><b>VI</b> Starting six</span>
+          </footer>
+        </section>
+
+        <aside key={store.id[sel]} className="athlete-dossier">
+          <div className="athlete-dossier-hero">
+            <span className="athlete-eyebrow">SELECTED PLAYER</span>
+            <span className="athlete-dossier-number">{g.shirtNumber(sel) ?? ''}</span>
+            <PlayerFace playerId={store.id[sel]} name={store.fullName(sel)} size={136} />
+            <h2 translate="no">{store.fullName(sel)}</h2>
+            <p>
+              <Pos pos={store.position[sel] as Position} /> <span>{POSITION_NAMES[store.position[sel] as Position]}</span> · {age(sel)} <span>years</span>
+            </p>
+            <span><Flag nation={store.nation[sel]} /> {NATIONS[store.nation[sel]]?.name}</span>
+          </div>
+          <div className="athlete-dossier-ratings">
+            <div><span>Ability</span><b>{store.currentAbility[sel]}</b></div>
+            <div><span>Potential</span><b>{store.potentialAbility[sel]}</b></div>
+            <div><span>Av Rat</span><RatingBadge value={avgRating(sel)} size="lg" /></div>
+          </div>
+          <div className="athlete-dossier-actions">
+            <button className="primary athlete-wide" onClick={() => g.select(sel)}>Open full profile <Icon name="arrowRight" size={15} /></button>
+            <Dropdown<number>
+              value={null}
+              placeholder="Compare with…"
+              searchable
+              menuWidth={260}
+              options={everyone.filter((p) => p !== sel).map((p) => ({ value: p, label: store.fullName(p), hint: POSITION_SHORT[store.position[p] as Position] }))}
+              onChange={(p) => { g.select(sel); g.compareWith(p); }}
+            />
+          </div>
+          <section className="athlete-key-attributes">
+            <h3>Key attributes</h3>
+            {keyAttrs.map((a) => (
+              <div key={a}>
+                <span>{ATTR_LABELS[a]}</span>
+                <span className="athlete-attribute-track"><i style={{ width: `${store.getAttr(sel, a) * 5}%` }} /></span>
+                <b>{store.getAttr(sel, a)}</b>
+              </div>
+            ))}
+          </section>
+          <div className="athlete-dossier-condition">
+            <span>Condition <b>{store.condition[sel]}%</b></span>
+            <Bar value={store.condition[sel]} wide />
+            <span>Morale <Morale value={store.morale[sel]} /></span>
+            <Status store={store} i={sel} />
+          </div>
+        </aside>
+      </div>
+    </div>
   );
 }
 
@@ -1182,6 +1283,12 @@ export function YouthScreen(): JSX.Element {
   const league = g.youthLeague();
   const [tab, setTab] = useState<AcademyTab>('players');
   const [releasing, setReleasing] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [posFilter, setPosFilter] = useState(-1);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const prospects = youth.filter((p) => (posFilter < 0 || store.position[p] === posFilter) &&
+    store.fullName(p).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const grid = useFitGrid(gridRef, prospects.length, { minWidth: 250, height: 212 });
   const lent = g.academyLoans();
   const bestPotential = youth.length > 0 ? store.potentialAbility[youth[0]] : 0;
 
@@ -1208,21 +1315,28 @@ export function YouthScreen(): JSX.Element {
   const position = league !== undefined ? youthTable(league).findIndex((r) => r.clubId === club.id) + 1 : 0;
 
   return (
-    <div className="academy">
-      <div className="tiles">
-        <StatTile label="Youth facilities" value={`${club.youthFacilities}/20`} sub={<Bar value={club.youthFacilities} max={20} wide />} />
-        <StatTile label="Recruitment reach" value={`${club.youthRecruitment}/20`} sub={<Bar value={club.youthRecruitment} max={20} wide />} />
-        <StatTile label="Prospects" value={youth.length} sub={lent.length > 0 ? `in the academy · ${lent.length} on loan` : 'in the academy'} />
-        <StatTile
-          label="Best potential"
-          value={youth.length > 0 ? <span className={abilityClass(bestPotential)}>{bestPotential}</span> : '—'}
-          sub={youth.length > 0 ? <StarMeter value={bestPotential} size={12} /> : 'no prospects yet'}
-        />
-        <StatTile
-          label="U19 league"
-          value={league !== undefined && league.round > 0 ? `${position}${ordinalSuffix(position)}` : '—'}
-          sub={league?.name ?? 'no youth league'}
-        />
+    <div className="academy athlete-academy">
+      <header className="athlete-heading">
+        <div>
+          <span className="athlete-eyebrow">TOMORROW'S FIRST TEAM</span>
+          <h1>Talent takes time. Give it a direction.</h1>
+          <p>
+            <span translate="no">{club.name}</span><span>·</span><span>{youth.length} prospects</span><span>·</span><span>{lent.length} on loan</span>
+          </p>
+        </div>
+        <div className="athlete-head-actions">
+          <button onClick={() => setTab('recruitment')}><Icon name="scouting" size={16} /> Youth search</button>
+          <button className="primary" onClick={() => setTab('plans')}>Career plans <Icon name="arrowRight" size={16} /></button>
+        </div>
+      </header>
+      <div className="athlete-academy-summary">
+        <div><b>{club.youthFacilities}<small>/20</small></b><span>Youth facilities<Bar value={club.youthFacilities} max={20} wide /></span></div>
+        <div><b>{club.youthRecruitment}<small>/20</small></b><span>Recruitment reach<Bar value={club.youthRecruitment} max={20} wide /></span></div>
+        <div><b>{bestPotential || '—'}</b><span>Best potential<StarMeter value={bestPotential} size={12} /></span></div>
+        <div>
+          <b>{league !== undefined && league.round > 0 ? `${position}${ordinalSuffix(position)}` : '—'}</b>
+          <span>U19 league<small>{league?.name ?? 'no youth league'}</small></span>
+        </div>
       </div>
 
       <div className="academy-tabs">
@@ -1243,82 +1357,86 @@ export function YouthScreen(): JSX.Element {
         : tab === 'recruitment' ? <AcademyRecruitment />
         : tab === 'facilities' ? <AcademyFacilities />
         : tab === 'players' ? (
-        <Card title="Academy Players" icon="youth" flush className="academy-card">
+        <>
+          <div className="athlete-toolbar">
+            <label className="athlete-search">
+              <Icon name="search" size={15} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a prospect" aria-label="Find a prospect" />
+            </label>
+            <Segmented size="sm" options={SQUAD_POS_FILTER} value={posFilter} onChange={setPosFilter} />
+            <ListPager page={grid.page} pages={grid.pages} setPage={grid.setPage} />
+          </div>
           {youth.length === 0
             ? <Empty>No youth players yet. The next intake arrives at the end of the season.</Empty>
             : (
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th />
-                      <th>Name</th>
-                      <th>Pos</th>
-                      <th className="num">Age</th>
-                      <th>Nat</th>
-                      <th className="num">Ability</th>
-                      <th>Potential</th>
-                      <th>Assessment</th>
-                      <th className="num" title="U19 matches this season">U19</th>
-                      <th className="num" title="Points for the U19s">Pts</th>
-                      <th className="num" title="Average rating for the U19s">Avg</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {youth.map((p) => {
-                      const pa = store.potentialAbility[p];
-                      const a = assessment(pa);
-                      const line = stats?.get(p);
-                      const offers = g.academyOffers(p);
-                      return (
-                        <tr key={p} className="clickable" onClick={() => g.select(p)}>
-                          <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
-                          <td className="strong">{store.fullName(p)}</td>
-                          <td><Pos pos={store.position[p] as Position} /></td>
-                          <td className="num">{store.ageOn(p, world.year, 181)}</td>
-                          <td><Flag nation={store.nation[p]} /></td>
-                          <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
-                          <td>
-                            <span className="ability-cell">
-                              <StarMeter value={pa} size={11} />
-                              <span className={abilityClass(pa)}>{pa}</span>
-                            </span>
-                          </td>
-                          <td className={a.cls}>{a.text}</td>
-                          <td className="num">{line?.[0] ?? 0}</td>
-                          <td className="num">{line?.[1] ?? 0}</td>
-                          <td className="num">
-                            {line !== undefined && line[0] > 0 ? <RatingBadge value={line[2] / line[0]} size="sm" /> : <span className="dim">—</span>}
-                          </td>
-                          <td className="num">
-                            <span className="academy-actions" onClick={(e) => e.stopPropagation()}>
-                              <button className="sm" onClick={() => g.promotePlayer(p)}>Promote</button>
-                              <Dropdown<number>
-                                size="sm"
-                                className="academy-more"
-                                placeholder="Actions"
-                                value={null}
-                                menuWidth={290}
-                                searchable={false}
-                                title="Sell him, send him on loan for senior games, or let him go"
-                                onChange={(v) => {
-                                  if (v === RELEASE) setReleasing(p);
-                                  else if (v >= LOAN_BASE) g.loanAcademyPlayer(p, v - LOAN_BASE);
-                                  else if (v >= 0) g.sellAcademyPlayer(p, v);
-                                }}
-                                options={academyActions(p, offers)}
-                              />
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="athlete-prospect-grid" ref={gridRef} style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))` }}>
+                {prospects.slice(grid.from, grid.to).map((p) => {
+                  const pa = store.potentialAbility[p];
+                  const ca = store.currentAbility[p];
+                  const a = assessment(pa);
+                  const line = stats?.get(p);
+                  const offers = g.academyOffers(p);
+                  const plan = g.careerPlan(p);
+                  const mentor = g.mentorOf(p);
+                  const start = g.ctx.seasonStartAbility.get(p);
+                  return (
+                    <article key={p} className="athlete-prospect">
+                      <header className="athlete-prospect-head">
+                        <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={64} />
+                        <div>
+                          <span className="athlete-eyebrow">ACADEMY PROSPECT</span>
+                          <h3 className="player-link" onClick={() => g.select(p)} translate="no">{store.fullName(p)}</h3>
+                          <p><Pos pos={store.position[p] as Position} />{store.ageOn(p, world.year, 181)} <span>years</span><Flag nation={store.nation[p]} /></p>
+                        </div>
+                      </header>
+                      <div className="athlete-prospect-abilities">
+                        <div>
+                          <span>Current ability</span>
+                          <b>{ca}</b>
+                          <div className="athlete-prospect-track"><i style={{ width: `${ca / 20}%` }} /></div>
+                        </div>
+                        <div>
+                          <span>Potential</span>
+                          <b className={abilityClass(pa)}>{pa}</b>
+                          <StarMeter value={pa} size={12} />
+                        </div>
+                      </div>
+                      <div className="athlete-prospect-notes">
+                        <div><span>Assessment</span><b className={a.cls}>{a.text}</b></div>
+                        <div><span>Career plan</span><b>{plan !== undefined ? PATH_NAMES[plan.path] : 'No plan'}</b></div>
+                        <div><span>Mentor</span><b>{mentor === null ? 'No mentor' : store.shortName(mentor)}</b></div>
+                        <div><span>Season progress</span><b className={start !== undefined && ca > start ? 'pos' : ''}>{start === undefined ? '—' : `${ca - start > 0 ? '+' : ''}${ca - start}`}</b></div>
+                      </div>
+                      <div className="athlete-prospect-stats">
+                        <div><span>U19 matches</span><b>{line?.[0] ?? 0}</b></div>
+                        <div><span>Points</span><b>{line?.[1] ?? 0}</b></div>
+                        <div><span>Average rating</span>{line !== undefined && line[0] > 0 ? <RatingBadge value={line[2] / line[0]} size="sm" /> : <b className="dim">—</b>}</div>
+                      </div>
+                      <footer onClick={(e) => e.stopPropagation()}>
+                        <button className="sm" onClick={() => g.select(p)}>Open profile <Icon name="arrowRight" size={13} /></button>
+                        <button className="sm primary" onClick={() => g.promotePlayer(p)}>Promote</button>
+                        <Dropdown<number>
+                          size="sm"
+                          className="academy-more"
+                          placeholder="Actions"
+                          value={null}
+                          menuWidth={290}
+                          searchable={false}
+                          title="Sell him, send him on loan for senior games, or let him go"
+                          onChange={(v) => {
+                            if (v === RELEASE) setReleasing(p);
+                            else if (v >= LOAN_BASE) g.loanAcademyPlayer(p, v - LOAN_BASE);
+                            else if (v >= 0) g.sellAcademyPlayer(p, v);
+                          }}
+                          options={academyActions(p, offers)}
+                        />
+                      </footer>
+                    </article>
+                  );
+                })}
               </div>
             )}
-        </Card>
+        </>
       ) : league === undefined
         ? <Empty>Your club has no youth league this season.</Empty>
         : <YouthLeagueView league={league} />}

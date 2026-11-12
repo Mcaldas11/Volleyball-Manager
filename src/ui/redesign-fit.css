@@ -1,0 +1,681 @@
+/*
+ * The redesign, fitted to this game: the sidebar stays (no top menu), the
+ * backdrops are the game's own arena renders, and every screen fits the
+ * window — nothing scrolls, the page least of all. Loaded after redesign.css.
+ */
+
+/* ---- The backdrop: the game's own hall, kept deep in the navy ---- */
+.app.vm-shell {
+  background-image:
+    linear-gradient(180deg, rgba(5, 14, 27, 0.9), rgba(5, 14, 27, 0.95)),
+    radial-gradient(ellipse at 68% 0%, rgba(22, 63, 118, 0.42), transparent 60%),
+    url('./menu-hall.jpg');
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* ---- The sidebar, in the redesign's colours ---- */
+.vm-shell .sidebar {
+  background: linear-gradient(180deg, rgba(7, 20, 33, 0.97), rgba(10, 27, 46, 0.97));
+  border-right: 1px solid #263f58;
+  box-shadow: 8px 0 28px rgba(0, 0, 0, 0.18);
+}
+.vm-shell .side-item {
+  border-radius: 5px;
+}
+.vm-shell .side-item:hover:not(:disabled) {
+  background: linear-gradient(90deg, var(--vm-gold-hover, rgba(245, 197, 66, 0.105)), transparent);
+  color: var(--gold-bright);
+}
+.vm-shell .side-item.active {
+  background: linear-gradient(90deg, rgba(245, 197, 66, 0.19), rgba(245, 197, 66, 0.03) 80%);
+  color: var(--gold);
+}
+
+/* ---- The header: the redesign's band ---- */
+.vm-shell .hdr-tabs-row {
+  background: rgba(6, 20, 34, 0.56);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ---- Home fits the window ---- */
+.vm-shell .content-fill > .view-fade > .portal-page {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  gap: 12px;
+  padding-bottom: 0;
+}
+.portal-page > .portal-heading {
+  flex: none;
+  min-height: 0;
+}
+.portal-page > .portal-command {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.portal-page > .portal-editorial {
+  flex: 1 1 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+.portal-editorial-main,
+.portal-club-rail {
+  min-height: 0;
+  overflow: hidden;
+}
+.portal-editorial-main > .portal-stories {
+  flex: none;
+}
+.portal-editorial-main > .portal-people {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.portal-club-rail > .hm-card {
+  min-height: 0;
+  overflow: hidden;
+}
+html.short-window .portal-page .portal-match {
+  padding-block: 14px;
+}
+html.short-window .portal-page .hm-teams {
+  margin-block: 6px;
+}
+html.short-window .portal-page .portal-lead-art {
+  display: none;
+}
+html.short-window .portal-story-briefs {
+  display: none;
+}
+html.short-window .portal-section-head {
+  margin-bottom: 6px;
+}
+
+/* ---- Fitted lists: rows share the panel, tight rows drop their second line ---- */
+.list-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.list-pager .icon-btn {
+  width: 24px;
+  height: 22px;
+  padding: 0;
+}
+
+/* ---- Squad fits the window ---- */
+.vm-shell .content-fill > .view-fade > .athlete-workspace {
+  height: 100%;
+  overflow: hidden;
+  gap: 10px;
+}
+.athlete-workspace .athlete-heading h1 {
+  margin-bottom: 4px;
+}
+.athlete-workspace .athlete-summary {
+  padding: 8px 0;
+}
+.athlete-workspace .athlete-summary > :is(div, button) {
+  gap: 3px;
+}
+.athlete-workspace .athlete-summary > :is(div, button) > b {
+  font-size: 24px;
+}
+.athlete-roster-grid {
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+.athlete-roster {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.athlete-roster > .athlete-table-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden !important;
+}
+.athlete-roster-table td {
+  padding-block: 0;
+  height: var(--row-h, 40px);
+}
+.athlete-roster-table .player-face {
+  width: min(34px, calc(var(--row-h, 40px) - 6px)) !important;
+  height: min(34px, calc(var(--row-h, 40px) - 6px)) !important;
+}
+[data-rows='tight'] .athlete-player-cell small {
+  display: none;
+}
+.athlete-roster-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.athlete-lineup,
+.athlete-dossier {
+  overflow: hidden !important;
+}
+.athlete-lineup {
+  gap: 9px;
+}
+html.short-window .athlete-heading p,
+html.short-window .athlete-summary small,
+html.short-window .athlete-court-note,
+html.short-window .athlete-lineup > .athlete-wide:last-child,
+html.short-window .athlete-availability,
+html.short-window .athlete-dossier-condition,
+html.short-window .athlete-dossier-number {
+  display: none;
+}
+html.short-window .athlete-workspace .athlete-heading h1 {
+  font-size: 26px;
+  margin: 0;
+}
+html.short-window .athlete-court-player .player-face {
+  width: 34px !important;
+  height: 34px !important;
+}
+html.short-window .athlete-dossier-hero .player-face {
+  width: 72px !important;
+  height: 72px !important;
+}
+@media (max-height: 960px) {
+  .athlete-lineup > .athlete-availability,
+  .athlete-lineup > .athlete-wide:last-child {
+    display: none;
+  }
+}
+html.short-window .athlete-lineup > .primary.athlete-wide,
+html.short-window .athlete-lineup > header .athlete-eyebrow {
+  display: none;
+}
+html.short-window .athlete-lineup h2 {
+  font-size: 20px;
+}
+
+/* ---- Workspace headings: room for the work under them ---- */
+.vm-workspace-heading {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+}
+.vm-section-header {
+  margin-bottom: 12px;
+}
+.vm-workspace-heading .vm-section-header {
+  margin-bottom: 0;
+}
+.vm-workspace-heading h2,
+.vm-section-heading h2 {
+  font-size: clamp(24px, 2.1vw, 34px);
+}
+.vm-section-heading p {
+  margin-top: 4px;
+}
+html.short-window .vm-section-heading p {
+  display: none;
+}
+html.short-window .vm-section-heading h2 {
+  font-size: 24px;
+}
+html.short-window .vm-workspace-heading {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+}
+
+/* ---- Instructions ---- */
+.strategy-ribbon {
+  padding: 9px 18px;
+  margin-bottom: 10px;
+}
+.strategy-ribbon strong {
+  font-size: 18px;
+}
+.tactics-page .tboard-phase > button {
+  font-size: 17px;
+  padding: 9px 16px;
+}
+.tactics-page .tboard:not(.compact) .tboard-body {
+  padding: 12px 16px;
+  gap: 16px;
+}
+.content-fill .tactics-page .tboard-cards,
+.content-fill .tactics-page .tboard-overview {
+  overflow: hidden !important;
+}
+html.short-window .strategy-ribbon {
+  padding-block: 6px;
+}
+html.short-window .strategy-ribbon strong {
+  font-size: 15px;
+}
+
+/* ---- Rotations: three panels to the window ---- */
+.tactical-rotations > .vm-section-header {
+  flex: none;
+}
+.tactical-rotation-workspace > .card > .card-body {
+  overflow: hidden !important;
+}
+.tactical-rotation-workspace .field {
+  margin: 0 0 6px;
+}
+.tactical-rotation-workspace .field-row {
+  min-height: 30px;
+}
+.tactical-rotation-workspace .dd-trigger {
+  min-height: 30px;
+  padding-block: 4px;
+}
+.tactical-rotation-workspace .slider-ends {
+  display: none;
+}
+.tactical-rotation-workspace .rot-receive {
+  margin: 0 0 6px;
+}
+.tactical-rotation-workspace .play-main {
+  min-height: 0;
+}
+.tactical-rotation-workspace .play-main svg {
+  max-height: 30vh;
+}
+.tactical-rotation-picker > button {
+  padding-block: 6px;
+}
+@media (max-height: 900px) {
+  .tactical-rotation-workspace .footnote,
+  .tactical-rotation-picker > button > span {
+    display: none;
+  }
+  .tactical-rotation-workspace .rot-zone .player-face {
+    width: 32px !important;
+    height: 32px !important;
+  }
+}
+/* The orders must stay in reach: in a very short window that panel alone still moves under the wheel (no bar is drawn). */
+.tactical-rotation-workspace > .card:last-child > .card-body {
+  overflow-y: auto !important;
+}
+
+/* ---- Training ---- */
+.vm-shell .content-fill > .view-fade > .athlete-training {
+  height: 100%;
+  overflow: hidden;
+}
+html.short-window .athlete-training-priorities,
+html.short-window .athlete-training .tr-note {
+  display: none;
+}
+.athlete-week-load[open] ~ .athlete-training-priorities {
+  display: none;
+}
+
+/* ---- Finances to the window ---- */
+.vm-shell .content-fill > .view-fade > .finance-workspace {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.finance-workspace > .vm-section-header {
+  margin-bottom: 0;
+}
+.finance-workspace > .finance-headlines {
+  flex: none;
+  padding-block: 6px;
+}
+.finance-workspace .vm-metric strong {
+  font-size: 30px;
+}
+.finance-workspace > .finance-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+.finance-analytics {
+  display: grid !important;
+  grid-template-rows: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  min-height: 0;
+  gap: 10px;
+}
+.finance-analytics > .vm-panel,
+.finance-distributions > .vm-panel,
+.finance-control > .vm-panel {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.finance-analytics .vm-panel-body,
+.finance-control .vm-panel-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.finance-main-chart .finance-books-chart,
+.finance-main-chart .finance-balance-chart {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto !important;
+}
+.finance-main-chart .finance-books-chart svg,
+.finance-main-chart svg.finance-balance-chart {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+.finance-distributions {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+.finance-control {
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  gap: 10px;
+}
+.finance-control .vm-panel-body {
+  gap: 8px;
+}
+.finance-split-hint,
+.finance-renewal {
+  display: none !important;
+}
+.finance-contracts .finance-contract:nth-child(n + 3) {
+  display: none;
+}
+@media (max-height: 900px) {
+  .finance-chart-caption,
+  .finance-budget-caption,
+  .finance-workspace .vm-metric-detail {
+    display: none !important;
+  }
+  .finance-workspace .vm-metric strong {
+    font-size: 24px;
+  }
+}
+html.short-window .finance-control > .vm-panel:last-child {
+  display: none;
+}
+html.short-window .finance-control {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* ---- Player Search: filters | players | report, to the window ---- */
+.vm-shell .content-fill > .view-fade > .recruitment-workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.recruitment-workspace .scout-table {
+  overflow: hidden !important;
+}
+.recruitment-workspace .scout-table td {
+  height: var(--row-h, 32px);
+  padding-block: 0;
+}
+.recruitment-workspace .recruitment-filters > .card-body {
+  overflow-y: auto !important;
+}
+.recruitment-workspace .scout-report > .card-body {
+  overflow-y: auto;
+}
+
+/* ---- Inbox: heading and its numbers on one line, every category in view ---- */
+.vm-shell .desk-mail-heading {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 0 6px !important;
+  border: 0 !important;
+  background: none !important;
+  min-height: 0 !important;
+}
+.vm-shell .desk-mail-heading .desk-mail-stats {
+  align-self: center !important;
+}
+.vm-shell .desk-mail .mail-folders {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  overflow: hidden !important;
+  max-height: none !important;
+  gap: 5px !important;
+  padding: 6px 8px !important;
+}
+.vm-shell .desk-mail .mail-folder {
+  flex: 0 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 5px 10px !important;
+  font-size: 12px !important;
+}
+.vm-shell .desk-mail .mail-folders-label,
+.vm-shell .desk-mail .mail-folders-sep {
+  display: none !important;
+}
+
+/* ---- Calendar ---- */
+.vm-shell .content-fill > .view-fade > .calendar-workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+.calendar-workspace > .calendar-workspace-heading {
+  flex: none;
+}
+.calendar-workspace > .cal {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.calendar-workspace .cal-side {
+  overflow: hidden !important;
+}
+.calendar-workspace .cal-legend {
+  display: none;
+}
+.calendar-workspace .cal-side .cal-up:nth-child(n + 5) {
+  display: none;
+}
+html.short-window .calendar-workspace-heading p {
+  display: none;
+}
+@media (max-height: 900px) {
+  .calendar-workspace .cal-side > .cal-card:not(.calendar-selected):not(.cal-next) {
+    display: none;
+  }
+}
+
+/* ---- Academy: the prospects as cards, a page at a time ---- */
+.vm-shell .content-fill > .view-fade > .athlete-academy {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.athlete-academy > * {
+  flex: none;
+}
+.athlete-academy > .athlete-prospect-grid,
+.athlete-academy > .card,
+.athlete-academy > .acx,
+.athlete-academy > div:last-child:not(.athlete-academy-summary):not(.academy-tabs):not(.athlete-toolbar) {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.athlete-academy .athlete-prospect-grid {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  overflow: hidden;
+}
+.athlete-academy .athlete-prospect {
+  height: 212px;
+  padding: 12px 14px !important;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.athlete-academy .athlete-prospect > * {
+  flex: none;
+}
+.athlete-academy .athlete-prospect > .athlete-prospect-notes {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.athlete-academy .athlete-prospect > footer {
+  margin-top: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.athlete-academy .athlete-prospect > footer .dd {
+  flex: 1;
+  min-width: 0;
+}
+.athlete-academy .athlete-prospect-head h3 {
+  font-size: 20px;
+  line-height: 1.05;
+}
+.athlete-academy .athlete-prospect-stats,
+.athlete-academy .athlete-prospect-head .athlete-eyebrow,
+.athlete-academy .athlete-prospect-notes > div:nth-child(n + 3) {
+  display: none;
+}
+.athlete-academy .athlete-prospect-head {
+  gap: 10px;
+}
+.athlete-academy .athlete-prospect-head .player-face {
+  width: 52px !important;
+  height: 52px !important;
+}
+.athlete-academy .athlete-prospect-abilities b {
+  font-size: 22px !important;
+}
+.athlete-academy .athlete-prospect-notes {
+  padding-block: 4px !important;
+}
+.athlete-academy .athlete-prospect-notes > div {
+  padding-block: 2px !important;
+}
+.athlete-academy .athlete-prospect > footer {
+  padding: 0 !important;
+  border: 0 !important;
+}
+@media (max-height: 900px) {
+  .athlete-academy .academy-tabs > .faint,
+  .athlete-academy .athlete-heading p {
+    display: none;
+  }
+}
+.athlete-academy .athlete-toolbar .list-pager {
+  margin-left: auto;
+}
+html.short-window .athlete-academy .athlete-heading p {
+  display: none;
+}
+.athlete-academy .athlete-prospect > * {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: none !important;
+  border: 0 !important;
+}
+.athlete-academy .athlete-prospect-head p {
+  margin: 0 !important;
+}
+.athlete-academy .athlete-prospect-head h3 {
+  margin: 0 0 4px !important;
+}
+
+/* ---- Career: the profile card, the sheet and the job, history in a strip under them ---- */
+.vm-shell .content-fill > .view-fade > .bureau-profile {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden !important;
+  align-items: stretch;
+  grid-template-rows: minmax(0, 1fr);
+}
+.bureau-profile > .cp-head {
+  grid-row: 1 !important;
+  min-height: 0;
+  overflow: hidden;
+  gap: 12px !important;
+  padding: 18px !important;
+}
+.bureau-profile > .bureau-profile-content {
+  display: flex !important;
+  flex-direction: column;
+  min-height: 0;
+  gap: 12px;
+  overflow: hidden;
+}
+.bureau-profile .cp-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr);
+}
+.bureau-profile .cp-body > *,
+.bureau-profile .cp-side-stack > * {
+  min-height: 0;
+  overflow: hidden;
+}
+.bureau-profile .cp-foot {
+  flex: none;
+  height: 96px;
+  overflow: hidden;
+}
+.bureau-profile .cp-foot > .cp-panel {
+  overflow: hidden;
+}
+.bureau-profile .cp-role-list > * {
+  padding-block: 1px !important;
+  min-height: 0 !important;
+}
+.bureau-profile .cp-foot .cp-title {
+  font-size: 16px !important;
+  margin-bottom: 4px !important;
+}
+.bureau-profile .cp-side-stack .card-body {
+  padding-block: 8px !important;
+}
+@media (max-height: 760px) {
+  .bureau-profile > .cp-head .cp-photo,
+  .bureau-profile > .cp-head .cp-photo .player-face {
+    width: 84px !important;
+    height: 96px !important;
+  }
+  .bureau-profile > .cp-head > .cp-who h2 {
+    font-size: 28px !important;
+  }
+}
+html.short-window .bureau-profile .cp-foot {
+  display: none;
+}
+/* Narrower windows keep the three columns side by side: nothing goes below the fold. */
+.bureau-profile .cp-body {
+  grid-template-columns: minmax(140px, 0.6fr) minmax(0, 1.3fr) minmax(200px, 0.85fr) !important;
+}
+.bureau-profile .cp-side,
+.bureau-profile .cp-side-stack {
+  grid-column: auto !important;
+}

@@ -8,7 +8,7 @@ import { contractEndSeason, DAYS_PER_SEASON, seasonEndDay, TRANSFER_WINDOWS, typ
 import { SESSIONS, weekPlan, weekStartOf } from '../../engine/world/training.ts';
 import { youthRound, youthRoundDay } from '../../engine/world/youth.ts';
 import { Icon } from '../icons.tsx';
-import { formatDate, useGame } from '../state.ts';
+import { formatDate, useGame, type ScreenId } from '../state.ts';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -61,6 +61,8 @@ export function CalendarScreen(): JSX.Element {
   // Which month is on show, as the absolute day of its 1st.
   const firstOf = (day: number): number => day - ((g.calendarDate(day)?.getUTCDate() ?? 1) - 1);
   const [monthStart, setMonthStart] = useState(() => firstOf(today));
+  const [selectedDay, setSelectedDay] = useState(today);
+  const [view, setView] = useState<'month' | 'agenda'>('month');
   const monthDate = g.calendarDate(monthStart)!;
   const month = monthDate.getUTCMonth();
 
@@ -153,6 +155,14 @@ export function CalendarScreen(): JSX.Element {
     : nextNote;
 
   const monthTitle = formatDate(monthDate, 'monthYear');
+  const notesFor = (day: number): Array<{ label: string; kind: string }> => (day >= 0
+    ? [...(layers.has('windows') ? [...notesOn(day), ...internationalNotes(world, day)] : []), ...(layerNotes.get(day) ?? [])]
+    : []);
+  const selectedNotes = notesFor(selectedDay);
+  const noteScreen = (n: { label: string; kind: string }): ScreenId => (n.kind === 'training' ? 'training'
+    : n.kind === 'youth' || n.kind === 'academy' ? 'youth'
+      : n.kind === 'window' || n.kind === 'deadline' ? 'transfers'
+        : /facilit|building/i.test(n.label) ? 'facilities' : 'squad');
 
   // The pre-season, while there is still time to fix up a friendly.
   const preSeason = today % DAYS_PER_SEASON <= friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS;
@@ -160,6 +170,18 @@ export function CalendarScreen(): JSX.Element {
   const invitations = friendlyRequests(world);
 
   return (
+    <div className="calendar-workspace">
+      <header className="calendar-workspace-heading">
+        <div>
+          <span className="portal-eyebrow">The rhythm of your club</span>
+          <h1>Make every day count.</h1>
+          <p>Matches, preparation and commitments in one place.</p>
+        </div>
+        <div className="calendar-mode">
+          <button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')}>Month</button>
+          <button className={view === 'agenda' ? 'active' : ''} onClick={() => setView('agenda')}>Agenda</button>
+        </div>
+      </header>
     <div className="cal">
       <div className="cal-main">
         <header className="cal-head">
@@ -185,36 +207,100 @@ export function CalendarScreen(): JSX.Element {
             <button key={l} className={`cal-layer ${l}${layers.has(l) ? ' on' : ''}`} onClick={() => toggle(l)} aria-pressed={layers.has(l)}>{label}</button>
           ))}
         </div>
-        <div className="cal-weekdays">
-          {WEEKDAYS.map((d) => <span key={d}>{d}</span>)}
-        </div>
-        <div className="cal-grid">
-          {cells.map((day) => {
-            const date = g.calendarDate(day);
-            const inMonth = date !== null && date.getUTCMonth() === month;
-            const fixtures = day >= 0 ? ownOn(day) : [];
-            const notes = day >= 0 ? [...(layers.has('windows') ? [...notesOn(day), ...internationalNotes(world, day)] : []), ...(layerNotes.get(day) ?? [])] : [];
-            return (
-              <div
-                key={day}
-                className={`cal-cell${inMonth ? '' : ' out'}${day === today ? ' today' : ''}${day < today ? ' past' : ''}${day > today ? ' ahead' : ''}`}
-                // A day ahead: go on holiday until it.
-                title={day > today ? `Go on holiday until ${g.dateLabelForDay(day)}` : undefined}
-                onClick={day > today ? () => g.openHoliday(day) : undefined}
-              >
-                <span className="cal-day">
-                  {date?.getUTCDate()}
-                  {day === today && <span className="cal-today">Today</span>}
-                </span>
-                {fixtures.map((f) => <FixtureChip key={f.id} fixture={f} />)}
-                {notes.map((n, i) => <span key={`${n.label}-${i}`} className={`cal-note ${n.kind}`} title={n.label}>{n.label}</span>)}
-              </div>
-            );
-          })}
-        </div>
+        {view === 'month' ? (
+          <>
+            <div className="cal-weekdays">
+              {WEEKDAYS.map((d) => <span key={d}>{d}</span>)}
+            </div>
+            <div className="cal-grid">
+              {cells.map((day) => {
+                const date = g.calendarDate(day);
+                const inMonth = date !== null && date.getUTCMonth() === month;
+                const fixtures = day >= 0 ? ownOn(day) : [];
+                const notes = notesFor(day);
+                return (
+                  <div
+                    key={day}
+                    className={`cal-cell${inMonth ? '' : ' out'}${day === today ? ' today' : ''}${day < today ? ' past' : ''}${day > today ? ' ahead' : ''}${day === selectedDay ? ' selected' : ''}`}
+                    title={g.dateLabelForDay(day)}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={day === selectedDay}
+                    onClick={() => setSelectedDay(day)}
+                    onKeyDown={(e) => {
+                      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setSelectedDay(day); }
+                    }}
+                  >
+                    <span className="cal-day">
+                      {date?.getUTCDate()}
+                      {day === today && <span className="cal-today">Today</span>}
+                    </span>
+                    {fixtures.map((f) => <FixtureChip key={f.id} fixture={f} />)}
+                    {notes.map((n, i) => <span key={`${n.label}-${i}`} className={`cal-note ${n.kind}`} title={n.label}>{n.label}</span>)}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="calendar-agenda">
+            {cells.filter((day) => g.calendarDate(day)?.getUTCMonth() === month).map((day) => {
+              const fixtures = day >= 0 ? ownOn(day) : [];
+              const notes = notesFor(day);
+              if (fixtures.length === 0 && notes.length === 0 && day !== today) return null;
+              const date = g.calendarDate(day);
+              return (
+                <section key={day} className={`calendar-agenda-day${day === today ? ' today' : ''}`}>
+                  <button className="calendar-agenda-date" onClick={() => setSelectedDay(day)}>
+                    <b>{date?.getUTCDate()}</b>
+                    <span>{date !== null ? formatDate(date, 'weekday') : ''}</span>
+                  </button>
+                  <div className="calendar-agenda-content">
+                    {fixtures.map((f) => <FixtureChip key={f.id} fixture={f} />)}
+                    {notes.map((n, i) => <span key={i} className={`cal-note ${n.kind}`}>{n.label}</span>)}
+                    {fixtures.length === 0 && notes.length === 0 && <span className="faint">Nothing scheduled</span>}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <aside className="cal-side">
+        <section className="cal-card calendar-selected">
+          <span className="portal-eyebrow">Selected day</span>
+          <h2 className="calendar-selected-date">{g.longDateLabel(selectedDay)}</h2>
+          <div className="calendar-selected-events">
+            {ownOn(selectedDay).map((f) => {
+              const opp = world.clubs[f.home === club.id ? f.away : f.home];
+              return (
+                <button key={f.id} className="calendar-event" onClick={() => (f.played ? g.go('fixtures') : g.go('lineup'))}>
+                  <Icon name="ball" size={19} />
+                  <span>
+                    <b>{opp?.name ?? 'Match'}</b>
+                    <small>{world.competitions[f.competitionId]?.name} · {f.home === club.id ? 'Home' : 'Away'}</small>
+                    <small>{f.played ? `${f.homeSets}–${f.awaySets}` : 'Prepare match'}</small>
+                  </span>
+                </button>
+              );
+            })}
+            {selectedNotes.map((n, i) => (
+              <button key={i} className="calendar-event" onClick={() => g.go(noteScreen(n))}>
+                <Icon name={n.kind === 'training' ? 'training' : n.kind === 'youth' || n.kind === 'academy' ? 'youth' : 'club'} size={18} />
+                <span><b>{n.label}</b><small>Open workspace</small></span>
+              </button>
+            ))}
+            {ownOn(selectedDay).length === 0 && selectedNotes.length === 0 && <p className="hm-empty">No events in the selected layers.</p>}
+          </div>
+          <div className="calendar-day-actions">
+            <button onClick={() => g.go('training')}><Icon name="training" size={14} /> Training plan</button>
+            {selectedDay > today && (
+              <button onClick={() => g.openHoliday(selectedDay)}><Icon name="calendar" size={14} /> Go on holiday until this day</button>
+            )}
+          </div>
+        </section>
+
         <section className="cal-card cal-next">
           <span className="cal-card-kicker">Next stop</span>
           <strong className="cal-next-title">{nextStop?.label ?? 'Nothing scheduled'}</strong>
@@ -298,6 +384,7 @@ export function CalendarScreen(): JSX.Element {
           <span><b className="lg-result">W / L</b>: final result</span>
         </section>
       </aside>
+    </div>
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import './styles.css';
+import './redesign.css';
+import './redesign-fit.css';
 import { watchWindowFit } from './fitWindow.ts';
 import { watchRangeFill } from './rangeFill.ts';
 import { startLanguage } from './language.ts';

@@ -13,7 +13,7 @@ import {
   SESSIONS, squadReadiness, weekPlan, weekSettings, weekStartOf,
   type IndividualFocus, type Intensity, type PlannedDay, type PlayerLoad, type PrepArea, type SessionType, type WeeklyFocus,
 } from '../../engine/world/training.ts';
-import { abilityClass, Bar, ClubCrest, Empty, money, PlayerFace, Pos, Segmented, StarMeter } from '../components.tsx';
+import { abilityClass, Bar, ClubCrest, Empty, money, PlayerFace, Pos, Segmented, StarMeter, WorkspaceHeading } from '../components.tsx';
 import { CAMP_DAYS, CAMP_KINDS, campBlock, campCost, CAMPS, campWindow, type CampKind } from '../../engine/world/camp.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
@@ -39,15 +39,29 @@ function sessionTone(s: SessionType): string {
 }
 
 export function TrainingScreen(): JSX.Element {
+  const g = useGame();
   const [tab, setTab] = useState<'week' | 'individual' | 'camp'>('week');
   return (
-    <div className="tr">
-      <div className="tr-tabs" role="tablist">
-        <button role="tab" className={`hdr-tab${tab === 'week' ? ' active' : ''}`} onClick={() => setTab('week')}>Week plan</button>
-        <button role="tab" className={`hdr-tab${tab === 'individual' ? ' active' : ''}`} onClick={() => setTab('individual')}>Individual training</button>
-        <button role="tab" className={`hdr-tab${tab === 'camp' ? ' active' : ''}`} onClick={() => setTab('camp')}>Pre-season camp</button>
+    <div className="tr athlete-training">
+      <WorkspaceHeading
+        eyebrow="PERFORMANCE CENTRE"
+        title="Prepare better. Play better."
+        description="Shape the week around the team, the players and the next opponent."
+        actions={<button onClick={() => g.go('calendar')}><Icon name="calendar" size={16} /> Open calendar</button>}
+      />
+      <div className="athlete-training-body">
+        <aside className="athlete-training-nav">
+          <div className="tr-tabs" role="tablist" aria-orientation="vertical">
+            <button role="tab" aria-selected={tab === 'week'} className={`hdr-tab${tab === 'week' ? ' active' : ''}`} onClick={() => setTab('week')}>Week plan</button>
+            <button role="tab" aria-selected={tab === 'individual'} className={`hdr-tab${tab === 'individual' ? ' active' : ''}`} onClick={() => setTab('individual')}>Individual training</button>
+            <button role="tab" aria-selected={tab === 'camp'} className={`hdr-tab${tab === 'camp' ? ' active' : ''}`} onClick={() => setTab('camp')}>Pre-season camp</button>
+          </div>
+          <ReadinessCard />
+        </aside>
+        <main className="athlete-training-canvas">
+          {tab === 'week' ? <WeekPlan onIndividual={() => setTab('individual')} /> : tab === 'individual' ? <IndividualTraining /> : <CampPlanner />}
+        </main>
       </div>
-      {tab === 'week' ? <WeekPlan /> : tab === 'individual' ? <IndividualTraining /> : <CampPlanner />}
     </div>
   );
 }
@@ -129,7 +143,7 @@ function CampPlanner(): JSX.Element {
 
 // ---- The week plan ---------------------------------------------------------------------
 
-function WeekPlan(): JSX.Element {
+function WeekPlan({ onIndividual }: { onIndividual: () => void }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const club = g.club!;
@@ -150,6 +164,8 @@ function WeekPlan(): JSX.Element {
   const matches = days.filter((d) => d.session === 'match').length;
   const recovery = days.filter((d) => d.session === 'rest' || d.session === 'recovery').length;
   const thisWeek = weekStartOf(world, world.day);
+  // The four with the least in their legs: the ones to keep an eye on this week.
+  const monitor = g.squad().slice().sort((a, b) => world.players.condition[a] - world.players.condition[b]).slice(0, 4);
 
   return (
     <div className="tr-layout">
@@ -183,6 +199,8 @@ function WeekPlan(): JSX.Element {
           {days.map((d, i) => <DayCard key={d.day} d={d} weekday={i} past={d.day < world.day} today={d.day === world.day} />)}
         </div>
 
+        <details className="athlete-week-load">
+        <summary>Load and development <Icon name="chevronDown" size={15} /></summary>
         <div className="tr-profile-head">
           <span className="tr-label">Week load profile</span>
           <span className="faint">
@@ -209,11 +227,34 @@ function WeekPlan(): JSX.Element {
             );
           })}
         </div>
+        </details>
+
+        <section className="athlete-training-priorities">
+          <header>
+            <h3>Players to monitor</h3>
+            <button className="sm" onClick={onIndividual}>Individual training <Icon name="arrowRight" size={14} /></button>
+          </header>
+          <div>
+            {monitor.map((p) => {
+              const store = world.players;
+              const own = individualOf(world, club, p);
+              return (
+                <button key={store.id[p]} onClick={() => g.select(p)}>
+                  <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={42} />
+                  <span>
+                    <b translate="no">{store.shortName(p)}</b>
+                    <small>{FOCUS_LABELS[own.focus]} · {PLAYER_LOAD[own.load].label}</small>
+                    <span className="athlete-training-condition"><Bar value={store.condition[p]} /><b>{store.condition[p]}%</b></span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
       </section>
 
       <aside className="tr-side">
         <NextMatchCard />
-        <ReadinessCard />
       </aside>
     </div>
   );

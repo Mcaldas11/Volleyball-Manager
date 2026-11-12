@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import { Formation, FORMATION_NAMES, formationOf } from '../../engine/match/tactics.ts';
 import { lineupSlotPositions } from '../../engine/season/seasonEngine.ts';
-import { abilityClass, Empty, Segmented, StarMeter } from '../components.tsx';
+import { abilityClass, Empty, Segmented, StarMeter, WorkspaceHeading } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { TacticPills } from '../tacticPills.tsx';
 import { TeamSheet } from '../teamSheet.tsx';
@@ -33,52 +33,61 @@ export function LineupScreen(): JSX.Element {
   const formation = formationOf(tactics ?? undefined);
 
   return (
-    <div className="lineup-page">
-      <div className="lineup-bar">
-        <div className="lineup-bar-text">
-          <strong>{national ? 'National team sheet' : 'Default team sheet'}</strong>
-          <span className="dim">
-            {national
-              ? 'Used for every national team match — the starting point on match day, from the squad named for the tournament. Your club keeps its own. Anyone hurt or not called up is swapped for the next best fit.'
-              : 'Used automatically for every match — the six, the liberos and the rest of the fourteen — and the starting point whenever you rearrange it on match day. Anyone injured or sold is swapped for the next best fit.'}
-          </span>
-        </div>
-        <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
-          <span className="faint">Formation</span>
-          <Segmented<Formation>
-            size="sm"
-            options={[[Formation.FiveOne, FORMATION_NAMES[Formation.FiveOne]], [Formation.FourTwo, FORMATION_NAMES[Formation.FourTwo]]]}
-            value={formation}
-            onChange={(f) => g.setFormation(f)}
+    <div className="tactical-lineup">
+      <WorkspaceHeading
+        eyebrow="TEAM SELECTION"
+        title="Six players. One system."
+        description="Build your starting six, choose your liberos and prepare the bench."
+        actions={<button onClick={() => g.go('tactics')}><Icon name="tactics" size={15} /> Tactical instructions</button>}
+      />
+      <div className="tactical-selection-layout">
+        <aside className="tactical-selection-rail">
+          <details className="tactical-selection-explainer">
+            <summary>{national ? 'National team sheet' : 'Default team sheet'}</summary>
+            <span className="dim">
+              {national
+                ? 'Used for every national team match — the starting point on match day, from the squad named for the tournament. Your club keeps its own. Anyone hurt or not called up is swapped for the next best fit.'
+                : 'Used automatically for every match — the six, the liberos and the rest of the fourteen — and the starting point whenever you rearrange it on match day. Anyone injured or sold is swapped for the next best fit.'}
+            </span>
+          </details>
+          <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
+            <span className="faint">Formation</span>
+            <Segmented<Formation>
+              size="sm"
+              options={[[Formation.FiveOne, FORMATION_NAMES[Formation.FiveOne]], [Formation.FourTwo, FORMATION_NAMES[Formation.FourTwo]]]}
+              value={formation}
+              onChange={(f) => g.setFormation(f)}
+            />
+          </div>
+          {tactics !== null && <TacticPills tactics={tactics} />}
+          <div className="lineup-bar-rating">
+            <span className="faint">Starting six</span>
+            <StarMeter value={teamAvg} size={16} />
+            <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
+          </div>
+          <button disabled={!hasPreference} onClick={() => g.resetPreferredLineup()}>
+            <Icon name="swap" size={14} /> Reset to auto-pick
+          </button>
+        </aside>
+        <div className="tactical-selection-sheet">
+          <TeamSheet
+            lineup={lineup}
+            libero={libero}
+            defensiveLibero={defensiveLibero}
+            bench={bench}
+            store={store}
+            onSetPlayer={(slot, p) => g.setPreferredLineupSlot(slot, p)}
+            onSwapPlayers={(a, b) => g.swapPreferredLineupSlots(a, b)}
+            onSetLibero={(p) => g.setPreferredLibero(p)}
+            onSetDefensiveLibero={(p) => g.setPreferredDefensiveLibero(p)}
+            slotPositions={lineupSlotPositions(formation)}
+            outOfSquad={out}
+            onAddToSquad={(p) => g.addToPreferredSquad(p)}
+            onDropFromSquad={(p) => g.dropFromPreferredSquad(p)}
+            chemistry={(s, h) => chemistryOf(world, s, h)}
           />
         </div>
-        {tactics !== null && <TacticPills tactics={tactics} />}
-        <div className="lineup-bar-rating">
-          <span className="faint">Starting six</span>
-          <StarMeter value={teamAvg} size={16} />
-          <strong className={abilityClass(teamAvg)}>{teamAvg}</strong>
-        </div>
-        <button disabled={!hasPreference} onClick={() => g.resetPreferredLineup()}>
-          <Icon name="swap" size={14} /> Reset to auto-pick
-        </button>
       </div>
-
-      <TeamSheet
-        lineup={lineup}
-        libero={libero}
-        defensiveLibero={defensiveLibero}
-        bench={bench}
-        store={store}
-        onSetPlayer={(slot, p) => g.setPreferredLineupSlot(slot, p)}
-        onSwapPlayers={(a, b) => g.swapPreferredLineupSlots(a, b)}
-        onSetLibero={(p) => g.setPreferredLibero(p)}
-        onSetDefensiveLibero={(p) => g.setPreferredDefensiveLibero(p)}
-        slotPositions={lineupSlotPositions(formation)}
-        outOfSquad={out}
-        onAddToSquad={(p) => g.addToPreferredSquad(p)}
-        onDropFromSquad={(p) => g.dropFromPreferredSquad(p)}
-        chemistry={(s, h) => chemistryOf(world, s, h)}
-      />
     </div>
   );
 }

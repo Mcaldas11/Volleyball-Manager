@@ -313,7 +313,7 @@ export function CareerScreen(): JSX.Element {
   const nationalTeam = career.nationalTeam;
 
   return (
-    <div className="club-profile cp" data-pronouns="keep">
+    <div className="club-profile cp bureau-profile" data-pronouns="keep">
       {editingLook && (
         <EditLookDialog
           initial={m.look}
@@ -368,6 +368,7 @@ export function CareerScreen(): JSX.Element {
         </div>
       </header>
 
+      <div className="bureau-profile-content">
       <div className="cp-body">
         {career.attributes !== undefined ? (
           <StaffSheet
@@ -410,6 +411,7 @@ export function CareerScreen(): JSX.Element {
             {accolades.length > 0 && <AccoladeList accolades={accolades} world={world} />}
           </div>
         </section>
+      </div>
       </div>
     </div>
   );

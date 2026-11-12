@@ -771,6 +771,21 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
     </div>
   );
 
+  // The options of the instruction picked: beside the board on the full screen, under it when compact.
+  const pickPanel = picked !== null && open !== null ? (
+    <div className="tboard-pick">
+              <div className="tboard-pick-head"><b>{picked.title}</b><span className="faint">{HINTS[open]}</span></div>
+              <div className="tboard-pick-opts">
+                {picked.options.map(([v, l]) => (
+                  <button key={v} className={`instr-tile${v === picked.current ? ' active' : ''}`} onClick={() => picked.set(v)}>
+                    {v === picked.current && <Icon name="check" size={13} />}
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+  ) : null;
+
   return (
     <div className={`tboard phase-${phase}${compact ? ' compact' : ''}`}>
       <div className="tboard-phase" role="tablist">
@@ -825,22 +840,20 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
               </p>
             </>
           )}
-          {picked !== null && open !== null && (
-            <div className="tboard-pick">
-              <div className="tboard-pick-head"><b>{picked.title}</b><span className="faint">{HINTS[open]}</span></div>
-              <div className="tboard-pick-opts">
-                {picked.options.map(([v, l]) => (
-                  <button key={v} className={`instr-tile${v === picked.current ? ' active' : ''}`} onClick={() => picked.set(v)}>
-                    {v === picked.current && <Icon name="check" size={13} />}
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {compact && pickPanel}
         </div>
         {!compact && (
           <aside className="tboard-overview">
+            <div className="tboard-head">Instruction detail</div>
+            {pickPanel ?? (
+              <div className="tboard-inspector-empty">
+                <Icon name="tactics" size={28} />
+                <strong>Fine-tune your game plan</strong>
+                <p>Select an instruction to compare its options here.</p>
+              </div>
+            )}
+            <details className="tboard-all-instructions">
+            <summary>Full tactical overview</summary>
             <div className="tboard-head">Overview</div>
             <Overview title="Whole team" rows={teamKeys.map((k) => [cards[k].title, cards[k].value])} />
             {PASS_ZONES.map((z) => {
@@ -866,6 +879,7 @@ export function TacticsBoard({ tactics: t, onChange, onFormation, compact = fals
               ['Against a jump serve', lineName(receivePlansOf(t).jump, 'jump')],
               ['Servers with orders', String(Object.keys(t.servers ?? {}).length)],
             ]} />
+            </details>
           </aside>
         )}
       </div>

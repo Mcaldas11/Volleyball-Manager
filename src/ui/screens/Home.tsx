@@ -3,26 +3,20 @@ import { rivalryName } from '../../engine/world/rivals.ts';
 import { ATTR_LABELS, type AttributeName } from '../../engine/model/attributes.ts';
 import { compareTableRows } from '../../engine/model/club.ts';
 import { Position, POSITION_NAMES } from '../../engine/model/positions.ts';
-import { matchRating } from '../../engine/match/playerRating.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
 import { seasonTotals } from '../../engine/world/records.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { boardMood } from '../../engine/world/career.ts';
 import {
-  attrClass, Bar, ClubCrest, money, PlayerFace, RatingBadge, StarMeter,
+  attrClass, ClubCrest, money, PlayerFace, StarMeter,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { formatDate, useGame, type ScreenId } from '../state.ts';
 import { messageNeedsAction } from '../../engine/world/inbox.ts';
 import { contractEndSeason, dayOfSeason } from '../../engine/world/world.ts';
 import { UnemployedHome } from './Career.tsx';
+import { NewsVisual, openNewsStory } from './News.tsx';
+import arena from '../menu-arena.jpg';
 import { NationalHome } from './National.tsx';
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
-}
 
 /** The six attributes that say most about a player in each role. */
 const KEY_ATTRS: Readonly<Record<Position, readonly AttributeName[]>> = {
@@ -42,20 +36,107 @@ export function HomeScreen(): JSX.Element {
   const g = useGame();
   if (g.club === null) return g.world!.career.nationalTeam !== undefined ? <NationalHome /> : <UnemployedHome />;
   return (
-    <div className="home-page">
-      <NowManaging />
-      <div className="home-row">
-        <LeagueTableCard />
-        <OneToWatch />
-        <TeamForm />
-      </div>
-      <div className="home-row home-row-2">
+    <div className="portal-page">
+      <header className="portal-heading">
+        <div>
+          <span className="portal-eyebrow">The coach's desk</span>
+          <h1>Your club. Your next move.</h1>
+        </div>
+        <HealthStrip />
+      </header>
+      <div className="portal-command">
+        <NowManaging />
         <ForToday />
-        <TopScorer />
-        <BoardCard />
-        <FinancesCard />
+      </div>
+      <div className="portal-editorial">
+        <div className="portal-editorial-main">
+          <SeasonStories />
+          <div className="portal-people">
+            <OneToWatch />
+            <TopScorer />
+          </div>
+        </div>
+        <aside className="portal-club-rail">
+          <LeagueTableCard />
+          <div className="portal-rail-shortcuts">
+            <button onClick={() => g.go('dressing')}><Icon name="squad" size={18} /><span>Dressing Room</span><Icon name="chevronRight" size={14} /></button>
+            <button onClick={() => g.go('youth')}><Icon name="youth" size={18} /><span>Youth Academy</span><Icon name="chevronRight" size={14} /></button>
+          </div>
+        </aside>
       </div>
     </div>
+  );
+}
+
+/** The squad's health in five numbers across the top: who can play, their legs, their mood, the board, the money. */
+function HealthStrip(): JSX.Element {
+  const g = useGame();
+  const club = g.club!;
+  const store = g.world!.players;
+  const n = club.players.length;
+  const fit = club.players.filter((p) => store.injuryDaysLeft[p] === 0).length;
+  const condition = n === 0 ? 0 : club.players.reduce((s, p) => s + store.condition[p], 0) / n;
+  const morale = n === 0 ? 0 : club.players.reduce((s, p) => s + store.morale[p], 0) / n;
+  return (
+    <div className="portal-health-strip">
+      <button onClick={() => g.go('squad')}><span>Players available</span><b>{fit}<small>/{n}</small></b></button>
+      <button onClick={() => g.go('training')}><span>Condition</span><b>{Math.round(condition)}%</b></button>
+      <button onClick={() => g.go('dressing')}><span>Morale</span><b>{Math.round(morale)}%</b></button>
+      <button onClick={() => g.go('owner')}><span>Board confidence</span><b>{Math.round(club.boardConfidence)}%</b></button>
+      <button onClick={() => g.go('finances')}><span>Balance</span><b className={club.finances.balance < 0 ? 'bad' : ''}>{money(club.finances.balance)}</b></button>
+    </div>
+  );
+}
+
+/** The club's latest stories: the lead, and two briefs under it. */
+function SeasonStories(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const ours = [...world.news].reverse().filter((n) => n.clubId === club.id || n.otherClubId === club.id);
+  const items = (ours.length > 0 ? ours : [...world.news].reverse()).slice(0, 3);
+  const lead = items[0];
+  const open = (id: number): void => { openNewsStory(id); g.go('news'); };
+  return (
+    <section className="portal-stories">
+      <header className="portal-section-head">
+        <div>
+          <span className="portal-eyebrow">Inside the club</span>
+          <h2>The story of your season</h2>
+        </div>
+        <button className="hm-link" onClick={() => g.go('news')}>World News <Icon name="arrowRight" size={15} /></button>
+      </header>
+      {lead === undefined ? (
+        <div className="portal-story-empty">
+          <Icon name="news" size={30} />
+          <div><strong>A new chapter begins</strong><p>Your club's stories will appear as the season unfolds.</p></div>
+          <button onClick={() => g.go('squad')}>Meet the squad <Icon name="arrowRight" size={14} /></button>
+        </div>
+      ) : (
+        <div className="portal-story-grid">
+          <button className="portal-lead" onClick={() => open(lead.id)}>
+            <div className="portal-lead-art"><NewsVisual item={lead} size={112} /></div>
+            <span className="portal-lead-copy">
+              <small>{g.dateLabelForDay(lead.day)}</small>
+              <strong>{lead.headline}</strong>
+              <span>{lead.body}</span>
+              <b>Read the story <Icon name="arrowRight" size={14} /></b>
+            </span>
+          </button>
+          {items.length > 1 && (
+            <div className="portal-story-briefs">
+              {items.slice(1).map((n) => (
+                <button key={n.id} onClick={() => open(n.id)}>
+                  <NewsVisual item={n} size={48} />
+                  <span className="portal-brief-copy"><small>{g.dateLabelForDay(n.day)}</small><b>{n.headline}</b></span>
+                  <Icon name="chevronRight" size={14} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -66,11 +147,13 @@ function NowManaging(): JSX.Element {
   const next = g.nextFixture();
   const manager = `${world.manager.firstName} ${world.manager.lastName}`;
   const league = world.competitions[club.leagueId];
+  const backdrop = { backgroundImage: `linear-gradient(90deg, rgba(5,17,31,.96), rgba(5,17,31,.6)), url(${arena})` };
 
   if (next === null) {
     return (
-      <section className="hm-banner">
+      <section className="hm-banner portal-match" style={backdrop}>
         <div className="hm-banner-main">
+          <span className="portal-match-label">Next match</span>
           <div className="hm-kicker">Now managing · {league?.name ?? club.name} · <span>{manager}</span></div>
           <div className="hm-teams">
             <ClubCrest club={club} size={54} />
@@ -95,16 +178,17 @@ function NowManaging(): JSX.Element {
   const shortDate = date === null ? '' : formatDate(date, 'weekdayDayMonth');
 
   return (
-    <section className="hm-banner">
+    <section className="hm-banner portal-match" style={backdrop}>
       <div className="hm-banner-main">
+        <span className="portal-match-label">Next match</span>
         <div className="hm-kicker">
           Now managing · {stageLabel(world, next)} · {shortDate} · {comp?.name ?? ''} · <span>{manager}</span>
         </div>
         <div className="hm-teams">
-          <ClubCrest club={club} size={54} />
+          <ClubCrest club={club} size={68} />
           <span className="hm-team-name">{club.name}</span>
           <span className="hm-vs">VS</span>
-          {opponent !== undefined && <ClubCrest club={opponent} size={54} />}
+          {opponent !== undefined && <ClubCrest club={opponent} size={68} />}
           <span className="hm-team-name link" onClick={() => opponent !== undefined && g.selectClub(opponent.id)}>
             {opponent?.name ?? '—'}
           </span>
@@ -116,6 +200,10 @@ function NowManaging(): JSX.Element {
         </div>
       </div>
       <div className="hm-banner-side">
+        <div className="portal-countdown">
+          <strong>{Math.max(0, days).toString().padStart(2, '0')}</strong>
+          <span>Days to prepare</span>
+        </div>
         <div className="hm-side-line">
           <span className={`hm-venue${isHome && !next.neutralVenue ? ' is-home' : ''}`}>
             {next.neutralVenue ? 'Neutral' : isHome ? 'Home' : 'Away'}
@@ -123,6 +211,9 @@ function NowManaging(): JSX.Element {
           <button className="hm-link" onClick={() => g.go('calendar')}>Calendar <Icon name="arrowRight" size={14} /></button>
         </div>
         <span className="hm-chip">Transfer budget <b>{money(club.finances.transferBudget)}</b></span>
+        {!today && (
+          <button className="primary portal-prepare" onClick={() => g.go('lineup')}>Prepare match <Icon name="arrowRight" size={16} /></button>
+        )}
         {today && (
           <div className="hm-side-line">
             <button className="hm-ghost" disabled={g.processing} onClick={() => g.instantResult()}>Instant result</button>
@@ -221,79 +312,6 @@ function OneToWatch(): JSX.Element {
         })}
       </div>
     </section>
-  );
-}
-
-function TeamForm(): JSX.Element {
-  const g = useGame();
-  const club = g.club!;
-  const played = g.ownFixtures().filter((f) => f.played);
-  const last5 = played.slice(-5);
-  const won = (f: (typeof played)[number]): boolean =>
-    f.home === club.id ? f.homeSets > f.awaySets : f.awaySets > f.homeSets;
-  const wins = last5.filter(won).length;
-  const setsFor = last5.reduce((s, f) => s + (f.home === club.id ? f.homeSets : f.awaySets), 0);
-  const last = played[played.length - 1];
-
-  return (
-    <section className="hm-card">
-      <header className="hm-card-head"><h3>Recent team form</h3></header>
-      {last5.length === 0 ? <p className="hm-empty">No matches played yet this season.</p> : (
-        <>
-          <div className="hm-pips">
-            {last5.map((f) => <span key={f.id} className={`hm-pip ${won(f) ? 'win' : 'loss'}`}>{won(f) ? 'W' : 'L'}</span>)}
-          </div>
-          <div className="hm-figures">
-            <div><b className="gold">{Math.round((wins / last5.length) * 100)}%</b><span>Win rate</span></div>
-            <div><b>{(setsFor / last5.length).toFixed(1)}</b><span>Sets / match</span></div>
-          </div>
-        </>
-      )}
-      {last !== undefined && <LastMatch fixtureId={last.id} />}
-    </section>
-  );
-}
-
-function LastMatch({ fixtureId }: { fixtureId: number }): JSX.Element {
-  const g = useGame();
-  const world = g.world!;
-  const store = world.players;
-  const f = world.fixtures[fixtureId];
-  const home = world.clubs[f.home];
-  const away = world.clubs[f.away];
-  const watched = g.reviewLast();
-  let rating: number | null = null;
-  if (watched !== null && watched.fixture.id === f.id && f.mvp >= 0) {
-    const r = watched.result;
-    const homeLine = r.stats.home.players.get(f.mvp);
-    const line = homeLine ?? r.stats.away.players.get(f.mvp);
-    if (line !== undefined) {
-      rating = matchRating(line, store.position[f.mvp] as Position,
-        homeLine !== undefined ? r.homeSets : r.awaySets, homeLine !== undefined ? r.awaySets : r.homeSets);
-    }
-  }
-  return (
-    <div className="hm-last">
-      <div className="hm-label">Last match</div>
-      <div className="hm-last-round">{world.competitions[f.competitionId]?.name} · {stageLabel(world, f)}</div>
-      <div className="hm-last-score">
-        {([[home, f.homeSets, f.homeSets > f.awaySets], [away, f.awaySets, f.awaySets > f.homeSets]] as const).map(([c, sets, won], i) => (
-          <div key={i} className={`hm-last-team${won ? ' won' : ''}${c?.id === world.userClubId ? ' mine' : ''}`}>
-            {c !== undefined && <ClubCrest club={c} size={24} />}
-            <span>{c?.name ?? '—'}</span>
-            <b>{sets}</b>
-          </div>
-        ))}
-      </div>
-      <div className="hm-last-sets">{f.setScores.map(([h, a]) => `${h}-${a}`).join(' · ')}</div>
-      {f.mvp >= 0 && (
-        <div className="hm-last-mvp">
-          Top performer <b className="player-link" onClick={() => g.select(f.mvp)}>{store.surname(f.mvp)}</b>
-          {rating !== null && <RatingBadge value={rating} size="sm" />}
-        </div>
-      )}
-      <button className="hm-link" onClick={() => g.go('fixtures')}><Icon name="play" size={11} /> Match report</button>
-    </div>
   );
 }
 
@@ -450,73 +468,6 @@ function TopScorer(): JSX.Element {
             <b className={gold === true ? 'gold' : ''}>{value}</b>
           </div>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function BoardCard(): JSX.Element {
-  const g = useGame();
-  const world = g.world!;
-  const club = g.club!;
-  const comp = world.competitions[club.leagueId];
-  const table = comp !== undefined ? [...comp.table].sort(compareTableRows) : [];
-  const pos = table.findIndex((r) => r.clubId === club.id) + 1;
-  const started = (table.find((r) => r.clubId === club.id)?.played ?? 0) > 0;
-  const target = club.boardExpectation;
-
-  // The board's mood is its confidence in the coach; the league line is
-  // where the table has the club against the target.
-  const confidence = club.boardConfidence;
-  const moodCls = confidence >= 60 ? 'good' : confidence >= 45 ? 'dim' : confidence >= 35 ? 'warn' : 'bad';
-  let league: [string, string] = ['Season not started', 'neutral'];
-  if (started) {
-    if (pos <= target) league = ['On course', 'good'];
-    else if (pos === target + 1) league = ['At risk', 'warn'];
-    else league = ['Off course', 'bad'];
-  }
-  const wages = g.wageBill();
-  const withinWages = wages <= club.finances.wageBudget;
-
-  return (
-    <section className="hm-card hm-board">
-      <header className="hm-card-head">
-        <h3>Board confidence</h3>
-        <button className="hm-link" onClick={() => g.go('career')}>Details</button>
-      </header>
-      <div className={`hm-mood ${moodCls}`}>{boardMood(confidence)}</div>
-      <div className="hm-conf"><Bar value={confidence} wide /></div>
-      <div className="hm-target">Finish {ordinal(target)} or better{started ? ` · now ${ordinal(pos)}` : ''}</div>
-      <div className="hm-board-rows">
-        <div className="hm-board-row"><span>Domestic league</span><span className={`hm-pill ${league[1]}`}>{league[0]}</span></div>
-        <div className="hm-board-row">
-          <span>Season squad wages</span>
-          <span className={`hm-pill ${withinWages ? 'good' : 'bad'}`}>{withinWages ? 'Within forecast' : 'Over budget'}</span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FinancesCard(): JSX.Element {
-  const g = useGame();
-  const club = g.club!;
-  const wages = g.wageBill();
-  const f = club.finances;
-  return (
-    <section className="hm-card hm-fin">
-      <header className="hm-card-head">
-        <h3>Finances</h3>
-        <button className="hm-link" onClick={() => g.go('finances')}>Details</button>
-      </header>
-      <div className="hm-fin-rows">
-        <div className="hm-fin-row"><span>Balance</span><b className={f.balance < 0 ? 'bad' : ''}>{money(f.balance)}</b></div>
-        <div className="hm-fin-row"><span>Transfer budget</span><b className="gold">{money(f.transferBudget)}</b></div>
-        <div className="hm-fin-row">
-          <span>Squad wages <small>{money(wages / 12)} a month</small></span>
-          <b>{money(wages)}</b>
-        </div>
-        <div className="hm-fin-row"><span>Wage budget</span><b>{money(f.wageBudget)}</b></div>
       </div>
     </section>
   );

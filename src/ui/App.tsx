@@ -13,7 +13,7 @@ import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
 import {
-  ClubCrest, clubThemeStyle, Flag, initials, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss,
+  ClubCrest, clubThemeStyle, Flag, initials, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss, WorkspaceHeading,
 } from './components.tsx';
 import { NATIONS } from '../engine/world/nations.ts';
 import { userNation, worldRanking } from '../engine/world/internationals.ts';
@@ -251,7 +251,7 @@ function GameShell(): JSX.Element {
     (!onAProfile && ['staff', 'career', 'jobs', 'owner', 'achievements', 'courses'].includes(g.screen));
 
   return (
-    <div className={`app${collapsed || live ? ' sidebar-collapsed' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
+    <div className={`app vm-shell${collapsed || live ? ' sidebar-collapsed' : ''}${live ? ' vm-match-live' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
       <Sidebar collapsed={collapsed || live} locked={live} onToggle={toggleCollapsed} />
       <div className="main-col">
         <Header />
@@ -285,7 +285,7 @@ function GameShell(): JSX.Element {
                             ? <SeasonReviewScreen />
                             : g.selectedCompetition !== null
                               ? <CompetitionDetail />
-                              : <Screen />}
+                              : <><ScreenHeading /><Screen /></>}
           </div>
         </main>
       </div>
@@ -297,6 +297,63 @@ function GameShell(): JSX.Element {
       <ProcessingWindow />
       <HelpDialog />
       <TutorialOverlay />
+    </div>
+  );
+}
+
+/** The screens whose heading the shell draws: eyebrow, line, sentence, and a way on to another screen. */
+const SCREEN_HEADINGS: Partial<Record<ScreenId, [eyebrow: string, title: string, description?: string, next?: ScreenId, nextLabel?: string]>> = {
+  tactics: ['Tactics', 'Give your team a clear direction.', 'Build your identity in attack, serve and defence.', 'lineup', 'Team Sheet'],
+  diagnosis: ['Analysis', 'A second pair of eyes.', 'Your assistant, the evidence and the next adjustment.', 'preplab', 'Prep Lab'],
+  preplab: ['Analysis', 'Prepare before the first serve.', 'Compare tactical plans against your next opponent.', 'lineup', 'Team Sheet'],
+  analysis: ['PERFORMANCE ANALYSIS', 'Read the patterns. Find the advantage.', 'Match by match, rotation by rotation, lane by lane.', 'diagnosis', 'Tactical Diagnosis'],
+  datahub: ['PERFORMANCE INTELLIGENCE', 'See where your team stands. Find the next improvement.', undefined, 'analysis', 'Analysis'],
+  scouting: ['Recruitment', 'Find your next difference maker.', 'Search, evaluate and compare before making your move.', 'shortlist', 'Shortlist'],
+  transfers: ['Recruitment', 'Build the next chapter.', 'Every arrival and departure, under control.', 'scouting', 'Player Search'],
+  shortlist: ['Recruitment', 'Talent worth following.', 'Keep your recruitment priorities within reach.', 'missions', 'Scout Missions'],
+  missions: ['Recruitment', 'Give your scouts a direction.', 'Turn your squad needs into a recruitment plan.', 'scouting', 'Player Search'],
+  director: ['Recruitment', 'A shared sporting vision.', 'Set responsibilities and keep control of recruitment.', 'staff', 'Staff'],
+  career: ['Career', 'Your story on the touchline.', 'Experience, reputation and the next opportunity.', 'achievements', 'Achievements'],
+  achievements: ['Your legacy', 'The milestones that tell your story.', undefined, 'courses', 'Courses'],
+  courses: ['The learning never stops', 'Become the coach you want to be.', undefined, 'career', 'Career'],
+  jobs: ['Your next opportunity', 'Find a challenge that fits your ambition.', undefined, 'career', 'Career'],
+  staff: ['The team behind your team', 'Expertise makes the difference.', undefined, 'meeting', 'Staff Meeting'],
+  meeting: ['Staff meeting', 'Good decisions start with your team.', undefined, 'staff', 'Staff'],
+  commercial: ['Club', 'A club people believe in.', 'Shape the matchday experience and build lasting partnerships.', 'finances', 'Finances'],
+  facilities: ['Club', 'Build the foundations of success.', 'Your arena, your facilities and the next investment.', 'finances', 'Finances'],
+  affiliates: ['Club partnerships', 'A wider path to the first team.', undefined, 'youth', 'Youth Academy'],
+  owner: ['Club', 'One club. A shared ambition.', 'Expectations, trust and the decisions that shape the club.', 'finances', 'Finances'],
+  news: ['Beyond the touchline', 'The volleyball journal.', undefined, 'social', 'Social'],
+  social: ['AROUND THE GAME', 'The conversation.', undefined, 'news', 'World News'],
+  competitions: ['THE SEASON AHEAD', 'Every competition. Every step towards the next trophy.', undefined, 'fixtures', 'Fixtures & Results'],
+  table: ['Competitions', 'Where every point counts.', undefined, 'fixtures', 'Fixtures & Results'],
+  fixtures: ['MATCH CENTRE', 'Every match, every set.', undefined, 'table', 'League Table'],
+  internationals: ['THE WORLD STAGE', 'National pride. Global ambition.', 'Follow the tournaments, the next generation and the race for gold.', 'rankings', 'World Rankings'],
+  stats: ['Stats', 'The numbers behind the season.', undefined, 'rankings', 'World Rankings'],
+  rankings: ['Stats', 'The standard to aim for.', 'Explore the leading clubs and players.', 'stats', 'Player Stats'],
+  coaches: ['THE PEOPLE BEHIND THE TEAMS', 'Coaching excellence.', undefined, 'halloffame', 'Hall of Fame'],
+  halloffame: ['THE GAME REMEMBERS', 'A place among the greats.', 'Outstanding careers, preserved for every generation.', 'stats', 'Player Stats'],
+  dressing: ['DRESSING ROOM', 'A team beyond the court.', 'Understand the leaders, the relationships and the mood of your squad.', 'squad', 'First team'],
+  planner: ['SQUAD PLANNING', 'Build the next three seasons.', 'Anticipate departures. Make room for the next generation.', 'scouting', 'Player search'],
+  deadline: ['Recruitment', 'The last hours of the window.', undefined, 'transfers', 'Transfer Centre'],
+  editor: ['CAREER STUDIO', 'Make this world your own.', 'Clubs, players and colours, all in one place.'],
+};
+
+function ScreenHeading(): JSX.Element | null {
+  const g = useGame();
+  const h = SCREEN_HEADINGS[g.screen];
+  if (h === undefined) return null;
+  // Out of work, a heading that leads to a club's screen would lead nowhere.
+  const [eyebrow, title, description, next, nextLabel] = h;
+  const canGo = next !== undefined && (g.club !== null || CLUBLESS_SCREENS.has(next));
+  return (
+    <div className="vm-workspace-heading">
+      <WorkspaceHeading
+        eyebrow={eyebrow}
+        title={title}
+        description={description}
+        actions={canGo ? <button onClick={() => g.go(next)}>{nextLabel} <Icon name="arrowRight" size={14} /></button> : undefined}
+      />
     </div>
   );
 }
