@@ -8,10 +8,12 @@
 
 import { useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { breakPointPct, sideOutPct } from '../../engine/match/stats.ts';
-import { analysisFor, GRID, seasonFromReports, type AttackMap, type MatchLine } from '../../engine/world/analysis.ts';
+import { analysisFor, GRID, nationKey, seasonFromReports, type AttackMap, type MatchLine } from '../../engine/world/analysis.ts';
 import { Card, ClubLink, Empty, PlayerLink, StatTile, Paged } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { useGame } from '../state.ts';
+import { NATIONS } from '../../engine/world/nations.ts';
+import { userNation } from '../../engine/world/internationals.ts';
 import { seasonLabel } from './Squad.tsx';
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
@@ -124,7 +126,7 @@ function MatchChart({ matches }: { matches: MatchLine[] }): JSX.Element {
       </div>
       <div className="an-chart-note">
         {h !== null
-          ? <>{g.dateLabelForDay(h.fixture.day)} · {h.won ? 'W' : 'L'} {h.fixture.home === h.opponent ? `${h.fixture.awaySets}-${h.fixture.homeSets}` : `${h.fixture.homeSets}-${h.fixture.awaySets}`} vs {world.clubs[h.opponent]?.shortName ?? '?'} — kill rate {pct(h.killRate)}, side-out {pct(h.sideOut)}, break point {pct(h.breakPoint)}</>
+          ? <>{g.dateLabelForDay(h.fixture.day)} · {h.won ? 'W' : 'L'} {h.fixture.home === h.opponent ? `${h.fixture.awaySets}-${h.fixture.homeSets}` : `${h.fixture.homeSets}-${h.fixture.awaySets}`} vs {h.fixture.home <= -1000 ? NATIONS[h.opponent]?.code ?? '?' : world.clubs[h.opponent]?.shortName ?? '?'} — kill rate {pct(h.killRate)}, side-out {pct(h.sideOut)}, break point {pct(h.breakPoint)}</>
           : <>{matches.length} matches · hover a match for its numbers</>}
       </div>
     </div>
@@ -136,11 +138,19 @@ export function AnalysisScreen(): JSX.Element {
   const world = g.world!;
   const club = g.club;
   const [season, setSeason] = useState(world.season);
-  if (club === null) return <Empty>No club.</Empty>;
+  // The national team on: its own matches, kept apart from the club's.
+  const national = g.nationalView();
+  const nation = userNation(world);
+  if (club === null && !national) return <Empty>No club.</Empty>;
   const store = world.players;
-  const seasons = [...new Set([world.season, ...(world.analysis ?? []).filter((a) => a.clubId === club.id).map((a) => a.season)])].sort((a, b) => b - a);
-  const a = analysisFor(world, club.id, season);
-  const r = seasonFromReports(world, club.id, season);
+  const teamId = national ? nationKey(nation) : club!.id;
+  const seasons = [...new Set([
+    world.season,
+    ...(world.analysis ?? []).filter((a) => a.clubId === teamId).map((a) => a.season),
+    ...(national ? (world.nationalLines ?? []).filter((l) => l.nation === nation).map((l) => l.season) : []),
+  ])].sort((a, b) => b - a);
+  const a = analysisFor(world, teamId, season);
+  const r = seasonFromReports(world, teamId, season);
   const t = r.totals;
   const received = r.rotations.reduce((s, x) => s + x.receiveRallies, 0);
   const sidedOut = r.rotations.reduce((s, x) => s + x.sideOutsWon, 0);
@@ -154,7 +164,7 @@ export function AnalysisScreen(): JSX.Element {
   return (
     <div className="an">
       <div className="an-bar">
-        <span className="faint an-intro">Every competitive match played in full this season{a !== undefined ? ` — ${a.matches} so far` : ''}.</span>
+        <span className="faint an-intro">{national ? `${NATIONS[nation]?.name ?? 'The national team'}: every match this season — ${r.matches.length} so far` : `Every competitive match played in full this season${a !== undefined ? ` — ${a.matches} so far` : ''}`}.</span>
         <Dropdown<number> size="sm" value={season} onChange={setSeason} title="Season"
           options={seasons.map((s) => ({ value: s, label: s === world.season ? `${seasonLabel(world, s)} · this season` : seasonLabel(world, s) }))} />
       </div>
@@ -226,7 +236,7 @@ export function AnalysisScreen(): JSX.Element {
           {r.matches.length > 0 ? <MatchChart matches={r.matches} /> : <Empty>No matches yet this season.</Empty>}
         </Card>
       </div>
-      <p className="footnote an-foot">Grids are drawn from the hitter's side: his own sideline — the line — on the left, the far one on the right. <ClubLink id={club.id} short /> only.</p>
+      <p className="footnote an-foot">Grids are drawn from the hitter's side: his own sideline — the line — on the left, the far one on the right. {national ? `${NATIONS[nation]?.name ?? ''} only.` : <><ClubLink id={club!.id} short /> only.</>}</p>
     </div>
   );
 }

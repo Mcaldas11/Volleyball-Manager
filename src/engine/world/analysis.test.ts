@@ -41,3 +41,26 @@ test('the analyst keeps a season of the club: where the attacks came down, both 
   assert.ok(received > 100 && r.rotations.every((x) => x.sideOutsWon <= x.receiveRallies));
   assert.ok(r.totals.kills <= r.totals.attacks && r.totals.sets >= played.length * 3);
 });
+
+test("the national team's matches are kept apart from the club's: a full match maps the court, an instant one keeps the box score", async () => {
+  const { MatchFormat, MatchSimulator } = await import('../match/engine.ts');
+  const { toTeamSetup } = await import('../season/seasonEngine.ts');
+  const { nationKey, noteNationalAnalysis } = await import('./analysis.ts');
+  const world = generateWorld({ seed: 96, startYear: 2026, scale: 'small', manager: stubManager() });
+  const [a, b] = world.clubs.filter((c) => c.players.length >= 12);
+  const play = (log: boolean, seed: number) => new MatchSimulator(world.players, {
+    home: toTeamSetup(world.players, a), away: toTeamSetup(world.players, b), format: MatchFormat.BestOf5,
+    importance: 0.5, neutralVenue: true, collectLog: log, seed,
+  }).run();
+  const nation = 3;
+  noteNationalAnalysis(world, nation, true, 7, 10, play(true, 1));
+  noteNationalAnalysis(world, nation, false, 9, 12, play(false, 2));
+  const r = seasonFromReports(world, nationKey(nation), world.season);
+  assert.equal(r.matches.length, 2, 'both matches');
+  assert.deepEqual(r.matches.map((m) => m.opponent), [7, 9]);
+  assert.ok(r.totals.attacks > 0 && r.rotations.some((x) => x.receiveRallies > 0));
+  const maps = analysisFor(world, nationKey(nation), world.season)!;
+  assert.equal(maps.matches, 1, 'only the match played in full maps the court');
+  // Nothing of it in a club's season.
+  assert.equal(seasonFromReports(world, a.id, world.season).matches.length, 0);
+});

@@ -47,7 +47,7 @@ import type { Accolade, AwardsNight } from './accolades.ts';
 import type { StaffApproach } from './staffMarket.ts';
 import type { StaffTalks } from './staffDeals.ts';
 import type { MatchReport } from './matchReports.ts';
-import type { SeasonAnalysis } from './analysis.ts';
+import type { NationalLine, SeasonAnalysis } from './analysis.ts';
 import type { PlayerPromise, TransferRequest } from './playerTalks.ts';
 import type { SponsorOffer } from './commercial.ts';
 import type { RetirementPlan } from './retirement.ts';
@@ -844,6 +844,8 @@ export interface World {
   inboxPrefs?: Partial<InboxPrefs>;
   /** The analyst's season data for the manager's club — see analysis.ts. */
   analysis?: SeasonAnalysis[];
+  /** The manager's national team's matches, as the analyst keeps them — see analysis.ts. */
+  nationalLines?: NationalLine[];
   /** The instructions as they were before the last game plan went in — see gamePlan.ts. */
   planUndo?: { clubId: number; fixtureId: number; before: string };
   /** The small print the club wrote into its players' contracts — see contractTerms.ts. */

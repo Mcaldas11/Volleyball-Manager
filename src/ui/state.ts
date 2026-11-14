@@ -37,6 +37,7 @@ import { askOwner } from '../engine/world/owners.ts';
 import { atRisk, chooseTreatment, type InjuryCase, type Treatment } from '../engine/world/treatment.ts';
 import { menteesOf, mentorBlock, mentorOf, setMentor } from '../engine/world/mentoring.ts';
 import { rivalryName, rivalsOf, type Rivalry } from '../engine/world/rivals.ts';
+import { noteNationalAnalysis } from '../engine/world/analysis.ts';
 import { useSyncExternalStore } from 'react';
 import { applyPlan, suggestPlan, undoPlan, type GamePlan, type PlanSide } from '../engine/world/gamePlan.ts';
 import type { InboxPrefs } from '../engine/world/world.ts';
@@ -219,7 +220,7 @@ export const CLUBLESS_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>([
 ]);
 
 /** The team screens a national team has as well as a club: its squad, its team sheet, its instructions, its rotations. */
-export const NATIONAL_TEAM_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>(['squad', 'lineup', 'tactics', 'rotations']);
+export const NATIONAL_TEAM_SCREENS: ReadonlySet<ScreenId> = new Set<ScreenId>(['squad', 'lineup', 'tactics', 'rotations', 'analysis']);
 
 /** Which of the manager's teams the team screens show, when he has a club and a country. */
 export type TeamView = 'club' | 'national';
@@ -5288,7 +5289,9 @@ class Game {
     const world = this.world;
     if (world === null || (view === 'national' && userNation(world) < 0) || (view === 'club' && this.club === null)) return;
     this.teamView = view;
-    if (view === 'national' && (this.screen === 'training' || this.screen === 'youth')) this.screen = 'squad';
+    // The club-only screens (its training ground, academy and the league analysts' tools) give way to the squad.
+    if (view === 'national' && ['training', 'youth'].includes(this.screen)) this.screen = 'squad';
+    if (view === 'national' && ['diagnosis', 'preplab', 'datahub'].includes(this.screen)) this.screen = 'analysis';
     this.selectedPlayer = null;
     this.selectedClub = null;
     this.selectedCoach = null;
@@ -5471,6 +5474,9 @@ class Game {
     const { t, m } = found;
     const stats = applyIntlResult(world, t, m, result);
     postMatchReport(world, t, [m], stats);
+    // The analyst keeps the national team's matches too: its own screens when the national team is on.
+    const home = m.home === ref.nation;
+    noteNationalAnalysis(world, ref.nation, home, home ? m.away : m.home, m.day, result);
     fixture.played = true;
     fixture.homeSets = result.homeSets;
     fixture.awaySets = result.awaySets;

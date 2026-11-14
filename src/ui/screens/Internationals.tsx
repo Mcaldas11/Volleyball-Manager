@@ -575,7 +575,7 @@ function NationsTable({ t, home }: { t: Tournament; home: number }): JSX.Element
 type StatKey = 'name' | 'apps' | 'points' | 'perApp' | 'kills' | 'aces' | 'blocks' | 'digs' | 'assists' | 'avg' | 'mvps';
 
 /** A tournament's numbers: its nations, and every player who played at it. */
-function TournamentStats({ t, home }: { t: Tournament; home: number }): JSX.Element {
+export function TournamentStats({ t, home }: { t: Tournament; home: number }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;

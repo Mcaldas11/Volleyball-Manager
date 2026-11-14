@@ -1,3 +1,6 @@
+import { TournamentStats } from './Internationals.tsx';
+import { internationals, userNation } from '../../engine/world/internationals.ts';
+import { Dropdown } from '../dropdown.tsx';
 import { useState, type JSX } from 'react';
 import { attackEfficiency, receptionPositivity } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
@@ -45,7 +48,42 @@ function col(key: StatKey, sort: StatKey, extra = ''): string {
  * are genuinely the players who performed, not a lookup of who has the highest
  * ability rating.
  */
+/** The national team on: the player stats of the tournaments it plays — the one under way, or the last. */
+function NationalStats(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const nation = userNation(world);
+  const all = (internationals(world).tournaments ?? [])
+    .filter((t) => t.teams.includes(nation) && t.status !== 'planned' && t.status !== 'called')
+    .sort((a, b) => b.startDay - a.startDay);
+  const [picked, setPicked] = useState<number | null>(null);
+  const t = all.find((x) => x.id === picked) ?? all[0];
+  return (
+    <div className="national-stats">
+      <div className="comp-bar">
+        <div className="comp-bar-title">
+          <span className="comp-bar-name"><Flag nation={nation} /> {NATIONS[nation]?.name} · tournament stats</span>
+          <span className="faint">The competitions the national team plays</span>
+        </div>
+        {all.length > 1 && (
+          <Dropdown<number> size="sm" value={t?.id ?? null} onChange={setPicked}
+            options={all.map((x) => ({ value: x.id, label: x.name }))} />
+        )}
+      </div>
+      {t === undefined
+        ? <Empty>No tournament played yet — the stats come once {NATIONS[nation]?.name ?? 'the national team'} takes the court.</Empty>
+        : <TournamentStats key={t.id} t={t} home={nation} />}
+    </div>
+  );
+}
+
 export function StatsScreen(): JSX.Element {
+  const g = useGame();
+  if (g.nationalView()) return <NationalStats />;
+  return <ClubStats />;
+}
+
+function ClubStats(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;

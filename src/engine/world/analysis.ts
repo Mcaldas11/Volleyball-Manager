@@ -68,9 +68,13 @@ export function noteAnalysis(world: World, fixture: Fixture, result: MatchResult
     // Old seasons go.
     world.analysis = all.filter((x) => x.season > world.season - KEEP_SEASONS);
   }
+  addLog(a, fixture.home === club ? 0 : 1, result);
+}
+
+/** One match's rallies into a season's maps and lanes, from side `us`. */
+function addLog(a: SeasonAnalysis, us: 0 | 1, result: MatchResult): void {
   a.matches++;
-  const us: 0 | 1 = fixture.home === club ? 0 : 1;
-  for (const rally of result.log) {
+  for (const rally of result.log ?? []) {
     for (const c of rally.contacts) {
       if (c.kind !== 'attack' && c.kind !== 'kill' && c.kind !== 'attackError' && c.kind !== 'blocked') continue;
       const map = c.team === us ? a.ours : a.theirs;
@@ -96,6 +100,95 @@ export function noteAnalysis(world: World, fixture: Fixture, result: MatchResult
   }
 }
 
+// ---- The national team ---------------------------------------------------------------
+
+/** The key a nation's season analysis is kept under: below every club id. */
+export function nationKey(nation: number): number {
+  return -1000 - nation;
+}
+
+/** A national team's match, as the analyst keeps it: the box score's side, cut to what the screens read. */
+export interface NationalLine {
+  nation: number;
+  season: number;
+  day: number;
+  opponent: number;
+  /** Our sets, theirs. */
+  sets: [number, number];
+  sets_played: number;
+  /** Per rotation: rallies received, side-outs won, rallies served, points won serving. */
+  rotations: Array<[number, number, number, number]>;
+  attacks: number;
+  kills: number;
+  errors: number;
+  aces: number;
+  serveErrors: number;
+  blocks: number;
+}
+
+/** Note a match of the manager's national team: its box score always, its rallies when it was played in full. */
+export function noteNationalAnalysis(world: World, nation: number, home: boolean, opponent: number, day: number, result: MatchResult): void {
+  const side = home ? result.stats.home : result.stats.away;
+  const line = aggregateTeam(side);
+  const lines = (world.nationalLines ??= []);
+  lines.push({
+    nation, season: world.season, day, opponent,
+    sets: home ? [result.homeSets, result.awaySets] : [result.awaySets, result.homeSets],
+    sets_played: result.setScores.length,
+    rotations: side.rotations.map((r) => [r.receiveRallies, r.sideOutsWon, r.serveRallies, r.servePointsWon]),
+    attacks: line.attacksTotal, kills: line.attackKills, errors: line.attackErrors + line.attackBlocked,
+    aces: line.serveAces, serveErrors: line.serveErrors, blocks: line.blockPoints,
+  });
+  world.nationalLines = lines.filter((x) => x.season > world.season - KEEP_SEASONS);
+  if (result.log === null) return;
+  const key = nationKey(nation);
+  const all = (world.analysis ??= []);
+  let a = analysisFor(world, key, world.season);
+  if (a === undefined) {
+    a = { season: world.season, clubId: key, matches: 0, ours: emptyMap(), theirs: emptyMap(), lanes: {} };
+    all.push(a);
+  }
+  addLog(a, home ? 0 : 1, result);
+}
+
+/** The national team's season, in the same shape as a club's from its box scores. */
+function nationSeason(world: World, nation: number, season: number): ReturnType<typeof seasonFromReports> {
+  const rotations = Array.from({ length: 6 }, newRotationStats);
+  const totals = { attacks: 0, kills: 0, errors: 0, aces: 0, serveErrors: 0, blocks: 0, sets: 0 };
+  const matches: MatchLine[] = [];
+  for (const l of (world.nationalLines ?? []).filter((x) => x.nation === nation && x.season === season).sort((x, y) => x.day - y.day)) {
+    let received = 0;
+    let sidedOut = 0;
+    let served = 0;
+    let broke = 0;
+    l.rotations.forEach(([rr, so, sr, sp], i) => {
+      rotations[i].receiveRallies += rr;
+      rotations[i].sideOutsWon += so;
+      rotations[i].serveRallies += sr;
+      rotations[i].servePointsWon += sp;
+      received += rr; sidedOut += so; served += sr; broke += sp;
+    });
+    totals.attacks += l.attacks;
+    totals.kills += l.kills;
+    totals.errors += l.errors;
+    totals.aces += l.aces;
+    totals.serveErrors += l.serveErrors;
+    totals.blocks += l.blocks;
+    totals.sets += l.sets_played;
+    matches.push({
+      // A stand-in fixture: the day and the score, which is what the screens show of it.
+      fixture: { id: -1, competitionId: -1, day: l.day, home: nationKey(nation), away: l.opponent, round: 0, format: 0, importance: 0, neutralVenue: true,
+        played: true, homeSets: l.sets[0], awaySets: l.sets[1], setScores: [], mvp: -1 } as unknown as Fixture,
+      opponent: l.opponent,
+      won: l.sets[0] > l.sets[1],
+      killRate: l.attacks > 0 ? l.kills / l.attacks : 0,
+      sideOut: received > 0 ? sidedOut / received : 0,
+      breakPoint: served > 0 ? broke / served : 0,
+    });
+  }
+  return { matches, rotations, totals };
+}
+
 // ---- From the kept box scores ------------------------------------------------------------
 
 /** A match of the season, as the side's numbers tell it. */
@@ -115,6 +208,7 @@ export function seasonFromReports(world: World, clubId: number, season: number):
   rotations: RotationStats[];
   totals: { attacks: number; kills: number; errors: number; aces: number; serveErrors: number; blocks: number; sets: number };
 } {
+  if (clubId <= -1000) return nationSeason(world, -1000 - clubId, season);
   const rotations = Array.from({ length: 6 }, newRotationStats);
   const totals = { attacks: 0, kills: 0, errors: 0, aces: 0, serveErrors: 0, blocks: 0, sets: 0 };
   const matches: MatchLine[] = [];

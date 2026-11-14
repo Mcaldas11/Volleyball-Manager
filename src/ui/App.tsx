@@ -171,7 +171,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
 const ALL_SECTIONS = SECTION_GROUPS.flatMap((grp) => grp.sections);
 
 /** The team's sections — a national team has its squad and its team sheet, but no training ground or academy. */
-const TEAM_SECTIONS: ReadonlySet<string> = new Set(['squad', 'lineup', 'training', 'academy']);
+const TEAM_SECTIONS: ReadonlySet<string> = new Set(['squad', 'lineup', 'training', 'analysis', 'academy']);
 
 function sectionFor(screen: ScreenId): Section {
   return ALL_SECTIONS.find((s) => s.tabs.some(([id]) => id === screen)) ?? ALL_SECTIONS[0];
@@ -345,7 +345,9 @@ function ScreenHeading(): JSX.Element | null {
   if (h === undefined) return null;
   // Out of work, a heading that leads to a club's screen would lead nowhere.
   const [eyebrow, title, description, next, nextLabel] = h;
-  const canGo = next !== undefined && (g.club !== null || CLUBLESS_SCREENS.has(next));
+  // A heading never leads where the team on show has no screen: out of work, or the national team's club-only tools.
+  const clubOnly = g.nationalView() && next !== undefined && ['diagnosis', 'preplab', 'datahub', 'training', 'youth'].includes(next);
+  const canGo = next !== undefined && !clubOnly && (g.club !== null || CLUBLESS_SCREENS.has(next));
   return (
     <div className="vm-workspace-heading">
       <WorkspaceHeading
