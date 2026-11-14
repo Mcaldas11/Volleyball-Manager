@@ -143,24 +143,24 @@
 .vm-workspace-heading .vm-eyebrow {
   color: var(--gold);
 }
-.vm-shell .card {
+/* The look every card and table takes — at no weight, so a screen's own sizes always win. */
+:where(.vm-shell) .card {
   background: linear-gradient(135deg, var(--surface-2), var(--surface));
   border-color: var(--line-strong);
   border-radius: 7px;
 }
-.vm-shell .card-head {
+:where(.vm-shell) .card-head {
   background: transparent;
   border-bottom: 1px solid var(--line);
-  padding: 14px 18px;
 }
-.vm-shell .card-head h2,
-.vm-shell .card-head h3 {
-  font: 600 22px var(--font-display);
+:where(.vm-shell) :where(.card-head) :is(h2, h3) {
+  font-family: var(--font-display);
+  font-weight: 600;
 }
-.vm-shell table {
+:where(.vm-shell) table {
   font-size: 13px;
 }
-.vm-shell th {
+:where(.vm-shell) th {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -168,9 +168,7 @@
   font-weight: 600;
   background: #08182a;
 }
-.vm-shell td {
-  padding-top: 10px;
-  padding-bottom: 10px;
+:where(.vm-shell) td {
   border-bottom-color: #ffffff07;
 }
 .vm-shell .table-wrap {

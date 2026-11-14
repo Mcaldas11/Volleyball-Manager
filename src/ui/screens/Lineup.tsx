@@ -33,7 +33,7 @@ export function LineupScreen(): JSX.Element {
   const formation = formationOf(tactics ?? undefined);
 
   return (
-    <div className="tactical-lineup">
+    <div className="lineup-page tactical-lineup">
       <WorkspaceHeading
         eyebrow="TEAM SELECTION"
         title="Six players. One system."

@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX, type CSSProperties } from 'react';
 import { championOf, pastLeagueTable, pastSeasonsOf } from '../../engine/season/pastSeasons.ts';
 import { predictionFor } from '../../engine/world/predictions.ts';
 import { RivalTag } from '../components.tsx';
@@ -719,7 +719,7 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
           )}
         >
           {past >= 0 ? <PastTable comp={comp} season={past} /> : <div className="table-wrap">
-            <table className="data-table league-table">
+            <table className="data-table league-table" style={{ '--rows': rows.length } as CSSProperties}>
               <thead>
                 <tr>
                   <th className="num">Pos</th>

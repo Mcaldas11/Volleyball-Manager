@@ -7299,7 +7299,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 /* The name. */
 .splash-brand {
   position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: clamp(10px, 1.6vh, 16px);
-  margin-top: -16vh; text-align: center;
+  margin-top: -21vh; text-align: center;
   translate: calc(var(--mx) * 6px) calc(var(--my) * 4px); transition: translate 0.6s ease-out, scale 0.65s ease-in, opacity 0.5s ease-in;
 }
 .splash.leaving .splash-brand { scale: 1.06; opacity: 0; }
@@ -7329,7 +7329,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .splash-tagline { margin: 0; font-size: clamp(13px, 1.9vh, 16px); font-weight: 500; letter-spacing: 0.08em; color: var(--text-dim); opacity: 0; animation: splash-rise 0.6s ease-out 2.55s forwards; }
 
 /* The bar while the scene sets itself, then the prompt — and it waits. */
-.splash-foot { position: absolute; left: 0; right: 0; top: 61vh; z-index: 1; display: grid; place-items: center; }
+.splash-foot { position: relative; z-index: 1; display: grid; place-items: center; margin-top: clamp(16px, 3.2vh, 30px); min-height: 18px; }
 .splash-foot > * { grid-area: 1 / 1; }
 .splash-bar { display: block; width: clamp(160px, 18vw, 260px); height: 3px; border-radius: 2px; background: rgba(233, 236, 241, 0.1); overflow: hidden; opacity: 0; animation: splash-rise 0.4s ease-out 0.7s forwards, splash-gone 0.35s ease-in 3.5s forwards; }
 .splash-bar i { display: block; height: 100%; width: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright)); transform-origin: left; transform: scaleX(0); animation: splash-load 2.5s cubic-bezier(.4, 0, .3, 1) 0.9s forwards; }

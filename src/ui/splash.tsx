@@ -156,15 +156,15 @@ export function Splash({ onDone }: { onDone: () => void }): JSX.Element {
         </h1>
         <span className="splash-rule" />
         <p className="splash-tagline">Every rally. Every decision. Your club.</p>
-      </div>
-
-      <div className="splash-foot">
-        <span className="splash-bar"><i /></span>
-        <span className="splash-start">
-          <span className="splash-start-line" />
-          Click anywhere to start
-          <span className="splash-start-line" />
-        </span>
+        {/* The prompt sits a set gap under the tagline, at any window size — never on the court. */}
+        <div className="splash-foot">
+          <span className="splash-bar"><i /></span>
+          <span className="splash-start">
+            <span className="splash-start-line" />
+            Click anywhere to start
+            <span className="splash-start-line" />
+          </span>
+        </div>
       </div>
 
       <span className="splash-corner left">© 2026 Miguel Caldas</span>

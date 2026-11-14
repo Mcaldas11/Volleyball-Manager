@@ -526,7 +526,7 @@ html.short-window .calendar-workspace-heading p {
   overflow: hidden;
 }
 .athlete-academy .athlete-prospect {
-  height: 212px;
+  height: 200px;
   padding: 12px 14px !important;
   box-sizing: border-box;
   overflow: hidden;
@@ -678,4 +678,495 @@ html.short-window .bureau-profile .cp-foot {
 .bureau-profile .cp-side,
 .bureau-profile .cp-side-stack {
   grid-column: auto !important;
+}
+
+/* ---- Team sheet: cards sized to the window, the court sized to its cards, the bench wide enough for names ---- */
+.vm-shell .tactical-lineup {
+  /* As tall as the window allows, and no wider than the court's share of the width (four cards across, libero included). */
+  --card-h: max(104px, min(calc((var(--app-h, 100vh) - 410px) / 2), 178px, calc((100vw - 1060px) / 2.88)));
+  --card-w: calc(var(--card-h) * 0.72);
+  gap: 0;
+}
+.vm-shell .tactical-lineup > .vm-section-header {
+  margin-bottom: 12px;
+}
+.vm-shell .tactical-lineup .tactical-selection-layout {
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 14px;
+}
+.vm-shell .tactical-lineup .tactical-selection-rail {
+  gap: 14px;
+  justify-content: flex-start;
+}
+.vm-shell .tactical-lineup .tactical-selection-rail > button {
+  margin-top: auto;
+}
+.vm-shell .tactical-lineup .ts,
+.vm-shell .tactical-match-preparation .ts {
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 340px);
+  gap: 14px;
+}
+.vm-shell .tactical-lineup .ts {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+.vm-shell .tactical-lineup .ts-main {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.vm-shell .tactical-lineup .ts-bench {
+  height: 100%;
+}
+/* The photo behind the sheet fought with the cards: the panel stays plain navy. */
+.vm-shell .tactical-team-sheets::before,
+.vm-shell .tactical-selection-sheet::before,
+.vm-shell .tactical-selection-layout::before {
+  display: none !important;
+}
+.vm-shell .tactical-lineup .ts-main {
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 16px;
+}
+.vm-shell .tactical-lineup .ts-court {
+  margin: 22px 26px;
+}
+.vm-shell :is(.tactical-lineup, .tactical-match-preparation) .ts-bench .bench-token {
+  grid-template-columns: auto auto minmax(0, 1fr) auto 34px 30px 22px;
+  gap: 6px;
+  padding: 6px 8px;
+}
+.vm-shell :is(.tactical-lineup, .tactical-match-preparation) .ts-bench .bench-token .bar {
+  width: 30px;
+}
+.vm-shell :is(.tactical-lineup, .tactical-match-preparation) .ts-bench .bench-token .player-face {
+  width: 26px !important;
+  height: 26px !important;
+}
+.vm-shell .tactical-lineup .ts-bench {
+  max-height: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.vm-shell .tactical-lineup .ts-bench-list {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+}
+/* The ability and the swap icon in a card's corner: room for both. */
+.lineup-card:has(.lineup-card-select) .lineup-card-info {
+  padding-right: 30px;
+}
+.lineup-card-info .stars {
+  font-size: 8px;
+}
+/* A short window: less court around the cards, so the cards keep room for a name. */
+html.short-window .vm-shell .tactical-lineup {
+  --card-h: max(112px, min(calc((var(--app-h, 100vh) - 330px) / 2), 150px, calc((100vw - 1000px) / 2.88)));
+}
+html.short-window .vm-shell .tactical-lineup .ts-row-label,
+html.short-window .vm-shell .tactical-lineup .ts-libero-note,
+html.short-window .vm-shell .tactical-lineup .lineup-card-info .stars {
+  display: none;
+}
+html.short-window .vm-shell .tactical-lineup .ts-court {
+  padding: 26px 18px 14px;
+  margin: 12px 16px;
+  gap: 8px;
+}
+html.short-window .vm-shell .tactical-lineup .ts-main {
+  padding: 8px;
+  gap: 14px;
+}
+html.short-window .vm-shell .tactical-lineup .lineup-card-info {
+  height: 34%;
+  gap: 1px;
+  padding: 3px 6px;
+}
+html.short-window .vm-shell .tactical-lineup .lineup-card-name {
+  font-size: 11px;
+}
+
+/* ============================================================
+   Spacing pass — one rhythm everywhere
+   ============================================================ */
+/* Tables and cards keep the sizes styles.css gives each screen; the redesign only recolours them. */
+:where(.vm-shell) .table-wrap > table {
+  width: 100%;
+}
+/* The gap between the cards of a screen. */
+.vm-shell .content-fill > .view-fade > * + * {
+  margin-top: 0;
+}
+.vm-shell .content-fill > .view-fade {
+  gap: 12px;
+}
+html.short-window .vm-shell .content-fill > .view-fade {
+  gap: 8px;
+}
+.vm-shell .content {
+  padding: 16px 22px 18px;
+}
+html.short-window .vm-shell .content {
+  padding: 10px 16px 12px;
+}
+.vm-shell .vm-workspace-heading {
+  margin-bottom: 0;
+}
+
+/* ---- Finances, second pass: nothing in a panel shrinks to nothing; the budgets at their own height ---- */
+.finance-workspace .vm-panel-body > * {
+  flex-shrink: 0;
+}
+.finance-workspace > .finance-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
+}
+.finance-analytics {
+  grid-template-rows: minmax(0, 0.8fr) minmax(0, 1fr);
+}
+.finance-control {
+  grid-template-rows: auto minmax(0, 1fr) !important;
+}
+.finance-control > .vm-panel:first-child .vm-panel-body {
+  flex: none;
+  gap: 10px;
+}
+.vm-shell .finance-workspace .finance-budget-slider {
+  padding: 10px 12px;
+  margin: 0;
+}
+.vm-shell .finance-workspace .finance-split-heading {
+  margin-bottom: 6px;
+}
+.vm-shell .finance-workspace .finance-budget-controls {
+  padding-top: 8px;
+  gap: 10px;
+}
+.finance-workspace .finance-budget-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.finance-workspace .finance-budget-controls .money-input {
+  width: 100%;
+  min-width: 0;
+}
+.finance-contracts .finance-contract:nth-child(n + 3) {
+  display: flex;
+}
+.finance-control > .vm-panel:last-child .finance-contracts {
+  overflow: hidden;
+}
+.finance-workspace .finance-costs {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.finance-workspace .finance-income-body {
+  flex: 1 1 0;
+  min-height: 0;
+}
+html.short-window .finance-workspace .finance-costs .finance-cost:nth-child(n + 5),
+html.short-window .finance-workspace .finance-note,
+html.short-window .finance-workspace .finance-wage-head + .vm-progress {
+  display: none;
+}
+html.short-window .finance-workspace .finance-ring {
+  transform: scale(0.8);
+}
+@media (max-height: 940px) {
+  .finance-control > .vm-panel:last-child {
+    display: none !important;
+  }
+  .finance-control {
+    grid-template-rows: minmax(0, 1fr) !important;
+  }
+  .finance-control > .vm-panel:first-child .vm-panel-body {
+    flex: 1 1 0;
+    justify-content: space-between;
+  }
+}
+
+/* ---- Squad, second pass ---- */
+.athlete-roster-table .cond-cell {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.athlete-roster-table .cond-cell .bar {
+  width: 40px !important;
+  margin: 0 !important;
+}
+.athlete-roster-table .player-face {
+  width: min(28px, calc(var(--row-h, 40px) - 6px)) !important;
+  height: min(28px, calc(var(--row-h, 40px) - 6px)) !important;
+}
+.athlete-summary small {
+  white-space: nowrap;
+}
+.athlete-dossier {
+  display: flex !important;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px !important;
+}
+.athlete-dossier > * {
+  flex-shrink: 0;
+  margin: 0 !important;
+}
+.athlete-dossier > .athlete-key-attributes {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.athlete-dossier .athlete-dossier-hero {
+  padding: 0 !important;
+}
+.athlete-dossier .athlete-dossier-hero .player-face {
+  width: 88px !important;
+  height: 88px !important;
+}
+.athlete-dossier .athlete-dossier-hero h2 {
+  font-size: 22px !important;
+  margin: 6px 0 2px !important;
+}
+.athlete-dossier .athlete-dossier-ratings {
+  padding: 8px 0 !important;
+}
+.athlete-dossier .athlete-dossier-ratings b {
+  font-size: 24px !important;
+}
+.athlete-dossier .athlete-key-attributes h3 {
+  font-size: 15px !important;
+  margin: 0 0 6px !important;
+}
+.athlete-dossier .athlete-key-attributes > div {
+  padding: 3px 0 !important;
+}
+.athlete-dossier .athlete-dossier-condition {
+  display: none;
+}
+@media (min-height: 940px) {
+  .athlete-dossier .athlete-dossier-condition {
+    display: grid;
+  }
+}
+/* The dossier's head across, not down: photo left, name and line beside it. */
+.athlete-dossier .athlete-dossier-hero {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'eyebrow eyebrow' 'face name' 'face line' 'face nation';
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  background: none !important;
+  overflow: visible !important;
+}
+.athlete-dossier .athlete-dossier-hero > .athlete-eyebrow { grid-area: eyebrow; margin-bottom: 6px; }
+.athlete-dossier .athlete-dossier-hero > .player-face { grid-area: face; width: 72px !important; height: 72px !important; margin: 0 !important; }
+.athlete-dossier .athlete-dossier-hero > h2 { grid-area: name; margin: 0 !important; font-size: 20px !important; line-height: 1.05; }
+.athlete-dossier .athlete-dossier-hero > p { grid-area: line; margin: 0 !important; }
+.athlete-dossier .athlete-dossier-hero > span:last-child { grid-area: nation; }
+.athlete-dossier .athlete-dossier-number { display: none; }
+.athlete-dossier .athlete-dossier-ratings { margin: 0 !important; padding: 8px 0 !important; }
+.athlete-dossier .athlete-dossier-actions { padding: 0 0 10px !important; gap: 6px; }
+.athlete-dossier .athlete-key-attributes { padding: 0 !important; }
+.athlete-player-cell {
+  width: 100%;
+  justify-content: flex-start;
+}
+html.short-window .athlete-dossier .athlete-key-attributes > div:nth-of-type(n + 3) {
+  display: none;
+}
+
+/* ---- Dressing room: the armband buttons side by side; rows that fit ---- */
+.vm-shell .room-row {
+  grid-template-columns: 30px minmax(0, 1fr) 40px 70px 54px;
+  min-height: 0;
+  padding: 7px 8px;
+  gap: 7px;
+}
+.vm-shell .room-row .player-face {
+  width: 30px !important;
+  height: 30px !important;
+}
+.vm-shell .room-influence {
+  width: 40px;
+}
+.vm-shell .room-influence .bar {
+  width: 40px !important;
+}
+@media (max-width: 1600px) {
+  .vm-shell .room-who .faint > span:last-child {
+    display: none;
+  }
+}
+.vm-shell .room-armband {
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.vm-shell .room-armband .icon-btn {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  font-size: 10px;
+}
+.vm-shell .room-list {
+  overflow-y: auto;
+}
+
+/* ---- Card titles: one size everywhere (the display face, a step under the screen's line) ---- */
+:where(.vm-shell) .card-title,
+:where(.vm-shell) :where(.card-head) :is(h2, h3) {
+  font: 600 18px/1.15 var(--font-display);
+  letter-spacing: 0.01em;
+}
+html.short-window :where(.vm-shell) .card-title {
+  font-size: 16px;
+}
+
+/* ---- Club overview: every card keeps its insides ---- */
+.vm-shell .ov-card {
+  overflow: hidden !important;
+}
+.vm-shell .ov-card > .card-body {
+  overflow: hidden !important;
+}
+html.short-window .vm-shell .club-hero-ov {
+  padding-block: 10px !important;
+  min-height: 0 !important;
+}
+html.short-window .vm-shell .club-hero-ov .crest,
+html.short-window .vm-shell .club-hero-ov svg:first-child {
+  max-height: 60px;
+}
+html.short-window .vm-shell .ov-card .kv {
+  padding: 3px 0;
+}
+html.short-window .vm-shell .ov-person {
+  padding: 3px 0;
+}
+.vm-shell .ov-fixture {
+  grid-template-columns: 34px 16px minmax(0, 1fr) minmax(0, max-content) 24px;
+}
+.vm-shell .ov-fixture-tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Job Centre: the table within its card ---- */
+.vm-shell .club-grid .data-table td.dim {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 1600px) {
+  .vm-shell .club-grid .data-table :is(th, td):nth-child(5) {
+    display: none;
+  }
+}
+
+/* ---- Career sheet: names give way to their numbers ---- */
+.vm-shell .cp-attr {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+.vm-shell .cp-attr > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Competitions: three across, never stacked past the bottom bar ---- */
+.vm-shell .competition-workspace .comps-grid,
+.vm-shell .comps .comps-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  overflow: hidden;
+}
+html.short-window .vm-shell .comps .comp-card .comp-mini-row:nth-child(n + 4) {
+  display: none;
+}
+
+/* ---- Home, short window: the one-to-watch keeps the face, the name and the stars ---- */
+html.short-window .portal-people .hm-attrs {
+  display: none;
+}
+
+/* ---- Academy cards: their own height, the notes a single line ---- */
+.athlete-academy .athlete-prospect-notes > div:nth-child(n + 2) {
+  display: none;
+}
+
+/* ---- League table: every club in view, the legend under it ---- */
+.vm-shell .league-table td {
+  height: max(22px, min(38px, calc((var(--app-h, 100vh) - 420px) / var(--rows, 12))));
+  padding-block: 0;
+}
+.vm-shell .league-table th {
+  padding-block: 6px;
+}
+.content-fill .legend {
+  flex: none;
+  margin: 0;
+}
+.athlete-academy .athlete-prospect > .athlete-prospect-notes {
+  flex: none !important;
+  overflow: visible;
+}
+html.short-window .vm-shell .ov-card .kv:has(.ov-rivals),
+html.short-window .vm-shell .ov-card .ov-person:nth-of-type(n + 2) {
+  display: none;
+}
+html.short-window .portal-people .hm-watch-stars:last-child {
+  display: none;
+}
+.calendar-workspace .cal-side .cal-up:nth-child(n + 4) {
+  display: none;
+}
+/* The play diagram in a short window: the court and its words side by side, small; the key goes. */
+html.short-window .tactical-rotation-workspace .play-main {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+html.short-window .tactical-rotation-workspace .play-main svg {
+  max-height: 20vh;
+  width: 100%;
+}
+html.short-window .tactical-rotation-workspace .play-about p {
+  font-size: 11.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+html.short-window .tactical-rotation-workspace .play-key,
+html.short-window .tactical-rotation-workspace .play-note {
+  display: none;
+}
+html.short-window .tactical-rotation-workspace .play-picks .play-diagram {
+  max-height: 46px;
+}
+/* Career: below ~950px tall the side column keeps the current job only (offers and applications have their own Job Centre tab). */
+@media (max-height: 940px) {
+  .bureau-profile .cp-side-stack > :not(:first-child) {
+    display: none;
+  }
+  .bureau-profile .cp-side-stack > :first-child {
+    flex: 1 1 0;
+  }
 }

@@ -1288,7 +1288,7 @@ export function YouthScreen(): JSX.Element {
   const gridRef = useRef<HTMLDivElement>(null);
   const prospects = youth.filter((p) => (posFilter < 0 || store.position[p] === posFilter) &&
     store.fullName(p).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-  const grid = useFitGrid(gridRef, prospects.length, { minWidth: 250, height: 212 });
+  const grid = useFitGrid(gridRef, prospects.length, { minWidth: 250, height: 200 });
   const lent = g.academyLoans();
   const bestPotential = youth.length > 0 ? store.potentialAbility[youth[0]] : 0;
 
