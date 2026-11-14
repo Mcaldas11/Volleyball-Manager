@@ -2655,3 +2655,21 @@ html.short-window .recruitment-workspace .recruitment-filters .filter-bar {
 html.short-window .recruitment-workspace .recruitment-filters .filter-field > label {
   display: none;
 }
+
+/* ---- International: each tab's card fits under the head, and scrolls inside its own border ---- */
+.vm-shell .intl-view > .intl-grid {
+  overflow: hidden !important;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: start;
+}
+.vm-shell .intl-view > .intl-grid > * {
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+}
+.vm-shell .intl-view > .intl-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
