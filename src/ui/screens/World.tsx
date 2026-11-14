@@ -4,8 +4,7 @@ import type { Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { averageRating, seasonTotals } from '../../engine/world/records.ts';
 import {
-  abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, RatingBadge, Segmented, StarMeter,
-} from '../components.tsx';
+  abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, RatingBadge, Segmented, StarMeter, Paged } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -122,7 +121,7 @@ export function StatsScreen(): JSX.Element {
         {rows.length === 0
           ? <Empty>No statistics yet — play some matches first.</Empty>
           : (
-            <div className="table-wrap">
+            <Paged className="table-wrap" items="tbody > tr">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -177,7 +176,7 @@ export function StatsScreen(): JSX.Element {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Paged>
           )}
       </Card>
     </>
@@ -215,7 +214,7 @@ export function RankingsScreen(): JSX.Element {
         The world ranking: points won and lost in every international match, more for an upset and on the bigger stages.
       </p>
       <Card title="National Teams" icon="world" flush>
-        <div className="table-wrap">
+        <Paged className="table-wrap" items="tbody > tr">
           <table className="data-table">
             <thead>
               <tr>
@@ -231,7 +230,7 @@ export function RankingsScreen(): JSX.Element {
                   (a, b) => store.currentAbility[b] - store.currentAbility[a],
                 )[0];
                 const titles = (n: number | undefined, gold = false): JSX.Element => (n ?? 0) > 0
-                  ? <span className={gold ? 'gold-text' : 'strong'}><Icon name="trophy" size={13} /> {n}</span>
+                  ? <span className={`trophy-count ${gold ? 'gold-text' : 'strong'}`}><Icon name="trophy" size={13} /> {n}</span>
                   : <span className="faint">0</span>;
                 return (
                   <tr key={r.team.nation} className={r.team.nation === userNation ? 'me' : ''}>
@@ -257,7 +256,7 @@ export function RankingsScreen(): JSX.Element {
               })}
             </tbody>
           </table>
-        </div>
+        </Paged>
       </Card>
     </>
   );
@@ -290,7 +289,7 @@ export function HallOfFameScreen(): JSX.Element {
         )
         : (
           <Card title="Inductees" icon="trophy" flush>
-            <div className="table-wrap">
+            <Paged className="table-wrap" items="tbody > tr">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -317,7 +316,7 @@ export function HallOfFameScreen(): JSX.Element {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Paged>
           </Card>
         )}
     </>

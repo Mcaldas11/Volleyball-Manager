@@ -17,7 +17,7 @@ import {
 } from '../../engine/world/internationals.ts';
 import { competitionStats } from '../../engine/world/competitionStats.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
-import { ClubLink, Empty, Flag, PlayerLink, Segmented, SortTh, sortBy, useListPages, useSort } from '../components.tsx';
+import { ClubLink, Empty, Flag, Paged, PlayerLink, Segmented, SortTh, sortBy, useListPages, useSort } from '../components.tsx';
 import { NationCoachLine } from '../nationCoach.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -127,7 +127,7 @@ export function InternationalsScreen(): JSX.Element {
       <aside className="intl-side">
         <h2 className="intl-title">International</h2>
         <NationCard nation={home} calendar={calendar} onPick={setPicked} />
-        <div className="intl-list">
+        <Paged className="intl-list" items=":scope > *">
           {nowOn.length > 0 && <span className="intl-group live"><i /> Live now</span>}
           {nowOn.map(pick)}
           {coming.length > 0 && <span className="intl-group">Coming up</span>}
@@ -135,9 +135,9 @@ export function InternationalsScreen(): JSX.Element {
           {done.length > 0 && <span className="intl-group">Finished</span>}
           {done.map(pick)}
           {tournaments.length === 0 && <p className="intl-none">No tournaments drawn yet.</p>}
-        </div>
+        </Paged>
         <h3 className="intl-h">Honours</h3>
-        <div className="intl-honours">
+        <Paged className="intl-honours" items=":scope > *">
           {[...(I?.history ?? [])].reverse().map((h, i) => (
             <button key={`${h.name}-${i}`} className="intl-honour" title="Open this competition"
               onClick={() => setOpened({ id: tournaments.find((x) => x.name === h.name)?.id ?? null, name: h.name, kind: h.kind, confederation: h.confederation })}>
@@ -146,7 +146,7 @@ export function InternationalsScreen(): JSX.Element {
             </button>
           ))}
           {(I?.history.length ?? 0) === 0 && <p className="intl-none">No tournament finished yet.</p>}
-        </div>
+        </Paged>
       </aside>
       <section className="intl-main">
         <RoadAhead events={calendar} picked={t?.id ?? null} onPick={setPicked} />
@@ -415,24 +415,42 @@ function SquadCard({ t, home }: { t: Tournament; home: number }): JSX.Element {
 function TournamentView({ t, onOpen }: { t: Tournament; onOpen: () => void }): JSX.Element {
   const g = useGame();
   const homeNation = followedNation(g);
+  // One part of the tournament at a time, as tabs: the page never runs past the window.
+  const tabs: Array<[string, string]> = [
+    ['overview', 'Overview'], ['pools', 'Pools'],
+    ...(t.kind !== 'qualifier' ? [['knockout', 'Knockout'] as [string, string]] : []),
+    ['results', 'Results'], ['squad', 'Squad'],
+  ];
+  const [tab, setTab] = useState('overview');
   return (
     <div className="intl-view">
       <TournamentHead t={t} action={<button className="sm primary" onClick={onOpen}><Icon name="expand" size={13} /> Open competition</button>} />
+      <div className="intl-tabs" role="tablist">
+        {tabs.map(([k, label]) => (
+          <button key={k} role="tab" className={`hdr-tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{label}</button>
+        ))}
+      </div>
       <div className="intl-grid">
-        <Qualification t={t} home={homeNation} />
-        <OursCard t={t} />
-        <PoolsCard t={t} home={homeNation} />
-        {t.kind !== 'qualifier' && (
+        {tab === 'overview' && (
+          <>
+            <Qualification t={t} home={homeNation} />
+            <OursCard t={t} />
+          </>
+        )}
+        {tab === 'pools' && <PoolsCard t={t} home={homeNation} />}
+        {tab === 'knockout' && (
           <section className="intl-card intl-bracket-card">
             <h3 className="intl-h">Knockout</h3>
             <Bracket t={t} />
           </section>
         )}
-        <section className="intl-card intl-results">
-          <h3 className="intl-h">Results</h3>
-          <Results t={t} />
-        </section>
-        <SquadCard t={t} home={homeNation} />
+        {tab === 'results' && (
+          <section className="intl-card intl-results">
+            <h3 className="intl-h">Results</h3>
+            <Results t={t} />
+          </section>
+        )}
+        {tab === 'squad' && <SquadCard t={t} home={homeNation} />}
       </div>
     </div>
   );
@@ -532,6 +550,7 @@ function NationsTable({ t, home }: { t: Tournament; home: number }): JSX.Element
   rows.sort((a, b) => (ranked && a.place >= 0 && b.place >= 0 ? a.place - b.place : 0)
     || b.won - a.won || (b.setsFor - b.setsAgainst) - (a.setsFor - a.setsAgainst));
   return (
+    <Paged className="intl-standings" items="tbody > tr">
     <table className="data-table">
       <thead>
         <tr><th className="num">{ranked ? 'Place' : '#'}</th><th>Nation</th><th className="num">P</th><th className="num">W</th><th className="num">L</th><th className="num">Sets</th></tr>
@@ -549,6 +568,7 @@ function NationsTable({ t, home }: { t: Tournament; home: number }): JSX.Element
         ))}
       </tbody>
     </table>
+    </Paged>
   );
 }
 

@@ -7,7 +7,7 @@ import { stageLabel } from '../../engine/season/cups.ts';
 import { seasonTotals } from '../../engine/world/records.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import {
-  attrClass, ClubCrest, money, PlayerFace, StarMeter,
+  attrClass, ClubCrest, money, Paged, PlayerFace, StarMeter,
 } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { formatDate, useGame, type ScreenId } from '../state.ts';
@@ -127,7 +127,7 @@ function SeasonStories(): JSX.Element {
             <div className="portal-story-briefs">
               {items.slice(1).map((n) => (
                 <button key={n.id} onClick={() => open(n.id)}>
-                  <NewsVisual item={n} size={48} />
+                  <NewsVisual item={n} size={36} />
                   <span className="portal-brief-copy"><small>{g.dateLabelForDay(n.day)}</small><b>{n.headline}</b></span>
                   <Icon name="chevronRight" size={14} />
                 </button>
@@ -210,7 +210,6 @@ function NowManaging(): JSX.Element {
           </span>
           <button className="hm-link" onClick={() => g.go('calendar')}>Calendar <Icon name="arrowRight" size={14} /></button>
         </div>
-        <span className="hm-chip">Transfer budget <b>{money(club.finances.transferBudget)}</b></span>
         {!today && (
           <button className="primary portal-prepare" onClick={() => g.go('lineup')}>Prepare match <Icon name="arrowRight" size={16} /></button>
         )}
@@ -379,7 +378,7 @@ function ForToday(): JSX.Element {
     <section className="hm-card hm-today">
       <header className="hm-card-head"><h3 className="gold">For today</h3><span className="faint">{items.length === 0 ? 'nothing waiting' : `${items.length} thing${items.length === 1 ? '' : 's'}`}</span></header>
       {items.length === 0 ? <p className="hm-empty">Nothing needs you today. A good day to look at the tactics — or the academy.</p> : (
-        <ul className="hm-today-list">
+        <Paged className="hm-today-list" items="li">
           {items.map((i) => (
             <li key={i.key}>
               <button className={`hm-today-item u${i.urgency}`} onClick={() => g.go(i.go)}>
@@ -389,7 +388,7 @@ function ForToday(): JSX.Element {
               </button>
             </li>
           ))}
-        </ul>
+        </Paged>
       )}
     </section>
   );

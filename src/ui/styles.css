@@ -56,10 +56,10 @@
 
   /* One colour per role, shared by badges, cards and court markers. */
   --pos-s: #f0c35a;
-  --pos-opp: #eac66e;
+  --pos-opp: #ff6b6b;
   --pos-oh: #4f9dff;
   --pos-mb: #b58cff;
-  --pos-l: #77bedb;
+  --pos-l: #3fbd5f;
 
   /* The two sides in a live match. */
   --home: #4f9dff;
@@ -1139,9 +1139,12 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .rating-form .faint { font-size: 11px; margin-right: 2px; }
 
 /* Star meter: five dim stars with the filled share clipped over them. */
-.star-meter { position: relative; display: inline-block; line-height: 1; letter-spacing: 1px; white-space: nowrap; vertical-align: middle; }
-.star-meter-empty { color: rgba(255, 255, 255, 0.13); }
-.star-meter-fill { position: absolute; left: 0; top: 0; overflow: hidden; white-space: nowrap; color: var(--gold); }
+.star-meter {
+  display: inline-block; line-height: 1; letter-spacing: 1px; white-space: nowrap; vertical-align: middle;
+  --star-on: var(--gold); --star-off: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(90deg, var(--star-on) var(--star-fill, 0%), var(--star-off) var(--star-fill, 0%));
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+}
 .stars { color: var(--gold); letter-spacing: -1px; white-space: nowrap; font-size: 12px; }
 
 /* Form guide — last results as coloured squares. */
@@ -1374,8 +1377,7 @@ td.col-sorted { background: rgba(215, 167, 63, 0.05) !important; font-weight: 70
 .paper-field span { font-size: 11.5px; color: var(--paper-dim); }
 .paper-field b { font-size: 15px; font-weight: 700; color: var(--paper-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .paper-muted { font-size: 13px; font-weight: 500; color: var(--paper-dim); }
-.paper .star-meter-empty { color: rgba(40, 30, 10, 0.18); }
-.paper .star-meter-fill { color: #cf9727; }
+.paper .star-meter { --star-on: #cf9727; --star-off: rgba(40, 30, 10, 0.18); }
 .paper-text { margin: 0 0 20px; font-size: 14.5px; line-height: 1.62; color: var(--paper-text); white-space: pre-line; }
 .paper-report {
   margin-bottom: 14px;

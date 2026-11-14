@@ -9,7 +9,7 @@
 import { useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { breakPointPct, sideOutPct } from '../../engine/match/stats.ts';
 import { analysisFor, GRID, seasonFromReports, type AttackMap, type MatchLine } from '../../engine/world/analysis.ts';
-import { Card, ClubLink, Empty, PlayerLink, StatTile } from '../components.tsx';
+import { Card, ClubLink, Empty, PlayerLink, StatTile, Paged } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { useGame } from '../state.ts';
 import { seasonLabel } from './Squad.tsx';
@@ -76,7 +76,7 @@ function MatchChart({ matches }: { matches: MatchLine[] }): JSX.Element {
   // Drawn at the size it is shown, so the text is never stretched.
   const W = Math.max(240, box.w);
   const H = Math.max(110, box.h);
-  const pad = { l: 34, r: 74, t: 10, b: 22 };
+  const pad = { l: 34, r: 96, t: 10, b: 22 };
   const x = (i: number): number => pad.l + (matches.length <= 1 ? 0 : (i / (matches.length - 1)) * (W - pad.l - pad.r));
   const y = (v: number): number => pad.t + (1 - Math.min(1, v) / 0.8) * (H - pad.t - pad.b);
   const path = (get: (m: MatchLine) => number): string => matches.map((m, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(get(m)).toFixed(1)}`).join(' ');
@@ -174,7 +174,7 @@ export function AnalysisScreen(): JSX.Element {
           {a !== undefined ? <AttackGrid map={a.theirs} what="theirs" /> : <Empty>No matches yet this season.</Empty>}
         </Card>
         <Card title="Rotation by rotation" icon="tactics" flush>
-          <div className="table-wrap an-rot">
+          <Paged className="table-wrap an-rot" items="tbody > tr">
             <table className="data-table">
               <thead><tr><th>Rot.</th><th className="num">Received</th><th className="num">Side-out</th><th className="num">Served</th><th className="num">Break</th></tr></thead>
               <tbody>
@@ -193,13 +193,13 @@ export function AnalysisScreen(): JSX.Element {
                 })}
               </tbody>
             </table>
-          </div>
+          </Paged>
         </Card>
       </div>
       <div className="an-row an-row-2">
         <Card title="Our attackers, lane by lane" icon="squad" flush>
           {lanes.length === 0 ? <Empty>Five attacks from a lane before it shows here.</Empty> : (
-            <div className="table-wrap">
+            <Paged className="table-wrap" items="tbody > tr">
               <table className="data-table">
                 <thead><tr><th>Player</th><th>Lane</th><th className="num">Att</th><th className="num">Kills</th><th className="num">Err</th><th className="num">Kill %</th><th className="num">Eff</th></tr></thead>
                 <tbody>
@@ -219,7 +219,7 @@ export function AnalysisScreen(): JSX.Element {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Paged>
           )}
         </Card>
         <Card title="Match by match" icon="schedule">

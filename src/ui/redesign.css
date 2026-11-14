@@ -70,31 +70,12 @@
 .hdr-top .hdr-date-sub {
   font-size: 10px;
 }
-.hdr-top .continue {
-  margin: 0;
-  align-self: center;
-}
-.hdr-top .continue-main,
-.hdr-top .continue-more {
-  min-height: 39px;
-  background: var(--gold);
-  color: #111c2a;
-  border-color: var(--gold);
-}
-.hdr-top .continue-main {
-  padding: 9px 13px;
-}
-.hdr-top .continue-label {
-  font: 700 17px var(--font-display);
-}
-.hdr-top .continue-more {
-  padding: 9px 7px;
-  border-left-color: #0002;
-}
-.hdr-top .continue-main:hover,
-.hdr-top .continue-more:hover {
-  background: var(--gold-bright);
-}
+
+
+
+
+
+
 .hdr-tabs-row {
   display: flex;
   align-items: center;
@@ -10252,27 +10233,7 @@
   --vm-gold-hover: rgba(245, 197, 66, 0.105);
   --vm-gold-selected: rgba(245, 197, 66, 0.19);
 }
-.vm-shell .hdr-tabs-row .hdr-tab:hover:not(:disabled),
-.vm-shell .hdr-tabs .hdr-tab:hover:not(:disabled),
-.vm-shell .hdr-tab.active:hover:not(:disabled) {
-  background: linear-gradient(0deg, var(--vm-gold-hover), transparent);
-  color: var(--gold-bright);
-  border-color: transparent;
-}
-.vm-shell .hdr-tab.active,
-.vm-shell .hdr-tab.active:hover:not(:disabled) {
-  color: var(--gold);
-}
-.vm-shell .segmented button:hover:not(:disabled) {
-  background: var(--vm-gold-hover);
-  color: var(--gold-bright);
-}
-.vm-shell .segmented button.active,
-.vm-shell .segmented button.active:hover:not(:disabled) {
-  background: var(--vm-gold-selected);
-  color: var(--gold);
-  box-shadow: inset 0 -2px 0 var(--gold);
-}
+/* Buttons, tabs and toggles keep the game's own hover and active looks (styles.css). */
 .vm-shell .hdr-top {
   min-width: 0;
   gap: clamp(7px, 1.15vw, 18px);
@@ -10646,13 +10607,8 @@ body,
 .vm-shell .hdr-top .hdr-date {
   padding-left: 8px;
 }
-.vm-shell .hdr-top .continue-main {
-  padding-inline: 10px;
-  min-width: 0;
-}
-.vm-shell .hdr-top .continue-label {
-  font-size: 15px;
-}
+
+
 .vm-shell .content:has(.tactical-rotations) {
   display: flex;
   flex-direction: column;

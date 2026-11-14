@@ -6,11 +6,11 @@
  * of it.
  */
 
-import { useState, type CSSProperties, type JSX } from 'react';
+import { useEffect, useState, type CSSProperties, type JSX } from 'react';
 import { flagImageUrl, NATIONS } from '../../engine/world/nations.ts';
 import type { NewsItem, NewsKind } from '../../engine/world/news.ts';
 import { fanComments, fanName, type FanComment } from '../../engine/world/fans.ts';
-import { ClubCrest, Empty, PlayerFace, useListPages } from '../components.tsx';
+import { ClubCrest, Empty, PlayerFace, Paged } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -94,11 +94,9 @@ export function NewsScreen(): JSX.Element {
   const when = useNewsDate();
   const [filter, setFilter] = useState<Filter>('all');
   const [nation, setNation] = useState(ALL_COUNTRIES);
-  const [openId, setOpenId] = useState<number | null>(() => {
-    const id = storyToOpen;
-    storyToOpen = null;
-    return id;
-  });
+  // The story Home asked for: read here (twice over in development's double render), forgotten once shown.
+  const [openId, setOpenId] = useState<number | null>(() => storyToOpen);
+  useEffect(() => { storyToOpen = null; }, []);
 
   const kinds = FILTERS.find(([f]) => f === filter)?.[2] ?? [];
   const items = [...world.news].reverse().filter((n) =>
@@ -109,7 +107,7 @@ export function NewsScreen(): JSX.Element {
   const nations = [...counts].sort((a, b) => b[1] - a[1]).map(([id]) => id);
   const open = items.find((n) => n.id === openId) ?? items[0];
   // Drawn a page at a time — always as far down as the open story.
-  const { shown, more } = useListPages(items, `${filter}/${nation}`, open !== undefined ? items.indexOf(open) : -1);
+  const shown = items;
 
   return (
     <div className="news">
@@ -135,7 +133,7 @@ export function NewsScreen(): JSX.Element {
             ]}
           />
         </header>
-        <div className="news-items">
+        <Paged className="news-items" items=".news-item" resetKey={`${filter}/${nation}`} follow=".news-item.on">
           {items.length === 0 && <p className="news-none">No stories here yet — the papers fill up as the season goes on.</p>}
           {shown.map((n) => (
             <button
@@ -152,13 +150,12 @@ export function NewsScreen(): JSX.Element {
               </span>
             </button>
           ))}
-          {more}
-        </div>
+        </Paged>
       </section>
 
-      <article className="news-article">
+      <Paged className="news-article" items=".news-fan" resetKey={String(open?.id ?? -1)}>
         {open !== undefined ? <Story item={open} /> : <Empty>Nothing in the news yet.</Empty>}
-      </article>
+      </Paged>
     </div>
   );
 }

@@ -18,7 +18,7 @@ import {
   buildDays, FACILITY_EFFECTS, FACILITY_KINDS, FACILITY_NAMES, facilityLevel, upgradeCost,
 } from '../../engine/world/facilities.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, PlayerFace, Pos, StarMeter, StatTile } from '../components.tsx';
+import { Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, PlayerFace, Pos, StarMeter, StatTile, Paged } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -237,7 +237,7 @@ export function AffiliatesScreen(): JSX.Element {
         </div>
       </Card>
       <Card title="Find an affiliate" icon="search" flush className="biz-aff-card">
-        <div className="table-wrap">
+        <Paged className="table-wrap" items="tbody > tr">
           <table className="data-table">
             <thead><tr><th>Club</th><th>Nation</th><th className="num">Tier</th><th>Standing</th><th /></tr></thead>
             <tbody>
@@ -259,7 +259,7 @@ export function AffiliatesScreen(): JSX.Element {
               })}
             </tbody>
           </table>
-        </div>
+        </Paged>
       </Card>
     </div>
   );
@@ -347,7 +347,7 @@ export function OwnerScreen(): JSX.Element {
         <StatTile label="Balance" value={money(club.finances.balance)} tone={club.finances.balance < 0 ? 'bad' : undefined} sub="in the bank" />
       </div>
       <div className="own-grid">
-        <div className="own-col">
+        <Paged className="own-col" items=":scope > *">
         <Card title="The man behind the club" icon="board">
           <KV k="Means"><Pips n={o.wealth} /></KV>
           <KV k="Ambition"><Pips n={o.ambition} /></KV>
@@ -372,8 +372,8 @@ export function OwnerScreen(): JSX.Element {
           {club.ownerAsk !== undefined && <p className="biz-status">Asked for {money(club.ownerAsk.amount)} — he answers by {g.dateLabelForDay(club.ownerAsk.until)}.</p>}
           {block !== null && club.ownerAsk === undefined && <p className="faint biz-why">{block}</p>}
         </Card>
-        </div>
-        <div className="own-col">
+        </Paged>
+        <Paged className="own-col" items=":scope > *">
         <Card title="His wish for the season" icon="trophy">
           {d === undefined ? <Empty>He will tell you soon.</Empty> : (
             <>
@@ -385,10 +385,10 @@ export function OwnerScreen(): JSX.Element {
           )}
         </Card>
         <BoardMeetingCard />
-        </div>
-        <div className="own-col">
+        </Paged>
+        <Paged className="own-col" items=":scope > *">
         <PhilosophyCard />
-        </div>
+        </Paged>
       </div>
     </>
   );

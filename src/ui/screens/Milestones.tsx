@@ -7,7 +7,7 @@ import type { JSX } from 'react';
 import { achievementList, type AchievementGroup } from '../../engine/world/achievements.ts';
 import { COURSES, courseBlock, LICENCE_NAMES, licenceOf } from '../../engine/world/courses.ts';
 import { ensureManagerAttributes } from '../../engine/world/career.ts';
-import { Bar, Card, money, StatTile } from '../components.tsx';
+import { Bar, Card, money, StatTile, Paged } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -30,7 +30,7 @@ export function AchievementsScreen(): JSX.Element {
       <div className="ach-grid">
         {GROUPS.map((grp) => (
           <Card key={grp} title={grp} icon={grp === 'Silverware' ? 'trophy' : grp === 'Results' ? 'stats' : 'career'} className="ach-card">
-            <div className="ach-list">
+            <Paged className="ach-list" items=".ach">
               {list.filter((a) => a.group === grp).map((a) => (
                 <div key={a.id} className={`ach${a.day !== null ? ' got' : ''}`}>
                   <span className="ach-badge">{a.day !== null ? <Icon name="trophy" size={16} /> : <Icon name="lock" size={14} />}</span>
@@ -40,7 +40,7 @@ export function AchievementsScreen(): JSX.Element {
                   </span>
                 </div>
               ))}
-            </div>
+            </Paged>
           </Card>
         ))}
       </div>
@@ -67,7 +67,7 @@ export function CoursesScreen(): JSX.Element {
         <StatTile label="Clinics this season" value={(career.clinics ?? []).filter((c) => c.season === world.season).length}
           sub="each once a season" />
       </div>
-      <div className="crs-grid">
+      <Paged className="crs-grid" items=":scope > *">
         {COURSES.map((c) => {
           const block = courseBlock(world, c);
           const mine = career.course?.id === c.id;
@@ -92,7 +92,7 @@ export function CoursesScreen(): JSX.Element {
             </Card>
           );
         })}
-      </div>
+      </Paged>
     </>
   );
 }

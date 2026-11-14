@@ -6,7 +6,7 @@
 import type { JSX } from 'react';
 import type { Position } from '../../engine/model/positions.ts';
 import { NEUTRAL_COHESION, ROOM_TIER_NAMES, type RoomMember, type RoomTier } from '../../engine/world/dressingRoom.ts';
-import { Bar, Card, Empty, Morale, PlayerFace, Pos, StatTile } from '../components.tsx';
+import { Bar, Card, Empty, Morale, PlayerFace, Pos, StatTile, Paged } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -43,7 +43,7 @@ export function DressingRoomScreen(): JSX.Element {
       <div className="room-grid">
         {(['leader', 'influential', 'other'] as const).map((t) => (
           <Card key={t} title={ROOM_TIER_NAMES[t]} icon={t === 'leader' ? 'star' : t === 'influential' ? 'press' : 'squad'} flush className="room-card">
-            <div className="room-list">
+            <Paged className="room-list" items=".room-row">
               {tier(t).map((m) => (
                 <div key={m.p} className="room-row">
                   <PlayerFace playerId={store.id[m.p]} name={store.fullName(m.p)} size={30} />
@@ -69,7 +69,7 @@ export function DressingRoomScreen(): JSX.Element {
                     : <span />}
                 </div>
               ))}
-            </div>
+            </Paged>
           </Card>
         ))}
       </div>

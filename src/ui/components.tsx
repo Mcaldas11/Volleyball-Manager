@@ -141,10 +141,10 @@ export function starRating(ca: number): string {
 export function StarMeter({ value, max = 2000, size = 14 }: { value: number; max?: number; size?: number }): JSX.Element {
   const halves = Math.max(1, Math.min(10, Math.round((value / max) * 10)));
   const pct = (halves / 10) * 100;
+  // One row of stars, painted gold up to the rating: nothing laid over anything, so nothing can slip out of line.
   return (
-    <span className="star-meter" style={{ fontSize: size }} title={`${(halves / 2).toFixed(1)} / 5`}>
-      <span className="star-meter-empty">★★★★★</span>
-      <span className="star-meter-fill" style={{ width: `${pct}%` }}>★★★★★</span>
+    <span className="star-meter" style={{ fontSize: size, '--star-fill': `${pct}%` } as CSSProperties} title={`${(halves / 2).toFixed(1)} / 5`}>
+      ★★★★★
     </span>
   );
 }
@@ -769,7 +769,8 @@ export function useFitList(
     measure();
     return () => ro.disconnect();
   }, [wrapRef, head]);
-  const perPage = space <= 0 ? count : Math.max(1, Math.min(count, Math.floor(space / min)));
+  // Every row drawn: when they do not all fit at the smallest height, the list scrolls in its box.
+  const perPage = count;
   const pages = Math.max(1, Math.ceil(count / Math.max(1, perPage)));
   const shownPage = Math.min(page, pages - 1);
   const rowH = space <= 0 ? max : Math.max(min, Math.min(max, Math.floor(space / Math.max(1, Math.min(perPage, count))) - 1));
@@ -780,19 +781,14 @@ export function useFitList(
     // Tight rows drop their second line (styles key on it).
     wrap.dataset.rows = rowH < 36 ? 'tight' : 'roomy';
   }, [wrapRef, rowH]);
+  useWheelPages(wrapRef, shownPage, pages, setPage);
   return { from: shownPage * perPage, to: Math.min(count, (shownPage + 1) * perPage), page: shownPage, pages, setPage };
 }
 
 /** The pages of a fitted list: back, "2 / 3", on. Nothing when it fits on one. */
-export function ListPager({ page, pages, setPage }: { page: number; pages: number; setPage: (p: number) => void }): JSX.Element | null {
-  if (pages <= 1) return null;
-  return (
-    <span className="list-pager">
-      <button className="icon-btn" disabled={page <= 0} onClick={() => setPage(page - 1)} title="Previous page"><Icon name="back" size={13} /></button>
-      <span>{page + 1} / {pages}</span>
-      <button className="icon-btn" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} title="Next page"><Icon name="forward" size={13} /></button>
-    </span>
-  );
+export function ListPager(_: { page: number; pages: number; setPage: (p: number) => void }): JSX.Element | null {
+  // No arrows: a fitted list turns its pages under the mouse wheel (useWheelPages).
+  return null;
 }
 
 /** Whether the window is a short one (fitWindow.ts marks it on <html>), kept up to date as it is resized. */
@@ -890,8 +886,53 @@ export function useFitGrid(
   }, [ref]);
   const cols = Math.max(1, Math.floor((box[0] + gap) / (minWidth + gap)));
   const rows = Math.max(1, Math.floor((box[1] + gap) / (height + gap)));
-  const per = box[1] <= 0 ? count : cols * rows;
+  void rows;
+  const per = count;
   const pages = Math.max(1, Math.ceil(count / Math.max(1, per)));
   const p = Math.min(page, pages - 1);
+  useWheelPages(ref, p, pages, setPage);
   return { from: p * per, to: Math.min(count, (p + 1) * per), page: p, pages, setPage, cols };
+}
+
+/**
+ * A long list in its own box: it scrolls inside the box (the bar hidden, the
+ * wheel moves it), the page around it never does. `resetKey` sends it back to
+ * the top (a new filter, another folder); `follow` keeps a chosen item in view.
+ */
+export function Paged({ className, resetKey, follow, children, style }: {
+  className?: string; items?: string; resetKey?: string;
+  /** An item to keep in view: when a new one matches (the message opened), it is scrolled to. */
+  follow?: string; children?: ReactNode; style?: CSSProperties;
+}): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  const followed = useRef<Element | null>(null);
+  useEffect(() => { if (ref.current !== null) ref.current.scrollTop = 0; }, [resetKey]);
+  useEffect(() => {
+    if (follow === undefined) return;
+    const target = ref.current?.querySelector(follow) ?? null;
+    if (target instanceof HTMLElement && target !== followed.current) {
+      followed.current = target;
+      target.scrollIntoView({ block: 'nearest' });
+    }
+  });
+  return (
+    <div ref={ref} className={`paged${className !== undefined ? ` ${className}` : ''}`} style={style}>
+      {children}
+    </div>
+  );
+}
+
+/** The wheel over a fitted list turns its pages — no arrows, no scroll bar. */
+export function useWheelPages(ref: RefObject<HTMLElement | null>, page: number, pages: number, setPage: (p: number) => void): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null || pages <= 1) return;
+    const onWheel = (e: WheelEvent): void => {
+      if (Math.abs(e.deltaY) < 4) return;
+      const next = Math.max(0, Math.min(pages - 1, page + (e.deltaY > 0 ? 1 : -1)));
+      if (next !== page) { e.preventDefault(); setPage(next); }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [ref, page, pages, setPage]);
 }

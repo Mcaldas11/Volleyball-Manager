@@ -11,7 +11,7 @@ import { familiarityLabel, MATCHDAY_SQUAD, Position, POSITION_SHORT } from '../e
 import type { PlayerStore } from '../engine/model/players.ts';
 import { registeredLiberos } from '../engine/match/engine.ts';
 import { LINEUP_SLOT_POSITIONS } from '../engine/season/seasonEngine.ts';
-import { Bar, initials, PlayerFace, Pos, POSITION_ACCENT, starRating } from './components.tsx';
+import { Bar, initials, PlayerFace, Pos, POSITION_ACCENT, starRating, Paged } from './components.tsx';
 import { playerFaceUrl } from './faces.ts';
 import { Dropdown } from './dropdown.tsx';
 
@@ -433,7 +433,7 @@ export function TeamSheet({
             ? `${MATCHDAY_SQUAD} can be named, two of them liberos. Drag a player onto a court slot, or use ⇅ on a card.`
             : 'Drag a player onto a court slot to bring them in, or use ⇅ on a card.'}
         </p>
-        <div className="ts-bench-list">
+        <Paged className="ts-bench-list" items=".bench-token, .ts-out-label">
           {bench.map((p) => (
             <BenchCard
               key={p}
@@ -468,7 +468,7 @@ export function TeamSheet({
               ))}
             </>
           )}
-        </div>
+        </Paged>
       </section>
     </div>
   );

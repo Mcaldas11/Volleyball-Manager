@@ -15,7 +15,7 @@ import { clubBooks } from '../../engine/season/books.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import {
   abilityClass, Bar, Card, ChoiceField, ClubLink, Empty, Flag, KV, money, moneyShort, MoneyInput,
-  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useShortWindow, useSort, WorkspaceHeading, useFitList, ListPager, Panel, Metric, StatusPill, EmptyState, Progress,
+  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useSort, WorkspaceHeading, useFitList, ListPager, Panel, Metric, StatusPill, EmptyState, Progress,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
@@ -103,8 +103,6 @@ export const SHAPE_OPTIONS: Array<[DefensiveShape, string]> = [
 export function TacticsScreen(): JSX.Element {
   const g = useGame();
   const tactics = g.activeTactics();
-  // A short window takes the board's compact form: the zones as buttons, the options under the cards.
-  const short = useShortWindow();
   if (tactics === null) return <Empty>No team to instruct.</Empty>;
   return (
     <div className="tactics-page">
@@ -116,7 +114,7 @@ export function TacticsScreen(): JSX.Element {
         <button onClick={() => g.go('preplab')}><Icon name="stats" size={16} /> Compare tactical plans</button>
       </div>
       {g.nationalView() && <p className="nat-only">National team only — your club keeps its own.</p>}
-      <TacticsBoard tactics={tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} compact={short} />
+      <TacticsBoard tactics={tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} />
     </div>
   );
 }

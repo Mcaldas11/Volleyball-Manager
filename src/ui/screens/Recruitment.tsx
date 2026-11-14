@@ -11,7 +11,7 @@ import { HANDLER_NAMES, TASK_HANDLERS, TASK_NAMES, type DelegableTask } from '..
 import { missionLabel, MAX_MISSIONS, type MissionSpec } from '../../engine/world/recruitment.ts';
 import type { DirectorTask } from '../../engine/world/director.ts';
 import type { Confederation } from '../../engine/world/nations.ts';
-import { Card, ClubCrest, Empty, money, MoneyInput, Pos, Segmented, StarMeter, useDismiss } from '../components.tsx';
+import { Card, ClubCrest, Empty, money, MoneyInput, Pos, Segmented, StarMeter, useDismiss, Paged } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -214,7 +214,7 @@ export function DirectorScreen(): JSX.Element {
   if (delegation === null) return <Empty>No club.</Empty>;
   return (
     <div className="rc-director">
-      <div className="rc-col">
+      <Paged className="rc-col" items=":scope > *">
         <Card title="Director of Football" icon="contract">
           {director !== undefined ? (
             <div className="rc-dof">
@@ -241,7 +241,7 @@ export function DirectorScreen(): JSX.Element {
             </div>
           ))}
         </Card>
-      </div>
+      </Paged>
       <Card title={`Deals handed to the director · ${tasks.filter((t) => t.status === 'working').length} in hand`} icon="transfers" flush className="rc-card">
         {tasks.length === 0 ? <Empty>No deals handed over yet. Use "Director" on a player's profile or your shortlist.</Empty> : (
           <div className="table-wrap rc-scroll">

@@ -1,7 +1,7 @@
-import { useMemo, useState, type JSX, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX, type CSSProperties } from 'react';
 import { championOf, pastLeagueTable, pastSeasonsOf } from '../../engine/season/pastSeasons.ts';
 import { predictionFor } from '../../engine/world/predictions.ts';
-import { RivalTag } from '../components.tsx';
+import { RivalTag, Paged } from '../components.tsx';
 import { fixtureRivalry, rivalryName } from '../../engine/world/rivals.ts';
 import { compareTableRows, setRatio } from '../../engine/model/club.ts';
 import { SECOND_BALL, type RallyContact, type RallyLogEntry, type Shot } from '../../engine/match/engine.ts';
@@ -48,6 +48,13 @@ export function FixturesScreen(): JSX.Element {
   }).length;
   const current = season === world.season;
   const nextIdx = current ? fixtures.findIndex((f) => !f.played) : -1;
+  // Opened at the next match, the ones just played above it.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = scrollRef.current?.querySelector('tr.next-fixture');
+    const box = scrollRef.current;
+    if (row instanceof HTMLElement && box !== null) box.scrollTop = Math.max(0, row.offsetTop - box.clientHeight / 2);
+  }, [season]);
 
   return (
     <>
@@ -73,7 +80,7 @@ export function FixturesScreen(): JSX.Element {
               options={seasons.map((s) => ({ value: s, label: s === world.season ? `${seasonLabel(world, s)} · this season` : seasonLabel(world, s) }))}
             />
           )}>
-          <div className="table-wrap">
+          <div className="table-wrap fixtures-scroll" ref={scrollRef}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -261,9 +268,9 @@ function RallyLog({
           onChange={setSetFilter}
         />
       </div>
-      <div className="ticker-scroll">
+      <Paged className="ticker-scroll" items=".ticker-entry">
         <RallyTicker entries={shown} store={store} homeCode={homeCode} awayCode={awayCode} showProb />
-      </div>
+      </Paged>
     </>
   );
 }

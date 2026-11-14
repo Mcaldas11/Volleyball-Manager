@@ -14,7 +14,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import { socialFeed } from '../../engine/world/socialFeed.ts';
 import { POSITION_NAMES, POSITIONS, type Position } from '../../engine/model/positions.ts';
 import type { Club } from '../../engine/model/club.ts';
-import { abilityClass, Card, ClubCrest, Empty, Flag, PlayerFace, Pos, Segmented, StarMeter } from '../components.tsx';
+import { abilityClass, Card, ClubCrest, Empty, Flag, PlayerFace, Pos, Segmented, StarMeter, Paged } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { clubKit } from '../kits.ts';
@@ -75,7 +75,7 @@ export function DataHubScreen(): JSX.Element {
           </Card>
         </div>
         <Card title="The league, measured" icon="stats" flush className="hub-card">
-          <div className="table-wrap hub-table">
+          <Paged className="table-wrap hub-table" items="tbody > tr">
             <table className="data-table">
               <thead>
                 <tr><th>Club</th>{HUB_METRIC_KEYS.map((k) => <th key={k} className="num" title={HUB_METRICS[k].name}>{HUB_METRICS[k].short}</th>)}</tr>
@@ -98,7 +98,7 @@ export function DataHubScreen(): JSX.Element {
                 )}
               </tbody>
             </table>
-          </div>
+          </Paged>
         </Card>
       </div>
     </div>
@@ -190,7 +190,7 @@ export function SocialScreen(): JSX.Element {
     <div className="social">
       <Card title="Timeline" icon="news" flush className="social-feed-card"
         actions={g.club !== null ? <Segmented size="sm" value={filter} onChange={setFilter} options={[['all', 'Everyone'], ['club', 'Your club']]} /> : undefined}>
-        <div className="social-feed">
+        <Paged className="social-feed" items=".social-post">
           {feed.length === 0 && <Empty>Nothing yet — the season is young.</Empty>}
           {feed.map((post) => {
             const club = post.clubId !== undefined ? world.clubs[post.clubId] : undefined;
@@ -221,10 +221,10 @@ export function SocialScreen(): JSX.Element {
               </article>
             );
           })}
-        </div>
+        </Paged>
       </Card>
       <Card title="Trending" icon="star" className="social-side">
-        <ol className="social-trending">
+        <Paged className="social-trending" items="li">
           {trending.map((p) => (
             <li key={p.key}>
               <b>{p.author}</b>
@@ -232,7 +232,7 @@ export function SocialScreen(): JSX.Element {
               <small className="faint">♥ {p.likes.toLocaleString()}</small>
             </li>
           ))}
-        </ol>
+        </Paged>
       </Card>
     </div>
   );
@@ -252,7 +252,7 @@ export function CoachesScreen(): JSX.Element {
   return (
     <div className="coaches">
       <Card title="World ranking — head coaches" icon="career" flush className="coaches-card">
-        <div className="table-wrap coaches-table">
+        <Paged className="table-wrap coaches-table" items="tbody > tr">
           <table className="data-table">
             <thead><tr><th className="num">#</th><th>Coach</th><th>Club</th><th className="num">Reputation</th><th className="num">Titles</th><th className="num">W–L</th></tr></thead>
             <tbody>
@@ -275,7 +275,7 @@ export function CoachesScreen(): JSX.Element {
               })}
             </tbody>
           </table>
-        </div>
+        </Paged>
       </Card>
       <Card title="Coaching legends" icon="trophy" flush className="coaches-card">
         <div className="coaches-pick">
