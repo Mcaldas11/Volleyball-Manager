@@ -32,13 +32,7 @@ function createWindow() {
     if (url.startsWith('http')) void shell.openExternal(url);
     return { action: 'deny' };
   });
-  // F11 (or Ctrl+Cmd+F on a Mac, from the menu) for full screen.
-  win.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && input.key === 'F11') {
-      win.setFullScreen(!win.isFullScreen());
-      event.preventDefault();
-    }
-  });
+  // F11 is the page's own (src/ui/fullscreen.tsx), so its full-screen button always agrees with it.
   void win.loadURL('app://game/index.html');
 }
 

@@ -21,6 +21,7 @@ import {
   abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, Segmented, StarMeter,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
+import { FullscreenButton } from '../fullscreen.tsx';
 import { useGame, type CareerMode } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 
@@ -91,6 +92,7 @@ export function MainMenu(): JSX.Element {
           <small className="mm-version">v{GAME_VERSION}</small>
         </div>
         <nav className="mm-pills">
+          <FullscreenButton className="mm-pill" />
           <button className="mm-pill" onClick={() => setNews(true)}><Icon name="star" size={14} /> What's New?</button>
           <button className="mm-pill on" onClick={() => g.openSettings()}><Icon name="gear" size={14} /> Preferences</button>
           <button className="mm-pill" onClick={() => setEditing(true)}><Icon name="user" size={14} /> Manager Profile</button>

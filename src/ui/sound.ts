@@ -169,7 +169,10 @@ export function playWhistle(): void {
 }
 
 /** The ball off the hand: a soft touch for a pass or a set, a crack for a spike or a serve. */
-export function playHit(hard: boolean): void {
+export function playHit(hard: boolean, pose?: string): void {
+  // The stadium sound (public/ui-audio) plays the touch itself when it is there.
+  if (window.__vmEvents?.emit?.('match:contact', { hard, pose: pose ?? '' }) === true) return;
+  if (window.__vmEvents === undefined && window.__vmMatchAudio?.hit?.(hard, pose) === true) return;
   const a = audio();
   if (a === null) return;
   const take: Recording = hard
@@ -196,7 +199,9 @@ export function playHit(hard: boolean): void {
 }
 
 /** The crowd for a point: a swell of applause, louder for the home side's — a different stretch of it each time. */
-export function playCrowd(loud: number): void {
+export function playCrowd(loud: number, point?: PointCue): void {
+  if (point !== undefined) window.__vmEvents?.emit?.('match:point', point);
+  if (window.__vmMatchAudio?.crowd?.(loud, point) === true) return;
   const a = audio();
   if (a === null) return;
   const level = Math.max(0, Math.min(1, loud));
@@ -228,4 +233,40 @@ export function playHooter(): void {
   tone.connect(soft).connect(envelope(a, 0.04, 0.02, 0.6));
   tone.start();
   tone.stop(a.currentTime + 0.62);
+}
+
+/** A point as the stadium sound hears it: the score before it, who won it, and how. */
+export interface PointCue {
+  scoreBefore: readonly [number, number];
+  winner: 0 | 1;
+  contacts: number;
+  /** 1-based. */
+  set: number;
+  setTarget: number;
+  setFinished: boolean;
+  userIsHome: boolean;
+  closeCall: boolean;
+  lastKind?: string;
+}
+
+/** The match's moments, told to the stadium sound (public/ui-audio) — nothing breaks without it. */
+export function matchEvent(name: 'match:start' | 'match:pause' | 'match:resume' | 'match:set-break' | 'match:review:start' | 'match:review:result' | 'match:review:end',
+  data: Record<string, unknown> = {}): void {
+  try {
+    window.__vmEvents?.emit?.(name, data);
+    if (name === 'match:start') window.__vmMatchAudio?.phase?.('start', data);
+    if (name.startsWith('match:review:')) window.__vmMatchAudio?.review?.(name.slice('match:review:'.length), data);
+  } catch { /* the sound is optional */ }
+}
+
+declare global {
+  interface Window {
+    __vmEvents?: { emit?: (name: string, data: unknown) => boolean | undefined };
+    __vmMatchAudio?: {
+      hit?: (hard: boolean, pose?: string) => boolean;
+      crowd?: (loud: number, point?: PointCue) => boolean;
+      phase?: (phase: string, data?: unknown) => void;
+      review?: (phase: string, data?: unknown) => void;
+    };
+  }
 }

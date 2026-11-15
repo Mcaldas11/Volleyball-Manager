@@ -9,7 +9,7 @@ import type { JSX } from 'react';
 export type IconName =
   | 'pencil' | 'home' | 'squad' | 'tactics' | 'training' | 'youth' | 'schedule' | 'trophy'
   | 'scouting' | 'transfers' | 'staff' | 'finances' | 'world' | 'club'
-  | 'back' | 'forward' | 'search' | 'menu' | 'chevronDown' | 'chevronRight'
+  | 'fullscreen' | 'back' | 'forward' | 'search' | 'menu' | 'chevronDown' | 'chevronRight'
   | 'play' | 'pause' | 'save' | 'exit' | 'close' | 'news' | 'task' | 'offer'
   | 'press' | 'whistle' | 'clock' | 'star' | 'ball' | 'alert' | 'collapse'
   | 'expand' | 'swap' | 'fastForward' | 'calendar' | 'user' | 'stats' | 'check'
@@ -63,6 +63,7 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   star: <path d="m12 3.8 2.5 5.2 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8L12 3.8Z" />,
   ball: <><circle cx="12" cy="12" r="8.5" /><path d="M12 3.5c-3 3-3 14 0 17" /><path d="M4.2 8.6c5 2.2 10.6 2.2 15.6 0" /><path d="M4.6 16.2c4.8-2.6 10-2.6 14.8 0" /></>,
   alert: <><path d="M12 4 21 19.5H3L12 4Z" /><path d="M12 10v4.5M12 17v.1" /></>,
+  fullscreen: <><path d="M4 9V4h5" /><path d="M20 9V4h-5" /><path d="M4 15v5h5" /><path d="M20 15v5h-5" /></>,
   collapse: <><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M9 4.5v15" /><path d="m15.5 9.5-2.5 2.5 2.5 2.5" /></>,
   expand: <><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M9 4.5v15" /><path d="m13 9.5 2.5 2.5-2.5 2.5" /></>,
   user: <><circle cx="12" cy="8.5" r="3.8" /><path d="M4.5 20c.9-4 3.8-6.2 7.5-6.2s6.6 2.2 7.5 6.2" /></>,

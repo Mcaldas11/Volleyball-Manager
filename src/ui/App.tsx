@@ -1,6 +1,6 @@
 import { openPortraits } from './portraits.ts';
 import { DiagnosisScreen, PrepLabScreen } from './screens/TacticalLab.tsx';
-import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type JSX, type RefObject } from 'react';
 import { StaffRole } from '../engine/model/staff.ts';
 import logo from './logo.png';
 import { Splash, splashDue } from './splash.tsx';
@@ -18,6 +18,7 @@ import {
 import { NATIONS } from '../engine/world/nations.ts';
 import { userNation, worldRanking } from '../engine/world/internationals.ts';
 import { Icon, type IconName } from './icons.tsx';
+import { FullscreenButton, useFullscreenKey } from './fullscreen.tsx';
 import { HolidayDialog } from './holiday.tsx';
 import { FriendlyDialog } from './friendlyDialog.tsx';
 import { ReplayViewer } from './replay.tsx';
@@ -93,77 +94,38 @@ interface Section {
   tabs: Array<[ScreenId, string]>;
 }
 
-/** The sidebar, in labelled groups: the day-to-day desk, the team, recruitment,
- *  the club behind it, and the wider volleyball world. */
+/** The top bar's menus, as in the follower's build: each a section, its tabs in its dropdown. */
 const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
   {
-    label: 'Overview',
+    label: 'Management',
     sections: [
-      { id: 'home', label: 'Home', icon: 'home', tabs: [['home', 'Home']] },
-      { id: 'inbox', label: 'Inbox', icon: 'inbox', tabs: [['inbox', 'Inbox']] },
-      { id: 'career', label: 'Career', icon: 'career', tabs: [['career', 'Profile'], ['achievements', 'Achievements'], ['courses', 'Courses'], ['jobs', 'Job Centre']] },
-    ],
-  },
-  {
-    label: 'Team',
-    sections: [
-      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'Squad'], ['planner', 'Squad Planner'], ['dressing', 'Dressing Room']] },
       {
-        id: 'lineup',
-        label: 'Lineup',
-        icon: 'tactics',
-        tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations']],
+        id: 'home', label: 'Portal', icon: 'home',
+        tabs: [['home', 'Overview'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['news', 'World News'], ['social', 'Social'],
+          ['career', 'Career'], ['achievements', 'Achievements'], ['courses', 'Courses'], ['jobs', 'Job Centre']],
+      },
+      { id: 'squad', label: 'Squad', icon: 'squad', tabs: [['squad', 'First team'], ['youth', 'Youth Academy'], ['planner', 'Squad Planner'], ['dressing', 'Dressing Room']] },
+      {
+        id: 'lineup', label: 'Tactics', icon: 'tactics',
+        tabs: [['lineup', 'Team Sheet'], ['tactics', 'Instructions'], ['rotations', 'Rotations'], ['analysis', 'Analysis'],
+          ['diagnosis', 'Tactical Diagnosis'], ['preplab', 'Prep Lab'], ['datahub', 'Data Hub']],
+      },
+      {
+        id: 'competitions', label: 'Competitions', icon: 'trophy',
+        tabs: [['competitions', 'Overview'], ['table', 'League Table'], ['fixtures', 'Fixtures & Results'], ['internationals', 'International'],
+          ['stats', 'Player Stats'], ['rankings', 'World Rankings'], ['coaches', 'Coaches'], ['halloffame', 'Hall of Fame']],
+      },
+      {
+        id: 'scouting', label: 'Recruitment', icon: 'scouting',
+        tabs: [['scouting', 'Player Search'], ['shortlist', 'Shortlist'], ['missions', 'Scout Missions'], ['transfers', 'Transfer Centre'],
+          ['deadline', 'Deadline Day'], ['director', 'Director & Delegation']],
       },
       { id: 'training', label: 'Training', icon: 'training', tabs: [['training', 'Training']] },
-      { id: 'analysis', label: 'Analysis', icon: 'stats', tabs: [['analysis', 'Analysis'], ['diagnosis', 'Tactical Diagnosis'], ['preplab', 'Prep Lab'], ['datahub', 'Data Hub']] },
-      { id: 'academy', label: 'Academy', icon: 'youth', tabs: [['youth', 'Youth Academy']] },
-    ],
-  },
-  {
-    label: 'Recruitment',
-    sections: [
-      { id: 'scouting', label: 'Scouting', icon: 'scouting', tabs: [['scouting', 'Player Search'], ['shortlist', 'Shortlist'], ['missions', 'Scout Missions']] },
       {
-        id: 'transfers', label: 'Transfers', icon: 'transfers',
-        tabs: [['transfers', 'Transfer Centre'], ['deadline', 'Deadline Day'], ['director', 'Director & Delegation']],
+        id: 'finances', label: 'Club', icon: 'club',
+        tabs: [['finances', 'Finances'], ['commercial', 'Tickets & Sponsors'], ['facilities', 'Facilities'], ['staff', 'Staff'],
+          ['meeting', 'Staff Meeting'], ['affiliates', 'Affiliates'], ['owner', 'Owner'], ['editor', 'Editor']],
       },
-    ],
-  },
-  {
-    label: 'Club',
-    sections: [
-      { id: 'staff', label: 'Staff', icon: 'staff', tabs: [['staff', 'Staff'], ['meeting', 'Staff Meeting']] },
-      {
-        id: 'finances',
-        label: 'Finances',
-        icon: 'finances',
-        tabs: [['finances', 'Finances'], ['commercial', 'Tickets & Sponsors'], ['facilities', 'Facilities'], ['affiliates', 'Affiliates'], ['owner', 'Owner']],
-      },
-    ],
-  },
-  {
-    label: 'World',
-    sections: [
-      { id: 'news', label: 'News', icon: 'news', tabs: [['news', 'World News'], ['social', 'Social']] },
-      {
-        id: 'calendar',
-        label: 'Calendar',
-        icon: 'calendar',
-        tabs: [['calendar', 'Calendar'], ['fixtures', 'Fixtures & Results']],
-      },
-      {
-        id: 'competitions',
-        label: 'Competitions',
-        icon: 'trophy',
-        tabs: [['competitions', 'Overview'], ['table', 'League Table'], ['internationals', 'International']],
-      },
-      {
-        id: 'stats',
-        label: 'Stats',
-        icon: 'stats',
-        tabs: [['stats', 'Player Stats'], ['rankings', 'World Rankings'], ['coaches', 'Coaches'], ['halloffame', 'Hall of Fame']],
-      },
-      { id: 'editor', label: 'Editor', icon: 'gear', tabs: [['editor', 'Editor']] },
     ],
   },
 ];
@@ -171,7 +133,7 @@ const SECTION_GROUPS: Array<{ label: string; sections: Section[] }> = [
 const ALL_SECTIONS = SECTION_GROUPS.flatMap((grp) => grp.sections);
 
 /** The team's sections — a national team has its squad and its team sheet, but no training ground or academy. */
-const TEAM_SECTIONS: ReadonlySet<string> = new Set(['squad', 'lineup', 'training', 'analysis', 'academy']);
+const TEAM_SECTIONS: ReadonlySet<string> = new Set(['squad', 'lineup', 'training']);
 
 function sectionFor(screen: ScreenId): Section {
   return ALL_SECTIONS.find((s) => s.tabs.some(([id]) => id === screen)) ?? ALL_SECTIONS[0];
@@ -184,18 +146,9 @@ function availableTabs(section: Section, hasClub: boolean, national = false): Ar
   return hasClub ? section.tabs : section.tabs.filter(([id]) => CLUBLESS_SCREENS.has(id));
 }
 
-const SIDEBAR_KEY = 'vm.sidebarCollapsed';
-
-function readCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(SIDEBAR_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 export function App(): JSX.Element {
   const g = useGame();
+  useFullscreenKey();
   // The open career's own portraits, loaded as it opens.
   useEffect(() => { void openPortraits(g.world !== null ? g.currentSaveId : null); }, [g.currentSaveId, g.world]);
   // As the game opens, before the menu: the splash.
@@ -226,17 +179,6 @@ function AppBody(): JSX.Element {
 function GameShell(): JSX.Element {
   const g = useGame();
   const club = g.club;
-  const [collapsed, setCollapsed] = useState(readCollapsed);
-
-  const toggleCollapsed = (): void => {
-    setCollapsed((c) => {
-      try {
-        window.localStorage.setItem(SIDEBAR_KEY, c ? '0' : '1');
-      } catch { /* per-viewer convenience only */ }
-      return !c;
-    });
-  };
-
   const key = viewKey(g);
   // Match day — team selection and the live match — is laid out to the
   // window and takes the sidebar's width too: nothing in it can be used
@@ -251,8 +193,7 @@ function GameShell(): JSX.Element {
     (!onAProfile && ['staff', 'career', 'jobs', 'owner', 'achievements', 'courses'].includes(g.screen));
 
   return (
-    <div className={`app vm-shell${collapsed || live ? ' sidebar-collapsed' : ''}${live ? ' vm-match-live' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
-      <Sidebar collapsed={collapsed || live} locked={live} onToggle={toggleCollapsed} />
+    <div className={`app vm-shell vm-topnav${live ? ' vm-match-live' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
       <div className="main-col">
         <Header />
         <main className={`content${contentClass}`} data-pronouns={keepPronouns ? 'keep' : undefined}>
@@ -433,100 +374,6 @@ function inTakeover(g: ReturnType<typeof useGame>): boolean {
   return g.matchday !== null || g.activeInterviewId !== null || g.postMatch !== null;
 }
 
-function Sidebar({
-  collapsed, locked, onToggle,
-}: {
-  collapsed: boolean;
-  /** Held collapsed for now (during a live match) — the toggle waits. */
-  locked: boolean;
-  onToggle: () => void;
-}): JSX.Element {
-  const g = useGame();
-  const world = g.world!;
-  const club = g.club;
-  const unread = g.unreadMessages().length;
-  const takeover = inTakeover(g);
-  const clubInfoActive = club !== null && g.selectedClub === club.id;
-  const national = g.nationalView();
-  const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
-  const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null || g.selectedCoach !== null ||
-    g.selectedNation !== null ||
-    g.negotiation !== null || g.staffNegotiation !== null || g.incomingOffer !== null || g.coachTalk !== null || g.playerTalk !== null;
-  const activeSection = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
-
-  const item = (
-    key: string, label: string, icon: IconName, active: boolean, onClick: () => void, badge?: number,
-  ): JSX.Element => (
-    <button
-      key={key}
-      data-tour={`nav-${key}`}
-      className={`side-item${active ? ' active' : ''}`}
-      onClick={onClick}
-      disabled={takeover}
-      title={collapsed ? label : undefined}
-    >
-      <Icon name={icon} size={18} />
-      <span className="side-item-label">{label}</span>
-      {badge !== undefined && badge > 0 && <span className="side-badge">{badge > 99 ? '99+' : badge}</span>}
-    </button>
-  );
-
-  return (
-    <aside className="sidebar">
-      <div className="side-brand">
-        <img className="brand-logo" src={logo} alt="" />
-        <span className="side-brand-text" translate="no">Volleyball<small>Manager</small></span>
-        <button
-          className="side-collapse"
-          onClick={onToggle}
-          disabled={locked}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <Icon name={collapsed ? 'expand' : 'collapse'} size={17} />
-        </button>
-      </div>
-
-      <div className="side-history">
-        <button className="side-arrow" title="Back" disabled={takeover || !g.canGoBack()} onClick={() => g.back()}>
-          <Icon name="back" size={17} />
-        </button>
-        <button
-          className="side-arrow"
-          title="Forward"
-          disabled={takeover || !g.canGoForward()}
-          onClick={() => g.forward()}
-        >
-          <Icon name="forward" size={17} />
-        </button>
-      </div>
-
-      <nav className="side-nav">
-        {SECTION_GROUPS.map((grp) => {
-          const sections = grp.sections
-            .map((s) => ({ s, tabs: availableTabs(s, club !== null, national) }))
-            .filter(({ tabs }) => tabs.length > 0);
-          if (sections.length === 0) return null;
-          return (
-            <div className="side-group" key={grp.label}>
-              <div className="side-group-label">{grp.label === 'Team' && national ? 'National team' : grp.label}</div>
-              {grp.label === 'Team' && <TeamSwitch disabled={takeover} />}
-              {sections.map(({ s, tabs }) => item(
-                s.id, s.label, s.icon, activeSection === s.id,
-                () => g.go(tabs[0][0]),
-                s.id === 'inbox' ? unread : s.id === 'career' ? offers : undefined,
-              ))}
-              {grp.label === 'Club' && club !== null &&
-                item('clubinfo', 'Club Info', 'club', clubInfoActive, () => g.selectClub(club.id))}
-            </div>
-          );
-        })}
-      </nav>
-
-      <ManagerMenu name={`${world.manager.firstName} ${world.manager.lastName}`} photo={managerPhotoUrl(world.manager)} />
-    </aside>
-  );
-}
-
 /** With a club and a country: which of the two the team screens are about. */
 function TeamSwitch({ disabled }: { disabled: boolean }): JSX.Element | null {
   const g = useGame();
@@ -549,7 +396,7 @@ function TeamSwitch({ disabled }: { disabled: boolean }): JSX.Element | null {
 
 /** The manager at the foot of the sidebar — and behind him the game's
  *  system menu: save, or save and leave. */
-function ManagerMenu({ name, photo }: { name: string; photo: string }): JSX.Element {
+function ManagerMenu({ name, photo, offers = 0 }: { name: string; photo: string; offers?: number }): JSX.Element {
   const g = useGame();
   const [open, setOpen] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
@@ -559,11 +406,13 @@ function ManagerMenu({ name, photo }: { name: string; photo: string }): JSX.Elem
         <PersonFace photoUrl={photo} name={name} size={28} />
         <span className="side-item-label">{name}</span>
         <Icon name="chevronDown" size={14} className="side-manager-caret" />
+        {offers > 0 && <span className="vm-count">{offers}</span>}
       </button>
       {open && (
         <div className="menu-pop menu-pop-up">
           <button disabled={inTakeover(g)} onClick={() => { setOpen(false); g.go('career'); }}>
             <Icon name="career" size={16} /> Career &amp; jobs
+            {offers > 0 && <span className="menu-pop-note">{offers} offer{offers === 1 ? '' : 's'}</span>}
           </button>
           <button disabled={g.busy} onClick={() => { void g.saveCurrentGame(); setOpen(false); }}>
             <Icon name="save" size={16} /> {g.busy ? 'Saving…' : 'Save game'}
@@ -614,6 +463,83 @@ function headerInfo(g: ReturnType<typeof useGame>): {
   return { title: section.label, tabs: tabs.length > 1 ? tabs : null };
 }
 
+/** How far the top bar has to give way, step by step, before everything in it fits. */
+const TOPBAR_SQUEEZE_MAX = 6;
+
+/**
+ * Keeps the top bar on one line at any window width and with any Continue label: after each
+ * render and each resize it finds the first squeeze level (see redesign-fit.css) at which
+ * nothing in the bar overflows — set on the element itself, so no extra render is needed.
+ */
+function useFitTopBar(): RefObject<HTMLDivElement> {
+  const ref = useRef<HTMLDivElement>(null);
+  const fit = (): void => {
+    const bar = ref.current;
+    if (bar === null) return;
+    const nav = bar.querySelector<HTMLElement>('.vm-primary-nav');
+    const fits = (): boolean => bar.scrollWidth <= bar.clientWidth + 1 && (nav === null || nav.scrollWidth <= nav.clientWidth + 1);
+    for (let level = 0; level <= TOPBAR_SQUEEZE_MAX; level++) {
+      bar.dataset.squeeze = String(level);
+      if (fits()) return;
+    }
+  };
+  useLayoutEffect(fit);
+  useEffect(() => {
+    const bar = ref.current;
+    if (bar === null) return;
+    const watch = new ResizeObserver(() => fit());
+    watch.observe(bar);
+    return () => watch.disconnect();
+  }, []);
+  return ref;
+}
+
+/** The top bar's menus: each section's name opens its first screen, the chevron beside it the rest. */
+function PrimaryNav({ disabled }: { disabled: boolean }): JSX.Element {
+  const g = useGame();
+  const [open, setOpen] = useState<string | null>(null);
+  const ref = useDismiss(open !== null, () => setOpen(null));
+  const onProfile = g.selectedPlayer !== null || g.selectedReview !== null || g.selectedClub !== null || g.selectedCoach !== null ||
+    g.selectedNation !== null || g.negotiation !== null || g.staffNegotiation !== null || g.incomingOffer !== null ||
+    g.coachTalk !== null || g.playerTalk !== null;
+  const active = g.selectedCompetition !== null ? 'competitions' : onProfile ? null : sectionFor(g.screen).id;
+  const unread = g.unreadMessages().length;
+  return (
+    <nav className="vm-primary-nav" aria-label="Main navigation" ref={ref}>
+      {ALL_SECTIONS.map((s) => {
+        const tabs = availableTabs(s, g.club !== null, g.nationalView());
+        if (tabs.length === 0) return null;
+        return (
+          <div key={s.id} className={`vm-primary-item${active === s.id ? ' active' : ''}`}>
+            <button data-tour={`nav-${s.id}`} className="vm-primary-main" disabled={disabled}
+              aria-current={active === s.id ? 'page' : undefined}
+              onClick={() => { setOpen(null); g.go(tabs[0][0]); }}>
+              {s.label}
+            </button>
+            {tabs.length > 1 && (
+              <button className="vm-primary-more" title={`${s.label} — more sections`} aria-label={`${s.label} — more sections`}
+                aria-haspopup="menu" aria-expanded={open === s.id} disabled={disabled}
+                onClick={() => setOpen(open === s.id ? null : s.id)}>
+                <Icon name="chevronDown" size={11} />
+              </button>
+            )}
+            {open === s.id && (
+              <div className="menu-pop vm-nav-pop" role="menu">
+                {tabs.map(([id, label]) => (
+                  <button key={id} role="menuitem" className={g.screen === id ? 'on' : ''} onClick={() => { setOpen(null); g.go(id); }}>
+                    {label}
+                    {id === 'inbox' && unread > 0 && <b>{unread}</b>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
 function Header(): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -626,30 +552,35 @@ function Header(): JSX.Element {
   // Looking at the national team's squad, team sheet or instructions: the header says so.
   const nationalTeamView = club !== null && g.nationalView() && TEAM_SECTIONS.has(sectionFor(g.screen).id) &&
     g.selectedPlayer === null && g.selectedClub === null && g.selectedNation === null && g.matchday === null;
+  const unread = g.unreadMessages().length;
+  const offers = world.career.offers.length + (world.internationals?.offers?.length ?? 0);
+  const [searching, setSearching] = useState(false);
+  const searchRef = useDismiss(searching, () => setSearching(false));
+  useEffect(() => { if (searching) searchRef.current?.querySelector('input')?.focus(); }, [searching, searchRef]);
+  const tacticScreen = ['lineup', 'tactics', 'rotations'].includes(g.screen);
+  const barRef = useFitTopBar();
 
   return (
     <header className="hdr">
-      <div className="hdr-top">
+      <div className="hdr-top vm-topbar" ref={barRef}>
+        <button className="vm-brand" onClick={() => g.go('home')} disabled={takeover} title="Portal" aria-label="Portal">
+          <img src={logo} alt="" />
+          <span translate="no">Volleyball<small>Manager</small></span>
+        </button>
         {nationalTeamView ? (
           <button className="hdr-club" onClick={() => g.selectNation(nationalTeam)} disabled={takeover} title="National team">
             <span className="side-flag hdr-flag"><Flag nation={nationalTeam} /></span>
             <span className="hdr-club-text">
-              <strong>{NATIONS[nationalTeam]?.name}</strong>
-              <span>
-                National team<span className="hdr-role">Head coach</span>
-                <span className="hdr-role hdr-nat"><ClubCrest club={club} size={12} /> {club.shortName}</span>
-              </span>
+              <strong translate="no">{NATIONS[nationalTeam]?.name}</strong>
+              <span>National team</span>
             </span>
           </button>
         ) : club !== null ? (
           <button className="hdr-club" onClick={() => g.selectClub(club.id)} disabled={takeover} title="Club info">
             <ClubCrest club={club} size={36} />
             <span className="hdr-club-text">
-              <strong>{club.name}</strong>
-              <span>
-                {league?.name ?? ''}<span className="hdr-role">Head coach</span>
-                {nationalTeam >= 0 && <span className="hdr-role hdr-nat"><Flag nation={nationalTeam} /> {NATIONS[nationalTeam]?.code}</span>}
-              </span>
+              <strong translate="no">{club.name}</strong>
+              <span>{league?.name ?? ''}</span>
             </span>
           </button>
         ) : (
@@ -657,32 +588,45 @@ function Header(): JSX.Element {
             <PersonFace photoUrl={managerPhotoUrl(world.manager)} name={manager} size={36} />
             <span className="hdr-club-text">
               <strong>{manager}</strong>
-              {nationalTeam >= 0
-                ? <span>{NATIONS[nationalTeam]?.name} national team<span className="hdr-role">Head coach</span></span>
-                : <span>Out of work<span className="hdr-role">Free agent</span></span>}
+              <span>{nationalTeam >= 0 ? `${NATIONS[nationalTeam]?.name} national team` : 'Out of work'}</span>
             </span>
           </button>
         )}
-        <span className="hdr-divider" />
-        <h1 className="hdr-h1">{info.title}</h1>
 
-        <span className="hdr-spacer" />
-        <GlobalSearch disabled={takeover} />
-        <button className="icon-btn hdr-help" title="Help" onClick={() => g.openHelp()}><Icon name="help" size={18} /></button>
-        <span className="hdr-spacer" />
+        <PrimaryNav disabled={takeover} />
+
+        <div className="vm-header-tools">
+          <FullscreenButton compact />
+          <div ref={searchRef}>
+            <button className="vm-tool" title="Search" aria-label="Search" disabled={takeover} aria-expanded={searching}
+              onClick={() => setSearching((s) => !s)}>
+              <Icon name="search" size={18} />
+            </button>
+            {searching && <div className="vm-search-pop"><GlobalSearch disabled={takeover} /></div>}
+          </div>
+          <button className="vm-tool" title="Inbox" aria-label="Inbox" disabled={takeover} onClick={() => g.go('inbox')}>
+            <Icon name="inbox" size={18} />
+            {unread > 0 && <span className="vm-count">{unread > 99 ? '99+' : unread}</span>}
+          </button>
+          <button className="vm-tool" title="Help" aria-label="Help" onClick={() => g.openHelp()}><Icon name="help" size={18} /></button>
+          <ManagerMenu name={manager} photo={managerPhotoUrl(world.manager)} offers={offers} />
+        </div>
 
         <div className="hdr-date">
           <span className="hdr-date-main">{g.longDateLabel(world.day)}</span>
-          <span className="hdr-date-sub">Season {world.season + 1}</span>
-          <span className="hdr-date-sub">{PHASE_NAMES[g.phase()]}</span>
+          <span className="hdr-date-sub">Season {world.season + 1} · {PHASE_NAMES[g.phase()]}</span>
         </div>
 
         <ContinueButton />
       </div>
 
-      {info.tabs !== null && (
-        <div className="hdr-tabs-row">
-          <nav className="hdr-tabs">
+      <div className="hdr-tabs-row vm-subbar">
+        <div className="vm-history">
+          <button title="Back" aria-label="Back" disabled={takeover || !g.canGoBack()} onClick={() => g.back()}><Icon name="back" size={16} /></button>
+          <button title="Forward" aria-label="Forward" disabled={takeover || !g.canGoForward()} onClick={() => g.forward()}><Icon name="forward" size={16} /></button>
+        </div>
+        {info.tabs !== null ? (
+          <nav className="hdr-tabs" aria-label="Section navigation">
             {info.tabs.map(([id, label]) => (
               <button
                 key={id}
@@ -694,10 +638,13 @@ function Header(): JSX.Element {
               </button>
             ))}
           </nav>
-          {/* The club's tactic loaded, and the others saved — over every Lineup screen, as in FM; not the national team's. */}
-          {sectionFor(g.screen).id === 'lineup' && club !== null && !takeover && !g.nationalView() && <TacticPicker />}
-        </div>
-      )}
+        ) : (
+          <span className="vm-context-title">{info.title}</span>
+        )}
+        <TeamSwitch disabled={takeover} />
+        {/* The club's tactic loaded, and the others saved — over the tactics screens; not the national team's. */}
+        {tacticScreen && club !== null && !takeover && !g.nationalView() && <TacticPicker />}
+      </div>
     </header>
   );
 }
@@ -763,7 +710,7 @@ function ContinueButton(): JSX.Element {
 
   return (
     <div className="continue" ref={ref} data-tour="continue">
-      <button className={`continue-main${g.processing ? ' busy' : ''}`} disabled={blocked} onClick={action}>
+      <button className={`continue-main${g.processing ? ' busy' : ''}`} disabled={blocked} onClick={action} title={label}>
         {g.processing ? <span className="spinner" /> : <Icon name={icon} size={16} />}
         <span className="continue-label">{label}</span>
       </button>

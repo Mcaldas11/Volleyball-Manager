@@ -9,6 +9,7 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { CAMERA_MODES, type CameraMode } from './courtCameras.ts';
 import { Dropdown } from './dropdown.tsx';
+import { FullscreenButton } from './fullscreen.tsx';
 import { Icon, type IconName } from './icons.tsx';
 import { LANGUAGES, language, setLanguage, type Language } from './language.ts';
 import {
@@ -95,6 +96,9 @@ export function PreferencesDialog(): JSX.Element | null {
             {tab === 'interface' && (
               <div className="settings-group">
                 <h4>Display</h4>
+                <Row label="Window mode" hint="F11 toggles full screen. Esc returns to a window.">
+                  <FullscreenButton />
+                </Row>
                 <Row label="Text size" hint="The whole interface grows with it — as far as the window has room for it.">
                   <Seg value={p.textScale} options={SCALES} onChange={(v) => set({ ...p, textScale: v })} />
                 </Row>

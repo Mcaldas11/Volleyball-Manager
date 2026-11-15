@@ -8,6 +8,7 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import { matchEvent } from './sound.ts';
 import { deletePortraitsOf } from './portraits.ts';
 import {
   addMission, cancelMission, isShortlisted, missionsOf, scoutEstimate, shortlistOf, toggleShortlist, type MissionSpec, type ScoutMission,
@@ -3040,6 +3041,7 @@ class Game {
     md.injury = null;
     md.stage = 'live';
     md.log = [];
+    matchEvent('match:start', { userIsHome: md.userIsHome });
     md.timeoutsUsed = [0, 0];
     // Both cooldowns count rallies in md.log, which starts again from zero.
     this.lastTimeoutAtRally = -Infinity;
@@ -3151,13 +3153,16 @@ class Game {
     md.paused = true;
     md.pauseUntil = null; // a manual pause is indefinite, not a timed stoppage
     md.pausedForPanel = false; // his own pause: closing a panel doesn't undo it
+    matchEvent('match:pause', { manual: true });
     this.emit();
   }
 
-  resume(): void {
+  /** Play on — `manual` when the coach pressed for it himself. */
+  resume(manual = false): void {
     const md = this.matchday;
     // Not while the referee is at the screen: the video runs to its verdict first.
     if (md === null || md.videoReview != null) return;
+    if (manual) matchEvent('match:resume', { manual: true });
     md.paused = false;
     md.pauseUntil = null;
     md.videoCheck = false;
@@ -3746,6 +3751,7 @@ class Game {
       return;
     }
     md.videoReview = { seq: ++this.subSeq, team, log, call: call.call, check, verdict: null, resume: !md.paused || md.pausedForPanel === true };
+    matchEvent('match:review:start', { team, userIsHome: md.userIsHome, seq: md.videoReview.seq });
     md.paused = true;
     md.pauseUntil = null;
     md.videoCheck = true;
@@ -3761,6 +3767,7 @@ class Game {
     review.verdict = result?.ok === true
       ? { overturned: result.overturned === true, text: result.verdict ?? '', mark: result.mark }
       : { overturned: false, text: result?.reason ?? 'The call stands.' };
+    matchEvent('match:review:result', { team: review.team, userIsHome: md.userIsHome, overturned: review.verdict.overturned, seq: review.seq });
     this.emit();
   }
 
@@ -3771,6 +3778,7 @@ class Game {
     if (md == null || review == null) return;
     if (review.verdict === null) this.finishVideoReview();
     md.videoReview = null;
+    matchEvent('match:review:end', { seq: review.seq });
     if (review.resume && md.coachPanel === true) {
       // A panel opened during the video holds play until it is closed.
       md.pausedForPanel = true;
@@ -4506,6 +4514,7 @@ class Game {
     const sim = this.liveSim;
     if (md === null || sim === null || !md.setBreakPending) return;
     this.resetSetBreakSheet();
+    matchEvent('match:set-break');
     md.stage = 'setBreak';
     md.setBreakPending = false;
     md.timeoutActive = null;

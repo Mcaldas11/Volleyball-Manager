@@ -1,0 +1,10 @@
+/* Only additive styling inside the game's existing sound preferences. */
+.vm-ui-sound-settings { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border, #263954); }
+.vm-ui-sound-settings h4 { font-size: 15px; margin: 0 0 10px; color: var(--gold, #f5bd38); }
+.vm-ui-sound-settings .settings-row { margin: 0; }
+.vm-ui-sound-settings .vm-ui-check { cursor: pointer; }
+.vm-ui-sound-settings input[type="range"]{ accent-color: #f2be38; }
+.vm-ui-sound-settings input[type="checkbox"]{ accent-color: #f2be38; }
+.vm-ui-sound-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 5px; }
+.vm-ui-sound-foot small { opacity: .72; line-height: 1.4; max-width: 390px; }
+.vm-ui-sound-foot button { flex-shrink: 0; }

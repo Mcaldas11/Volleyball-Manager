@@ -1,0 +1,11 @@
+/* Additive music settings in existing Preferences > Sound; no visual redesign. */
+.vm-music-settings{margin-top:22px;padding-top:16px;border-top:1px solid var(--border,#263954)}
+.vm-music-settings h4{font-size:15px;margin:0 0 10px;color:var(--gold,#f5bd38)}
+.vm-music-settings .settings-row{margin:0}
+.vm-music-check{cursor:pointer}
+.vm-music-settings input[type="range"],.vm-music-settings input[type="checkbox"]{accent-color:#f2be38}
+.vm-music-track{margin:12px 0 8px;color:#d9e4fa;font-size:13px;line-height:1.4;min-height:18px}
+.vm-music-buttons{display:flex;gap:8px;justify-content:flex-end;margin:7px 0 9px}
+.vm-music-buttons button{min-width:120px}
+.vm-music-note{display:block;color:#a6b5ca;opacity:.85;line-height:1.5;margin-bottom:5px}
+@media(max-width:780px){.vm-music-buttons{flex-wrap:wrap}.vm-music-buttons button{min-width:90px;flex:1}}

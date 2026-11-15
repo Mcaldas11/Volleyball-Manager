@@ -45,7 +45,7 @@ import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
 import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
-import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn } from '../sound.ts';
+import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn, type PointCue } from '../sound.ts';
 
 /** National teams play in something like their flag's colour. */
 const NATION_HUES: Readonly<Record<string, number>> = {
@@ -119,6 +119,8 @@ async function animateRally(
   clock?: PlayClock,
   /** Each side's orders: where its servers serve from, where its passers stand. */
   ordersOf?: (team: 0 | 1) => SideOrders | undefined,
+  /** How the point stood, for the stadium sound. */
+  cue?: Pick<PointCue, 'userIsHome' | 'closeCall' | 'setFinished'>,
 ): Promise<void> {
   const { entry } = logEntry;
   const seed = entry.set * 1000 + entry.scoreBefore[0] * 31 + entry.scoreBefore[1];
@@ -127,11 +129,16 @@ async function animateRally(
     // Struck — a serve, a spike, the block's hands — or played: a pass, a set, a dig.
     if (beat.actor !== null) {
       const pose = beat.poses.get(beat.actor);
-      playHit(pose === 'spike' || pose === 'serve' || pose === 'jumpFloat' || pose === 'float' || pose === 'block' || beat.radar !== undefined);
+      playHit(pose === 'spike' || pose === 'serve' || pose === 'jumpFloat' || pose === 'float' || pose === 'block' || beat.radar !== undefined, pose);
     }
   }, clock);
   // The stands applaud the point — the home crowd louder for the home side's.
-  playCrowd(entry.winner === 0 ? 0.9 : 0.35);
+  if (cancelled.current) return;
+  playCrowd(entry.winner === 0 ? 0.9 : 0.35, {
+    scoreBefore: entry.scoreBefore, winner: entry.winner, contacts: entry.contacts.length, set: entry.set + 1,
+    setTarget: entry.set >= 4 ? 15 : 25, setFinished: cue?.setFinished ?? false, userIsHome: cue?.userIsHome ?? true,
+    closeCall: cue?.closeCall ?? false, lastKind: entry.contacts.at(-1)?.kind,
+  });
 }
 
 /** A side's trip to the match, as the team sheet says it. */
@@ -1688,7 +1695,8 @@ function LiveMatchView(): JSX.Element {
         if (logEntry === null) { animatingRef.current = false; break; }
         // The user's side defends, serves and passes as set now; the other as its club has it.
         await animateRally(logEntry, g.liveRoles(), nearTeam, current.speed, cancelled, setScene, triggerBigPlay, triggerRadar,
-          defenceNow, clock, tacticsNow);
+          defenceNow, clock, tacticsNow,
+          { userIsHome: g.matchday?.userIsHome ?? true, closeCall: g.lastCall()?.close === true, setFinished: g.matchday?.setEnding === true });
         animatingRef.current = false;
         if (cancelled.current) break;
         setRevealed(g.matchday?.log.length ?? 0);
@@ -2074,7 +2082,7 @@ function LiveMatchView(): JSX.Element {
         <span className="flex-spacer" />
         {md.paused
           ? (
-            <button disabled={md.timeoutActive !== null || md.injury != null || md.videoReview != null} onClick={() => g.resume()}
+            <button disabled={md.timeoutActive !== null || md.injury != null || md.videoReview != null} onClick={() => g.resume(true)}
               title={md.videoReview != null ? 'The referee is at the video screen' : undefined}>
               <Icon name="play" size={14} /> Resume
             </button>

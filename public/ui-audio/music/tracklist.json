@@ -1,0 +1,37 @@
+[
+  {
+    "id": "antes-del-saque",
+    "title": "Antes del saque",
+    "durationSec": 78.3,
+    "file": "antes-del-saque.ogg",
+    "bpm": 76
+  },
+  {
+    "id": "tarde-de-pabellon",
+    "title": "Tarde de pabellón",
+    "durationSec": 72.7,
+    "file": "tarde-de-pabellon.ogg",
+    "bpm": 82
+  },
+  {
+    "id": "luces-del-vestuario",
+    "title": "Luces del vestuario",
+    "durationSec": 84.8,
+    "file": "luces-del-vestuario.ogg",
+    "bpm": 70
+  },
+  {
+    "id": "dia-de-descanso",
+    "title": "Día de descanso",
+    "durationSec": 76.3,
+    "file": "dia-de-descanso.ogg",
+    "bpm": 78
+  },
+  {
+    "id": "ultima-rotacion",
+    "title": "Última rotación",
+    "durationSec": 80.3,
+    "file": "ultima-rotacion.ogg",
+    "bpm": 74
+  }
+]

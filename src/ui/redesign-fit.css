@@ -1,5 +1,5 @@
 /*
- * The redesign, fitted to this game: the sidebar stays (no top menu), the
+ * The redesign, fitted to this game: the top menu (as in the follower's build), the
  * backdrops are the game's own arena renders, and every screen fits the
  * window — nothing scrolls, the page least of all. Loaded after redesign.css.
  */
@@ -14,17 +14,6 @@
   background-size: cover;
   background-repeat: no-repeat;
 }
-
-/* ---- The sidebar, in the redesign's colours ---- */
-.vm-shell .sidebar {
-  background: linear-gradient(180deg, rgba(7, 20, 33, 0.97), rgba(10, 27, 46, 0.97));
-  border-right: 1px solid #263f58;
-  box-shadow: 8px 0 28px rgba(0, 0, 0, 0.18);
-}
-.vm-shell .side-item {
-  border-radius: 5px;
-}
-
 
 /* ---- The header: the redesign's band ---- */
 .vm-shell .hdr-tabs-row {
@@ -2963,4 +2952,353 @@ html.short-window .portal-people .player-face {
 html.short-window .portal-people > .hm-card {
   gap: 4px;
   padding: 8px 12px !important;
+}
+
+/* ============================================================
+   The top menu (2026-11-15) — the sidebar's place taken by the
+   follower's top bar: brand, club, menus, tools, date, Continue;
+   and under it back/forward, the section's tabs and the team switch.
+   ============================================================ */
+.vm-shell.vm-topnav {
+  display: flex;
+}
+.vm-shell.vm-topnav > .main-col {
+  display: flex;
+  flex-direction: column;
+}
+.vm-shell .vm-topbar {
+  min-width: 0;
+  gap: clamp(8px, 1.1vw, 18px);
+  padding-inline: clamp(10px, 1.4vw, 22px);
+}
+.vm-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 0;
+  flex: none;
+  border: 0;
+  border-right: 1px solid #ffffff20;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+}
+.vm-brand img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+.vm-brand span {
+  font: 700 16px/0.92 var(--font-display);
+  text-transform: uppercase;
+  text-align: left;
+}
+.vm-brand small {
+  display: block;
+  font: inherit;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+}
+.vm-shell .vm-brand:hover:not(:disabled) {
+  background: transparent;
+  border-color: #ffffff30;
+}
+.vm-shell .vm-topbar .hdr-club {
+  width: auto;
+  min-width: 0;
+  max-width: 200px;
+  flex: 0 1 auto;
+}
+.vm-shell .vm-topbar .hdr-club-text > span,
+.vm-shell .vm-topbar .hdr-club-text strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vm-shell .vm-topbar .hdr-club-text strong {
+  font: 650 17px/1.1 var(--font-display);
+}
+
+/* The menus. */
+.vm-shell .vm-primary-nav {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: clamp(2px, 0.4vw, 10px);
+  padding-inline: clamp(4px, 0.6vw, 14px);
+}
+.vm-shell .vm-primary-item {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  border-bottom: 3px solid transparent;
+  border-radius: 5px 5px 0 0;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.vm-shell .vm-primary-item:hover:not(:has(button:disabled)),
+.vm-shell .vm-primary-item:focus-within {
+  background: linear-gradient(0deg, var(--vm-gold-hover), rgba(245, 197, 66, 0.025));
+}
+.vm-shell .vm-primary-item.active,
+.vm-shell .vm-primary-item.active:hover {
+  border-bottom-color: var(--gold);
+  background: linear-gradient(0deg, var(--vm-gold-selected), rgba(245, 197, 66, 0.045) 72%);
+}
+.vm-shell .vm-primary-item:has(button:disabled) {
+  opacity: 0.48;
+}
+.vm-shell .vm-primary-main,
+.vm-shell .vm-primary-more,
+.vm-shell .vm-primary-main:hover:not(:disabled),
+.vm-shell .vm-primary-more:hover:not(:disabled) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  white-space: nowrap;
+}
+.vm-shell .vm-primary-main {
+  font: 600 clamp(13px, 1.05vw, 17px)/1 var(--font-display);
+  letter-spacing: 0.01em;
+  padding: 0 clamp(4px, 0.55vw, 12px);
+  min-height: 34px;
+  color: var(--text);
+}
+.vm-shell .vm-primary-more {
+  padding: 0 3px 0 0;
+  width: 15px;
+  min-height: 34px;
+  color: var(--text-dim);
+}
+.vm-shell .vm-primary-item:hover:not(:has(button:disabled)) > :is(.vm-primary-main, .vm-primary-more) {
+  color: var(--gold-bright);
+}
+.vm-shell .vm-primary-item.active > :is(.vm-primary-main, .vm-primary-more) {
+  color: var(--gold);
+}
+.vm-shell .vm-nav-pop {
+  top: calc(100% + 4px);
+  left: -10px;
+  right: auto;
+  min-width: 230px;
+  padding: 7px;
+  border: 1px solid var(--line-strong);
+  z-index: 150;
+}
+.vm-shell .vm-nav-pop button {
+  justify-content: flex-start;
+  width: 100%;
+}
+.vm-shell .vm-nav-pop button b {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--gold);
+  color: #17202a;
+  font-size: 10px;
+  text-align: center;
+}
+.vm-shell .vm-nav-pop button.on {
+  background: var(--vm-gold-selected);
+  color: var(--gold);
+}
+.vm-shell .vm-nav-pop button:hover:not(:disabled) {
+  background: var(--vm-gold-hover);
+  color: var(--gold-bright);
+  border-color: transparent;
+}
+
+/* The tools: full screen, search, inbox, help, the manager's menu. */
+.vm-shell .vm-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  margin-left: auto;
+}
+.vm-shell .vm-tool {
+  position: relative;
+  width: 30px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #d5e0eb;
+}
+.vm-shell .vm-tool:hover:not(:disabled),
+.vm-shell .vm-history button:hover:not(:disabled) {
+  color: var(--gold-bright);
+  background: var(--vm-gold-hover);
+  border-color: transparent;
+}
+.vm-shell :is(.vm-tool, .vm-history button):disabled {
+  opacity: 0.4;
+}
+.vm-shell .vm-count {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  background: var(--gold);
+  color: #17202a;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+.vm-shell .vm-header-tools .side-manager {
+  position: relative;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+}
+.vm-shell .vm-header-tools .side-manager-btn {
+  position: relative;
+  padding: 0 2px;
+  background: none;
+  border: 0;
+  min-height: 32px;
+  gap: 4px;
+  width: auto;
+}
+.vm-shell .vm-header-tools .side-item-label {
+  display: none;
+}
+.vm-shell .vm-header-tools .side-manager .menu-pop-up {
+  top: calc(100% + 14px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  width: 260px;
+}
+.vm-shell .vm-search-pop {
+  position: absolute;
+  right: clamp(180px, 18vw, 300px);
+  top: calc(var(--vm-header-height) - 8px);
+  z-index: 160;
+  width: min(500px, calc(100vw - 24px));
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-pop);
+  border-radius: var(--radius);
+}
+.vm-shell .vm-search-pop .global-search,
+.vm-shell .vm-search-pop input {
+  width: 100%;
+}
+.vm-shell .vm-topbar .hdr-date {
+  flex: none;
+  padding-left: 10px;
+  white-space: nowrap;
+}
+
+/* The bar beneath: back and forward, the tabs, the team switch, the tactic. */
+.vm-shell .vm-subbar {
+  display: flex;
+  align-items: center;
+  min-height: var(--vm-tabs-height);
+  padding: 0 clamp(12px, 1.6vw, 24px);
+  gap: clamp(10px, 1.2vw, 18px);
+}
+.vm-shell .vm-history {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--line-strong);
+  flex: none;
+}
+.vm-shell .vm-history button {
+  border: 0;
+  background: none;
+  padding: 5px;
+  width: 27px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+}
+.vm-shell .vm-subbar .hdr-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.vm-shell .vm-subbar .hdr-tabs::-webkit-scrollbar {
+  display: none;
+}
+.vm-context-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 600 17px var(--font-display);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vm-shell .vm-subbar .side-team-switch {
+  flex: none;
+  margin: 0;
+}
+
+/* The bar never runs over itself: useFitTopBar (App.tsx) picks the first of these
+   levels at which everything fits — for any window, text size and Continue label. */
+.vm-shell .vm-topbar {
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+.vm-shell .vm-topbar > * {
+  flex-shrink: 0;
+}
+.vm-shell .vm-topbar > .vm-primary-nav {
+  flex-shrink: 1;
+}
+.vm-shell .vm-topbar .continue-label {
+  white-space: nowrap;
+}
+/* 1: the brand's words go; the club's name narrows. */
+.vm-topbar[data-squeeze]:not([data-squeeze='0']) .vm-brand span { display: none; }
+.vm-topbar[data-squeeze]:not([data-squeeze='0']) .vm-brand { padding-right: 8px; }
+.vm-shell .vm-topbar[data-squeeze]:not([data-squeeze='0']) .hdr-club { max-width: 150px; }
+/* 2: the menus tighten; the date keeps its first line. */
+.vm-shell .vm-topbar:is([data-squeeze='2'], [data-squeeze='3'], [data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .vm-primary-main {
+  font-size: 14px;
+  padding-inline: 5px;
+}
+.vm-shell .vm-topbar:is([data-squeeze='2'], [data-squeeze='3'], [data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) :is(.vm-primary-nav) { gap: 2px; padding-inline: 4px; }
+.vm-shell .vm-topbar:is([data-squeeze='2'], [data-squeeze='3'], [data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .hdr-date-sub { display: none; }
+.vm-shell .vm-topbar:is([data-squeeze='2'], [data-squeeze='3'], [data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .vm-tool { width: 26px; }
+/* 3: the club shows its crest alone; a long Continue label is cut short. */
+.vm-shell .vm-topbar:is([data-squeeze='3'], [data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .hdr-club-text { display: none; }
+.vm-shell .vm-topbar:is([data-squeeze='3'], [data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .hdr-club { max-width: none; }
+.vm-shell .vm-topbar:is([data-squeeze='3'], [data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .continue-label {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 4: the date goes, the menus tighten again. */
+.vm-shell .vm-topbar:is([data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .hdr-date,
+.vm-shell .vm-topbar:is([data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .side-manager-caret { display: none; }
+.vm-shell .vm-topbar:is([data-squeeze='4'], [data-squeeze='5'], [data-squeeze='6']) .vm-primary-main {
+  font-size: 13px;
+  padding-inline: 3px;
+}
+/* 5: Continue keeps its icon only (its name is in its tooltip). */
+.vm-shell .vm-topbar:is([data-squeeze='5'], [data-squeeze='6']) .continue-label { display: none; }
+/* 6: the last resort — the menus slide sideways rather than run under the tools. */
+.vm-shell .vm-topbar[data-squeeze='6'] .vm-primary-nav {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
