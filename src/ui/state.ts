@@ -1005,6 +1005,9 @@ class Game {
       ['Reading the save', 'Setting up the world'], isBigCareer(saved));
     try {
       const { world, season } = await readSaveWorld(id, () => this.taskStep(1));
+      // A loaded career rolls new dice: leave a match you lost, load the save and play it again,
+      // and it is a new match — the story is not written in the save.
+      freshDice(world);
       this.world = world;
       setUiGame(world.gender ?? 'men');
       showUniqueFaces(world);
@@ -7081,6 +7084,14 @@ const DATE_FORMATS = {
  *  "11 January 2027", "Sat 11 Jan". */
 export function formatDate(date: Date, how: keyof typeof DATE_FORMATS): string {
   return DATE_FORMATS[how].format(date);
+}
+
+/** A world's random stream started again from real entropy — nothing to do with what the save held. */
+function freshDice(world: World): void {
+  const r = new Uint32Array(2);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') crypto.getRandomValues(r);
+  else { r[0] = (Math.random() * 2 ** 32) >>> 0; r[1] = (Date.now() ^ (Math.random() * 2 ** 32)) >>> 0; }
+  world.rng.setState([r[0], r[1]]);
 }
 
 export const game = new Game();

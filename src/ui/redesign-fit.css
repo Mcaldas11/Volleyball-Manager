@@ -1274,9 +1274,6 @@ html.short-window .calendar-workspace-heading h1 {
   font-size: 11px;
   margin: 4px 0 0;
 }
-html.short-window .tactics-page .zcourt-note {
-  display: none;
-}
 .tactics-page .tboard-body {
   align-items: stretch !important;
 }
@@ -1936,7 +1933,6 @@ html.short-window .vm-shell .an .an-intro {
 
 /* ---- Short windows (≤ 820 px tall): what gives way ---- */
 html.short-window .news-article .news-hero,
-html.short-window .portal-people .hm-stats,
 html.short-window .vm-shell .club-side .career-note {
   display: none;
 }
@@ -2466,7 +2462,6 @@ html.short-window .portal-lead-art {
 .portal-page .portal-match .hm-banner-main {
   overflow: hidden;
 }
-html.short-window .portal-people .hm-stats,
 html.short-window .portal-people .hm-scorer-link {
   display: none !important;
 }
@@ -2698,4 +2693,274 @@ html.short-window .recruitment-workspace .recruitment-filters .filter-field > la
   position: sticky;
   top: 0;
   z-index: 1;
+}
+
+/* ---- Instructions, final: each of the three columns scrolls on its own when it needs to (nothing cut, nothing hidden) ---- */
+.content-fill .tactics-page .tboard-body > * {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+}
+.content-fill .tactics-page .tboard-overview > .tboard-head {
+  flex: none;
+  position: static;
+  margin: 0 0 6px;
+}
+.content-fill .tactics-page .tboard-overview > .tboard-pick {
+  flex: none;
+  margin: 0;
+}
+.content-fill .tactics-page .tboard-pick-opts {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* The column's title stays in view while its options scroll under it. */
+.content-fill .tactics-page .tboard-overview > .tboard-head {
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  padding: 0 0 8px;
+  background: var(--surface);
+}
+/* In the side column the options are in the flow, under the title — not stuck over it. */
+.content-fill .tactics-page .tboard-overview > .tboard-pick {
+  position: static !important;
+  box-shadow: none !important;
+  background: #142c43 !important;
+}
+
+/* ============================================================
+   Player Search, reorganised (2026-11-15): the filters in one row across the top,
+   then the players (two thirds) and the scout's report (one third). The list scrolls.
+   ============================================================ */
+.vm-shell .content-fill > .view-fade > .recruitment-workspace {
+  grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr) !important;
+  grid-template-rows: auto auto auto minmax(0, 1fr) !important;
+  gap: 10px 14px !important;
+}
+.vm-shell .recruitment-workspace > .recruitment-toolbar,
+.vm-shell .recruitment-workspace > .recruitment-explainer {
+  grid-column: 1 / -1 !important;
+}
+.vm-shell .recruitment-workspace > .recruitment-filters {
+  grid-column: 1 / -1 !important;
+  grid-row: 3 !important;
+  align-self: stretch;
+  max-height: none !important;
+}
+.vm-shell .recruitment-workspace .scout-layout > .card:first-child {
+  grid-column: 1 !important;
+  grid-row: 4 !important;
+}
+.vm-shell .recruitment-workspace .scout-layout > .scout-report {
+  grid-column: 2 !important;
+  grid-row: 4 !important;
+}
+/* The filters, across. */
+.vm-shell .recruitment-workspace .recruitment-filters {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+.vm-shell .recruitment-workspace .recruitment-filters > .card-head {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 6px !important;
+  padding: 10px 14px !important;
+  border: 0 !important;
+  border-right: 1px solid var(--line) !important;
+  align-self: stretch;
+  justify-content: center;
+}
+.vm-shell .recruitment-workspace .recruitment-filters > .card-body {
+  padding: 10px 14px !important;
+  overflow: visible !important;
+  flex: none !important;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-bar {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 16px !important;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field {
+  display: flex !important;
+  flex-direction: column;
+  gap: 4px !important;
+  width: auto !important;
+  flex: 0 0 auto;
+  grid-column: auto !important;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field > label {
+  display: block !important;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(1) {
+  flex: 1 1 200px;
+  min-width: 180px;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(1) input {
+  width: 100%;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .seg,
+.vm-shell .recruitment-workspace .recruitment-filters .segmented {
+  flex-wrap: nowrap !important;
+  width: auto !important;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .seg button,
+.vm-shell .recruitment-workspace .recruitment-filters .segmented button {
+  flex: none !important;
+  padding: 5px 9px !important;
+  white-space: nowrap;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-range {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-range input {
+  width: 62px !important;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field .dd {
+  min-width: 150px;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field input:not([type='checkbox']) {
+  height: 32px;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(6) input {
+  width: 110px;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-check {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+/* The players: every column in the card, the list scrolling under a fixed head. */
+.vm-shell .recruitment-workspace .scout-layout > .card:first-child > .card-body {
+  overflow: hidden !important;
+}
+.vm-shell .recruitment-workspace .scout-table {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+.vm-shell .recruitment-workspace .scout-table table {
+  width: 100%;
+}
+.vm-shell .recruitment-workspace .scout-table td {
+  height: 34px !important;
+}
+@media (max-height: 940px) {
+  .vm-shell .recruitment-workspace > .recruitment-explainer {
+    display: none;
+  }
+}
+html.short-window .vm-shell .recruitment-workspace > .recruitment-toolbar {
+  display: none;
+}
+/* Two tidy rows: name and position; then age, height, potential, price and free agents. */
+.vm-shell .recruitment-workspace .recruitment-filters .filter-bar {
+  display: grid !important;
+  grid-template-columns: repeat(4, auto) auto minmax(0, 1fr) !important;
+  grid-template-areas: 'name name name pos pos pos' 'age height pot price free .';
+  gap: 8px 18px !important;
+  align-items: end;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(1) { grid-area: name; min-width: 0; }
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(2) { grid-area: pos; }
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(3) { grid-area: age; }
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(4) { grid-area: height; }
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(5) { grid-area: pot; }
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(6) { grid-area: price; }
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(7) { grid-area: free; }
+.vm-shell .recruitment-workspace .recruitment-filters .filter-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-check {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 12.5px !important;
+  color: var(--text) !important;
+}
+@media (max-height: 760px) {
+  .vm-shell .recruitment-workspace .recruitment-filters .filter-field > label:not(.filter-check) {
+    display: none !important;
+  }
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-bar {
+  grid-template-columns: 160px 160px 170px 130px auto minmax(0, 1fr) !important;
+  grid-template-areas: 'name name pos pos pos pos' 'age height pot price free .' !important;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-range input {
+  width: 100% !important;
+  min-width: 0;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field .dd {
+  min-width: 0;
+  width: 100%;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(6) input {
+  width: 100%;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(2),
+.vm-shell .recruitment-workspace .recruitment-filters .filter-field:nth-child(2) > :is(.seg, .segmented) {
+  width: max-content !important;
+  max-width: none !important;
+}
+.vm-shell .recruitment-workspace .recruitment-filters .filter-check input[type='checkbox'] {
+  width: 16px !important;
+  height: 16px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  flex: none;
+  accent-color: var(--gold);
+}
+
+/* ---- Player profile, Contract & career: each column scrolls when its rows don't all fit (a loan, a long agent line, bigger text) ---- */
+.content-fill .profile-details > * {
+  overflow-y: auto !important;
+}
+.content-fill .profile-details > .card > .card-body,
+.content-fill .profile-details > .stack > .card > .card-body {
+  overflow-y: auto !important;
+}
+.content-fill .ch-card > .ch-list {
+  overflow-y: auto !important;
+}
+.content-fill .ch-card thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* The top scorer's numbers stay in sight at every height: on a short window, one compact row of four. */
+.portal-people .hm-stats {
+  display: grid !important;
+}
+html.short-window .portal-people .hm-stat:nth-child(n + 5) {
+  display: none !important;
+}
+html.short-window .portal-people .hm-stat b {
+  font-size: 17px !important;
+}
+html.short-window .portal-people .hm-stat span {
+  font-size: 9.5px;
+}
+html.short-window .portal-people .player-face {
+  width: 48px !important;
+  height: 48px !important;
+}
+html.short-window .portal-people > .hm-card {
+  gap: 4px;
+  padding: 8px 12px !important;
 }
