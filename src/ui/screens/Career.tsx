@@ -286,6 +286,40 @@ function HistoryRows(): JSX.Element {
   );
 }
 
+/** Every club and nation he has coached, in a window of its own: the History box only has room for a few. */
+function AllHistoryButton({ owner }: { owner: string }): JSX.Element | null {
+  const g = useGame();
+  const [open, setOpen] = useState(false);
+  const spells = careerSpells(g.world!);
+  if (spells.length === 0) return null;
+  const clubs = new Set(spells.filter((s) => s.club !== undefined).map((s) => s.club!.id)).size;
+  const nations = new Set(spells.filter((s) => s.nation !== undefined).map((s) => s.nation)).size;
+  const won = spells.reduce((n, s) => n + s.won, 0);
+  const lost = spells.reduce((n, s) => n + s.lost, 0);
+  return (
+    <>
+      <button className="sm cp-title-btn" onClick={() => setOpen(true)}>View all</button>
+      {open && (
+        <div className="hol-overlay" onClick={() => setOpen(false)}>
+          <div className="hol-card hall-card cp-history-card" role="dialog" aria-label="Career history" onClick={(e) => e.stopPropagation()}>
+            <header className="hol-top">
+              <span className="hol-crumbs">{owner} <Icon name="chevronRight" size={12} /> <b>Career history</b></span>
+              <button className="icon-btn" onClick={() => setOpen(false)} title="Close"><Icon name="close" size={16} /></button>
+            </header>
+            <h2 className="hol-title">Career History</h2>
+            <p className="hol-sub">
+              {clubs} {clubs === 1 ? 'club' : 'clubs'} · {nations} {nations === 1 ? 'national team' : 'national teams'} · {won}W {lost}L
+            </p>
+            <div className="hall-list" onClick={() => setOpen(false)}>
+              <HistoryRows />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ---- Profile ---------------------------------------------------------------------
 
 /**
@@ -408,7 +442,10 @@ export function CareerScreen(): JSX.Element {
 
       <div className="cp-foot">
         <section className="cp-panel cp-history">
-          <h3 className="cp-title"><Icon name="career" size={14} /> History</h3>
+          <div className="cp-title-row">
+            <h3 className="cp-title"><Icon name="career" size={14} /> History</h3>
+            <AllHistoryButton owner={name} />
+          </div>
           <HistoryRows />
         </section>
         <section className="cp-panel cp-honours">

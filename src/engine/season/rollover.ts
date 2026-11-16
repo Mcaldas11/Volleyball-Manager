@@ -19,6 +19,7 @@ import { judgePhilosophy } from '../world/board.ts';
 import { summerPress } from '../world/pressRoom.ts';
 import { predictionVerdicts } from '../world/predictions.ts';
 import { summerChemistry } from '../world/chemistry.ts';
+import { summerNationalChemistry } from '../world/nationalChemistry.ts';
 import { fansTrophy } from '../world/supporters.ts';
 import { newsChampions, newsExtension, newsSignings } from '../world/news.ts';
 import { competitionReviewsDay } from '../world/competitionReview.ts';
@@ -71,6 +72,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   competitionReviewsDay(world, true);
   // Pairs split up are forgotten; the rest lose a little over the break.
   summerChemistry(world);
+  // A national side's pairs hardly fade: they meet again next summer.
+  summerNationalChemistry(world);
   // The papers look back at their tips, and the board at the manager's finish against them.
   predictionVerdicts(world);
   // The press's grudges and friendships soften over the summer.

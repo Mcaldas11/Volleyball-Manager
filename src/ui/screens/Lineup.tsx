@@ -5,7 +5,7 @@ import { abilityClass, Empty, Segmented, StarMeter, WorkspaceHeading } from '../
 import { Icon } from '../icons.tsx';
 import { TacticPills } from '../tacticPills.tsx';
 import { TeamSheet } from '../teamSheet.tsx';
-import { chemistryOf } from '../../engine/world/chemistry.ts';
+import { Position } from '../../engine/model/positions.ts';
 import { useGame } from '../state.ts';
 
 /**
@@ -31,6 +31,12 @@ export function LineupScreen(): JSX.Element {
   const hasPreference = g.hasPreferredSheet();
   const tactics = g.activeTactics();
   const formation = formationOf(tactics ?? undefined);
+  const chemistry = g.pairChemistry();
+  // The six's setters with its hitters, on average: what the chemistry pill shows.
+  const setters = lineup.filter((p) => store.position[p] === Position.Setter);
+  const hitters = lineup.filter((p) => store.position[p] !== Position.Setter && store.position[p] !== Position.Libero);
+  const pairs = setters.flatMap((s) => hitters.map((h) => chemistry(s, h)));
+  const sixChemistry = pairs.length > 0 ? pairs.reduce((a, b) => a + b, 0) / pairs.length : null;
 
   return (
     <div className="lineup-page tactical-lineup">
@@ -59,7 +65,7 @@ export function LineupScreen(): JSX.Element {
               onChange={(f) => g.setFormation(f)}
             />
           </div>
-          {tactics !== null && <TacticPills tactics={tactics} />}
+          {tactics !== null && <TacticPills tactics={tactics} national={national} chemistry={sixChemistry} />}
           <div className="lineup-bar-rating">
             <span className="faint">Starting six</span>
             <StarMeter value={teamAvg} size={16} />
@@ -84,7 +90,7 @@ export function LineupScreen(): JSX.Element {
             outOfSquad={out}
             onAddToSquad={(p) => g.addToPreferredSquad(p)}
             onDropFromSquad={(p) => g.dropFromPreferredSquad(p)}
-            chemistry={(s, h) => chemistryOf(world, s, h)}
+            chemistry={chemistry}
           />
         </div>
       </div>

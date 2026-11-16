@@ -15,7 +15,7 @@ import { clubBooks } from '../../engine/season/books.ts';
 import { ATTR_LABELS } from '../../engine/model/attributes.ts';
 import {
   abilityClass, Bar, Card, ChoiceField, ClubLink, Empty, Flag, KV, money, moneyShort, MoneyInput,
-  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useSort, WorkspaceHeading, useFitList, ListPager, Panel, Metric, StatusPill, EmptyState, Progress,
+  parseMoneyShort, PlayerFace, Pos, Segmented, SortTh, StarMeter, StatTile, sortBy, useSort, WorkspaceHeading, useFitList, useListPages, listPage, ListPager, Panel, Metric, StatusPill, EmptyState, Progress,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { DEFAULT_SCOUT_FILTERS, useGame, type ScoutFilters } from '../state.ts';
@@ -720,7 +720,9 @@ export function ScoutingScreen(): JSX.Element {
   const fit = useFitList(listRef, targets.length, { min: 28, max: 36 });
   const listKey = `${JSON.stringify(filters)}/${JSON.stringify(sort)}`;
   useEffect(() => { fit.setPage(0); }, [listKey]);
-  const shown = targets.slice(fit.from, fit.to);
+  // Drawn a page at a time as the box is scrolled — always as far down as the player picked.
+  // (Rows of 28px or more, in a box some 500px short of the window.)
+  const { shown, more } = useListPages(targets.slice(fit.from, fit.to), listKey, target !== null ? targets.indexOf(target) : -1, 8, listPage(34));
   const matchesWatched = target !== null ? totalMatchesWatched(world, target) : 0;
   const report = target !== null && matchesWatched > 0
     ? buildScoutReport(world, world.userClubId, target, { matchesWatched })
@@ -886,6 +888,7 @@ export function ScoutingScreen(): JSX.Element {
                     </tr>
                   );
                 })}
+                {more}
                 {targets.length === 0 && (
                   <tr><td colSpan={8}><Empty>No players match these filters.</Empty></td></tr>
                 )}

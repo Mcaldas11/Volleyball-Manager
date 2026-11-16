@@ -796,6 +796,8 @@ export interface World {
   press?: PressMemory;
   /** Every setter–hitter pair's understanding, 0-1, by chemKey — see chemistry.ts. */
   chemistry?: Map<number, number>;
+  /** The same understanding as built playing for a country, by nationalChemKey — see nationalChemistry.ts. Kept apart from the clubs'. */
+  nationalChemistry?: Map<number, number>;
   /** The press's tips for each league's table, this season and last — see predictions.ts. */
   predictions?: Prediction[];
   /** Changed by hand in the editor: such a career earns no achievements. */

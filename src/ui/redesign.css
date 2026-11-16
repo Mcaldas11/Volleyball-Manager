@@ -4318,6 +4318,14 @@
 .tactical-selection-rail .tpill {
   max-width: 100%;
 }
+/* The rail sits at the window's left edge: its cards open rightwards, over the sheet, not off screen. */
+.tactical-selection-rail .tpill-card {
+  left: 0;
+  right: auto;
+}
+.tactical-selection-rail:has(.tpill:hover, .tpill:focus-within) {
+  z-index: 3;
+}
 .tactical-selection-rail > button {
   margin-top: auto;
   white-space: normal;

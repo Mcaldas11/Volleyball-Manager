@@ -327,8 +327,8 @@
     previewUI.drums.disabled=!state.enabled||state.volume===0;
   }
   function settings() {
-    const group=document.querySelector('.prefs-panel .settings-group');
-    const tab=document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]');
+    const group=(document.getElementsByClassName('prefs-panel').length?document.querySelector('.prefs-panel .settings-group'):null);
+    const tab=(document.getElementsByClassName('prefs-tabs').length?document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]'):null);
     if (!group || !tab || !/sound|sonido|som/i.test(tab.textContent||'')) {
       previewUI=null; return;
     }

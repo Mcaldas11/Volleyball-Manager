@@ -930,8 +930,8 @@
     }).en;
   }
   function settings() {
-    const group = document.querySelector('.prefs-panel .settings-group');
-    const selected = document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]');
+    const group = (document.getElementsByClassName('prefs-panel').length?document.querySelector('.prefs-panel .settings-group'):null);
+    const selected = (document.getElementsByClassName('prefs-tabs').length?document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]'):null);
     if (!group || !selected || !/sound|sonido|som/i.test(selected.textContent || '')) { ui = null; return; }
     if (group.querySelector('[data-vm-match-audio]')) return;
     const lang = tr(), section = document.createElement('section');

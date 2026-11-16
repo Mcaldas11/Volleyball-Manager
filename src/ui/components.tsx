@@ -7,7 +7,7 @@
 
 import { hueOf } from './kits.ts';
 import {
-  useEffect, useId, useRef, useState, type CSSProperties, type JSX, type ReactNode, type RefObject,
+  useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode, type RefObject,
 } from 'react';
 import { hashString } from '../engine/core/rng.ts';
 import { RATING_BANDS } from '../engine/match/playerRating.ts';
@@ -52,7 +52,7 @@ export function useDismiss(open: boolean, close: () => void): RefObject<HTMLDivE
  * at the end of the list: a row of a table when `colSpan` is given.
  */
 export function useListPages<T>(
-  items: readonly T[], key: string, keep = -1, colSpan?: number, page = 40,
+  items: readonly T[], key: string, keep = -1, colSpan?: number, page = listPage(),
 ): { shown: readonly T[]; more: JSX.Element | null } {
   const [state, setState] = useState({ key, limit: page });
   const limit = Math.max(state.key === key ? state.limit : page, keep + 1);
@@ -63,6 +63,15 @@ export function useListPages<T>(
     // Keyed by how much is drawn: each page drawn looks again, until the panel is full.
     more: shown.length < items.length ? <ListMore key={shown.length} onNear={grow} colSpan={colSpan} /> : null,
   };
+}
+
+/**
+ * How many rows a list draws at first: enough to fill any panel the window can hold, for rows
+ * of at least `rowPx` (the tightest are 28px, in panels a good 200px shorter than the window),
+ * and no more — every row drawn is time before the screen shows.
+ */
+export function listPage(rowPx = 30): number {
+  return Math.max(12, Math.ceil((typeof window === 'undefined' ? 800 : window.innerHeight) / rowPx));
 }
 
 /** The end of a list still being drawn: as it comes near the view, the next page is drawn. */
@@ -746,6 +755,9 @@ export function WorkspaceHeading({ eyebrow, title, description, actions, childre
   );
 }
 
+/** The space each fitted list had when last drawn (see useFitList). */
+const FIT_LIST_SPACE = new Map<string, number>();
+
 /**
  * A list fitted to its panel, never scrolled: the rows share the height the
  * panel has (between `min` and `max` px each, set as `--row-h` on the panel),
@@ -755,26 +767,33 @@ export function WorkspaceHeading({ eyebrow, title, description, actions, childre
 export function useFitList(
   wrapRef: RefObject<HTMLElement | null>, count: number, { min = 24, max = 44, head = 'thead' }: { min?: number; max?: number; head?: string } = {},
 ): { from: number; to: number; page: number; pages: number; setPage: (p: number) => void } {
-  const [space, setSpace] = useState(0);
+  // The space this list had when last drawn: a screen opened again lays its rows out right the
+  // first time, instead of measuring there and then and laying the page out twice over.
+  const cacheKey = `${head}|${min}|${max}`;
+  const [space, setSpace] = useState(() => FIT_LIST_SPACE.get(cacheKey) ?? 0);
   const [page, setPage] = useState(0);
   useEffect(() => {
     const wrap = wrapRef.current;
     if (wrap === null) return;
     const measure = (): void => {
       const h = wrap.querySelector(head)?.getBoundingClientRect().height ?? 0;
-      setSpace(Math.max(0, wrap.clientHeight - h));
+      const s = Math.max(0, wrap.clientHeight - h);
+      FIT_LIST_SPACE.set(cacheKey, s);
+      setSpace(s);
     };
+    // Its first report comes once the page is laid out anyway, and checks the remembered space.
     const ro = new ResizeObserver(measure);
     ro.observe(wrap);
-    measure();
+    if (!FIT_LIST_SPACE.has(cacheKey)) measure();
     return () => ro.disconnect();
-  }, [wrapRef, head]);
+  }, [wrapRef, head, cacheKey]);
   // Every row drawn: when they do not all fit at the smallest height, the list scrolls in its box.
   const perPage = count;
   const pages = Math.max(1, Math.ceil(count / Math.max(1, perPage)));
   const shownPage = Math.min(page, pages - 1);
   const rowH = space <= 0 ? max : Math.max(min, Math.min(max, Math.floor(space / Math.max(1, Math.min(perPage, count))) - 1));
-  useEffect(() => {
+  // Before the page is laid out, so the rows are drawn at their height in one go.
+  useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (wrap === null) return;
     wrap.style.setProperty('--row-h', `${rowH}px`);
@@ -865,6 +884,9 @@ export function Progress({ value, max = 100, label, tone = 'gold' }: { value: nu
   );
 }
 
+/** The box each fitted grid had when last drawn (see useFitGrid). */
+const FIT_GRID_BOX = new Map<string, [number, number]>();
+
 /**
  * A grid of cards fitted to its panel, never scrolled: as many columns as
  * cards of `minWidth` fit across, as many rows as cards of `height` fit down,
@@ -873,17 +895,23 @@ export function Progress({ value, max = 100, label, tone = 'gold' }: { value: nu
 export function useFitGrid(
   ref: RefObject<HTMLElement | null>, count: number, { minWidth, height, gap = 12 }: { minWidth: number; height: number; gap?: number },
 ): { from: number; to: number; page: number; pages: number; setPage: (p: number) => void; cols: number } {
-  const [box, setBox] = useState<[number, number]>([0, 0]);
+  // As useFitList: the box remembered from the last time, checked once the page is laid out.
+  const cacheKey = `${minWidth}|${height}|${gap}`;
+  const [box, setBox] = useState<[number, number]>(() => FIT_GRID_BOX.get(cacheKey) ?? [0, 0]);
   const [page, setPage] = useState(0);
   useEffect(() => {
     const el = ref.current;
     if (el === null) return;
-    const measure = (): void => setBox([el.clientWidth, el.clientHeight]);
+    const measure = (): void => {
+      const next: [number, number] = [el.clientWidth, el.clientHeight];
+      FIT_GRID_BOX.set(cacheKey, next);
+      setBox((old) => (old[0] === next[0] && old[1] === next[1] ? old : next));
+    };
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    measure();
+    if (!FIT_GRID_BOX.has(cacheKey)) measure();
     return () => ro.disconnect();
-  }, [ref]);
+  }, [ref, cacheKey]);
   const cols = Math.max(1, Math.floor((box[0] + gap) / (minWidth + gap)));
   const rows = Math.max(1, Math.floor((box[1] + gap) / (height + gap)));
   void rows;
@@ -906,7 +934,12 @@ export function Paged({ className, resetKey, follow, children, style }: {
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const followed = useRef<Element | null>(null);
-  useEffect(() => { if (ref.current !== null) ref.current.scrollTop = 0; }, [resetKey]);
+  // A box just drawn is at the top already: setting it there would lay the page out early.
+  const drawn = useRef(false);
+  useEffect(() => {
+    if (!drawn.current) { drawn.current = true; return; }
+    if (ref.current !== null) ref.current.scrollTop = 0;
+  }, [resetKey]);
   useEffect(() => {
     if (follow === undefined) return;
     const target = ref.current?.querySelector(follow) ?? null;

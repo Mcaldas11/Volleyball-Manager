@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react
 import { AssistantDialog, AssistantReport } from '../assistantPanel.tsx';
 import { clubKit, kitFromHue, matchKits } from '../kits.ts';
 import { asItStands, liveTable, type AroundTheLeague, type Progress } from '../../engine/season/aroundTheLeague.ts';
-import { chemistryOf } from '../../engine/world/chemistry.ts';
 import { TRAVEL_COST, tripTo, type Trip } from '../../engine/world/fatigue.ts';
 import { fixtureRivalry } from '../../engine/world/rivals.ts';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
@@ -311,7 +310,7 @@ function LineupSetup(): JSX.Element {
         onDropFromSquad={(p) => g.dropFromMatchdaySquad(p)}
         outfieldLiberos={md.homeOutfieldLiberos}
         onToggleReserveLibero={(p) => g.toggleReserveLibero(p)}
-        chemistry={(s, h) => chemistryOf(world, s, h)}
+        chemistry={g.pairChemistry(true)}
       />
     </div>
   );
@@ -474,7 +473,7 @@ function SetBreak(): JSX.Element {
         onSetDefensiveLibero={(p) => g.setMatchdayDefensiveLibero(p)}
         slotPositions={lineupSlotPositions(formationOf(g.matchTactics() ?? undefined))}
         registered={md.homeLiberos ?? g.matchLiberosOf(md.userIsHome ? 0 : 1)}
-        chemistry={(s, h) => chemistryOf(world, s, h)}
+        chemistry={g.pairChemistry(true)}
       />
     </div>
   );

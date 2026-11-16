@@ -168,6 +168,7 @@ import {
   type InterviewSession,
 } from '../engine/world/interviews.ts';
 import { chemistryFor } from '../engine/world/chemistry.ts';
+import { nationalChemistryFor } from '../engine/world/nationalChemistry.ts';
 import {
   deleteSave as deleteSaveFromDb, listSaves, loadGame as readSaveWorld,
   newSaveId, saveGame as writeSaveWorld, type SaveMeta,
@@ -5459,6 +5460,18 @@ class Game {
     return this.club === null || this.teamView === 'national';
   }
 
+  /**
+   * How well each setter and hitter of the team on screen understand each other: for the
+   * country on the national side's sheet or matchday — kept apart from the club's — the
+   * club's otherwise. `matchday`: the match being prepared or played, rather than the view.
+   */
+  pairChemistry(matchday = false): (setter: number, hitter: number) => number {
+    const world = this.world;
+    if (world === null) return () => 0;
+    const nation = matchday ? (this.matchday?.national?.nation ?? -1) : this.nationalView() ? userNation(world) : -1;
+    return nation >= 0 ? nationalChemistryFor(world, nation) : chemistryFor(world);
+  }
+
   /** Look at the club, or at the national team. A screen the other has no use for gives way to the squad. */
   setTeamView(view: TeamView): void {
     const world = this.world;
@@ -5620,6 +5633,7 @@ class Game {
       bench: md.homeBench,
       liberos: md.homeLiberos,
       tactics,
+      chemistry: nationalChemistryFor(world, nation),
     };
     const opponent = nationSetup(world, t, md.userIsHome ? m.away : m.home);
     // A copy: what the other bench changes against the manager is for the match.

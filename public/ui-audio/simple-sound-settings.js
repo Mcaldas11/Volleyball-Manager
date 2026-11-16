@@ -165,8 +165,8 @@
     textIfChanged(p.status,'');
   }
   function settings(){
-    const target=document.querySelector('.prefs-panel .settings-group');
-    const tab=document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]');
+    const target=(document.getElementsByClassName('prefs-panel').length?document.querySelector('.prefs-panel .settings-group'):null);
+    const tab=(document.getElementsByClassName('prefs-tabs').length?document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]'):null);
     const selected=!!(target&&tab&&/sound|sonido|som/i.test(tab.textContent||''));
     if(!selected){if(group)restore();return;}
     if(group&&group!==target)restore();

@@ -649,8 +649,9 @@ html.short-window .athlete-academy .athlete-heading p {
     font-size: 28px !important;
   }
 }
+/* Short windows keep the history and the trophies too: a lower strip, its lists scrolling inside. */
 html.short-window .bureau-profile .cp-foot {
-  display: none;
+  height: 104px;
 }
 /* Narrower windows keep the three columns side by side: nothing goes below the fold. */
 .bureau-profile .cp-body {
@@ -3363,3 +3364,41 @@ html.short-window .portal-people > .hm-card {
 }
 .watch-live-btn { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .lv-stands-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* Career: the clubs and nations he coached, and the trophies, always on show — scrolling in their own box. */
+.bureau-profile .cp-foot {
+  display: grid !important;
+  height: clamp(104px, calc(var(--app-h, 100vh) * 0.17), 150px) !important;
+  min-height: 0 !important;
+}
+.bureau-profile .cp-foot > .cp-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.bureau-profile .cp-foot > .cp-history > :not(.cp-title, .cp-title-row),
+.bureau-profile .cp-foot .cp-honours-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cp-history-card .hall-list .cp-hist-row {
+  padding: 10px 4px;
+  grid-template-columns: 170px minmax(0, 1.6fr) minmax(0, 1fr) 90px 80px;
+}
+.cp-history-card {
+  width: min(920px, calc(100vw - 48px)) !important;
+  max-width: none !important;
+}
+.cp-history-card .cp-hist-row > span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cp-history-card .cp-hist-club {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

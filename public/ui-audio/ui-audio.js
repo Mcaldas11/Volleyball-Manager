@@ -113,7 +113,7 @@
     observing=true;
     const mo=new MutationObserver(()=>{
       maybeSettings();
-      const toast=document.querySelector('.toast[role="status"],.toast,.notification-toast');
+      const toast=(document.getElementsByClassName('toast').length||document.getElementsByClassName('notification-toast').length)?document.querySelector('.toast[role="status"],.toast,.notification-toast'):null;
       const message=toast?.textContent?.trim().slice(0,120)||'';
       if(!initialQuiet&&message&&message!==state.lastToastText&&performance.now()-state.lastInteraction<3000){
         state.lastToastText=message;
@@ -133,8 +133,8 @@
     pt:{title:'Sons da interface',on:'Efeitos sonoros dos menus',hint:'Cliques suaves, navegação, seleção e notificações.',vol:'Volume da interface',test:'Testar som',quiet:'Independente do volume do jogo. Sem áudio em segundo plano.'}
   };return translations[lang]||translations.en}
   function maybeSettings(){
-    const group=document.querySelector('.prefs-panel .settings-group');
-    const tab=document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]');
+    const group=(document.getElementsByClassName('prefs-panel').length?document.querySelector('.prefs-panel .settings-group'):null);
+    const tab=(document.getElementsByClassName('prefs-tabs').length?document.querySelector('.prefs-tabs [role="tab"][aria-selected="true"]'):null);
     if(!group||!tab||!/sound|sonido|som/i.test(tab.textContent||''))return;
     if(group.querySelector('[data-vm-uiaudio]'))return;
     const t=i18n();

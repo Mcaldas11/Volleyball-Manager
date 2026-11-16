@@ -10,7 +10,7 @@ import { useEffect, useState, type CSSProperties, type JSX } from 'react';
 import { flagImageUrl, NATIONS } from '../../engine/world/nations.ts';
 import type { NewsItem, NewsKind } from '../../engine/world/news.ts';
 import { fanComments, fanName, type FanComment } from '../../engine/world/fans.ts';
-import { ClubCrest, Empty, PlayerFace, Paged } from '../components.tsx';
+import { ClubCrest, Empty, PlayerFace, listPage, Paged, useListPages } from '../components.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
@@ -106,8 +106,9 @@ export function NewsScreen(): JSX.Element {
   for (const n of world.news) counts.set(n.nation, (counts.get(n.nation) ?? 0) + 1);
   const nations = [...counts].sort((a, b) => b[1] - a[1]).map(([id]) => id);
   const open = items.find((n) => n.id === openId) ?? items[0];
-  // Drawn a page at a time — always as far down as the open story.
-  const shown = items;
+  // Drawn a page at a time as the box is scrolled — always as far down as the open story.
+  // (Each story's row is 59px, in a box well short of the window.)
+  const { shown, more } = useListPages(items, `${filter}/${nation}`, open !== undefined ? items.indexOf(open) : -1, undefined, listPage(50));
 
   return (
     <div className="news">
@@ -150,6 +151,7 @@ export function NewsScreen(): JSX.Element {
               </span>
             </button>
           ))}
+          {more}
         </Paged>
       </section>
 

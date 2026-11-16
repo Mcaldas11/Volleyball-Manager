@@ -474,9 +474,16 @@ const TOPBAR_SQUEEZE_MAX = 6;
  */
 function useFitTopBar(): RefObject<HTMLDivElement> {
   const ref = useRef<HTMLDivElement>(null);
-  const fit = (): void => {
+  // What the last fit was worked out for: measuring makes the browser lay the whole page out
+  // there and then, so a render that changed nothing the bar's width depends on skips it.
+  const fitted = useRef('');
+  const fit = (force = false): void => {
     const bar = ref.current;
     if (bar === null) return;
+    const de = document.documentElement;
+    const key = `${window.innerWidth}|${de.className}|${de.style.cssText}|${bar.textContent}`;
+    if (!force && key === fitted.current) return;
+    fitted.current = key;
     const nav = bar.querySelector<HTMLElement>('.vm-primary-nav');
     const fits = (): boolean => bar.scrollWidth <= bar.clientWidth + 1 && (nav === null || nav.scrollWidth <= nav.clientWidth + 1);
     for (let level = 0; level <= TOPBAR_SQUEEZE_MAX; level++) {
@@ -484,12 +491,16 @@ function useFitTopBar(): RefObject<HTMLDivElement> {
       if (fits()) return;
     }
   };
-  useLayoutEffect(fit);
+  useLayoutEffect(() => fit());
   useEffect(() => {
     const bar = ref.current;
     if (bar === null) return;
-    const watch = new ResizeObserver(() => fit());
+    // A resize, or the fonts arriving, can change what fits with the same words in the bar.
+    // (The first report is only the bar being observed: the render's own fit has just run.)
+    let first = true;
+    const watch = new ResizeObserver(() => { if (first) first = false; else fit(true); });
     watch.observe(bar);
+    void document.fonts?.ready.then(() => fit(true));
     return () => watch.disconnect();
   }, []);
   return ref;

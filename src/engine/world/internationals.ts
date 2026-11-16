@@ -49,6 +49,7 @@
 
 import { intlEventDays, plannedEventDays, type IntlKind } from './calendar.ts';
 import { frameVerdict, framedSquad } from './nationalExtras.ts';
+import { nationalCampDay, nationalChemistryFor, nationalTogether, seedNationalChemistry } from './nationalChemistry.ts';
 import { Rng } from '../core/rng.ts';
 import { bankFor } from './names.ts';
 import { MatchFormat, simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
@@ -1112,7 +1113,7 @@ export function nationSetup(world: World, t: Tournament, nation: number): TeamSe
     undefined,
     (p) => canPlayForCountry(world, p),
   );
-  return { clubId: -1, name: nationName(nation), ...pick, tactics };
+  return { clubId: -1, name: nationName(nation), ...pick, tactics, chemistry: nationalChemistryFor(world, nation) };
 }
 
 /** How much a match matters: a pool match, a knockout tie, the final. */
@@ -1160,6 +1161,9 @@ export function applyIntlResult(world: World, t: Tournament, m: IntlMatch, resul
   // Hurt playing for his country: his club loses him too.
   applyMatchInjuries(world, result.injuries ?? [], matchInjuryRng(world, fixture.id, m.day));
 
+  // The setters and hitters on court together know each other a little better — for their country.
+  nationalTogether(world, m.home, homeStats);
+  nationalTogether(world, m.away, awayStats);
   const all = new Map<number, PlayerMatchStats>([...homeStats, ...awayStats]);
   const sides = [[homeStats, m.home, m.homeSets, m.awaySets], [awayStats, m.away, m.awaySets, m.homeSets]] as const;
   for (const [stats, nation, setsFor, setsAgainst] of sides) {
@@ -2175,6 +2179,10 @@ export function askForSquad(world: World): GameMessage | undefined {
 export function internationalDay(world: World): void {
   planInternationals(world);
   const I = internationals(world);
+  // A new world, or a save from before: each nation's core has played together before.
+  if (world.nationalChemistry === undefined) {
+    seedNationalChemistry(world, world.nationalTeams.map((team) => [team.nation, suggestSquad(world, team.nation)] as const));
+  }
   askForSquad(world);
   for (const t of I.tournaments) {
     // Last season's, if it is under way: the Nations League's finals are in the summer after the season it was drawn in.
@@ -2184,6 +2192,8 @@ export function internationalDay(world: World): void {
       else continue;
     }
     if (t.status === 'called' && world.day >= t.startDay) t.status = 'pools';
+    // A day together, training or playing: the squads still in it get to know each other.
+    nationalCampDay(world, t);
     const outBefore = t.out.length;
     const today = t.matches.filter((m) => m.day === world.day && !m.played);
     const stats = new Map<number, PlayerMatchStats>();
