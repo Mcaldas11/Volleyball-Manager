@@ -20,6 +20,7 @@ import { useGame, type WatchedMatch } from '../state.ts';
 import { CompetitionStatsView } from '../competitionStats.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
+import { WatchLiveMenu } from '../watchLive.tsx';
 import { seasonLabel } from './Squad.tsx';
 
 type NameLookup = { shortName: (i: number) => string };
@@ -72,13 +73,16 @@ export function FixturesScreen(): JSX.Element {
       <div className={`fixtures-layout${watched !== null ? ' with-report' : ''}`}>
         <Card title="Schedule" icon="schedule" flush
           actions={(
-            <Dropdown<number>
-              size="sm"
-              value={season}
-              onChange={setSeason}
-              title="Season"
-              options={seasons.map((s) => ({ value: s, label: s === world.season ? `${seasonLabel(world, s)} · this season` : seasonLabel(world, s) }))}
-            />
+            <>
+              <WatchLiveMenu />
+              <Dropdown<number>
+                size="sm"
+                value={season}
+                onChange={setSeason}
+                title="Season"
+                options={seasons.map((s) => ({ value: s, label: s === world.season ? `${seasonLabel(world, s)} · this season` : seasonLabel(world, s) }))}
+              />
+            </>
           )}>
           <div className="table-wrap fixtures-scroll" ref={scrollRef}>
             <table className="data-table">

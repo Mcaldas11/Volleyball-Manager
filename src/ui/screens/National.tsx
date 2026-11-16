@@ -19,6 +19,7 @@ import {
   useSort,
 } from '../components.tsx';
 import { Icon } from '../icons.tsx';
+import { WatchLiveMenu } from '../watchLive.tsx';
 import { useGame } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
@@ -322,6 +323,7 @@ export function NationalHome(): JSX.Element {
           ) : t !== undefined ? (
             <button className="primary" onClick={() => g.openTournament(t.id)}><Icon name="trophy" size={14} /> {t.name}</button>
           ) : null}
+          {today === null && <WatchLiveMenu />}
           <button className="hm-ghost" onClick={() => setFriendly(true)}><Icon name="calendar" size={14} /> Arrange a friendly</button>
         </div>
       </section>

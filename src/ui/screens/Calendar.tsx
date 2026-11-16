@@ -8,6 +8,7 @@ import { contractEndSeason, DAYS_PER_SEASON, seasonEndDay, TRANSFER_WINDOWS, typ
 import { SESSIONS, weekPlan, weekStartOf } from '../../engine/world/training.ts';
 import { youthRound, youthRoundDay } from '../../engine/world/youth.ts';
 import { Icon } from '../icons.tsx';
+import { WatchLiveMenu } from '../watchLive.tsx';
 import { formatDate, useGame, type ScreenId } from '../state.ts';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -295,6 +296,7 @@ export function CalendarScreen(): JSX.Element {
           </div>
           <div className="calendar-day-actions">
             <button onClick={() => g.go('training')}><Icon name="training" size={14} /> Training plan</button>
+            {selectedDay === today && <WatchLiveMenu align="left" label="Other matches live" />}
             {selectedDay > today && (
               <button onClick={() => g.openHoliday(selectedDay)}><Icon name="calendar" size={14} /> Go on holiday until this day</button>
             )}

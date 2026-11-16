@@ -61,6 +61,7 @@ import { AffiliatesScreen, OwnerScreen, CommercialScreen, FacilitiesScreen } fro
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
+import { WatchMatchItem } from './watchLive.tsx';
 import {
   TacticsScreen, RotationsScreen, FinancesScreen,
   ScoutingScreen, TransfersScreen,
@@ -679,6 +680,8 @@ function ContinueButton(): JSX.Element {
   const natDay = nat?.match ?? null;
   const opponentId = next === null ? -1 : next.home === world.userClubId ? next.away : next.home;
   const opponent = world.clubs[opponentId];
+  // No match of his own today: the other clubs' matches, to watch from the stands.
+  const watchable = matchToday || !open ? [] : g.watchableMatches().slice(0, 4);
 
   let label = 'Continue';
   let icon: IconName = 'playOutline';
@@ -762,6 +765,13 @@ function ContinueButton(): JSX.Element {
             <button onClick={() => { g.instantResult(); setOpen(false); }}>
               <Icon name="whistle" size={15} /> Instant result
             </button>
+          )}
+          {watchable.length > 0 && (
+            <>
+              <div className="menu-sep" />
+              <span className="menu-pop-label">Watch live from the stands</span>
+              {watchable.map((f) => <WatchMatchItem key={f.id} fixture={f} onPick={() => setOpen(false)} />)}
+            </>
           )}
           <div className="menu-sep" />
           <button disabled={unread === 0} onClick={() => { g.nextUnread(); setOpen(false); }}>

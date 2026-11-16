@@ -28,6 +28,7 @@ import { acceptSuggestion, declineSuggestion, meetingsOf, type StaffMeeting } fr
 import { applyPreferences, loadPreferences, savePreferences, type Preferences } from './preferences.ts';
 import { loadManagerProfile, saveManagerProfile } from './managerProfile.ts';
 import { playAroundTheLeague, type AroundTheLeague } from '../engine/season/aroundTheLeague.ts';
+import { canWatch, commitWatched, spectatorSetup, watchableToday, watchAngle, watchListToday, type WatchAngle } from '../engine/season/spectator.ts';
 import { bookCamp, type CampKind } from '../engine/world/camp.ts';
 import { requestLowerTarget, requestWages } from '../engine/world/board.ts';
 import { setUiGame } from './gameGender.ts';
@@ -130,7 +131,7 @@ import {
 } from '../engine/season/friendlies.ts';
 import {
   acceptContractOffer as signContractOffer, acceptJobOffer as takeJobOffer, appointManager, askForContract, startOutOfWork as startOutOfWorkCareer,
-  applyForJob as sendApplication, applicationBlock, declineContractOffer as turnDownContractOffer,
+  approachClub, interestBlock, declineContractOffer as turnDownContractOffer,
   declineJobOffer as turnDownJobOffer, headCoachOf, isUnemployed, resign as resignFromClub,
 } from '../engine/world/career.ts';
 import { positionTarget, setPositionTarget } from '../engine/world/training.ts';
@@ -671,6 +672,12 @@ export interface MatchdayState {
   assistantPrompt?: string | null;
   /** The moments coaching mode has stopped for already, so as not to stop twice for one. */
   assistantStops?: string[];
+  /**
+   * Another club's match, watched from the stands (see spectator.ts): nobody's
+   * bench is the manager's — the engine coaches both sides — and at full time
+   * the view goes back to `back`, where it was opened from.
+   */
+  spectator?: { back: NavEntry };
 }
 
 const COACHING_MODE_KEY = 'vm.coachingMode';
@@ -1451,15 +1458,18 @@ class Game {
     this.emit();
   }
 
-  /** Apply for a club's vacant head coach's job. */
+  /** Apply for a club's head coach's job — a vacancy, or an approach to a club with a coach in post. */
   applyForJob(clubId: number, interview?: number): void {
     const world = this.world;
     if (world === null) return;
-    const problem = applicationBlock(world, clubId);
-    const app = problem === null ? sendApplication(world, clubId, interview) : null;
-    this.notice = app !== null
-      ? `Application sent to ${world.clubs[clubId]?.name ?? 'the club'} — expect an answer by ${this.dateLabelForDay(app.answerOn)}.`
-      : problem ?? 'You cannot apply for that job.';
+    const problem = interestBlock(world, clubId);
+    const app = problem === null ? approachClub(world, clubId, interview) : null;
+    const name = world.clubs[clubId]?.name ?? 'the club';
+    this.notice = app === null
+      ? problem ?? 'You cannot apply for that job.'
+      : app.speculative === true
+        ? `Your interest has been passed to the ${name} board — expect an answer by ${this.dateLabelForDay(app.answerOn)}.`
+        : `Application sent to ${name} — expect an answer by ${this.dateLabelForDay(app.answerOn)}.`;
     this.emit();
   }
 
@@ -2688,6 +2698,116 @@ class Game {
     this.emit();
   }
 
+  /** Today's matches of other clubs the manager could watch from the stands, the likeliest first. */
+  watchableMatches(): Fixture[] {
+    const world = this.world;
+    return world === null ? [] : watchableToday(world);
+  }
+
+  /** The same, each with why he might go. */
+  watchList(): Array<{ fixture: Fixture; angle: WatchAngle }> {
+    const world = this.world;
+    return world === null ? [] : watchListToday(world);
+  }
+
+  /** Whether a match can be watched live from the stands now. */
+  canWatchMatch(f: Fixture): boolean {
+    const world = this.world;
+    return world !== null && !this.processing && this.matchday === null && this.postMatch === null && canWatch(world, f);
+  }
+
+  /** Why he might be there — for the button's hint. */
+  watchReason(f: Fixture): WatchAngle | null {
+    return this.world === null ? null : watchAngle(this.world, f);
+  }
+
+  /**
+   * Go and watch another club's match: straight into the live view, in the
+   * stands — no team sheet, no bench, no say in it. The match is the season's
+   * own (see spectator.ts), kept at full time and never played again.
+   */
+  watchMatch(fixtureId: number): void {
+    const world = this.world;
+    const f = world?.fixtures[fixtureId];
+    if (world == null || f === undefined || !this.canWatchMatch(f)) return;
+    // Six to put on the court — either side short, and it is decided by default before it starts.
+    if (forfeitIfShort(world, this.ctx, f)) {
+      this.notice = `${world.clubs[f.home]?.name ?? '?'} v ${world.clubs[f.away]?.name ?? '?'} was decided by default.`;
+      this.emit();
+      return;
+    }
+    const back = this.navEntry();
+    const side = (id: number): MatchSide => {
+      const c = world.clubs[id];
+      return { clubId: id, nation: -1, name: c?.name ?? '—', shortName: c?.shortName ?? '—', players: c?.players ?? [] };
+    };
+    this.matchday = {
+      fixture: f,
+      sides: [side(f.home), side(f.away)],
+      title: (world.competitions[f.competitionId]?.name ?? 'Match') + (rivalryName(world, f) !== null ? ` · ${rivalryName(world, f)}` : ''),
+      national: null,
+      final: trophyAtStake(world, f),
+      stage: 'lineup',
+      setBreakPending: false,
+      opponentChanges: [],
+      // Nobody's side is his: the home side plays at the near end.
+      userIsHome: true,
+      homeLineup: [],
+      homeLibero: -1,
+      homeDefensiveLibero: -1,
+      homeBench: [],
+      speed: 1,
+      paused: false,
+      pauseUntil: null,
+      log: [],
+      snapshot: null,
+      timeoutsUsed: [0, 0],
+      timeoutActive: null,
+      lastSubstitution: null,
+      lastShout: null,
+      opponentMoves: [],
+      assistantApplied: {},
+      assistantPrompt: null,
+      assistantStops: [],
+      spectator: { back },
+    };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedCoach = null;
+    this.selectedNation = null;
+    this.selectedReview = null;
+    this.selectedCompetition = null;
+    this.negotiation = null;
+    this.staffNegotiation = null;
+    this.incomingOffer = null;
+    this.coachTalk = null;
+    this.playerTalk = null;
+    this.watched = null;
+    this.liveSim = new MatchSimulator(world.players, spectatorSetup(world, f));
+    this.startLive();
+  }
+
+  /** Leave the stands before the end: nothing is kept — the day plays the match as it would have. */
+  leaveWatching(): void {
+    const md = this.matchday;
+    if (md?.spectator === undefined) return;
+    this.matchday = null;
+    this.liveSim = null;
+    this.restoreNav(md.spectator.back);
+  }
+
+  /** Full time in the stands: the result goes into the world, the papers have their story, and back to where he was. */
+  private finishWatching(md: MatchdayState, result: MatchResult): void {
+    const world = this.world;
+    if (world === null || md.spectator === undefined) return;
+    const story = commitWatched(world, this.ctx, md.fixture, result);
+    this.matchday = null;
+    this.liveSim = null;
+    this.captureWatched(md.fixture);
+    this.notice = story !== null ? `In the news: ${story.headline}.` : '';
+    this.restoreNav(md.spectator.back);
+  }
+
   /** Swap a starter on the team sheet — before kickoff or at a set break. */
   setMatchdayPlayer(zoneIdx: number, playerIdx: number): void {
     const md = this.matchday;
@@ -3029,10 +3149,14 @@ class Game {
   private startLive(): void {
     const md = this.matchday;
     if (md === null || this.liveSim === null) return;
-    // His own hurt players are his to answer for: the engine waits on him.
-    this.liveSim.answerInjuriesFor(md.userIsHome ? 0 : 1, true);
-    // A set's last point can be challenged: the set is closed only once the benches have had their look.
-    this.liveSim.holdSetEnds = true;
+    // Watching from the stands, the engine has both benches and plays the
+    // match exactly as the season would — sets close on their last point.
+    if (md.spectator === undefined) {
+      // His own hurt players are his to answer for: the engine waits on him.
+      this.liveSim.answerInjuriesFor(md.userIsHome ? 0 : 1, true);
+      // A set's last point can be challenged: the set is closed only once the benches have had their look.
+      this.liveSim.holdSetEnds = true;
+    }
     md.setEnding = false;
     md.setEndsAt = null;
     md.timeoutRequest = null;
@@ -3087,7 +3211,7 @@ class Game {
     const liberos = [lib.reception, lib.defence].filter((p) => p >= 0);
     const bench = sim.squadFor(team).filter((p) => !court.includes(p) && !liberos.includes(p));
     const side = md.sides[team];
-    const userSide = team === (md.userIsHome ? 0 : 1);
+    const userSide = md.spectator === undefined && team === (md.userIsHome ? 0 : 1);
     const club = side.clubId >= 0 ? world.clubs[side.clubId] : undefined;
     const staff = club !== undefined && !userSide ? headCoachOf(world, club) : undefined;
     const coach = userSide ? `${world.manager.firstName} ${world.manager.lastName}` : staff !== undefined ? `${staff.firstName} ${staff.lastName}` : null;
@@ -3186,8 +3310,9 @@ class Game {
     const entry = sim.step();
     if (entry === null) return null;
     const userTeam: 0 | 1 = md.userIsHome ? 0 : 1;
+    const watching = md.spectator !== undefined;
     for (const inj of sim.takeInjuries()) {
-      (md.injuryQueue ??= []).push({ seq: ++this.subSeq, inj, ours: inj.team === userTeam, phase: 'down' });
+      (md.injuryQueue ??= []).push({ seq: ++this.subSeq, inj, ours: !watching && inj.team === userTeam, phase: 'down' });
     }
 
     const logEntry: MatchdayLogEntry = {
@@ -3198,6 +3323,16 @@ class Game {
     md.log.push(logEntry);
     md.snapshot = sim.snapshot();
     md.ballInPlay = true;
+    if (watching) {
+      // The engine has closed the set already; the screen holds its last point a moment, as it would its own.
+      const now = md.snapshot;
+      md.setEnding = now.homeSets + now.awaySets !== preSnap.homeSets + preSnap.awaySets;
+      const last = sim.setScoresSoFar().at(-1);
+      if (md.setEnding && last !== undefined) md.snapshot = { ...preSnap, homeScore: last[0], awayScore: last[1], serving: entry.winner };
+      md.setEndsAt = null;
+      this.emit();
+      return logEntry;
+    }
     this.warmUpBench();
     // The set's last point: given, but the set — or the match — is closed only
     // once the point has been shown and either bench has had the chance to ask
@@ -3223,6 +3358,11 @@ class Game {
       const call = this.liveSim?.lastCall();
       const hot = call?.close === true && this.challengeError() === null;
       md.setEndsAt = Date.now() + (hot ? 4200 : 2600) / md.speed;
+      this.emit();
+      return;
+    }
+    // In the stands: the benches are the engine's, and it has made its changes already.
+    if (md.spectator !== undefined) {
       this.emit();
       return;
     }
@@ -3543,6 +3683,22 @@ class Game {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null || md.setEnding !== true) return null;
+    if (md.spectator !== undefined) {
+      // The set was closed by the engine on its last point: the real score now, and a break before the next.
+      md.setEnding = false;
+      md.setEndsAt = null;
+      md.snapshot = sim.snapshot();
+      if (md.snapshot.matchOver) {
+        this.emit();
+        return 'match';
+      }
+      md.timeoutsUsed = [0, 0];
+      md.paused = true;
+      md.pauseUntil = Date.now() + 6000 / md.speed;
+      matchEvent('match:set-break');
+      this.emit();
+      return null;
+    }
     sim.closeSet();
     md.setEnding = false;
     md.setEndsAt = null;
@@ -3696,6 +3852,7 @@ class Game {
     const md = this.matchday;
     const sim = this.liveSim;
     if (md === null || sim === null) return 'No match.';
+    if (md.spectator !== undefined) return 'You are in the stands.';
     if (md.videoReview != null) return 'The video is being looked at.';
     return sim.challengeError(md.userIsHome ? 0 : 1);
   }
@@ -3714,7 +3871,7 @@ class Game {
   aiConsidersChallenge(): void {
     const md = this.matchday;
     const sim = this.liveSim;
-    if (md === null || sim === null || md.timeoutActive !== null || md.videoReview != null) return;
+    if (md === null || sim === null || md.timeoutActive !== null || md.videoReview != null || md.spectator !== undefined) return;
     const aiTeam: 0 | 1 = md.userIsHome ? 1 : 0;
     const call = sim.lastCall();
     if (call !== null && call.close && call.doubt !== null && call.winner !== aiTeam && sim.challengeError(aiTeam) === null
@@ -5182,6 +5339,10 @@ class Game {
     if (world === null || md === null || sim === null) return;
 
     const result = sim.buildResult();
+    if (md.spectator !== undefined) {
+      this.finishWatching(md, result);
+      return;
+    }
     if (md.national !== null) {
       this.finishNationalMatch(md.national, md.fixture, result);
       return;
@@ -5268,6 +5429,8 @@ class Game {
   matchTactics(): TeamTactics | null {
     const md = this.matchday;
     if (md?.national != null) return this.nationalTactics();
+    // In the stands, the near side is the home club.
+    if (md?.spectator !== undefined) return this.world?.clubs[md.fixture.home]?.tactics ?? null;
     return this.club?.tactics ?? null;
   }
 

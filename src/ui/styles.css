@@ -5031,6 +5031,7 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .job-item-actions { display: flex; gap: 6px; flex: none; }
 
 .jobs-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.jobs-world-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); }
 
 .coach-vacant { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 

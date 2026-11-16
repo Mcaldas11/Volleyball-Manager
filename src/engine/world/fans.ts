@@ -25,7 +25,7 @@ export type FanStory =
   | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top' | 'retiring' | 'retired'
   | 'playerAward' | 'coachAward' | 'title' | 'match' | 'derby'
   | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified'
-  | 'press' | 'pressBold' | 'tips';
+  | 'press' | 'pressBold' | 'tips' | 'spotted' | 'homecoming';
 
 /** What a story's comments turn on. */
 export interface FanBrief {
@@ -69,6 +69,42 @@ type Line = readonly [FanMood, string];
  * nations, {coach}, {score}, {fee}, {weeks}, {comp}.
  */
 const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>> = {
+  spotted: {
+    club: [
+      ['happy', '{coach} in our stands? Somebody is being watched.'],
+      ['neutral', 'Coaches turn up to games all the time. Means nothing.'],
+      ['worried', 'If {coach} is here for one of ours, the board had better be ready.'],
+      ['happy', 'Nice to have a big name in to see us. Hope we put on a show.'],
+      ['neutral', 'Saw {coach} a few rows behind me. Took a lot of notes.'],
+    ],
+    other: [
+      ['neutral', 'Wonder who {coach} really came to see.'],
+      ['happy', 'Hope {coach} saw how good our team was tonight.'],
+    ],
+    rival: [
+      ['neutral', 'Of all the games to pick, {coach} chose that one?'],
+    ],
+    neutral: [
+      ['neutral', 'Something is brewing. Coaches do not sit through a {score} for fun.'],
+      ['happy', 'Love it when coaches go and watch the game like the rest of us.'],
+    ],
+  },
+  homecoming: {
+    club: [
+      ['delighted', '{coach} back where it belongs! Got a cheer from our end too.'],
+      ['happy', 'Good to see {coach} at our place again. Always welcome here.'],
+      ['angry', 'After how it ended? {coach} has some nerve showing up.'],
+      ['neutral', 'Old coaches come back to watch. Nothing to read into it.'],
+      ['delighted', 'Bring {coach} back. I will say it every week.'],
+    ],
+    other: [
+      ['neutral', 'All eyes on {coach} in the stands instead of on us. Typical.'],
+      ['happy', 'Hope {coach} enjoyed watching {c} get the result they deserved.'],
+    ],
+    neutral: [
+      ['neutral', 'Nice moment, that. Former coach back in the old stands.'],
+    ],
+  },
   tips: {
     club: [
       ['happy', 'Favourites? We will take that. Now go and do it.'],
@@ -448,7 +484,7 @@ const COMMENTS: Readonly<Record<FanStory, number>> = {
   rumour: 4, signing: 5, extension: 3, sacked: 4, appointed: 4, injury: 3, shock: 5, top: 4, retiring: 4, retired: 4,
   playerAward: 3, coachAward: 3, title: 6, match: 5, derby: 6,
   nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4, qualified: 4,
-  press: 3, pressBold: 5, tips: 3,
+  press: 3, pressBold: 5, tips: 3, spotted: 4, homecoming: 4,
 };
 
 /** Words in a club's name that say nothing about it. */

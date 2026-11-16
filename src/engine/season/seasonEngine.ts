@@ -44,7 +44,7 @@ import { selectionScore } from '../model/ability.ts';
 import { awardLeaguePoints, type Club, type LeagueTableRow } from '../model/club.ts';
 import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { MATCHDAY_SQUAD, Position } from '../model/positions.ts';
-import { MatchFormat, simulateMatch, type MatchResult, type TeamSetup } from '../match/engine.ts';
+import { MatchFormat, simulateMatch, type MatchResult, type MatchSetup, type TeamSetup } from '../match/engine.ts';
 import { formationOf, lineupSlotPositions, type TeamTactics } from '../match/tactics.ts';
 import { addToSeason, newSeasonLine, type PlayerMatchStats, type SeasonStatLine } from '../match/stats.ts';
 import { DAYS_PER_SEASON, currentPhase, dayOfSeason, SeasonPhase, type Fixture, type World } from '../world/world.ts';
@@ -375,26 +375,7 @@ export function playFixture(
   const friendly = isFriendly(world, fixture);
   const ownLeague = inManagersLeague(world, fixture);
   if (detailed || friendly || ownLeague) {
-    const result = simulateMatch(store, {
-      home: {
-        ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home), prep: matchPrep(world, home, fixture.day),
-        roomEdge: cohesionEdge(cohesionOf(world, home.id)), chemistry: chemistryFor(world),
-      },
-      away: {
-        ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away), prep: matchPrep(world, away, fixture.day),
-        roomEdge: cohesionEdge(cohesionOf(world, away.id)), chemistry: chemistryFor(world),
-      },
-      format: fixture.format,
-      importance: fixture.importance,
-      neutralVenue: fixture.neutralVenue,
-      collectLog: detailed || friendly,
-      // The manager's own matches anywhere, and his league's: their best moments are kept.
-      highlights: ownLeague || (detailed && !friendly),
-      seed: world.rng.next(),
-      // Nobody is on the bench to make the changes: the engine makes them for both sides.
-      autoCoach: [true, true],
-      friendly,
-    });
+    const result = simulateMatch(store, detailedMatchSetup(world, fixture, detailed, () => world.rng.next(), homeOwed, awayOwed));
     if (detailed || friendly) ctx.detailedResults.set(fixture.id, result);
     applyMatchResult(world, ctx, fixture, result);
     return;
@@ -423,6 +404,48 @@ export function playFixture(
   applyMatchFinances(world, home, away, fixture);
   aftermath(world, fixture, result.homeStats, result.awayStats, true);
   opponentsStudy(world, fixture);
+}
+
+/**
+ * The match as the season engine plays it in full, rally by rally: both
+ * clubs as they would turn out, each having read and prepared for the other,
+ * and nobody on either bench but the engine. `detailed` is a match someone
+ * is watching — its whole log is kept. Shared by `playFixture` and the live
+ * viewer of another club's match (see spectator.ts), so a match watched is
+ * the very match the season would have played. `seed` draws the match's
+ * dice.
+ */
+export function detailedMatchSetup(
+  world: World, fixture: Fixture, detailed: boolean, seed: () => number,
+  homeOwed = loanStarters(world, world.clubs[fixture.home]),
+  awayOwed = loanStarters(world, world.clubs[fixture.away]),
+): MatchSetup {
+  const store = world.players;
+  const home = world.clubs[fixture.home];
+  const away = world.clubs[fixture.away];
+  const friendly = isFriendly(world, fixture);
+  const ownLeague = inManagersLeague(world, fixture);
+  return {
+    home: {
+      ...toTeamSetup(store, home, homeOwed), read: oppositionRead(world, home), prep: matchPrep(world, home, fixture.day),
+      roomEdge: cohesionEdge(cohesionOf(world, home.id)), chemistry: chemistryFor(world),
+    },
+    away: {
+      ...toTeamSetup(store, away, awayOwed), read: oppositionRead(world, away), prep: matchPrep(world, away, fixture.day),
+      roomEdge: cohesionEdge(cohesionOf(world, away.id)), chemistry: chemistryFor(world),
+    },
+    format: fixture.format,
+    importance: fixture.importance,
+    neutralVenue: fixture.neutralVenue,
+    collectLog: detailed || friendly,
+    // The manager's own matches anywhere, and his league's: their best moments are kept.
+    highlights: ownLeague || (detailed && !friendly),
+    // Drawn here, after both sides are set up — where the season has always drawn it.
+    seed: seed(),
+    // Nobody is on the bench to make the changes: the engine makes them for both sides.
+    autoCoach: [true, true],
+    friendly,
+  };
 }
 
 /**

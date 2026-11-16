@@ -323,6 +323,8 @@ interface TodayItem {
   urgency: 1 | 2 | 3;
   text: string;
   go: ScreenId;
+  /** Done in place of going to `go`. */
+  act?: () => void;
 }
 
 /**
@@ -371,6 +373,17 @@ function ForToday(): JSX.Element {
   const project = club.facilityProject;
   if (project !== undefined) items.push({ key: 'facility', icon: 'club', urgency: 1, go: 'facilities', text: project.stage === 'asked' ? `The board is weighing up your facilities request — answer by ${g.dateLabelForDay(project.until)}` : `Building work under way — done ${g.dateLabelForDay(project.until)}` });
 
+  // No match of his own today: one of the others, live from the stands.
+  if (g.ownFixtureToday() === null && g.nationalMatchToday() === null) {
+    const watch = g.watchableMatches()[0];
+    if (watch !== undefined) {
+      const home = world.clubs[watch.home];
+      const away = world.clubs[watch.away];
+      items.push({ key: 'watch', icon: 'play', urgency: 1, go: 'fixtures', act: () => g.watchMatch(watch.id),
+        text: `Watch ${home.shortName} v ${away.shortName} live from the stands` });
+    }
+  }
+
   if (club.boardConfidence < 35) items.push({ key: 'board', icon: 'board', urgency: 3, go: 'home', text: `The board's confidence is low (${Math.round(club.boardConfidence)}%)` });
 
   items.sort((a, b) => b.urgency - a.urgency);
@@ -381,7 +394,7 @@ function ForToday(): JSX.Element {
         <Paged className="hm-today-list" items="li">
           {items.map((i) => (
             <li key={i.key}>
-              <button className={`hm-today-item u${i.urgency}`} onClick={() => g.go(i.go)}>
+              <button className={`hm-today-item u${i.urgency}`} onClick={() => (i.act !== undefined ? i.act() : g.go(i.go))}>
                 <span className="hm-today-icon"><Icon name={i.icon} size={15} /></span>
                 <span className="hm-today-text">{i.text}</span>
                 <Icon name="chevronRight" size={14} />

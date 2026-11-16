@@ -1791,6 +1791,8 @@ function LiveMatchView(): JSX.Element {
 
   const [homeClub, awayClub] = md.sides;
   const userTeamIdx: 0 | 1 = md.userIsHome ? 0 : 1;
+  // In the stands: neither side is his, and there is nothing to coach.
+  const watching = md.spectator !== undefined;
   const kits = sideKits(world, homeClub, awayClub);
   const teamOf = (p: number): 0 | 1 => (homeClub.players.includes(p) ? 0 : 1);
   // What the scoreboard shows: the state before the rally still being
@@ -1829,7 +1831,8 @@ function LiveMatchView(): JSX.Element {
       : md.videoReview != null
         ? 'Video check'
       : md.paused && md.pauseUntil !== null
-        ? (md.videoCheck === true ? 'Video check' : 'Substitution')
+        // In the stands the only timed stoppage is the break between sets: the benches' changes are the engine's own.
+        ? (md.videoCheck === true ? 'Video check' : md.spectator !== undefined ? 'Set break' : 'Substitution')
         : md.paused ? 'Paused' : 'Live';
   const remaining = g.subsRemaining();
   const shoutWait = g.shoutWait();
@@ -1880,7 +1883,7 @@ function LiveMatchView(): JSX.Element {
       <div className="lv-main">
         <div className="lv-col">
           <LiveTeamCard team={0} serving={view.serving === 0} ratings={ratings}
-            onPick={userTeamIdx === 0 ? (p, row) => pickPlayer(p, row, 'left') : undefined} />
+            onPick={!watching && userTeamIdx === 0 ? (p, row) => pickPlayer(p, row, 'left') : undefined} />
           <section className="card lv-points-card">
             <header className="lv-card-head">Point by point</header>
             <div className="lv-pbp" ref={logRef}>
@@ -1921,7 +1924,7 @@ function LiveMatchView(): JSX.Element {
               view={g.courtView}
               camera={g.courtCamera}
               numberOf={(p) => g.shirtNumber(p)}
-              coachLookFor={(t, kit) => (t === userTeamIdx ? figureLook(world.manager.look ?? DEFAULT_LOOK, kit, world.manager.gender === 'female') : null)}
+              coachLookFor={(t, kit) => (!watching && t === userTeamIdx ? figureLook(world.manager.look ?? DEFAULT_LOOK, kit, world.manager.gender === 'female') : null)}
               zoom={varZoom}
               ceremony={ceremony}
               trophy={md.trophy ?? null}
@@ -1994,7 +1997,7 @@ function LiveMatchView(): JSX.Element {
 
         <div className="lv-col">
           <LiveTeamCard team={1} serving={view.serving === 1} ratings={ratings}
-            onPick={userTeamIdx === 1 ? (p, row) => pickPlayer(p, row, 'right') : undefined} />
+            onPick={!watching && userTeamIdx === 1 ? (p, row) => pickPlayer(p, row, 'right') : undefined} />
           {quick !== null && <QuickSub key={quick.p} at={quick} onClose={closeQuick} />}
           <section className="card lv-stats-card">
             <header className="lv-card-head lv-tabs">
@@ -2031,6 +2034,15 @@ function LiveMatchView(): JSX.Element {
       </div>
 
       <div className="lv-coachbar">
+        {watching ? (
+          <>
+            <span className="lv-coach-label">In the stands</span>
+            <span className="faint lv-stands-note">Watching {homeClub.name} v {awayClub.name} — the benches are theirs.</span>
+            <button onClick={() => g.leaveWatching()} title="Leave before the end: the match is played later in the day as usual">
+              <Icon name="back" size={14} /> Leave
+            </button>
+          </>
+        ) : <>
         <span className="lv-coach-label">Coach</span>
         <button
           data-tour="timeout"
@@ -2079,6 +2091,7 @@ function LiveMatchView(): JSX.Element {
           <Icon name="stats" size={15} /> Assistant
           {g.coachingMode && <span className="lv-badge" title="Coaching mode is on">C</span>}
         </button>
+        </>}
         <span className="flex-spacer" />
         {md.paused
           ? (
@@ -2630,7 +2643,7 @@ function TrophyBanner(): JSX.Element | null {
   }, [trophy?.team]);
   if (md == null || trophy === null) return null;
   const winner = md.sides[trophy.team];
-  const ours = trophy.team === (md.userIsHome ? 0 : 1);
+  const ours = md.spectator === undefined && trophy.team === (md.userIsHome ? 0 : 1);
   return (
     <div className={`trophy-banner${ours ? ' ours' : ''}`} role="status" style={{ animationDelay: `${TROPHY_LIFT_AT - 200}ms` }}>
       <span className="trophy-banner-cup"><Icon name="trophy" size={28} /></span>

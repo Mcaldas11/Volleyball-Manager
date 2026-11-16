@@ -92,6 +92,8 @@ export interface JobApplication {
   answerOn: number;
   /** What the interview did to the board's view of him — added to its chance of offering the job. */
   interview?: number;
+  /** Sent to a club whose coach was still in post: its board must want to make a change for him. */
+  speculative?: boolean;
 }
 
 /** A club without a head coach. */
@@ -815,6 +817,91 @@ export function applyForJob(world: World, clubId: number, interview?: number): J
   return app;
 }
 
+// ---- Interest in any club -----------------------------------------------------------
+
+/** Approaches to clubs with a coach in post that can wait on an answer at once. */
+export const MAX_APPROACHES = 3;
+/** A board that turned an approach down won't hear another for this long. */
+const APPROACH_COOLDOWN_DAYS = 60;
+
+/**
+ * How ready a club's board is to part with its head coach for the user, 0-1: 1 at a club with no
+ * coach, next to nothing at one delighted with the man it has — and less still in his first weeks.
+ * A name bigger than his turns heads; a smaller one makes the board wonder why it would bother.
+ */
+export function changeAppetite(world: World, club: Club): number {
+  const coach = headCoachOf(world, club);
+  if (vacancyAt(world, club.id) !== undefined || coach === undefined) return 1;
+  const conf = club.boardConfidence;
+  let appetite = conf >= 75 ? 0.06 : conf >= 60 ? 0.15 : conf >= RECOVERED ? 0.32 : conf >= CONCERNED ? 0.55 : 0.8;
+  if (world.day - (club.coachSince ?? 0) < GRACE_DAYS) appetite *= 0.4;
+  const edge = (world.career.reputation - coach.reputation) / 5000;
+  appetite *= Math.max(0.5, Math.min(1.6, 1 + edge));
+  return Math.max(0, Math.min(1, appetite));
+}
+
+/** How likely a club is to offer the user its job if he asks, 0-1 — whether or not it has a vacancy. */
+export function interestChance(world: World, club: Club): number {
+  return Math.max(0.01, Math.min(0.95, hiringChance(world, club) * changeAppetite(world, club)));
+}
+
+/** Why the user can't make his interest in a club known right now, or null if he can. */
+export function interestBlock(world: World, clubId: number): string | null {
+  const club = world.clubs[clubId];
+  const career = world.career;
+  if (club === undefined) return 'There is no such club.';
+  if (vacancyAt(world, clubId) !== undefined) return applicationBlock(world, clubId);
+  if (clubId === world.userClubId) return 'You already manage this club.';
+  if (club.players.length === 0) return `${club.name} have no squad to coach.`;
+  if (career.offers.some((o) => o.clubId === clubId)) return `${club.name} have already offered you the job.`;
+  if (career.applications.some((a) => a.clubId === clubId)) return `You have made your interest known — ${club.name} will answer soon.`;
+  if (blocked(world, clubId)) return `${club.name} will not consider you again so soon.`;
+  if (career.applications.filter((a) => a.speculative === true).length >= MAX_APPROACHES) {
+    return `You already have ${MAX_APPROACHES} approaches waiting on an answer.`;
+  }
+  return null;
+}
+
+/**
+ * Ask a club for its job, vacancy or not. With a vacancy it is an ordinary application; with a coach
+ * in post the board takes a little longer, and offers only if it is ready to make a change for him.
+ */
+export function approachClub(world: World, clubId: number, interview?: number): JobApplication | null {
+  if (vacancyAt(world, clubId) !== undefined) return applyForJob(world, clubId, interview);
+  if (interestBlock(world, clubId) !== null) return null;
+  const app: JobApplication = {
+    clubId, sentOn: world.day, answerOn: world.day + world.rng.int(5, 10), interview, speculative: true,
+  };
+  world.career.applications.push(app);
+  return app;
+}
+
+/** The board's answer to an approach while its coach is still in post. */
+function answerApproach(world: World, app: JobApplication, club: Club): void {
+  const coach = headCoachOf(world, club);
+  const name = hiringChance(world, club);
+  const chance = Math.max(0, Math.min(0.95, (name + (app.interview ?? 0)) * changeAppetite(world, club)));
+  if (world.rng.chance(chance)) {
+    makeOffer(world, club, true, coach !== undefined
+      ? `The board is ready to part company with ${coach.firstName} ${coach.lastName} if you accept.`
+      : undefined);
+    return;
+  }
+  world.career.blockedUntil.set(club.id, world.day + APPROACH_COOLDOWN_DAYS);
+  const reason = name < 0.2
+    ? 'The board is looking for a coach of greater standing than yours, and will not consider a change on those terms.'
+    : coach !== undefined && club.boardConfidence >= RECOVERED
+      ? `The board has full confidence in ${coach.firstName} ${coach.lastName} and is not looking to make a change.`
+      : 'The board has decided to stand by its current head coach for now.';
+  postMessage(world, {
+    subject: `${club.name} are not looking for a new coach`,
+    body: `Thank you for making your interest in ${club.name} known. ${reason} We wish you well in your search.`,
+    from: `${club.name} Board`,
+    clubId: club.id,
+    category: 'career',
+  });
+}
+
 /**
  * Take a job on offer. From another club, the user leaves that one first,
  * with its board's thanks.
@@ -848,7 +935,7 @@ export function declineJobOffer(world: World, offerId: number): void {
   career.blockedUntil.set(offer.clubId, world.day + 90);
 }
 
-function makeOffer(world: World, club: Club, applied: boolean): JobOffer {
+function makeOffer(world: World, club: Club, applied: boolean, note?: string): JobOffer {
   const career = world.career;
   // A club that has to reach for him offers longer.
   const years = club.reputation < career.reputation * 0.9 ? 3 : 2;
@@ -870,7 +957,7 @@ function makeOffer(world: World, club: Club, applied: boolean): JobOffer {
       : `${club.name} are looking for a new head coach, and the board would like it to be you.`) +
       `${league !== undefined ? ` They play in the ${league.name}, and` : ' The board'} would expect a finish of ` +
       `${ordinal(club.boardExpectation)} or better. The contract: ${contractTerms(world, contract)}. ` +
-      `The offer stands until ${formatDay(world, offer.expiresOn)}.`,
+      `The offer stands until ${formatDay(world, offer.expiresOn)}.${note !== undefined ? ` ${note}` : ''}`,
     from: `${club.name} Board`,
     clubId: club.id,
     jobOfferId: offer.id,
@@ -886,6 +973,10 @@ function answerApplications(world: World): void {
     career.applications = career.applications.filter((a) => a !== app);
     const club = world.clubs[app.clubId];
     if (club === undefined) continue;
+    if (app.speculative === true && vacancyAt(world, club.id) === undefined && club.id !== world.userClubId) {
+      answerApproach(world, app, club);
+      continue;
+    }
     const chance = Math.max(0.02, Math.min(0.97, hiringChance(world, club) + (app.interview ?? 0)));
     if (vacancyAt(world, club.id) !== undefined && world.rng.chance(chance)) {
       makeOffer(world, club, true);

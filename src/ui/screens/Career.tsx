@@ -1,11 +1,11 @@
 import { InterestButton } from '../nationCoach.tsx';
 import { useListPages } from '../components.tsx';
 import { nationalCoachName } from '../../engine/world/internationals.ts';
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type { Club } from '../../engine/model/club.ts';
 import {
-  applicationBlock, boardMood, contractAskBlock, contractEndYear, contractTerms, currentJob, hiringChance,
-  lastJobEnded, type JobExit,
+  applicationBlock, boardMood, contractAskBlock, contractEndYear, contractTerms, currentJob, headCoachOf, hiringChance,
+  interestBlock, interestChance, lastJobEnded, vacancyAt, type JobExit,
 } from '../../engine/world/career.ts';
 import { ordinal } from '../../engine/world/inbox.ts';
 import {
@@ -21,6 +21,7 @@ import { AccoladeList, AllHonoursButton, HonourList, honourOf, type Honour } fro
 import { coachAccolades } from '../../engine/world/accolades.ts';
 import { StaffSheet, TeamStyle } from './CoachProfile.tsx';
 import { Icon } from '../icons.tsx';
+import { WatchLiveMenu } from '../watchLive.tsx';
 import { useGame } from '../state.ts';
 import { EditLookDialog } from '../lookEditor.tsx';
 import { ManagerPortraitButton } from '../portraitEditor.tsx';
@@ -125,18 +126,27 @@ export function VacancyAction({ club }: { club: Club }): JSX.Element {
   if (career.offers.some((o) => o.clubId === club.id)) {
     return <button className="sm" onClick={() => g.go('career')}>Offer received</button>;
   }
-  if (career.applications.some((a) => a.clubId === club.id)) return <span className="faint">Applied</span>;
-  const problem = applicationBlock(world, club.id);
+  const app = career.applications.find((a) => a.clubId === club.id);
+  if (app !== undefined) return <span className="faint">{app.speculative === true ? 'Approached' : 'Applied'}</span>;
+  const problem = interestBlock(world, club.id);
   if (problem !== null) return <span className="faint" title={problem}>Unavailable</span>;
-  return <ApplyButton club={club} />;
+  return <ApplyButton club={club} approach={vacancyAt(world, club.id) === undefined} />;
 }
 
-/** Apply — the board sits down with you first. */
-function ApplyButton({ club }: { club: Club }): JSX.Element {
+/** Apply — or, at a club with a coach in post, make your interest known. The board sits down with you first. */
+function ApplyButton({ club, approach = false }: { club: Club; approach?: boolean }): JSX.Element {
   const [interview, setInterview] = useState(false);
   return (
     <>
-      <button className="primary sm" onClick={() => setInterview(true)} title="An interview with the board, then your application">Apply</button>
+      <button
+        className={approach ? 'sm' : 'primary sm'}
+        onClick={() => setInterview(true)}
+        title={approach
+          ? 'The club has a head coach: tell the board you want the job. It offers it only if it is ready to make a change'
+          : 'An interview with the board, then your application'}
+      >
+        {approach ? 'Approach' : 'Apply'}
+      </button>
       {interview && <InterviewDialog club={club} onClose={() => setInterview(false)} />}
     </>
   );
@@ -553,7 +563,16 @@ function NationalJobBlock({ nation }: { nation: number }): JSX.Element {
 
 // ---- Job Centre ------------------------------------------------------------------
 
-type Scope = 'suitable' | 'all';
+type Scope = 'suitable' | 'all' | 'world';
+
+/** The Job Centre's filters, kept while the game runs: back from another screen, they are as he left them. */
+const keptFilters = new Map<string, unknown>();
+function useKept<T>(key: string, initial: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => (keptFilters.has(key) ? keptFilters.get(key) as T : initial));
+  return [value, (v: T) => { keptFilters.set(key, v); setValue(v); }];
+}
+type Level = 'all' | 'top' | 'level' | 'smaller';
+type Status = 'any' | 'vacant' | 'taken';
 
 /**
  * Every club in the world looking for a head coach, with how keen each is
@@ -563,10 +582,10 @@ export function JobCentreScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const career = world.career;
-  const [scope, setScope] = useState<Scope>('suitable');
-  const [conf, setConf] = useState<Confederation | 'all'>('all');
-  const [query, setQuery] = useState('');
-  const [kind, setKind] = useState<'clubs' | 'national'>('clubs');
+  const [scope, setScope] = useKept<Scope>('scope', 'suitable');
+  const [conf, setConf] = useKept<Confederation | 'all'>('conf', 'all');
+  const [query, setQuery] = useKept('query', '');
+  const [kind, setKind] = useKept<'clubs' | 'national'>('kind', 'clubs');
 
   const q = query.trim().toLowerCase();
   const rep = career.reputation;
@@ -590,7 +609,13 @@ export function JobCentreScreen(): JSX.Element {
         </div>
         <div className="jobs-filters">
           <Segmented options={[['clubs', 'Clubs'], ['national', 'National teams']] as const} value={kind} onChange={setKind} />
-          {kind === 'clubs' && <Segmented options={[['suitable', 'Suited to you'], ['all', 'All vacancies']] as const} value={scope} onChange={setScope} />}
+          {kind === 'clubs' && (
+            <Segmented
+              options={[['suitable', 'Suited to you'], ['all', 'All vacancies'], ['world', 'All clubs']] as const}
+              value={scope}
+              onChange={setScope}
+            />
+          )}
           <Dropdown
             size="sm"
             value={conf}
@@ -605,7 +630,7 @@ export function JobCentreScreen(): JSX.Element {
       </div>
 
       <div className="club-grid">
-        {kind === 'national' ? <NationalVacancies /> : (
+        {kind === 'national' ? <NationalVacancies /> : scope === 'world' ? <AllClubs conf={conf} query={q} /> : (
         <Card title={`Vacancies (${rows.length})`} icon="career" flush>
           {rows.length === 0 ? <Empty>No vacancies match — try all vacancies, or another continent.</Empty> : (
             <div className="table-wrap">
@@ -655,7 +680,8 @@ export function JobCentreScreen(): JSX.Element {
             <KV k="Status">{g.club !== null ? `Head coach of ${g.club.name}` : 'Out of work'}</KV>
             <p className="career-note">
               Clubs answer an application within a week. The bigger the club next to your name, the slimmer your chances —
-              success and trophies are what make a name.
+              success and trophies are what make a name. A club with a coach in post can be approached too: its board
+              offers you the job only if it is ready to part with him.
             </p>
           </Card>
           <Card title={`Job Offers (${career.offers.length})`} icon="offer"><OffersList /></Card>
@@ -663,6 +689,134 @@ export function JobCentreScreen(): JSX.Element {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Every club in the world, vacancy or not, narrowed by nation, division, standing and whether the job
+ * is free — and any of them open to an application or an approach.
+ */
+function AllClubs({ conf, query }: { conf: Confederation | 'all'; query: string }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const rep = world.career.reputation;
+  const [nation, setNation] = useKept('nation', -1);
+  const [tier, setTier] = useKept('tier', 0);
+  const [level, setLevel] = useKept<Level>('level', 'all');
+  const [status, setStatus] = useKept<Status>('status', 'any');
+
+  const userClubId = world.userClubId;
+  const clubs = useMemo(() => world.clubs.filter((c) => c.players.length > 0 && c.id !== userClubId), [world, userClubId]);
+  // The top clubs: the best-known twentieth of the world, and never fewer than twenty.
+  const topLine = useMemo(() => {
+    const reps = clubs.map((c) => c.reputation).sort((a, b) => b - a);
+    return reps[Math.min(reps.length - 1, Math.max(19, Math.floor(reps.length * 0.05)))] ?? 0;
+  }, [clubs]);
+  const nations = useMemo(() => [...new Set(clubs.map((c) => c.nation))]
+    .sort((a, b) => (NATIONS[a]?.name ?? '').localeCompare(NATIONS[b]?.name ?? '')), [clubs]);
+  const inConf = (n: number): boolean => conf === 'all' || NATIONS[n]?.confederation === conf;
+  const nationShown = nation >= 0 && inConf(nation) ? nation : -1;
+  const tiers = [...new Set(clubs.filter((c) => nationShown < 0 || c.nation === nationShown).map((c) => c.tier))].sort((a, b) => a - b);
+  const tierShown = tiers.includes(tier) ? tier : 0;
+  const tierLabel = (t: number): string => {
+    if (nationShown < 0) return t === 1 ? 'Top divisions' : `Division ${t}`;
+    const club = clubs.find((c) => c.nation === nationShown && c.tier === t);
+    return world.competitions[club?.leagueId ?? -1]?.name ?? `Division ${t}`;
+  };
+
+  const rows = clubs
+    .filter((c) => inConf(c.nation) && (nationShown < 0 || c.nation === nationShown) && (tierShown === 0 || c.tier === tierShown))
+    .filter((c) => level === 'all'
+      || (level === 'top' && c.reputation >= topLine)
+      || (level === 'level' && c.reputation <= rep * 1.3 && c.reputation >= rep * 0.6)
+      || (level === 'smaller' && c.reputation < rep * 0.6))
+    .filter((c) => {
+      if (status === 'any') return true;
+      const vacant = vacancyAt(world, c.id) !== undefined || headCoachOf(world, c) === undefined;
+      return status === 'vacant' ? vacant : !vacant;
+    })
+    .filter((c) => query === '' || c.name.toLowerCase().includes(query))
+    .sort((a, b) => b.reputation - a.reputation);
+  const { shown, more } = useListPages(rows, `world-${conf}-${nationShown}-${tierShown}-${level}-${status}-${query}`, -1, 7);
+
+  return (
+    <Card title={`All clubs (${rows.length})`} icon="club" flush className="jobs-world">
+      <div className="jobs-world-filters">
+        <Dropdown
+          size="sm"
+          value={nationShown}
+          menuWidth={220}
+          onChange={(n) => { setNation(n); setTier(0); }}
+          options={[
+            { value: -1, label: 'All nations', icon: <Icon name="world" size={14} /> },
+            ...nations.filter(inConf).map((n) => ({ value: n, label: NATIONS[n]?.name ?? '?', icon: <Flag nation={n} /> })),
+          ]}
+        />
+        <Dropdown
+          size="sm"
+          value={tierShown}
+          menuWidth={260}
+          onChange={setTier}
+          options={[
+            { value: 0, label: 'Every division', icon: <Icon name="trophy" size={14} /> },
+            ...tiers.map((t) => ({ value: t, label: tierLabel(t), hint: `Tier ${t}`, icon: <Icon name="trophy" size={14} /> })),
+          ]}
+        />
+        <Segmented
+          size="sm"
+          options={[['all', 'Any size'], ['top', 'Top clubs'], ['level', 'Your level'], ['smaller', 'Smaller']] as const}
+          value={level}
+          onChange={setLevel}
+        />
+        <Segmented
+          size="sm"
+          options={[['any', 'Any job'], ['vacant', 'Vacant'], ['taken', 'Coach in post']] as const}
+          value={status}
+          onChange={setStatus}
+        />
+      </div>
+      {rows.length === 0 ? <Empty>No clubs match — widen the filters.</Empty> : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Club</th>
+                <th>League</th>
+                <th>Reputation</th>
+                <th>Head coach</th>
+                <th>Board</th>
+                <th>Interest</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((club) => {
+                const coach = vacancyAt(world, club.id) === undefined ? headCoachOf(world, club) : undefined;
+                const interest = interestOf(interestChance(world, club));
+                const league = world.competitions[club.leagueId];
+                return (
+                  <tr key={club.id} className="clickable" onClick={() => g.selectClub(club.id)}>
+                    <td>
+                      <span className="name-cell">
+                        <ClubCrest club={club} size={24} />
+                        <span className="strong">{club.name}</span>
+                      </span>
+                    </td>
+                    <td className="dim"><Flag nation={club.nation} /> {league?.name ?? `Tier ${club.tier}`}</td>
+                    <td><StarMeter value={club.reputation} max={10000} size={11} /></td>
+                    <td className="dim">{coach !== undefined ? `${coach.firstName} ${coach.lastName}` : <span className="warn">Vacant</span>}</td>
+                    <td className={coach !== undefined ? moodClass(club.boardConfidence) : 'dim'}>{coach !== undefined ? boardMood(club.boardConfidence) : '—'}</td>
+                    <td className={interest.cls}>{interest.label}</td>
+                    <td className="num" onClick={(e) => e.stopPropagation()}><VacancyAction club={club} /></td>
+                  </tr>
+                );
+              })}
+              {more}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -746,6 +900,7 @@ export function UnemployedHome(): JSX.Element {
         </div>
         <div className="hm-banner-side">
           <span className="hm-chip">Offers <b>{career.offers.length}</b></span>
+          <WatchLiveMenu />
           <button className="primary" onClick={() => g.go('jobs')}><Icon name="search" size={14} /> Job Centre</button>
         </div>
       </section>

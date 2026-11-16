@@ -6,6 +6,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import type { Competition, Fixture } from '../../engine/world/world.ts';
 import { ClubCrest, ClubLink, Empty, Flag, FormGuide, money } from '../components.tsx';
 import { Icon } from '../icons.tsx';
+import { WatchLiveButton } from '../watchLive.tsx';
 import { useGame } from '../state.ts';
 import { BracketView, LeagueTableView } from './Match.tsx';
 import { Dropdown } from '../dropdown.tsx';
@@ -437,7 +438,7 @@ function ResultsList({ comp }: { comp: Competition }): JSX.Element {
                 <td className="dim">{g.weekdayLabelForDay(f.day)} {g.dateLabelForDay(f.day)}</td>
                 <td className="faint">{stageLabel(world, f)}{f.neutralVenue ? ' · neutral' : ''}</td>
                 <td className="num"><span className={f.played && f.homeSets > f.awaySets ? 'strong' : ''}><ClubLink id={f.home} /></span></td>
-                <td className="num"><b>{f.played ? `${f.homeSets}–${f.awaySets}` : 'v'}</b></td>
+                <td className="num">{f.played ? <b>{f.homeSets}–{f.awaySets}</b> : g.canWatchMatch(f) ? <WatchLiveButton fixture={f} /> : <b>v</b>}</td>
                 <td><span className={f.played && f.awaySets > f.homeSets ? 'strong' : ''}><ClubLink id={f.away} /></span></td>
               </tr>
             ))}
