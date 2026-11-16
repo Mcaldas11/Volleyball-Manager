@@ -3402,3 +3402,117 @@ html.short-window .portal-people > .hm-card {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---- Before the first serve: the coin toss, and the walk onto the court ---- */
+.coin-toss { flex: none; white-space: nowrap; }
+.coin-toss .coin-toss-call { color: var(--gold); font-weight: 700; }
+.coin-toss.choosing .segmented { box-shadow: 0 0 0 1px var(--gold); border-radius: 7px; }
+.coin-toss-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 10px 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.coin-toss-result.serve { border-color: rgba(245, 197, 66, 0.55); }
+.coin-toss .coin {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #17202a;
+  background: radial-gradient(circle at 35% 30%, #ffe6a3, var(--gold) 60%, #b8891c);
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18);
+}
+.coin-toss .coin.spinning {
+  animation: coin-flip 0.32s linear infinite;
+}
+@keyframes coin-flip {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(360deg); }
+}
+/* The competition's name never spills over the teams beside it. */
+.md-banner-mid { min-width: 0; max-width: 200px; }
+.md-banner-comp {
+  max-width: 100%;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.walk-out {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 10, 20, 0.72);
+  backdrop-filter: blur(2px);
+}
+.walk-out-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 26px 28px 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--surface-2), var(--surface));
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+  color: var(--text);
+}
+.walk-out-card > .icon { color: var(--gold); }
+.walk-out-card > b {
+  font: 700 22px/1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.walk-out-card > span:not(.walk-out-bar) {
+  min-height: 2.6em;
+  color: var(--text-dim);
+}
+.walk-out-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+.walk-out-bar > span {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #b8891c, var(--gold), #ffe6a3);
+  transform-origin: left center;
+  /* A transform: the compositor keeps it moving even while the match is being set up. */
+  animation: walk-out-fill linear forwards;
+}
+@keyframes walk-out-fill {
+  from { transform: scaleX(0.02); }
+  to { transform: scaleX(1); }
+}
+.md-banner-tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Narrower windows: the stars give way (the number says it), so the teams keep their names. */
+@media (max-width: 1440px) {
+  .md-banner .md-strength .star-meter { display: none; }
+  .md-banner-side { gap: 12px; padding-left: 12px; }
+}
+/* A long club name takes a second line rather than losing its end. */
+.md-banner-name {
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

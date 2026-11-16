@@ -81,6 +81,8 @@
     const button=el.closest('button,[role="button"],[role="tab"],[role="option"],[role="menuitem"],a[href],input[type="checkbox"],select,[role="switch"],tr.clickable,.player-link,.cal-cell');
     if(!button || button.closest('[data-vm-uiaudio]'))return null;
     if(button.disabled || button.getAttribute('aria-disabled')==='true')return null;
+    // Every click sounds the same: the plain tap (the one the manager's photo makes).
+    return 'tap';
     const cl=button.classList;
     const text=(button.getAttribute('aria-label')||button.getAttribute('title')||button.textContent||'').trim().slice(0,70).toLowerCase();
     if(button.matches('input[type="checkbox"],select,[role="switch"]') || cl.contains('seg')|| cl.contains('seg-btn'))return 'toggle';

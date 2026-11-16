@@ -94,7 +94,7 @@ test('a side that doesn\'t know its tactic yet plays it worse', () => {
     const away = { ...toTeamSetup(store, b), tactics: defaultTactics() };
     let won = 0;
     let played = 0;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) {
       const r = simulateMatch(store, { home, away, format: MatchFormat.BestOf5, importance: 0.5, neutralVenue: true, collectLog: false, seed: 300 + i });
       for (const [h, w] of r.setScores) {
         won += h;

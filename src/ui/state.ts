@@ -591,6 +591,11 @@ export interface MatchdayState {
   introShown?: boolean;
   /** The rotation the user's side starts each set in (0 for P1) — its coach's to pick on the team sheet. Absent: P1. */
   startRotation?: number;
+  /**
+   * The coin toss before the match: who won it, and whether the user's side serves the first point
+   * (null while the user, having won it, has still to choose). Absent until tossed.
+   */
+  toss?: { userWon: boolean; userServes: boolean | null };
   /** The reception libero — the only libero, unless a defensive one is named. */
   homeLibero: number;
   /** Second libero who plays whenever the team serves, or -1. */
@@ -3038,6 +3043,34 @@ class Game {
   }
 
   /** Confirm the lineup and start the live match. */
+  /**
+   * Before the match the referee tosses the coin. The winner picks: to serve, or to receive. The
+   * other side's coach picks as most do, to receive more often than not — the side-out is the easier point.
+   */
+  tossCoin(): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup' || md.toss !== undefined) return;
+    const userWon = Math.random() < 0.5;
+    md.toss = { userWon, userServes: userWon ? null : Math.random() < 0.6 };
+    this.emit();
+  }
+
+  /** Having won the toss: serve first, or receive. */
+  chooseFirstServe(serve: boolean): void {
+    const md = this.matchday;
+    if (md === null || md.stage !== 'lineup' || md.toss?.userWon !== true) return;
+    md.toss = { userWon: true, userServes: serve };
+    this.emit();
+  }
+
+  /** Who serves first by the toss, home 0 or away 1 — undefined if none was made (the engine then tosses). */
+  private firstServeOf(md: MatchdayState): 0 | 1 | undefined {
+    const serves = md.toss?.userServes;
+    if (serves === undefined || serves === null) return undefined;
+    const user: 0 | 1 = md.userIsHome ? 0 : 1;
+    return serves ? user : (1 - user) as 0 | 1;
+  }
+
   kickOff(): void {
     const world = this.world;
     const md = this.matchday;
@@ -3109,6 +3142,7 @@ class Game {
       highlights: !isFriendly(world, md.fixture),
       seed: world.rng.next(),
       friendly: isFriendly(world, md.fixture),
+      firstServe: this.firstServeOf(md),
     });
     const talk = md.talks?.prematch;
     if (talk !== undefined) this.liveSim.teamTalk(md.userIsHome ? 0 : 1, talk.result.multiplier, 'match');
@@ -5651,6 +5685,7 @@ class Game {
       neutralVenue: m.home !== t.host,
       collectLog: true,
       seed: world.rng.next(),
+      firstServe: this.firstServeOf(md),
     });
     this.startLive();
   }

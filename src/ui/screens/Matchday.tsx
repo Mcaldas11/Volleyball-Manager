@@ -44,6 +44,7 @@ import { CAMERA_MODES, type CameraMode } from '../courtCameras.ts';
 import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
+import { CoinToss, KickOffButton } from '../matchPrelude.tsx';
 import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn, type PointCue } from '../sound.ts';
 
 /** National teams play in something like their flag's colour. */
@@ -286,11 +287,11 @@ function LineupSetup(): JSX.Element {
           </div>
           {md.national === null && <MatchdayTacticSelect />}
           <MatchdayFormation />
+          <CoinToss />
           <MatchdayStartRotation />
           <TeamTalkButton />
-          <button className="primary lg" onClick={() => g.kickOff()} data-tour="kickoff">
-            <Icon name="whistle" size={18} /> Kick off
-          </button>
+          <KickOffButton disabled={md.toss?.userWon === true && md.toss.userServes === null}
+            title={md.toss?.userWon === true && md.toss.userServes === null ? 'Choose to serve or receive first' : undefined} />
         </div>
       </div>
 

@@ -88,7 +88,7 @@ test('combinations run off a middle up front as the decoy, and not at all when t
 });
 
 test('combination plays rehearsed in training beat the block, and a side that runs none', () => {
-  const N = 160;
+  const N = 400;
   let won = 0;
   const eff = { combo: [0, 0], plain: [0, 0] };
   for (let i = 0; i < N; i++) {

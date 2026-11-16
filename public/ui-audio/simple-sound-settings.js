@@ -14,13 +14,13 @@
   let group=null,panel=null,inputs=null,restored=new Map(),migrated=false;
   const translations={
     es:['Música de los menús','Canciones que cambian suavemente al navegar',
-      'Sonidos del partido','Balón, público, silbatos, esfuerzos y música del pabellón',
+      'Sonidos del partido','Balón, público, silbatos y esfuerzos',
       'Volumen','Ahora suena: ','Cargando música…','Música desactivada','Error al cargar música local','Lista: empieza al navegar'],
     en:['Menu music','Gentle songs that rotate while browsing',
-      'Match sounds','Ball, crowd, whistles, effort and stadium music',
+      'Match sounds','Ball, crowd, whistles and effort',
       'Volume','Now playing: ','Loading music…','Music disabled','Could not load local music','Ready: starts when browsing'],
     pt:['Música dos menus','Canções com transições suaves durante a navegação',
-      'Sons do jogo','Bola, público, apitos, esforço e música do pavilhão',
+      'Sons do jogo','Bola, público, apitos e esforço',
       'Volume','A tocar: ','A carregar música…','Música desligada','Erro ao abrir música local','Pronta: começa ao navegar']
   };
   function words(){return translations[get('vm.language','en')]||translations.en;}

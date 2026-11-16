@@ -248,6 +248,8 @@ export interface MatchSetup {
   autoCoach?: readonly [boolean, boolean];
   /** A friendly: played in full, but nothing of it goes on anyone's career record. */
   friendly?: boolean;
+  /** Who serves first, when the coin was tossed before kickoff ([home 0, away 1]). Absent: the engine tosses it. */
+  firstServe?: 0 | 1;
 }
 
 /**
@@ -873,6 +875,9 @@ export class MatchSimulator {
    */
   readonly roles: Uint8Array;
 
+  /** Who served the first point of the match: the sets alternate from it. */
+  private firstServer: 0 | 1 = 0;
+
   constructor(
     private readonly store: PlayerStore,
     private readonly setup: MatchSetup,
@@ -1049,8 +1054,8 @@ export class MatchSimulator {
     this.teams[1].stats.pointsByset.push(b);
     this.recoverBetweenSets();
 
-    // Serve alternates by set.
-    this.serving = (this.currentSet % 2 === 0 ? 1 : 0) as 0 | 1;
+    // Serve alternates by set, from whoever won the toss's serve.
+    this.serving = ((this.currentSet + 1) % 2 === 0 ? this.firstServer : 1 - this.firstServer) as 0 | 1;
     this.currentSet++;
 
     if (
@@ -1688,7 +1693,10 @@ export class MatchSimulator {
     this.setsToWin = format === MatchFormat.BestOf5 ? 3 : format === MatchFormat.BestOf3 ? 2 : 1;
     this.maxSets = format === MatchFormat.BestOf5 ? 5 : format === MatchFormat.BestOf3 ? 3 : 1;
     // Coin toss for first serve.
-    this.serving = this.rng.chance(0.5) ? 0 : 1;
+    // Drawn either way, so the rest of the match's draws come in the same order.
+    const coin: 0 | 1 = this.rng.chance(0.5) ? 0 : 1;
+    this.serving = this.setup.firstServe ?? coin;
+    this.firstServer = this.serving;
     this.drawForm();
     for (const t of this.teams) {
       for (const p of [...t.startLineup, t.liberoIdx, t.defensiveLibero]) if (p >= 0) t.starters.add(p);
