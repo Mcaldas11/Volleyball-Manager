@@ -1,0 +1,19 @@
+Sound in public/ui-audio and public/match-v168 (from a follower's build, 2026-11)
+
+Crowd, whistle, horn, squeak, grunt and breathing effects (match-v168/library/sfxmint-*.mp3)
+  SFXMint — https://sfxmint.com — CC0 1.0 (public domain): commercial use allowed, no attribution required.
+
+Menu and arena music (match-v168/menu-*.mp3, match-v168/pa-*.mp3)
+  The file names follow Pixabay's download naming (artist-title.mp3); the Pixabay Content License
+  allows use in a game without credit, but not selling the tracks on their own.
+  - menu-comastudio.mp3   "Soft Minimal Contemporary" — ComaStudio
+  - menu-corporate.mp3    "Corporate Technology" — DELOSound
+  - pa-sport.mp3          "Sport" — Paul Yudin
+  - menu-lofi.mp3, pa-rock.mp3, pa-drums.mp3,
+    user-long-applause.mp3, user-encouragement.mp3, user-crowd-error.mp3 — source not recorded:
+    to confirm with the follower before release.
+
+Interface cues (ui-audio/sfx/*.ogg) and the chill tracks (ui-audio/music/*.ogg)
+  Made for the follower's build, described there as original.
+
+The CC0 recordings in public/sounds are credited in public/sounds/CREDITS.txt.
