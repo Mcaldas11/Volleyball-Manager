@@ -5,6 +5,7 @@ import { cupGroupTable, cupProgress, isCupCompetition, nextClubWorldYear, stageL
 import { NATIONS } from '../../engine/world/nations.ts';
 import type { Competition, Fixture } from '../../engine/world/world.ts';
 import { ClubCrest, ClubLink, Empty, Flag, FormGuide, money } from '../components.tsx';
+import { CompetitionLogo } from '../crest.tsx';
 import { Icon } from '../icons.tsx';
 import { WatchLiveButton } from '../watchLive.tsx';
 import { useGame } from '../state.ts';
@@ -83,7 +84,9 @@ function LeagueCard(): JSX.Element {
   return (
     <section className="comp-card">
       <header className="comp-card-head">
-        <span className="comp-card-icon"><Icon name="trophy" size={18} /></span>
+        <span className={`comp-card-icon${comp !== undefined ? ' logo' : ''}`}>
+          {comp !== undefined ? <CompetitionLogo comp={comp} size={30} /> : <Icon name="trophy" size={18} />}
+        </span>
         <span className="comp-card-titles">
           <span className="comp-card-kind">League</span>
           <strong>{comp?.name ?? 'League'}</strong>
@@ -126,7 +129,7 @@ function CupCard({ comp }: { comp: Competition }): JSX.Element {
   return (
     <section className={`comp-card${progress?.champion === true ? ' champion' : ''}`}>
       <header className="comp-card-head">
-        <span className="comp-card-icon"><Icon name={comp.kind === 'clubworld' ? 'world' : 'trophy'} size={18} /></span>
+        <span className="comp-card-icon logo"><CompetitionLogo comp={comp} size={30} /></span>
         <span className="comp-card-titles">
           <span className="comp-card-kind">{competitionKind(comp)}</span>
           <strong>{comp.name}</strong>
@@ -157,7 +160,7 @@ function SpectatorCard({ comp }: { comp: Competition }): JSX.Element {
   return (
     <section className="comp-card spectator">
       <header className="comp-card-head">
-        <span className="comp-card-icon"><Icon name={comp.kind === 'clubworld' ? 'world' : 'trophy'} size={18} /></span>
+        <span className="comp-card-icon logo"><CompetitionLogo comp={comp} size={30} /></span>
         <span className="comp-card-titles">
           <span className="comp-card-kind">{competitionKind(comp)}</span>
           <strong>{comp.name}</strong>
@@ -268,7 +271,7 @@ export function CompetitionDetail(): JSX.Element | null {
   return (
     <div className="comp-page">
       <div className="comp-page-head">
-        <span className="comp-card-icon lg"><Icon name={comp.kind === 'clubworld' ? 'world' : 'trophy'} size={24} /></span>
+        <span className="comp-card-icon lg logo"><CompetitionLogo comp={comp} size={44} /></span>
         <div className="comp-page-titles">
           <span className="comp-card-kind">
             {league ? <><Flag nation={comp.nation} /> {NATIONS[comp.nation]?.name} · Tier {comp.tier}</> : <>{competitionKind(comp)} · {comp.organizer ?? ''}</>}

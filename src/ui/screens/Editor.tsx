@@ -6,18 +6,20 @@
  */
 
 import { useMemo, useState, type JSX } from 'react';
-import type { Club, ClubKit } from '../../engine/model/club.ts';
+import type { Club, ClubKit, CrestDesign } from '../../engine/model/club.ts';
+import type { Competition } from '../../engine/world/world.ts';
 import { ATTR_LABELS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS, HIDDEN_ATTRS, type AttributeName } from '../../engine/model/attributes.ts';
 import { refreshAbility } from '../../engine/model/ability.ts';
 import { POSITION_NAMES, POSITIONS, type Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { Card, ClubCrest, Empty, money, PlayerFace, Pos } from '../components.tsx';
+import { Card, ClubCrest, Empty, money, PlayerFace, Pos, Segmented } from '../components.tsx';
+import { CompetitionLogo, CREST_PATTERNS, CREST_SHAPES, CrestArt, defaultCompetitionLogo, hslHex, shrinkImage } from '../crest.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { designFrom, hueOf, kitFromHue, toHex } from '../kits.ts';
 import { useGame } from '../state.ts';
 
-type Tab = 'clubs' | 'players' | 'kits';
+type Tab = 'clubs' | 'players' | 'kits' | 'logos';
 
 /** A labelled box that commits what was typed when it loses focus, or on Enter. */
 function Field({ label, value, onCommit, type = 'text', min, max, width }: {
@@ -244,6 +246,137 @@ function KitDesigner({ club }: { club: Club }): JSX.Element {
   );
 }
 
+// ---- Crests and league badges --------------------------------------------------------------
+
+/** A club's crest as the designer starts it: the drawn shield, in its colour, with its short name. */
+function clubDesign(club: Club): CrestDesign {
+  const h = hueOf(club);
+  return { shape: 'shield', primary: hslHex(h, 55, 40), secondary: '#ffffff', pattern: 'plain', text: club.shortName.slice(0, 4) };
+}
+
+function CompetitionPicker({ value, onChange }: { value: number; onChange: (id: number) => void }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const options = useMemo(() => world.competitions
+    .filter((c) => c.kind !== 'friendly')
+    .sort((a, b) => a.nation - b.nation || a.tier - b.tier || a.name.localeCompare(b.name))
+    .map((c) => ({ value: c.id, label: c.name, hint: c.nation >= 0 ? NATIONS[c.nation]?.code ?? '' : c.kind })), [world]);
+  return <Dropdown value={value} options={options} onChange={onChange} searchable menuWidth={340} />;
+}
+
+/**
+ * The crest designer: shape, two colours, a pattern and a few letters — or a picture of the
+ * player's own. Every change shows at once wherever the crest appears; looks alone, so a
+ * career keeps its achievements.
+ */
+function CrestDesigner({ name, design, initial, onChange }: {
+  name: string;
+  /** The design saved now; undefined: the one the game draws. */
+  design: CrestDesign | undefined;
+  /** Where a new design starts from. */
+  initial: CrestDesign;
+  onChange: (next: CrestDesign | undefined) => void;
+}): JSX.Element {
+  const d = design ?? initial;
+  const [error, setError] = useState('');
+  const set = (patch: Partial<CrestDesign>): void => onChange({ ...d, ...patch });
+  const pick = (file: File | undefined): void => {
+    if (file === undefined) return;
+    setError('');
+    shrinkImage(file)
+      .then((image) => set({ image }))
+      .catch(() => setError('That file is not a picture the game can read (PNG, JPG, SVG or WebP).'));
+  };
+  const usesImage = d.image !== undefined && d.image !== '';
+  return (
+    <div className="ed-crest">
+      <div className="ed-crest-controls">
+        <div className="ed-crest-row">
+          <span>Shape</span>
+          <Segmented size="sm" options={CREST_SHAPES} value={d.shape} onChange={(shape) => set({ shape })} />
+        </div>
+        <div className="ed-crest-row">
+          <span>Pattern</span>
+          <Segmented size="sm" options={CREST_PATTERNS} value={d.pattern} onChange={(pattern) => set({ pattern })} />
+        </div>
+        <div className="ed-crest-row">
+          <span>Colours</span>
+          <label className="ed-crest-colour"><input type="color" value={d.primary} onChange={(e) => set({ primary: e.target.value })} /> Main</label>
+          <label className="ed-crest-colour"><input type="color" value={d.secondary} onChange={(e) => set({ secondary: e.target.value })} /> Pattern</label>
+        </div>
+        <div className="ed-crest-row">
+          <span>Letters</span>
+          <input className="ed-crest-text" value={d.text} maxLength={4} spellCheck={false}
+            onChange={(e) => set({ text: e.target.value.toUpperCase().slice(0, 4) })} />
+          <small className="faint">Up to four, or none</small>
+        </div>
+        <div className="ed-crest-row">
+          <span>Picture</span>
+          <label className="ed-crest-upload">
+            <Icon name="upload" size={13} /> {usesImage ? 'Change picture…' : 'Use a picture…'}
+            <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden
+              onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
+          </label>
+          {usesImage && <button className="sm" onClick={() => set({ image: undefined })}><Icon name="close" size={12} /> Remove picture</button>}
+        </div>
+        {error !== '' && <p className="ed-crest-error">{error}</p>}
+        <p className="faint ed-note">
+          A picture stands for the whole design: a square one with a clear background looks best, and it is kept at 128 pixels.
+          Looks alone, so the career keeps its achievements.
+        </p>
+        <button className="sm ed-crest-reset" disabled={design === undefined} onClick={() => onChange(undefined)}>
+          <Icon name="swap" size={13} /> Back to the game's own
+        </button>
+      </div>
+      <div className="ed-crest-preview">
+        <CrestArt design={d} size={128} title={name} />
+        <div className="ed-crest-sizes">
+          <CrestArt design={d} size={48} title={name} />
+          <CrestArt design={d} size={28} title={name} />
+          <CrestArt design={d} size={18} title={name} />
+        </div>
+        <b>{name}</b>
+      </div>
+    </div>
+  );
+}
+
+function LogoEditor({ club }: { club: Club | undefined }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const [kind, setKind] = useState<'club' | 'competition'>('club');
+  const [compId, setCompId] = useState<number>(() => (club !== undefined
+    ? world.competitions.find((c) => c.kind === 'league' && c.participants.includes(club.id))?.id : undefined)
+    ?? world.competitions.find((c) => c.kind === 'league')?.id ?? 0);
+  const comp: Competition | undefined = world.competitions[compId];
+  return (
+    <div className="ed-logos">
+      <div className="ed-logo-head">
+        <Segmented size="sm" options={[['club', 'Club crest'], ['competition', 'League & cup badges']]} value={kind} onChange={setKind} />
+        {kind === 'competition' && <CompetitionPicker value={compId} onChange={setCompId} />}
+        {kind === 'club' && <span className="faint">Pick the club at the top right.</span>}
+      </div>
+      <Card
+        title={<span className="ed-title">
+          {kind === 'club' && club !== undefined ? <ClubCrest club={club} size={22} /> : comp !== undefined && <CompetitionLogo comp={comp} size={22} />}
+          {kind === 'club' ? club?.name ?? 'Club crest' : comp?.name ?? 'Competition badge'}
+        </span>}
+        icon="club"
+        className="ed-card"
+      >
+        {kind === 'club' && club !== undefined && (
+          <CrestDesigner key={`c${club.id}`} name={club.name} design={club.crest} initial={clubDesign(club)}
+            onChange={(next) => { club.crest = next; g.markKitChanged(); }} />
+        )}
+        {kind === 'competition' && comp !== undefined && (
+          <CrestDesigner key={`l${comp.id}`} name={comp.name} design={comp.logo} initial={defaultCompetitionLogo(comp)}
+            onChange={(next) => { comp.logo = next; g.markKitChanged(); }} />
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // ---- The screen --------------------------------------------------------------------------
 
 export function EditorScreen(): JSX.Element {
@@ -257,9 +390,9 @@ export function EditorScreen(): JSX.Element {
     <div className="ed">
       <div className="ed-bar">
         <div className="tr-tabs" role="tablist">
-          {(['clubs', 'players', 'kits'] as const).map((t) => (
+          {(['clubs', 'players', 'kits', 'logos'] as const).map((t) => (
             <button key={t} role="tab" className={`hdr-tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'clubs' ? 'Clubs' : t === 'players' ? 'Players' : 'Kit designer'}
+              {t === 'clubs' ? 'Clubs' : t === 'players' ? 'Players' : t === 'kits' ? 'Kit designer' : 'Crests & logos'}
             </button>
           ))}
         </div>
@@ -270,12 +403,13 @@ export function EditorScreen(): JSX.Element {
         <Icon name="alert" size={13} />
         {world.edited === true
           ? 'This career has been edited: it earns no achievements.'
-          : tab === 'kits'
+          : tab === 'kits' || tab === 'logos'
             ? 'Changes are made at once, to this career only — new colours keep its achievements.'
-            : 'Changes are made at once, to this career only — and an edited career earns no achievements (the kit designer excepted).'}
+            : 'Changes are made at once, to this career only — and an edited career earns no achievements (kits and crests excepted).'}
       </p>
       {tab === 'clubs' && club !== undefined && <ClubEditor key={club.id} club={club} />}
       {tab === 'kits' && club !== undefined && <KitDesigner key={club.id} club={club} />}
+      {tab === 'logos' && <LogoEditor club={club} />}
       {tab === 'players' && (
         <div className="ed-players">
           <PlayerSearch selected={player} onPick={setPlayer} />

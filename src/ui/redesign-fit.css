@@ -3516,3 +3516,162 @@ html.short-window .portal-people > .hm-card {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+
+/* Names after a match read as links: a faint underline, gold on hover. */
+.box-table .player-link,
+.mr .player-link,
+.mrv-player-name.player-link,
+.lv-stats .player-link {
+  text-decoration: underline dotted rgba(255, 255, 255, 0.3);
+  text-underline-offset: 3px;
+}
+.box-table .player-link:hover,
+.mr .player-link:hover,
+.mrv-player-name.player-link:hover,
+.lv-stats .player-link:hover {
+  color: var(--gold-bright);
+  text-decoration: underline solid;
+}
+
+/* The live Players tab: either side's match so far, the table scrolling inside its card. */
+.lv-stats { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 6px; padding: 6px 8px 8px; }
+.lv-stats-pick { display: flex; gap: 4px; flex: none; }
+.lv-stats-pick button {
+  flex: 1;
+  min-height: 24px;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 5px;
+}
+.lv-stats-pick button.on { background: var(--vm-gold-selected, rgba(245, 197, 66, 0.18)); color: var(--gold); border-color: var(--gold); }
+.lv-stats-table { flex: 1; min-height: 0; overflow: auto; scrollbar-width: none; }
+.lv-stats-table::-webkit-scrollbar { display: none; }
+.lv-stats-table table { width: 100%; font-size: 11.5px; }
+.lv-stats-table th, .lv-stats-table td { padding: 3px 4px; white-space: nowrap; }
+.lv-stats-table thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.lv-stats-who { display: inline-flex; align-items: center; gap: 5px; max-width: 120px; }
+.lv-stats-who .player-link { overflow: hidden; text-overflow: ellipsis; }
+.lv-stats-off td { opacity: 0.55; }
+.lv-stats-who { border-left: 3px solid var(--pos-c, var(--line-strong)); padding-left: 5px; max-width: 104px; }
+.lv-stats-table th, .lv-stats-table td { padding: 2px 3px; height: auto; line-height: 1.35; font-size: 11px; }
+
+/* Competition badges where the trophy icon stood. */
+.comp-card-icon.logo,
+.competition-workspace .comp-card-icon.logo {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  width: auto;
+  height: auto;
+}
+.comp-logo { flex: none; filter: drop-shadow(0 2px 4px #0007); }
+
+/* The editor's crest designer: the controls, and the crest at the sizes it is seen at. */
+.ed-logos { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.ed-logo-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ed-crest { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
+.ed-crest-controls { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ed-crest-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ed-crest-row > span:first-child { width: 72px; flex: none; font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.ed-crest-colour {
+  display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px;
+  border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12.5px;
+}
+.ed-crest-colour input[type="color"] { width: 40px; height: 26px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.ed-crest-text { width: 90px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.ed-crest-upload {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.ed-crest-upload:hover { border-color: var(--gold); color: var(--gold-bright); }
+.ed-crest-error { color: var(--bad, #ff6b6b); font-size: 12px; margin: 0; }
+.ed-crest-reset { align-self: flex-start; }
+.ed-crest-preview {
+  display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px;
+  border-radius: 10px; background: radial-gradient(circle at 50% 35%, #ffffff10, transparent 70%), var(--surface-2);
+}
+.ed-crest-sizes { display: flex; align-items: flex-end; gap: 16px; }
+@media (max-width: 1100px) { .ed-crest { grid-template-columns: minmax(0, 1fr); } }
+/* The designer takes the height it needs, like the other editor tabs. */
+.ed-logos, .ed-logos > .ed-card, .ed-logos > .ed-card > .card-body { flex: none; }
+
+/* ============================================================
+   The live match, full window (2026-11-18): no menus over it once
+   the ball is in play; the score in one bar across the top, the
+   win-probability line under it, the caption laid over the court.
+   ============================================================ */
+.vm-shell.vm-match-play .content-live { padding: 10px 14px 12px; }
+.vm-match-play .lv { gap: 8px; }
+.vm-match-play .lv-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "home score away" "bar bar bar";
+  align-items: center;
+  column-gap: 18px;
+  row-gap: 0;
+  padding: 0 0 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--lv-home) 22%, transparent), transparent 35%, transparent 65%, color-mix(in srgb, var(--lv-away) 22%, transparent)),
+    linear-gradient(180deg, #172233, #0f1824);
+  overflow: hidden;
+}
+.vm-match-play .lv-score {
+  grid-area: score;
+  min-width: 0;
+  padding: 5px 16px 4px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.vm-match-play .lv-score-meta { justify-content: center; gap: 12px; }
+.vm-match-play .lv-points { font-size: 34px; }
+/* The momentum line's parts join the bar: the names either side, the line along the bottom. */
+.vm-match-play .lv-momentum { display: contents; }
+.vm-match-play .lv-momentum > span {
+  font: 800 clamp(15px, 1.35vw, 22px)/1.1 var(--font-display);
+  letter-spacing: 0.03em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 18px;
+}
+.vm-match-play .lv-momentum > span:first-child { grid-area: home; text-align: right; }
+.vm-match-play .lv-momentum > span:last-child { grid-area: away; text-align: left; }
+.vm-match-play .lv-momentum-bar { grid-area: bar; height: 4px; gap: 0; }
+.vm-match-play .lv-momentum-bar i { border-radius: 0; }
+
+/* The side columns: a little wider on the right for the players' table. */
+.vm-match-play .lv-main {
+  grid-template-columns: clamp(220px, 17vw, 290px) minmax(0, 1fr) clamp(240px, 19vw, 330px);
+  gap: 10px;
+}
+/* The caption sits on the court's foot, not under it. */
+.vm-match-play .lv-center { position: relative; gap: 0; }
+.vm-match-play .lv-caption {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  background: rgba(8, 14, 22, 0.78);
+  backdrop-filter: blur(3px);
+  border: 1px solid #ffffff1a;
+  pointer-events: none;
+}
+
+/* The stats card's tabs: short, on one line, never over each other. */
+.lv-stats-card .lv-tabs { flex-wrap: nowrap; gap: 2px; overflow: hidden; letter-spacing: 0.06em; }
+.lv-stats-card .lv-tabs button { flex: 0 1 auto; min-width: 0; padding: 3px 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1440px) {
+  .vm-match-play .lv-main { grid-template-columns: clamp(200px, 15.5vw, 290px) minmax(0, 1fr) clamp(262px, 20vw, 330px); }
+  .lv-stats { padding-inline: 6px; }
+  .lv-stats-who { max-width: 82px; }
+  .lv-stats-table th, .lv-stats-table td { padding: 2px 2px; font-size: 10.5px; }
+  .lv-stats-table th { letter-spacing: 0; }
+}

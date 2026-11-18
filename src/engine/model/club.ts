@@ -135,6 +135,8 @@ export interface Club {
   camp?: Camp;
   /** The club's colour and kit as designed in the editor — absent: made from its id (see ui/kits.ts). */
   kit?: ClubKit;
+  /** The crest as designed in the editor — absent: the shield drawn in the club's colour (see ui/crest.tsx). */
+  crest?: CrestDesign;
   /** Its following, and what it started at; a new stand being asked for or built — see supporters.ts. */
   fans?: number;
   fanRef?: FanRef;
@@ -163,6 +165,26 @@ export interface LeagueTableRow {
   setsAgainst: number;
   pointsFor: number;
   pointsAgainst: number;
+}
+
+/** The shapes a crest or a competition's badge can take. */
+export type CrestShape = 'shield' | 'round' | 'diamond' | 'hexagon' | 'square';
+/** What is drawn across it. */
+export type CrestPattern = 'plain' | 'stripes' | 'halves' | 'chevron' | 'sash' | 'ring';
+
+/**
+ * A crest or a league's badge as designed in the editor: a shape in two colours, a pattern, a few
+ * letters — or a picture of the player's own (a small PNG as a data URL), which then stands for it all.
+ */
+export interface CrestDesign {
+  shape: CrestShape;
+  /** CSS colours, as #rrggbb. */
+  primary: string;
+  secondary: string;
+  pattern: CrestPattern;
+  /** Up to four letters across the middle; empty for none. */
+  text: string;
+  image?: string;
 }
 
 /** A club's colour, as a hue, and its kit, as CSS colours. */

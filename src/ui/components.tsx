@@ -6,6 +6,7 @@
  */
 
 import { hueOf } from './kits.ts';
+import { CrestArt } from './crest.tsx';
 import {
   useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode, type RefObject,
 } from 'react';
@@ -320,6 +321,12 @@ export function clubThemeStyle(club: Club): CSSProperties {
  * Fully offline — no image request, no rate limit, works for all of them at once.
  */
 export function ClubCrest({ club, size = 28 }: { club: Club; size?: number }): JSX.Element {
+  // Designed in the editor: that one.
+  if (club.crest !== undefined) return <CrestArt design={club.crest} size={size} title={club.name} />;
+  return <DrawnCrest club={club} size={size} />;
+}
+
+function DrawnCrest({ club, size }: { club: Club; size: number }): JSX.Element {
   const gradId = useId();
   const hue = clubHue(club);
   return (

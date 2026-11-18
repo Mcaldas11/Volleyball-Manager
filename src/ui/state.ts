@@ -28,7 +28,7 @@ import { acceptSuggestion, declineSuggestion, meetingsOf, type StaffMeeting } fr
 import { applyPreferences, loadPreferences, savePreferences, type Preferences } from './preferences.ts';
 import { loadManagerProfile, saveManagerProfile } from './managerProfile.ts';
 import { playAroundTheLeague, type AroundTheLeague } from '../engine/season/aroundTheLeague.ts';
-import { canWatch, commitWatched, spectatorSetup, watchableToday, watchAngle, watchListToday, type WatchAngle } from '../engine/season/spectator.ts';
+import { canWatch, commitWatched, nextWatchDay, spectatorSetup, watchableToday, watchAngle, watchListToday, type WatchAngle } from '../engine/season/spectator.ts';
 import { bookCamp, type CampKind } from '../engine/world/camp.ts';
 import { requestLowerTarget, requestWages } from '../engine/world/board.ts';
 import { setUiGame } from './gameGender.ts';
@@ -53,6 +53,7 @@ import {
 import { bestByAbility } from '../engine/model/ability.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
+import type { PlayerMatchStats } from '../engine/match/stats.ts';
 import { InjuryType, NO_CLUB, PlayerFlag } from '../engine/model/players.ts';
 import { MATCHDAY_SQUAD, Position } from '../engine/model/positions.ts';
 import { StaffRole, staffName, staffRating, type Staff } from '../engine/model/staff.ts';
@@ -2711,6 +2712,12 @@ class Game {
   }
 
   /** The same, each with why he might go. */
+  /** The next day with another club's match to watch from the stands, today included — null when none is left. */
+  nextWatchDay(): number | null {
+    const world = this.world;
+    return world === null ? null : nextWatchDay(world);
+  }
+
   watchList(): Array<{ fixture: Fixture; angle: WatchAngle }> {
     const world = this.world;
     return world === null ? [] : watchListToday(world);
@@ -5263,6 +5270,14 @@ class Game {
       }
     }
     return out;
+  }
+
+  /** One side's players in the match so far, as the box score will list them — those who have been on court. */
+  livePlayerStats(team: 0 | 1): PlayerMatchStats[] {
+    const sim = this.liveSim;
+    if (sim === null) return [];
+    const live = sim.liveStats();
+    return [...(team === 0 ? live.home : live.away).players.values()].filter((st) => playedInMatch(st));
   }
 
   /**

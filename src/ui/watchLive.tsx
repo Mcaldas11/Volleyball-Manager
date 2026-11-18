@@ -198,3 +198,26 @@ function WatchRow({ fixture, reason, onPick }: { fixture: Fixture; reason?: stri
     </button>
   );
 }
+
+/**
+ * In the bar under the menus, on every screen: today's other matches to watch,
+ * and — out of work, on a day with none — the next day there are, a holiday away.
+ * Nothing in a match, or on a day of his own match.
+ */
+export function WatchBar(): JSX.Element | null {
+  const g = useGame();
+  const world = g.world;
+  if (world === null || g.matchday !== null || g.postMatch !== null) return null;
+  if (g.ownFixtureToday() !== null || g.nationalMatchToday() !== null) return null;
+  if (g.watchList().length > 0) return <WatchLiveMenu label="Matches today" />;
+  // In work, the club's own calendar moves him on; out of work, nothing would.
+  if (!g.unemployed) return null;
+  const day = g.nextWatchDay();
+  if (day === null || day <= world.day) return null;
+  return (
+    <button className="sm watch-live-trigger" disabled={g.processing} onClick={() => g.openHoliday(day)}
+      title="Out of work: go on holiday until the next day other clubs play, and watch from the stands">
+      <Icon name="calendar" size={12} /> Next matches · {g.dateLabelForDay(day)}
+    </button>
+  );
+}

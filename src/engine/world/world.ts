@@ -22,7 +22,7 @@ import type { Mentorship } from './mentoring.ts';
 import type { InjuryCase, RelapseRisk } from './treatment.ts';
 import type { AbilityHistory } from './abilityHistory.ts';
 import { Rng } from '../core/rng.ts';
-import type { Club, LeagueTableRow } from '../model/club.ts';
+import type { Club, CrestDesign, LeagueTableRow } from '../model/club.ts';
 import { PlayerStore } from '../model/players.ts';
 import type { Staff } from '../model/staff.ts';
 import type { Highlight } from '../match/highlights.ts';
@@ -121,6 +121,8 @@ export interface Competition {
   key?: string;
   /** Who runs it — a national federation, a confederation, FIVB. */
   organizer?: string;
+  /** Its badge as designed in the editor — absent: one drawn from its name (see ui/crest.tsx). */
+  logo?: CrestDesign;
   /** This season's groups and bracket, for a cup competition. */
   cup?: CupState;
   /** Nation index for domestic competitions, -1 otherwise. */

@@ -505,7 +505,7 @@ export function BoxScore({ watched: shown }: { watched?: WatchedMatch } = {}): J
                 ? (s.receptionPerfect + s.receptionPositive) / s.receptionsTotal : 0;
               return (
                 <tr key={s.playerIdx} className="clickable" onClick={() => g.select(s.playerIdx)}>
-                  <td className="strong" title={store.fullName(s.playerIdx)}>{store.shortName(s.playerIdx)}</td>
+                  <td className="strong" title={`${store.fullName(s.playerIdx)} — open his profile`}><span className="player-link">{store.shortName(s.playerIdx)}</span></td>
                   <td className="num">
                     <RatingBadge
                       value={matchRating(s, store.position[s.playerIdx] as Position, setsFor, setsAgainst)}

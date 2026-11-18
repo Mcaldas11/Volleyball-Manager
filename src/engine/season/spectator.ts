@@ -37,11 +37,28 @@ export type WatchAngle =
 
 /** Whether a match can be watched from the stands: today's, still to play, two clubs — neither of them the manager's. */
 export function canWatch(world: World, f: Fixture): boolean {
-  if (f.played || f.day !== world.day) return false;
+  return f.day === world.day && watchableFixture(world, f);
+}
+
+/** A match he could go and see on its day: not played, not his club's, a club match with a table to it. */
+function watchableFixture(world: World, f: Fixture): boolean {
+  if (f.played || f.day < world.day) return false;
   if (f.home === world.userClubId || f.away === world.userClubId) return false;
   if (world.clubs[f.home] === undefined || world.clubs[f.away] === undefined) return false;
   const comp = world.competitions[f.competitionId];
   return comp !== undefined && comp.kind !== 'international' && !isFriendly(world, f);
+}
+
+/** The next day, from today on, with a match he could go and see — or null if the season has none left. */
+export function nextWatchDay(world: World): number | null {
+  const days = [...world.fixturesByDay.keys()].filter((d) => d >= world.day).sort((a, b) => a - b);
+  for (const d of days) {
+    for (const id of world.fixturesByDay.get(d) ?? []) {
+      const f = world.fixtures[id];
+      if (f !== undefined && watchableFixture(world, f)) return d;
+    }
+  }
+  return null;
 }
 
 /** Today's matches he could watch, the ones with a reason to be there first, then the biggest. */

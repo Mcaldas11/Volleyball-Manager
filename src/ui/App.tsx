@@ -61,7 +61,7 @@ import { AffiliatesScreen, OwnerScreen, CommercialScreen, FacilitiesScreen } fro
 import { SquadScreen, PlayerDetail, YouthScreen } from './screens/Squad.tsx';
 import { LineupScreen } from './screens/Lineup.tsx';
 import { FixturesScreen, TableScreen } from './screens/Match.tsx';
-import { WatchMatchItem } from './watchLive.tsx';
+import { WatchBar, WatchMatchItem } from './watchLive.tsx';
 import {
   TacticsScreen, RotationsScreen, FinancesScreen,
   ScoutingScreen, TransfersScreen,
@@ -185,6 +185,8 @@ function GameShell(): JSX.Element {
   // window and takes the sidebar's width too: nothing in it can be used
   // until the match is over anyway.
   const live = g.matchday !== null;
+  // Once the ball is in play, the match is the whole window: no menus over it.
+  const inPlay = g.matchday?.stage === 'live';
   const contentClass = live ? ' content-live' : ' content-fill';
   // In the women's game the screens speak of the players as women — not of the
   // coaches, the staff, the owner or the manager's own career: those keep theirs.
@@ -194,9 +196,9 @@ function GameShell(): JSX.Element {
     (!onAProfile && ['staff', 'career', 'jobs', 'owner', 'achievements', 'courses'].includes(g.screen));
 
   return (
-    <div className={`app vm-shell vm-topnav${live ? ' vm-match-live' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
+    <div className={`app vm-shell vm-topnav${live ? ' vm-match-live' : ''}${inPlay ? ' vm-match-play' : ''}`} style={club !== null ? clubThemeStyle(club) : undefined}>
       <div className="main-col">
-        <Header />
+        {!inPlay && <Header />}
         <main className={`content${contentClass}`} data-pronouns={keepPronouns ? 'keep' : undefined}>
           <div key={key} className="view-fade">
             {g.matchday !== null
@@ -653,6 +655,7 @@ function Header(): JSX.Element {
         ) : (
           <span className="vm-context-title">{info.title}</span>
         )}
+        {!takeover && <WatchBar />}
         <TeamSwitch disabled={takeover} />
         {/* The club's tactic loaded, and the others saved — over the tactics screens; not the national team's. */}
         {tacticScreen && club !== null && !takeover && !g.nationalView() && <TacticPicker />}
@@ -693,6 +696,9 @@ function ContinueButton(): JSX.Element {
   const opponent = world.clubs[opponentId];
   // No match of his own today: the other clubs' matches, to watch from the stands.
   const watchable = matchToday || !open ? [] : g.watchableMatches().slice(0, 4);
+  // Out of work, with no fixture of his own: the next day other clubs play, to go and watch.
+  const nextWatch = next === null && natDay === null && g.unemployed && open ? g.nextWatchDay() : null;
+  const watchDay = nextWatch !== null && nextWatch > world.day ? nextWatch : null;
 
   let label = 'Continue';
   let icon: IconName = 'playOutline';
@@ -751,15 +757,21 @@ function ContinueButton(): JSX.Element {
           <button onClick={() => { setOpen(false); g.openHoliday(); }}>
             <Icon name="calendar" size={15} /> Go on holiday…
           </button>
-          <button disabled={next === null && natDay === null} onClick={() => {
+          <button disabled={next === null && natDay === null && watchDay === null} onClick={() => {
             setOpen(false);
             if (next !== null) g.openMatchday();
             else if (natDay !== null && natDay <= world.day) g.openNationalMatchday();
             else if (natDay !== null) g.openHoliday(natDay);
+            else if (watchDay !== null) g.openHoliday(watchDay);
           }}>
             <Icon name="fastForward" size={15} />
             <span className="menu-pop-stack">
-              <span>{next === null && natDay === null ? 'No fixture scheduled' : matchToday ? 'Play match' : 'Holiday until the next match…'}</span>
+              <span>{next === null && natDay === null
+                ? (watchDay !== null ? 'Holiday until the next matches…' : 'No fixture scheduled')
+                : matchToday ? 'Play match' : 'Holiday until the next match…'}</span>
+              {next === null && natDay === null && watchDay !== null && (
+                <span className="faint">Other clubs play · {g.dateLabelForDay(watchDay)}</span>
+              )}
               {next !== null && opponent !== undefined && (
                 <span className="faint">
                   {next.home === world.userClubId ? 'vs' : 'at'} {opponent.shortName} · {g.dateLabelForDay(next.day)}

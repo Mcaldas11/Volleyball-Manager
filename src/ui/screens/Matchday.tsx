@@ -45,6 +45,7 @@ import { DEFAULT_LOOK, figureLook } from '../coachLook.ts';
 import { PlayerDetail } from './Squad.tsx';
 import { TALK_LINES, TALK_OPTIONS, type ReactionLabel, type TalkMoment } from '../../engine/world/teamTalk.ts';
 import { CoinToss, KickOffButton } from '../matchPrelude.tsx';
+import { LivePlayerStats } from '../livePlayerStats.tsx';
 import { playCrowd, playHit, playHooter, playWhistle, setSoundOn, soundOn, type PointCue } from '../sound.ts';
 
 /** National teams play in something like their flag's colour. */
@@ -1474,7 +1475,7 @@ function LiveMatchView(): JSX.Element {
   }, [panelOpen]);
   const [shoutOpen, setShoutOpen] = useState(false);
   const shoutRef = useDismiss(shoutOpen, () => setShoutOpen(false));
-  const [sideTab, setSideTab] = useState<'stats' | 'around'>('stats');
+  const [sideTab, setSideTab] = useState<'stats' | 'players' | 'around'>('stats');
   const [ceremony, setCeremony] = useState<number | null>(null);
   /** True while a rally is being played out, so snapshot changes don't yank the court mid-rally. */
   const animatingRef = useRef(false);
@@ -2001,14 +2002,18 @@ function LiveMatchView(): JSX.Element {
           {quick !== null && <QuickSub key={quick.p} at={quick} onClose={closeQuick} />}
           <section className="card lv-stats-card">
             <header className="lv-card-head lv-tabs">
-              <button className={sideTab === 'stats' ? 'on' : ''} onClick={() => setSideTab('stats')}>Match stats</button>
+              <button className={sideTab === 'stats' ? 'on' : ''} onClick={() => setSideTab('stats')} title="The two sides' match stats">Stats</button>
+              <button className={sideTab === 'players' ? 'on' : ''} onClick={() => setSideTab('players')} title="Each player's match so far">Players</button>
               {md.around !== undefined && (
-                <button className={sideTab === 'around' ? 'on' : ''} onClick={() => setSideTab('around')}>Around the league</button>
+                <button className={sideTab === 'around' ? 'on' : ''} onClick={() => setSideTab('around')} title="The other matches of the round, and the table as it stands">League</button>
               )}
             </header>
             {sideTab === 'around' && md.around !== undefined ? (
               <AroundPanel around={md.around} progress={{ sets: setHistory.length, score: [view.homeScore, view.awayScore], over: view.matchOver }}
                 own={{ home: md.fixture.home, away: md.fixture.away, homeSets: view.homeSets, awaySets: view.awaySets }} />
+            ) : sideTab === 'players' ? (
+              <LivePlayerStats names={[homeClub.shortName, awayClub.shortName]} ratings={ratings}
+                onCourt={[[...(md.snapshot?.homeCourt ?? []), md.snapshot?.homeLibero ?? -1], [...(md.snapshot?.awayCourt ?? []), md.snapshot?.awayLibero ?? -1]]} />
             ) : <>
             <div className="lv-stats-names">
               <span>{homeClub.shortName}</span>
