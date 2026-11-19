@@ -5,7 +5,7 @@
  * achievements, as the editor says before anything is changed.
  */
 
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useState, type JSX } from 'react';
 import type { Club, ClubKit, CrestDesign } from '../../engine/model/club.ts';
 import type { Competition } from '../../engine/world/world.ts';
 import { ATTR_LABELS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS, HIDDEN_ATTRS, type AttributeName } from '../../engine/model/attributes.ts';
@@ -105,6 +105,16 @@ function PlayerEditor({ p }: { p: number }): JSX.Element {
   const store = g.world!.players;
   const edit = (f: () => void): void => { f(); g.markEdited(); };
   const nationOptions = useMemo(() => NATIONS.map((n, i) => ({ value: i, label: n.name, hint: n.code })), []);
+  const world = g.world!;
+  const clubOptions = useMemo(() => [
+    { value: -1, label: 'No club (free agent)', hint: '' },
+    ...world.clubs
+      .filter((c) => c.players.length > 0)
+      .sort((a, b) => a.tier - b.tier || b.reputation - a.reputation)
+      .map((c) => ({ value: c.id, label: c.name, hint: `${NATIONS[c.nation]?.code ?? ''} · tier ${c.tier}` })),
+  ], [world]);
+  const [confirmWipe, setConfirmWipe] = useState(false);
+  const age = world.year - store.birthYear[p];
   const setAttr = (a: AttributeName, v: string): void => {
     const n = num(v, 1, 20);
     if (n === null) return;
@@ -136,6 +146,27 @@ function PlayerEditor({ p }: { p: number }): JSX.Element {
           onCommit={(v) => { const n = num(v, 160, 225); if (n !== null) edit(() => { store.heightCm[p] = n; }); }} />
         <Field label="Potential" type="number" min={1} max={2000} value={store.potentialAbility[p]}
           onCommit={(v) => { const n = num(v, store.currentAbility[p], 2000); if (n !== null) edit(() => { store.potentialAbility[p] = n; }); }} />
+        <label className="ed-field">
+          <span>Club</span>
+          <Dropdown<number> size="sm" value={store.clubId[p]} options={clubOptions} searchable menuWidth={320}
+            onChange={(v) => g.editorMove(p, v)} />
+        </label>
+        <Field label="Age" type="number" min={15} max={45} value={age}
+          onCommit={(v) => { const n = num(v, 15, 45); if (n !== null) edit(() => { store.birthYear[p] = world.year - n; }); }} />
+      </div>
+      <div className="ed-player-actions">
+        <button className="sm" onClick={() => g.select(p)}><Icon name="user" size={13} /> His page</button>
+        {confirmWipe ? (
+          <>
+            <span className="faint">Wipe his clubs before this one, his transfers, his season numbers and his timeline?</span>
+            <button className="sm danger" onClick={() => { g.editorClearHistory(p); setConfirmWipe(false); }}>Yes, clear it</button>
+            <button className="sm" onClick={() => setConfirmWipe(false)}>Keep it</button>
+          </>
+        ) : (
+          <button className="sm" onClick={() => setConfirmWipe(true)} title="Start his career record again from his club now">
+            <Icon name="close" size={13} /> Clear career history
+          </button>
+        )}
       </div>
       <div className="ed-attrs">
         {GROUPS.map(([name, list]) => (
@@ -382,9 +413,16 @@ function LogoEditor({ club }: { club: Club | undefined }): JSX.Element {
 export function EditorScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const [tab, setTab] = useState<Tab>('clubs');
+  const [tab, setTab] = useState<Tab>(g.editorTarget !== null ? 'players' : 'clubs');
   const [clubId, setClubId] = useState<number>(g.club?.id ?? world.clubs.find((c) => c.players.length > 0)?.id ?? 0);
-  const [player, setPlayer] = useState<number>(g.club?.players[0] ?? -1);
+  const [player, setPlayer] = useState<number>(g.editorTarget ?? g.club?.players[0] ?? -1);
+  // From a player's Edit button: his page, in the editor.
+  useEffect(() => {
+    if (g.editorTarget === null) return;
+    setTab('players');
+    setPlayer(g.editorTarget);
+    g.editorTarget = null;
+  }, [g, g.editorTarget]);
   const club = world.clubs[clubId];
   return (
     <div className="ed">

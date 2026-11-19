@@ -20,7 +20,8 @@
 
 import { Rng } from '../core/rng.ts';
 import { abilityFractionAtAge } from '../model/ability.ts';
-import { ATTR_COUNT, ATTR_LABELS, ATTRIBUTES, type AttributeName } from '../model/attributes.ts';
+import { ATTR_COUNT, ATTR_LABELS, ATTRIBUTES, HIDDEN_ATTRS, type AttributeName } from '../model/attributes.ts';
+import { refreshAbility } from '../model/ability.ts';
 import type { Club } from '../model/club.ts';
 import { InjuryType, PlayerFlag } from '../model/players.ts';
 import { Position, POSITION_NAMES } from '../model/positions.ts';
@@ -439,6 +440,26 @@ export function dismissCandidate(world: World, p: number): void {
 
 // ---- Each day -------------------------------------------------------------------------
 
+/** The attributes a programme looks after: everything but the hidden ones (his nature, not his game). */
+const GUARDED = new Set<number>(ATTRIBUTES.map((a, i) => (HIDDEN_ATTRS as readonly string[]).includes(a) ? -1 : i).filter((i) => i >= 0));
+
+/**
+ * A programme never sets its prospect back: whatever the rest of his days do
+ * to him while it runs, no attribute of his game ends below where it began.
+ * Programmes from before their starting attributes were kept are left alone.
+ */
+function holdGround(world: World, prog: AcademyProgramme): void {
+  const start = prog.startAttrs;
+  if (start === undefined) return;
+  const store = world.players;
+  const base = store.attrBase(prog.playerIdx);
+  let changed = false;
+  for (const i of GUARDED) {
+    if (store.attrs[base + i] < start[i]) { store.attrs[base + i] = start[i]; changed = true; }
+  }
+  if (changed) refreshAbility(store, prog.playerIdx);
+}
+
 /**
  * The academy's day: a programme's week done (a step of development, maybe),
  * a programme over (its report), a search's report in, a candidate no longer
@@ -457,6 +478,7 @@ export function academyDay(world: World): void {
       continue;
     }
     const days = world.day - prog.startDay;
+    holdGround(world, prog);
     if (days > 0 && days % 7 === 0) {
       programmeWeek(world, prog, new Rng(store.id[p] * 101 + world.day));
       // A training report every four weeks; the last one is the final word.

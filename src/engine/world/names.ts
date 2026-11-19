@@ -7,12 +7,15 @@
  * through the FIVB VIS importer, never from here.
  */
 
+import type { Rng } from '../core/rng.ts';
+import { DOUBLE_SURNAME, NAME_EXTRAS } from './nameExtras.ts';
+
 export interface NameBank {
   first: readonly string[];
   last: readonly string[];
 }
 
-export const NAME_BANKS: Readonly<Record<string, NameBank>> = {
+const BASE_BANKS: Readonly<Record<string, NameBank>> = {
   polish: {
     first: ['Bartosz', 'Kamil', 'Wojciech', 'Mateusz', 'Jakub', 'Michał', 'Paweł', 'Tomasz', 'Piotr', 'Łukasz', 'Aleksander', 'Norbert', 'Karol', 'Grzegorz', 'Marcin', 'Dawid', 'Rafał', 'Krzysztof', 'Damian', 'Sebastian', 'Artur', 'Jan', 'Adrian', 'Filip', 'Maciej', 'Szymon'],
     last: ['Kowalski', 'Nowak', 'Wiśniewski', 'Wójcik', 'Kamiński', 'Lewandowski', 'Zieliński', 'Szymański', 'Woźniak', 'Dąbrowski', 'Kozłowski', 'Jankowski', 'Mazur', 'Kwiatkowski', 'Krawczyk', 'Piotrowski', 'Grabowski', 'Nowicki', 'Pawłowski', 'Michalski', 'Adamczyk', 'Dudek', 'Zając', 'Wieczorek', 'Jabłoński', 'Król'],
@@ -158,7 +161,7 @@ export const NAME_BANKS: Readonly<Record<string, NameBank>> = {
 export const DEFAULT_NAME_GROUP = 'american';
 
 /** The women's game: first names by the same groups. */
-const WOMEN_FIRST: Readonly<Record<string, readonly string[]>> = {
+const BASE_WOMEN_FIRST: Readonly<Record<string, readonly string[]>> = {
   polish: ['Agnieszka', 'Katarzyna', 'Magdalena', 'Joanna', 'Natalia', 'Malwina', 'Zuzanna', 'Martyna', 'Aleksandra', 'Kamila', 'Klaudia', 'Monika', 'Paulina', 'Weronika', 'Julia', 'Anna', 'Maria', 'Karolina', 'Justyna', 'Oliwia'],
   italian: ['Paola', 'Alessia', 'Miriam', 'Giulia', 'Francesca', 'Sofia', 'Chiara', 'Elena', 'Martina', 'Sara', 'Federica', 'Valentina', 'Anna', 'Ilaria', 'Beatrice', 'Caterina', 'Monica', 'Cristina', 'Gaia', 'Silvia'],
   french: ['Lucille', 'Héléna', 'Juliette', 'Camille', 'Léa', 'Chloé', 'Manon', 'Emma', 'Inès', 'Clara', 'Pauline', 'Marine', 'Laura', 'Julie', 'Océane', 'Margot', 'Lisa', 'Anaïs', 'Mathilde', 'Amandine'],
@@ -234,6 +237,23 @@ export function feminineSurname(group: string, last: string): string {
   }
 }
 
+/** A list and more for it, each name once, in order: the common ones first. */
+function joined(base: readonly string[], more: readonly string[] | undefined): readonly string[] {
+  return more === undefined ? base : [...new Set([...base, ...more])];
+}
+
+/** Every bank with its extra names (nameExtras.ts) after its own. */
+export const NAME_BANKS: Readonly<Record<string, NameBank>> = Object.fromEntries(
+  Object.entries(BASE_BANKS).map(([group, bank]) => [group, {
+    first: joined(bank.first, NAME_EXTRAS[group]?.first),
+    last: joined(bank.last, NAME_EXTRAS[group]?.last),
+  }]),
+);
+
+const WOMEN_FIRST: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
+  Object.entries(BASE_WOMEN_FIRST).map(([group, names]) => [group, joined(names, NAME_EXTRAS[group]?.womenFirst)]),
+);
+
 const WOMEN_BANKS = new Map<string, NameBank>();
 
 /** The name bank of a group — the women's, in the women's game. */
@@ -247,4 +267,41 @@ export function bankFor(group: string, women = false): NameBank {
     WOMEN_BANKS.set(key, bank);
   }
   return bank;
+}
+
+/** The weight of each surname by its place in its bank: the first few common, the tail rare but there. */
+const SURNAME_WEIGHTS = new Map<number, Float64Array>();
+function surnameWeights(n: number): { weights: Float64Array; total: number } {
+  let w = SURNAME_WEIGHTS.get(n);
+  if (w === undefined) {
+    w = new Float64Array(n);
+    for (let i = 0; i < n; i++) w[i] = 1 / Math.pow(i + 8, 0.75);
+    SURNAME_WEIGHTS.set(n, w);
+  }
+  let total = 0;
+  for (let i = 0; i < n; i++) total += w[i];
+  return { weights: w, total };
+}
+
+/**
+ * A surname from a group's bank as a country spreads them: the common ones
+ * more often, every one of them possible — and in Spain now and then the two
+ * a player is given, the father's and the mother's.
+ */
+export function drawSurname(group: string, women: boolean, rng: Rng): string {
+  const bank = bankFor(group, women);
+  const { weights, total } = surnameWeights(bank.last.length);
+  // One draw, as a plain pick would take, so the rest of the world comes out as it always has:
+  // the second surname and whether there is one are read off the same number.
+  const u = rng.float();
+  const at = (x: number): string => {
+    let r = x * total;
+    for (let i = 0; i < weights.length; i++) { r -= weights[i]; if (r < 0) return bank.last[i]; }
+    return bank.last[bank.last.length - 1];
+  };
+  const first = at(u);
+  const double = DOUBLE_SURNAME[group];
+  if (double === undefined || (u * 7919) % 1 >= double) return first;
+  const second = at((u * 104729) % 1);
+  return second === first ? first : `${first} ${second}`;
 }

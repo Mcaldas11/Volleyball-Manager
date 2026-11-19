@@ -93,6 +93,7 @@ import {
   type Fixture, type GameMessage, type ManagerLook, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
 import { MAX_CONTRACT_YEARS, refusesToRenew, SquadRole, type IncomingOffer } from '../engine/world/negotiation.ts';
+import { editorClearHistory, editorMovePlayer } from '../engine/world/godMode.ts';
 import { releaseClauseOf, takeUpOption } from '../engine/world/contractTerms.ts';
 import { defaultTactics, FORMATION_NAMES, formationOf, type Formation, type TeamTactics } from '../engine/match/tactics.ts';
 import {
@@ -131,13 +132,19 @@ import {
   boardArrangeFriendly, friendlyBlock, isFriendly, requestFriendly, withdrawFriendlyRequest,
 } from '../engine/season/friendlies.ts';
 import {
+  beginTestCoaching, bookTestMatch, endTestCoaching, settleTestMatch, testMatchToday as testFixtureToday, TEST_SIDE_NAME,
+} from '../engine/season/testMatch.ts';
+import {
+  answerCupInvite as answerTournamentInvite, cancelCup, cupMatchTitle, hostBlock, hostCup, hostNationCup, type CupSize,
+} from '../engine/season/preseasonCups.ts';
+import {
   acceptContractOffer as signContractOffer, acceptJobOffer as takeJobOffer, appointManager, askForContract, startOutOfWork as startOutOfWorkCareer,
   approachClub, interestBlock, declineContractOffer as turnDownContractOffer,
   declineJobOffer as turnDownJobOffer, headCoachOf, isUnemployed, resign as resignFromClub,
 } from '../engine/world/career.ts';
 import { positionTarget, setPositionTarget } from '../engine/world/training.ts';
 import { effectivePlayerAt } from '../engine/match/court.ts';
-import { injuryNotice } from '../engine/world/inbox.ts';
+import { injuryNotice, postMessage } from '../engine/world/inbox.ts';
 import type { CourtSideline, InjuryPhase } from './courtMotion.ts';
 import type { MatchInjury } from '../engine/match/injury.ts';
 import type { Highlight } from '../engine/match/highlights.ts';
@@ -777,6 +784,8 @@ class Game {
   holidayDialog: { returnDay: number | null } | null = null;
   /** The dialog to invite a club to a friendly, while it is open. */
   friendlyDialog = false;
+  /** The pre-season tournaments' window — host one, answer invitations, the brackets — while it is open. */
+  cupsDialog = false;
   /** A point or play being shown again, and what it is. */
   replay: { highlight: Highlight; title: string } | null = null;
   /** The instructions left last time, offered again next time. */
@@ -1023,6 +1032,8 @@ class Game {
       // A loaded career rolls new dice: leave a match you lost, load the save and play it again,
       // and it is a new match — the story is not written in the save.
       freshDice(world);
+      // A save written in the middle of the practice match: the side lent for it goes back.
+      endTestCoaching(world);
       this.world = world;
       setUiGame(world.gender ?? 'men');
       showUniqueFaces(world);
@@ -1963,7 +1974,7 @@ class Game {
       this.finishPostMatch();
       return;
     }
-    if (this.ownFixtureToday() !== null) {
+    if (this.ownFixtureToday() !== null || this.testMatchToday() !== null) {
       this.openMatchday();
       return;
     }
@@ -2114,6 +2125,90 @@ class Game {
 
   closeFriendlyDialog(): void {
     this.friendlyDialog = false;
+    this.emit();
+  }
+
+  // ---- Pre-season tournaments ---------------------------------------------------------------
+
+  openCupsDialog(): void {
+    if (this.world === null) return;
+    this.cupsDialog = true;
+    this.emit();
+  }
+
+  closeCupsDialog(): void {
+    this.cupsDialog = false;
+    this.emit();
+  }
+
+  /** Host a tournament: the invitations go out, and each club answers within a few days. */
+  hostTournament(size: CupSize, startDay: number, invitees: readonly number[]): boolean {
+    const world = this.world;
+    if (world === null) return false;
+    const problem = hostBlock(world, size, startDay, invitees);
+    const cup = problem === null ? hostCup(world, size, startDay, invitees) : null;
+    this.notice = cup !== null
+      ? `Invitations sent for the ${cup.name} — the clubs answer within a few days.`
+      : problem ?? 'That tournament cannot be arranged.';
+    this.emit();
+    return cup !== null;
+  }
+
+  /** The national team hosts a friendly tournament. */
+  hostNationalTournament(size: CupSize, startDay: number, invitees: readonly number[]): boolean {
+    const world = this.world;
+    if (world === null) return false;
+    const r = hostNationCup(world, size, startDay, invitees);
+    this.notice = r.text;
+    this.emit();
+    return r.ok;
+  }
+
+  /** Accept or turn down an invitation to a tournament. */
+  answerCupInvite(inviteId: number, accept: boolean): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = answerTournamentInvite(world, inviteId, accept).text;
+    this.emit();
+  }
+
+  /** Call off the club's own tournament before it starts. */
+  cancelTournament(cupId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    this.notice = cancelCup(world, cupId) ? 'The tournament is called off.' : 'It is too late to call it off.';
+    this.emit();
+  }
+
+  // ---- The tutorial's practice match --------------------------------------------------------
+
+  /** The practice match, while it waits to be played today. */
+  testMatchToday(): Fixture | null {
+    return this.world === null ? null : testFixtureToday(this.world);
+  }
+
+  /**
+   * The tutorial reaches its matchday: a practice match today against the Tutorial XI, so that
+   * nobody has to wait weeks for a first match — unless a real one is on today already.
+   */
+  ensureTutorialMatch(): void {
+    const world = this.world;
+    if (world === null || world.testMatch !== undefined || this.matchday !== null || this.postMatch !== null || this.processing) return;
+    if (this.ownFixtureToday() !== null || userMatchToday(world) !== null) return;
+    const f = bookTestMatch(world);
+    if (f === null) return;
+    const side = world.clubs[f.home];
+    postMessage(world, {
+      subject: `A practice match today: ${side?.name ?? 'your side'} v ${TEST_SIDE_NAME}`,
+      body: `To get a feel for the bench before the real thing, a practice match has been arranged for today against the ${TEST_SIDE_NAME}. ` +
+        (world.userClubId < 0
+          ? `You take ${side?.name ?? 'a side'} for the day. `
+          : '') +
+        'Pick the team, toss the coin, kick off and coach it live. It counts for nothing: no table, no statistics, no records — and nobody gets tired.',
+      from: 'Assistant',
+      category: 'matchday',
+      clubId: f.home,
+    });
     this.emit();
   }
 
@@ -2378,6 +2473,9 @@ class Game {
     const world = this.world;
     if (world === null || this.postMatch === null) return;
     this.postMatch = null;
+    // The practice match over: the side lent for it goes back, and so do its made-up players.
+    endTestCoaching(world);
+    settleTestMatch(world);
     // The club's and the nation's matches on the one day: the other one next.
     if (this.ownFixtureToday() !== null) {
       this.openMatchday();
@@ -2640,6 +2738,8 @@ class Game {
   /** Open the pre-match lineup screen for today's match. A match further
    *  off is reached by going on holiday until its day. */
   openMatchday(): void {
+    // The tutorial's practice match with a side lent for the day: the manager takes it first.
+    if (this.world !== null && this.testMatchToday() !== null) beginTestCoaching(this.world);
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return;
@@ -2670,7 +2770,8 @@ class Game {
     this.matchday = {
       fixture: next,
       sides: [side(next.home), side(next.away)],
-      title: (world.competitions[next.competitionId]?.name ?? 'Match') + (rivalryName(world, next) !== null ? ` · ${rivalryName(world, next)}` : ''),
+      title: world.testMatch?.fixtureId === next.id ? 'Practice match'
+        : cupMatchTitle(world, next) ?? ((world.competitions[next.competitionId]?.name ?? 'Match') + (rivalryName(world, next) !== null ? ` · ${rivalryName(world, next)}` : '')),
       national: null,
       final: trophyAtStake(world, next),
       stage: 'lineup',
@@ -4444,6 +4545,32 @@ class Game {
   /** A club's colours changed in the kit designer: shown again — but no advantage gained, so the career still earns achievements. */
   markKitChanged(): void {
     this.emit();
+  }
+
+  /** The player the editor should open on, from his page's Edit button; taken by the editor as it opens. */
+  editorTarget: number | null = null;
+
+  /** Open the editor on a player, from his page. */
+  editPlayer(p: number): void {
+    if (this.world === null || this.matchday !== null) return;
+    this.editorTarget = p;
+    this.go('editor');
+  }
+
+  /** The editor moves a player to a club, or out of work with -1. An edit like any other. */
+  editorMove(p: number, clubId: number): void {
+    const world = this.world;
+    if (world === null) return;
+    editorMovePlayer(world, p, clubId);
+    this.markEdited();
+  }
+
+  /** The editor wipes a player's past: clubs, transfers, season numbers, timeline. */
+  editorClearHistory(p: number): void {
+    const world = this.world;
+    if (world === null) return;
+    editorClearHistory(world, p);
+    this.markEdited();
   }
 
   openSettings(): void {

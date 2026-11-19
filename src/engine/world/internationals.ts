@@ -128,6 +128,8 @@ export interface Tournament {
   entry?: Array<[number, string]>;
   /** A qualifying tournament: how many places it hands out. */
   places?: number;
+  /** A friendly tournament of four or eight (see preseasonCups.ts): a trophy for the cabinet, and nothing else. */
+  cup?: { size: 4 | 8 };
 }
 
 /** A finished tournament, kept for good. */
@@ -654,6 +656,57 @@ export function createFriendly(world: World, home: number, away: number, day: nu
     mvp: -1,
     stats: new Map(),
   };
+  I.tournaments.push(t);
+  return t;
+}
+
+/**
+ * A friendly tournament of national teams: four in a round robin and then
+ * the semi-finals (first against fourth, second against third), or eight in
+ * two groups of four and then the quarter-finals — the final and a match for
+ * third place either way. Friendlies all: caps, never the ranking; and the
+ * winners' trophy goes in the friendly cabinet, never the honours.
+ */
+export function createFriendlyCup(world: World, name: string, host: number, teams: readonly number[], startDay: number, size: 4 | 8): Tournament {
+  const I = internationals(world);
+  const comp = competitionFor(world, 'friendly', null);
+  const points = (n: number): number => teamOf(world, n)?.rankingPoints ?? 0;
+  const seeded = [...new Set(teams)].slice(0, size).sort((a, b) => points(b) - points(a));
+  const groups = size === 4 ? [seeded] : [[seeded[0], seeded[3], seeded[4], seeded[7]], [seeded[1], seeded[2], seeded[5], seeded[6]]];
+  const t: Tournament = {
+    id: I.nextTournamentId++,
+    kind: 'friendly',
+    confederation: null,
+    name,
+    year: world.year,
+    season: Math.floor(startDay / DAYS_PER_SEASON),
+    competitionId: comp.id,
+    teams: seeded,
+    host,
+    pools: groups.map((g, i) => ({ name: size === 4 ? 'Round robin' : `Group ${String.fromCharCode(65 + i)}`, teams: g })),
+    advance: 4,
+    matches: [],
+    callUpDay: startDay - 3,
+    startDay,
+    knockoutDays: size === 4 ? [startDay + 3, startDay + 4] : [startDay + 3, startDay + 4, startDay + 5],
+    squads: [],
+    status: 'planned',
+    out: [],
+    placings: [],
+    mvp: -1,
+    stats: new Map(),
+    cup: { size },
+  };
+  for (const pool of t.pools) {
+    const [a, b, c, d] = pool.teams;
+    const rounds: Array<Array<[number, number]>> = [[[a, d], [b, c]], [[a, c], [d, b]], [[a, b], [c, d]]];
+    rounds.forEach((round, r) => {
+      for (const [x, y] of round) {
+        const [home, away] = orient(t, x, y);
+        t.matches.push(newMatch(I, startDay + r, home, away, pool.name, -1, 0));
+      }
+    });
+  }
   I.tournaments.push(t);
   return t;
 }
@@ -1258,8 +1311,19 @@ function drawKnockout(world: World, t: Tournament): void {
     seeds.push(...tier.map((r) => r.clubId));
   }
   for (const tb of tables) for (const r of tb.slice(t.advance)) release(world, t, r.clubId);
-  const order = bracketOrder(seeds.length);
   const day = t.knockoutDays[0];
+  // A friendly tournament: first against fourth and second against third — crosswise, in two groups.
+  if (t.cup !== undefined) {
+    const [A, B] = tables.map((tb) => tb.map((r) => r.clubId));
+    const pairs = B === undefined ? [[A[0], A[3]], [A[1], A[2]]] : [[A[0], B[3]], [B[1], A[2]], [B[0], A[3]], [A[1], B[2]]];
+    pairs.forEach(([x, y], i) => {
+      const [home, away] = orient(t, x, y);
+      t.matches.push(newMatch(I, day, home, away, roundName(pairs.length * 2), 0, i));
+    });
+    t.status = 'knockout';
+    return;
+  }
+  const order = bracketOrder(seeds.length);
   for (let i = 0; i < order.length; i += 2) {
     const [home, away] = orient(t, seeds[order[i] - 1], seeds[order[i + 1] - 1]);
     t.matches.push(newMatch(I, day, home, away, roundName(seeds.length), 0, i / 2));
@@ -1294,7 +1358,7 @@ function nextRound(world: World, t: Tournament): void {
 /** Once the day's matches are in: the bracket drawn, the next round, or the end. */
 function progress(world: World, t: Tournament): void {
   // A friendly is one match: played, and everyone goes home.
-  if (t.kind === 'friendly') {
+  if (t.kind === 'friendly' && t.cup === undefined) {
     if (t.matches.every((m) => m.played)) {
       for (const n of t.teams) release(world, t, n);
       t.placings = t.matches[0].homeSets > t.matches[0].awaySets ? [t.matches[0].home, t.matches[0].away] : [t.matches[0].away, t.matches[0].home];
@@ -1399,6 +1463,37 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
   }
   t.mvp = mvp;
   t.status = 'done';
+
+  // A friendly tournament: the trophy for the friendly cabinet — no title, no medal, no name made.
+  if (t.cup !== undefined) {
+    for (const n of t.teams) release(world, t, n);
+    (world.preseasonCups ??= { cups: [], nextId: 0, invites: [], nextInviteId: 0, trophies: [], fixtureCup: {} })
+      .trophies.push({ name: t.name, year: t.year, season: t.season, nation: podium[0], prize: 0 });
+    const score = `${Math.max(final.homeSets, final.awaySets)}-${Math.min(final.homeSets, final.awaySets)}`;
+    postNews(world, {
+      kind: 'result',
+      headline: `${nationName(podium[0])} win the ${t.name}`,
+      body: `${nationName(podium[0])} beat ${nationName(podium[1])} ${score} in the final of the ${t.name}, a friendly tournament.` +
+        `${podium[2] !== undefined ? ` ${nationName(podium[2])} finished third.` : ''}`,
+      nation: podium[0],
+      competitionId: t.competitionId,
+      fans: { story: 'nationMatch', nation: podium[0], otherNation: podium[1], score },
+    });
+    const mine = userNation(world);
+    const place = t.placings.indexOf(mine);
+    if (place >= 0) {
+      postMessage(world, {
+        subject: place === 0 ? `Winners of the ${t.name}` : `The ${t.name}: ${ordinal(place + 1)}`,
+        body: place === 0
+          ? `${nationName(mine)} beat ${nationName(podium[1])} ${score} in the final and lift the ${t.name} — a friendly trophy for the cabinet. It counts for nothing else.`
+          : `${nationName(mine)} finished ${ordinal(place + 1)} in the ${t.name}. ${nationName(podium[0])} took the trophy, beating ${nationName(podium[1])} ${score} in the final.`,
+        from: `${nationName(t.host)} federation`,
+        category: 'international',
+        aboutNation: t.host,
+      });
+    }
+    return;
+  }
 
   const team = teamOf(world, podium[0]);
   if (team !== undefined) {

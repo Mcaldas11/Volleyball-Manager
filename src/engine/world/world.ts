@@ -34,6 +34,8 @@ import type { Loan, LoanReport } from './loans.ts';
 import type { PendingMove } from './moves.ts';
 import type { NewsItem } from './news.ts';
 import type { Internationals, IntlReport } from './internationals.ts';
+import type { TestMatchState } from '../season/testMatch.ts';
+import type { PreseasonCups } from '../season/preseasonCups.ts';
 import type { Formation, TeamTactics } from '../match/tactics.ts';
 import type { YouthState } from './youth.ts';
 import type { AcademyState } from './academy.ts';
@@ -445,6 +447,8 @@ export interface GameMessage {
   interviewId?: number;
   /** A club's offer of its head coach's job — see `World.career.offers`. */
   jobOfferId?: number;
+  /** An invitation to a pre-season tournament, club or national — see preseasonCups.ts: the inbox offers the answers. */
+  cupInviteId?: number;
   /** A federation's offer of its national team job — see `Internationals.offers`. */
   nationalOffer?: { id: number; nation: number };
   /** The board's offer of a new contract — see career.ts. */
@@ -722,6 +726,10 @@ export interface World {
    *  the board last arranged some of its own — see friendlies.ts. Absent on
    *  saves from before friendlies. */
   friendlies?: { requests: FriendlyRequest[]; nextId: number; boardArranged: number };
+  /** The tutorial's practice match — booked once a career, played for nothing — see testMatch.ts. */
+  testMatch?: TestMatchState;
+  /** Pre-season tournaments: invitations, the cups themselves and the friendly trophies — see preseasonCups.ts. */
+  preseasonCups?: PreseasonCups;
   /** The world's news, most recent last — see news.ts. */
   news: NewsItem[];
   nextNewsId: number;

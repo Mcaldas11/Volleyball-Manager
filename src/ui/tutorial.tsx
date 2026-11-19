@@ -13,8 +13,9 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { nextTournamentFor, userNation } from '../engine/world/internationals.ts';
+import { userNation } from '../engine/world/internationals.ts';
 import { planOf } from '../engine/world/training.ts';
+import { SCRATCH_SIDE_NAME, TEST_SIDE_NAME } from '../engine/season/testMatch.ts';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
 import { pageRect, pageSize } from './zoom.ts';
@@ -315,9 +316,9 @@ export const TUTORIAL: readonly TutorialStep[] = [
     done: (g, s) => (g.world?.day ?? 0) > s.day || g.matchday !== null,
   },
   {
-    id: 'to-match', chapter: 'Matchday', title: 'To match day',
-    body: 'When there is a match today, the button says Play match. The arrow beside it can take you straight there — a holiday until the next match.',
-    todo: 'Get to your next match and press Play match. Answer anything that comes up on the way.',
+    id: 'to-match', chapter: 'Matchday', title: 'Your first match',
+    body: `No need to wait for the fixtures: a practice match against the ${TEST_SIDE_NAME} is on today. It counts for nothing — no table, no statistics, no records — it is there to learn the bench. When there is a match today, the button says Play match; on other days the arrow beside it can take you straight to the next one.`,
+    todo: 'Press Play match. Answer anything that comes up on the way.',
     target: '[data-tour="continue"]',
     free: true,
     done: (g) => g.matchday !== null,
@@ -413,13 +414,6 @@ export const TUTORIAL: readonly TutorialStep[] = [
 const clubStep = (id: string): TutorialStep => TUTORIAL.find((s) => s.id === id)!;
 const nationalScreen = (g: Game, screen: string): boolean => plainScreen(g, screen) && g.nationalView();
 const frameOf = (g: Game): string => JSON.stringify(g.world?.internationals?.frame?.players ?? []);
-/** The squad named for the national team's next tournament — or none ahead to name one for. */
-const squadNamed = (g: Game): boolean => {
-  const world = g.world;
-  if (world === null) return false;
-  const t = nextTournamentFor(world, userNation(world));
-  return t === undefined || t.status !== 'planned' || world.internationals?.chosen?.tournamentId === t.id;
-};
 
 /** The national team's own screens: its squad, the players in contention, its team sheet, its tournaments. */
 const NATIONAL_CHAPTER: readonly TutorialStep[] = [
@@ -465,7 +459,9 @@ const NATIONAL_TOURNAMENTS: readonly TutorialStep[] = [
   },
 ];
 
-/** A national team only: its squad and team sheet, its tournaments, the call-up — and its first match. */
+const squadNamedText = "A week before each tournament the federation asks for your squad, and Continue stops on the day — the arrow beside it can take you there on holiday. Name your fourteen in the federation's message, your own or the Assistant's pick, then Confirm squad. Leave it to the holiday and your assistant names it.";
+
+/** A national team only: its squad and team sheet, its tournaments, its first match — a practice one — and the call-up. */
 const NATIONAL_TOUR: readonly TutorialStep[] = [
   {
     id: 'welcome', chapter: 'Welcome', title: 'Welcome, coach',
@@ -504,18 +500,15 @@ const NATIONAL_TOUR: readonly TutorialStep[] = [
   ...NATIONAL_TOURNAMENTS,
   clubStep('continue'),
   {
-    id: 'callup', chapter: 'Your national team', title: 'Name your fourteen',
-    body: 'A week before each tournament the federation asks for your squad, and Continue stops on the day. The arrow beside it can take you there on holiday. Leave it to the holiday and your assistant names it.',
-    todo: 'Get to the day the squad is due, and name your fourteen in the federation\'s message — your own, or the Assistant\'s pick — then Confirm squad.',
-    target: '[data-tour="continue"]',
-    free: true,
-    done: squadNamed,
-  },
-  {
     ...clubStep('to-match'),
-    body: 'On a match day the button says Play match. The arrow beside it can take you straight there — a holiday until the next match.',
+    body: `No need to wait for a tournament: your fourteen have a practice match against the ${TEST_SIDE_NAME} today. It counts for nothing — no caps, no ranking, no statistics — it is there to learn the bench. On a match day the button says Play match; the arrow beside it can take you straight to the next one.`,
   },
   ...TUTORIAL.slice(TUTORIAL.findIndex((s) => s.id === 'team-talk'), TUTORIAL.findIndex((s) => s.id === 'done')),
+  {
+    id: 'callup', chapter: 'Your national team', title: 'Name your fourteen',
+    body: squadNamedText,
+    target: '[data-tour="continue"]',
+  },
   {
     id: 'done', chapter: 'All set', title: 'Over to you',
     body: 'That is the job: watch the players, name the right fourteen, pick the team, win matches — and climb the world ranking. The ? at the top opens the help any time, and this tutorial again.',
@@ -553,19 +546,44 @@ const BOTH_TOUR: readonly TutorialStep[] = [
   ...TUTORIAL.slice(TUTORIAL.findIndex((s) => s.id === 'continue')),
 ];
 
-/** The tutorial for the career in play: a club's, a national team's, or both. */
+/** Out of work: the Job Centre — and a scratch side for a practice match, to learn the bench meanwhile. */
+const OUT_OF_WORK_TOUR: readonly TutorialStep[] = [
+  {
+    id: 'welcome', chapter: 'Welcome', title: 'Welcome, coach',
+    body: 'You start out of work: no club and no national team yet. This short tutorial shows you how to find a job — and gives you a practice match, so you know the bench by the time you have one. You can leave it at any point, and start it again from the Help (?).',
+  },
+  {
+    id: 'jobs', chapter: 'Finding a job', title: 'The Job Centre',
+    target: '[data-tour="nav-jobs"]',
+    body: 'Every vacancy is in the Job Centre: clubs looking for a coach, and the national teams. Apply, and the answer comes to the inbox — the smaller clubs are the likeliest to take a chance on a new name. Until then you can go and watch other clubs\' matches from the stands.',
+  },
+  {
+    ...clubStep('to-match'),
+    body: `Before that, a practice match: the ${SCRATCH_SIDE_NAME} need a coach for the day, against the ${TEST_SIDE_NAME}. It counts for nothing — no table, no statistics, no records — it is there to learn the bench.`,
+  },
+  ...TUTORIAL.slice(TUTORIAL.findIndex((s) => s.id === 'team-talk'), TUTORIAL.findIndex((s) => s.id === 'after')),
+  {
+    id: 'done', chapter: 'All set', title: 'Over to you',
+    body: 'That is the bench. Now find a club: apply in the Job Centre, keep Continuing, and answer the offers in the inbox. The ? at the top opens the help any time, and this tutorial again.',
+  },
+];
+
+/** The tutorial for the career in play: a club's, a national team's, both — or a coach's out of work. */
 export function tourFor(g: Game): readonly TutorialStep[] {
   const world = g.world;
   if (world === null) return TUTORIAL;
+  // While a side lent for the practice match is coached, the tour is the one the career began with.
+  const lent = world.testMatch?.coaching;
+  const hasClub = lent !== undefined ? lent.was >= 0 : g.club !== null;
   const nation = userNation(world) >= 0;
-  if (g.club === null) return nation ? NATIONAL_TOUR : TUTORIAL;
+  if (!hasClub) return nation ? NATIONAL_TOUR : OUT_OF_WORK_TOUR;
   return nation ? BOTH_TOUR : TUTORIAL;
 }
 
-/** Whether there is a tutorial to give now: a team to manage, and no draft still to be made. */
+/** Whether there is a tutorial to give now: a team to manage (or a job to find), and no draft still to be made. */
 export function tutorialAvailable(g: Game): boolean {
   const world = g.world;
-  return world !== null && world.draft === undefined && (g.club !== null || userNation(world) >= 0);
+  return world !== null && world.draft === undefined && (g.club !== null || userNation(world) >= 0 || g.unemployed);
 }
 
 /**
@@ -669,6 +687,11 @@ export function TutorialOverlay(): JSX.Element | null {
   useEffect(() => {
     if (g.welcomeOpen && tutorialAvailable(g) && world !== null && world.tutorial === undefined) g.startTutorial();
   });
+
+  // The first match: a practice match today, the moment the tour gets to it — a career loaded there too.
+  useEffect(() => {
+    if (step?.id === 'to-match') g.ensureTutorialMatch();
+  }, [step?.id, world?.day]);
 
   // Keep the spotlight on the target as the screen moves under it.
   useEffect(() => {

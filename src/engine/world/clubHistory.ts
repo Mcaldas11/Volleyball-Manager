@@ -131,6 +131,11 @@ export function recordClubMatch(
   }
 }
 
+/** A spell at `club` running from this season: what the editor starts when it moves a player there. */
+export function startSpell(world: World, p: number, club: number): void {
+  noteClub(world, p, club, world.season);
+}
+
 /** A new season: every senior player's spell at his club runs into it — or begins with it. */
 export function openSeasonSpells(world: World): void {
   const store = world.players;

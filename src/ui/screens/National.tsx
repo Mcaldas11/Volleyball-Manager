@@ -325,6 +325,7 @@ export function NationalHome(): JSX.Element {
           ) : null}
           {today === null && <WatchLiveMenu />}
           <button className="hm-ghost" onClick={() => setFriendly(true)}><Icon name="calendar" size={14} /> Arrange a friendly</button>
+          <button className="hm-ghost" onClick={() => g.openCupsDialog()}><Icon name="trophy" size={14} /> Friendly tournaments</button>
         </div>
       </section>
       {friendly && <FriendlyDialog onClose={() => setFriendly(false)} />}
@@ -455,6 +456,7 @@ export function NationalSquadScreen(): JSX.Element {
           <span className="dim">{status}</span>
         </div>
         <button onClick={() => setFriendly(true)}><Icon name="calendar" size={14} /> Arrange a friendly</button>
+        <button onClick={() => g.openCupsDialog()}><Icon name="trophy" size={14} /> Tournaments</button>
         {t !== undefined && (
           <button onClick={() => g.openTournament(t.id)}><Icon name="trophy" size={14} /> {t.name}</button>
         )}

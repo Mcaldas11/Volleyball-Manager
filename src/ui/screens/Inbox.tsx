@@ -1340,6 +1340,25 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     );
   }
 
+  const cupInvite = m.cupInviteId !== undefined
+    ? world.preseasonCups?.invites.find((i) => i.id === m.cupInviteId && i.answered === undefined && i.expiresOn >= world.day)
+    : undefined;
+  if (cupInvite !== undefined) {
+    out.push(
+      <button key="accept-cup" className="paper-btn primary-dark" onClick={() => g.answerCupInvite(cupInvite.id, true)}>
+        <Icon name="check" size={15} /> Accept invitation
+      </button>,
+      <button key="decline-cup" className="paper-btn" onClick={() => g.answerCupInvite(cupInvite.id, false)}>Decline</button>,
+    );
+  }
+  if (m.cupInviteId !== undefined) {
+    out.push(
+      <button key="cups" className="paper-btn" onClick={() => g.openCupsDialog()}>
+        <Icon name="calendar" size={15} /> Tournaments
+      </button>,
+    );
+  }
+
   if (m.contractOfferId !== undefined && world.career.contractOffer?.id === m.contractOfferId) {
     out.push(
       <button key="sign" className="paper-btn primary-dark" onClick={() => g.acceptContractOffer()}>

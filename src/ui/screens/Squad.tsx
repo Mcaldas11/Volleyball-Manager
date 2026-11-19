@@ -972,6 +972,11 @@ export function PlayerDetail(): JSX.Element | null {
             </>
           )}
           <CompareMenu p={p} />
+          {store.isActive(p) && g.matchday === null && (
+            <button onClick={() => g.editPlayer(p)} title="Change his club, name, age, position or any attribute in the editor — an edited career earns no achievements">
+              <Icon name="pencil" size={14} /> Edit
+            </button>
+          )}
           <button onClick={() => g.select(null)}><Icon name="close" size={14} /> Close</button>
         </div>
       </div>

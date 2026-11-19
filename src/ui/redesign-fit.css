@@ -3675,3 +3675,7 @@ html.short-window .portal-people > .hm-card {
   .lv-stats-table th, .lv-stats-table td { padding: 2px 2px; font-size: 10.5px; }
   .lv-stats-table th { letter-spacing: 0; }
 }
+
+/* The player editor's own actions: his page, and wiping his record (asked twice). */
+.ed-player-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px; }
+.ed-player-actions .faint { font-size: 12.5px; }

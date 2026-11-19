@@ -19,8 +19,10 @@ import { NATIONS } from '../engine/world/nations.ts';
 import { userNation, worldRanking } from '../engine/world/internationals.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { FullscreenButton, useFullscreenKey } from './fullscreen.tsx';
+import { useBackNavigation } from './backNav.ts';
 import { HolidayDialog } from './holiday.tsx';
 import { FriendlyDialog } from './friendlyDialog.tsx';
+import { CupsDialog } from './cupsDialog.tsx';
 import { ReplayViewer } from './replay.tsx';
 import { TacticPicker } from './tacticPicker.tsx';
 import { ProcessingWindow } from './processing.tsx';
@@ -150,6 +152,8 @@ function availableTabs(section: Section, hasClub: boolean, national = false): Ar
 export function App(): JSX.Element {
   const g = useGame();
   useFullscreenKey();
+  // The browser's Back, a mouse's side buttons and Alt+arrows: through the game's own history.
+  useBackNavigation(g);
   // The open career's own portraits, loaded as it opens.
   useEffect(() => { void openPortraits(g.world !== null ? g.currentSaveId : null); }, [g.currentSaveId, g.world]);
   // As the game opens, before the menu: the splash.
@@ -237,6 +241,7 @@ function GameShell(): JSX.Element {
       <TrophyOverlay />
       <HolidayDialog />
       <FriendlyDialog />
+      <CupsDialog />
       <ReplayViewer />
       <ProcessingWindow />
       <HelpDialog />
@@ -679,7 +684,8 @@ function ContinueButton(): JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
   const unread = g.unreadMessages().length;
-  const clubMatchToday = g.ownFixtureToday() !== null;
+  // The tutorial's practice match counts as a match today — with a side lent for it, too.
+  const clubMatchToday = g.ownFixtureToday() !== null || g.testMatchToday() !== null;
   const nationalToday = g.nationalMatchToday();
   const matchToday = clubMatchToday || nationalToday !== null;
   const inMatch = g.matchday !== null;
@@ -757,16 +763,16 @@ function ContinueButton(): JSX.Element {
           <button onClick={() => { setOpen(false); g.openHoliday(); }}>
             <Icon name="calendar" size={15} /> Go on holiday…
           </button>
-          <button disabled={next === null && natDay === null && watchDay === null} onClick={() => {
+          <button disabled={next === null && natDay === null && watchDay === null && !clubMatchToday} onClick={() => {
             setOpen(false);
-            if (next !== null) g.openMatchday();
+            if (next !== null || g.testMatchToday() !== null) g.openMatchday();
             else if (natDay !== null && natDay <= world.day) g.openNationalMatchday();
             else if (natDay !== null) g.openHoliday(natDay);
             else if (watchDay !== null) g.openHoliday(watchDay);
           }}>
             <Icon name="fastForward" size={15} />
             <span className="menu-pop-stack">
-              <span>{next === null && natDay === null
+              <span>{next === null && natDay === null && !clubMatchToday
                 ? (watchDay !== null ? 'Holiday until the next matches…' : 'No fixture scheduled')
                 : matchToday ? 'Play match' : 'Holiday until the next match…'}</span>
               {next === null && natDay === null && watchDay !== null && (

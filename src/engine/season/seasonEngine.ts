@@ -53,6 +53,8 @@ import { quickSimulate } from './quickSim.ts';
 import { progressPlayoffs } from './playoffs.ts';
 import { progressCups, scheduleCupSeason } from './cups.ts';
 import { friendliesDay, isFriendly } from './friendlies.ts';
+import { isTestMatch, settleTestMatch } from './testMatch.ts';
+import { preseasonCupsDay } from './preseasonCups.ts';
 import { POSITION_MATCH, prepCoverage, trainingDay, trainPositions } from '../world/training.ts';
 import { youthDay } from '../world/youth.ts';
 import { academyDay } from '../world/academy.ts';
@@ -465,6 +467,11 @@ export function applyMatchResult(
   fixture.awaySets = result.awaySets;
   fixture.setScores = result.setScores;
   fixture.mvp = result.mvp;
+  // The tutorial's practice match: its report to read, and nothing else at all — not even tired legs.
+  if (isTestMatch(world, fixture)) {
+    keepMatchReport(world, fixture, result);
+    return;
+  }
   collectHighlights(world, fixture, result);
   // The manager's own matches: the box score is kept, to be read again — and the analyst takes his notes.
   keepMatchReport(world, fixture, result);
@@ -692,6 +699,11 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
     // Every result weighs on its clubs' boards — the user's may act on it.
     boardResults(world, todays);
   }
+
+  // The tutorial's practice match, once played: its made-up players go.
+  settleTestMatch(world);
+  // Pre-season tournaments: invitations answered, the next round drawn, a winner crowned.
+  preseasonCupsDay(world);
 
   // The national teams' tournaments, and what the papers make of the day.
   internationalDay(world);

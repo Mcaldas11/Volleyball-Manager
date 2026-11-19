@@ -135,6 +135,8 @@ export interface Club {
   camp?: Camp;
   /** The club's colour and kit as designed in the editor — absent: made from its id (see ui/kits.ts). */
   kit?: ClubKit;
+  /** A made-up side for a practice match — no league, no squad once it is over (see testMatch.ts). */
+  exhibition?: boolean;
   /** The crest as designed in the editor — absent: the shield drawn in the club's colour (see ui/crest.tsx). */
   crest?: CrestDesign;
   /** Its following, and what it started at; a new stand being asked for or built — see supporters.ts. */

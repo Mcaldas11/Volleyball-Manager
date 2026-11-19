@@ -19,7 +19,7 @@ import { PlayerFlag, type PlayerStore } from '../model/players.ts';
 import { rollTraits } from '../model/traits.ts';
 import { PLAUSIBLE_SECONDARY, Position } from '../model/positions.ts';
 import { NATIONS } from './nations.ts';
-import { bankFor } from './names.ts';
+import { bankFor, drawSurname } from './names.ts';
 
 /** Natural distribution of positions in a talent pool. */
 const POSITION_WEIGHTS = [0.16, 0.16, 0.30, 0.24, 0.14];
@@ -87,7 +87,7 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
   // ---- Identity ----
   const bank = bankFor(nationDef.nameGroup, store.women);
   store.firstName[i] = store.names.intern(rng.pick(bank.first));
-  store.lastName[i] = store.names.intern(rng.pick(bank.last));
+  store.lastName[i] = store.names.intern(drawSurname(nationDef.nameGroup, store.women, rng));
   store.birthYear[i] = opts.currentYear - opts.age;
   store.birthDay[i] = rng.int(0, 364);
 

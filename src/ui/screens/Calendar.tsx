@@ -4,6 +4,7 @@ import { stageLabel } from '../../engine/season/cups.ts';
 import {
   FRIENDLY_NOTICE_DAYS, friendliesOf, friendlyRequests, friendlyWindow,
 } from '../../engine/season/friendlies.ts';
+import { openInvites, userCups } from '../../engine/season/preseasonCups.ts';
 import { contractEndSeason, DAYS_PER_SEASON, seasonEndDay, TRANSFER_WINDOWS, type Competition, type Fixture } from '../../engine/world/world.ts';
 import { SESSIONS, weekPlan, weekStartOf } from '../../engine/world/training.ts';
 import { youthRound, youthRoundDay } from '../../engine/world/youth.ts';
@@ -169,6 +170,10 @@ export function CalendarScreen(): JSX.Element {
   const preSeason = today % DAYS_PER_SEASON <= friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS;
   const friendlies = friendliesOf(world, club.id);
   const invitations = friendlyRequests(world);
+  // Pre-season tournaments: the club's, and the invitations waiting.
+  const cups = userCups(world);
+  const cupInvites = openInvites(world).filter((i) => i.cupId !== undefined).length;
+  const cupsOn = cups.length > 0 || cupInvites > 0;
 
   return (
     <div className="calendar-workspace">
@@ -196,6 +201,11 @@ export function CalendarScreen(): JSX.Element {
           {preSeason && (
             <button className="cal-full" disabled={g.processing} onClick={() => g.openFriendlyDialog()}>
               <Icon name="ball" size={14} /> Arrange friendly
+            </button>
+          )}
+          {(preSeason || cupsOn) && (
+            <button className="cal-full" disabled={g.processing} onClick={() => g.openCupsDialog()}>
+              <Icon name="trophy" size={14} /> Tournaments{cupInvites > 0 ? ` (${cupInvites})` : ''}
             </button>
           )}
           <button className="cal-full" disabled={g.processing} onClick={() => g.openHoliday()}>
@@ -338,6 +348,30 @@ export function CalendarScreen(): JSX.Element {
                 <button className="icon-btn" title="Withdraw the invitation" onClick={() => g.withdrawFriendly(r.id)}>
                   <Icon name="close" size={14} />
                 </button>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {cupsOn && (
+          <section className="cal-card">
+            <span className="cal-card-title">Pre-season tournaments</span>
+            {cupInvites > 0 && (
+              <div className="cal-fr pending">
+                <span className="cal-fr-main">
+                  <strong>{cupInvites === 1 ? 'An invitation' : `${cupInvites} invitations`} to answer</strong>
+                  <span>Accept or decline in Tournaments</span>
+                </span>
+                <button className="sm" onClick={() => g.openCupsDialog()}>Answer</button>
+              </div>
+            )}
+            {cups.map((c) => (
+              <div key={`cup-${c.id}`} className="cal-fr">
+                <span className="cal-fr-date">{g.dateLabelForDay(c.startDay)}</span>
+                <span className="cal-fr-main">
+                  <strong className="club-link" onClick={() => g.openCupsDialog()}>{c.name}</strong>
+                  <span>{c.size} teams · {c.stage === 'forming' ? `${c.teams.length} of ${c.size} in` : c.stage === 'done' ? `won by ${world.clubs[c.placings[0]]?.name ?? '—'}` : c.stage === 'groups' ? 'group stage' : c.stage === 'knockout' ? 'knockout' : 'called off'}</span>
+                </span>
               </div>
             ))}
           </section>

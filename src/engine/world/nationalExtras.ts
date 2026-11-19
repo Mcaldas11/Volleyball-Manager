@@ -59,6 +59,26 @@ export function friendlyDays(world: World, opp = -1): number[] {
   return out;
 }
 
+/**
+ * The days a friendly tournament of `size` could start on for every one of `nations`: a week's
+ * notice and the squad's three days, all of it in the national team's months and clear of their
+ * other tournaments.
+ */
+export function friendlyCupDays(world: World, size: 4 | 8, nations: readonly number[]): number[] {
+  const I = internationals(world);
+  const len = size === 4 ? 5 : 6;
+  const out: number[] = [];
+  for (let day = world.day + NOTICE + 3; day <= world.day + HORIZON + 30; day++) {
+    let ok = true;
+    for (let d = day - 3; d < day + len && ok; d++) {
+      if (!nationalWindow(world, d)) ok = false;
+      else if (nations.some((n) => busy(I.tournaments, n, d))) ok = false;
+    }
+    if (ok) out.push(day);
+  }
+  return out;
+}
+
 /** Friendlies arranged this season. */
 export function friendliesThisSeason(world: World): number {
   return internationals(world).tournaments.filter((t) => t.kind === 'friendly' && t.season === world.season && t.teams.includes(userNation(world))).length;

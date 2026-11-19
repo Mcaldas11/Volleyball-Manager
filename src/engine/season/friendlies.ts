@@ -95,7 +95,9 @@ export function friendliesOf(world: World, clubId: number): Fixture[] {
   const start = seasonStart(world);
   return comp.fixtureIds
     .map((id) => world.fixtures[id])
-    .filter((f) => f.day >= start && f.day < start + DAYS_PER_SEASON && (f.home === clubId || f.away === clubId))
+    .filter((f) => f.day >= start && f.day < start + DAYS_PER_SEASON && (f.home === clubId || f.away === clubId) &&
+      // The tutorial's practice match and the pre-season tournaments' matches are not friendlies arranged.
+      world.testMatch?.fixtureId !== f.id && world.preseasonCups?.fixtureCup?.[f.id] === undefined)
     .sort((a, b) => a.day - b.day);
 }
 
