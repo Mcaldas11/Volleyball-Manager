@@ -13,10 +13,15 @@ import { buildDays, FACILITY_EFFECTS, FACILITY_NAMES, facilityLevel, upgradeCost
 import { FOCUS_LABELS } from '../../engine/world/training.ts';
 import { CAREER_PATHS, PATH_NAMES, type CareerPath } from '../../engine/world/academyPlans.ts';
 import { Position, POSITION_NAMES, POSITIONS } from '../../engine/model/positions.ts';
-import { abilityClass, Bar, Card, ClubLink, Empty, Flag, money, PlayerFace, PlayerLink, Pos, StarMeter } from '../components.tsx';
+import { abilityClass, Bar, Card, ClubLink, Empty, Flag, money, PlayerFace, PlayerLink, Pos, Segmented, StarMeter } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
+import { sideSuffix } from '../../engine/world/sides.ts';
+import { nationName as nationNameOf } from '../../engine/world/internationals.ts';
+import {
+  clubYouthInternationals, MAX_RECOMMENDATIONS, recommendationsUsed, recommendBlock, YOUTH_STATUS_LABEL,
+} from '../../engine/world/youthNational.ts';
 
 /** The part of the game a prospect's programme starts on: what his position needs most. */
 const DEFAULT_AREA: Readonly<Record<Position, ProgrammeArea>> = {
@@ -365,4 +370,99 @@ export function AcademyPlans(): JSX.Element {
       )}
     </Card>
   );
+}
+
+// ---- Internationals ----------------------------------------------------------------------
+
+type IntlFilter = 'all' | 'capped' | 'contention';
+
+/**
+ * The club's young players and their countries' youth sides: who is away with
+ * the U19s or U21s, who was in the last squad, where each stands with the
+ * youth coach, their caps — and the head of youth's pick to put forward.
+ */
+export function AcademyInternationals(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const club = g.club!;
+  const [filter, setFilter] = useState<IntlFilter>('all');
+  const young = [...club.youthPlayers, ...club.players.filter((p) => store.ageOn(p, world.year, 181) <= 21)];
+  const lines = clubYouthInternationals(world, young)
+    .sort((a, b) => (a.order || 9999) - (b.order || 9999));
+  const shown = lines.filter((l) => filter === 'all' || (filter === 'capped' ? l.u19 + l.u21 > 0 : l.status !== 'outside' && l.status !== 'watched'));
+  const capped = lines.filter((l) => l.u19 + l.u21 > 0).length;
+  const away = lines.filter((l) => l.status === 'away').length;
+  const left = MAX_RECOMMENDATIONS - recommendationsUsed(world);
+  // The head of youth's pick: the best of those not yet in the picture, close enough to be worth a word.
+  const advice = lines.find((l) => !l.recommended && l.status !== 'away' && l.status !== 'named' && l.order > 0 && l.order <= 45);
+  return (
+    <Card title="Youth Internationals" icon="world" flush className="academy-card acx-card"
+      actions={<span className="acx-funds"><span className="faint">Capped</span> <b>{capped}</b><span className="acx-dot">·</span>
+        <span className="faint">Away now</span> <b>{away}</b><span className="acx-dot">·</span>
+        <span className="faint">Recommendations left</span> <b>{left}/{MAX_RECOMMENDATIONS}</b></span>}>
+      <div className="acx-intl-head">
+        <p className="acx-lead">
+          The U19s play their championship late in July, the U21s in mid-August — players called up are away until their side goes out.
+          {advice !== undefined && <> Head of youth: <b>{store.shortName(advice.p)}</b> is {ordinalLabel(advice.order)} in the {nationNameOf(advice.side)} coach's thinking — a word could get him in.</>}
+        </p>
+        <Segmented<IntlFilter> size="sm" options={[['all', 'All'], ['contention', 'In the picture'], ['capped', 'Capped']]} value={filter} onChange={setFilter} />
+      </div>
+      {shown.length === 0 ? <Empty>No young players {filter === 'capped' ? 'with youth caps' : filter === 'contention' ? 'in their youth side\'s picture' : 'at the club'}.</Empty> : (
+        <div className="table-wrap">
+          <table className="data-table acx-intl">
+            <thead>
+              <tr>
+                <th />
+                <th>Name</th>
+                <th className="num">Age</th>
+                <th>Pos</th>
+                <th className="num">Ability</th>
+                <th title="His country's youth side">Side</th>
+                <th className="num" title="His place in the youth coach's pecking order">Order</th>
+                <th>Status</th>
+                <th className="num">U19</th>
+                <th className="num">U21</th>
+                <th className="num" title="Senior caps">Caps</th>
+                <th title="His side's next tournament">Next</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((l) => {
+                const block = g.world !== null ? recommendBlock(world, l.p) : null;
+                return (
+                  <tr key={l.p} className={l.status === 'away' ? 'acx-away' : ''}>
+                    <td className="face-cell"><PlayerFace playerId={store.id[l.p]} name={store.fullName(l.p)} size={28} /></td>
+                    <td className="strong"><PlayerLink idx={l.p} />{club.youthPlayers.includes(l.p) && <span className="faint acx-tag">academy</span>}</td>
+                    <td className="num">{store.ageOn(l.p, world.year, 181)}</td>
+                    <td><Pos pos={store.position[l.p] as Position} /></td>
+                    <td className={`num ${abilityClass(store.currentAbility[l.p])}`}>{store.currentAbility[l.p]}</td>
+                    <td title={nationNameOf(l.side)}><span className="name-cell"><Flag nation={l.side} /> {sideSuffix(l.side)}</span></td>
+                    <td className="num">{l.order > 0 ? `#${l.order}` : '—'}</td>
+                    <td className={`acx-status ${l.status}`}>{YOUTH_STATUS_LABEL[l.status]}{l.senior ? ' · seniors' : ''}</td>
+                    <td className="num">{l.u19 || <span className="dim">0</span>}</td>
+                    <td className="num">{l.u21 || <span className="dim">0</span>}</td>
+                    <td className="num">{l.seniorCaps || <span className="dim">0</span>}</td>
+                    <td className="faint" title={l.next?.name}>{l.next !== undefined ? g.dateLabelForDay(l.next.startDay) : '—'}</td>
+                    <td className="num">
+                      {l.recommended
+                        ? <span className="pos"><Icon name="check" size={12} /> Put forward</span>
+                        : <button className="sm" disabled={block !== null} title={block ?? `Put him forward to the ${nationNameOf(l.side)} coach`}
+                          onClick={() => g.recommendToYouthSide(l.p)}>Recommend</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ordinalLabel(n: number): string {
+  const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+  return `${n}${s}`;
 }

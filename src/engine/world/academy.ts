@@ -19,9 +19,8 @@
  */
 
 import { Rng } from '../core/rng.ts';
-import { abilityFractionAtAge } from '../model/ability.ts';
+import { abilityFractionAtAge, refreshAbility } from '../model/ability.ts';
 import { ATTR_COUNT, ATTR_LABELS, ATTRIBUTES, HIDDEN_ATTRS, type AttributeName } from '../model/attributes.ts';
-import { refreshAbility } from '../model/ability.ts';
 import type { Club } from '../model/club.ts';
 import { InjuryType, PlayerFlag } from '../model/players.ts';
 import { Position, POSITION_NAMES } from '../model/positions.ts';

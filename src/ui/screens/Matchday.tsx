@@ -16,6 +16,7 @@ import {
   Segmented, StarMeter, useDismiss,
 } from '../components.tsx';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { baseNation } from '../../engine/world/sides.ts';
 import type { World } from '../../engine/world/world.ts';
 import { Icon } from '../icons.tsx';
 import { LiveCourt, type CourtLabels } from '../LiveCourt.tsx';
@@ -62,7 +63,7 @@ function sideHue(world: World, side: MatchSide): number {
     const club = world.clubs[side.clubId];
     return club !== undefined ? clubHue(club) : 210;
   }
-  return NATION_HUES[NATIONS[side.nation]?.code ?? ''] ?? (side.nation * 137.508) % 360;
+  return NATION_HUES[NATIONS[baseNation(side.nation)]?.code ?? ''] ?? (side.nation * 137.508) % 360;
 }
 
 /** The two sides' kits: a club's own (as designed, or from its colour), a nation's from its colours — the away side changing on a clash. */

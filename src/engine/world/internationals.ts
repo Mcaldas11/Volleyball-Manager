@@ -48,7 +48,7 @@
  */
 
 import { intlEventDays, plannedEventDays, type IntlKind } from './calendar.ts';
-import { frameVerdict, framedSquad } from './nationalExtras.ts';
+import { frameOf, frameVerdict, framedSquad } from './nationalExtras.ts';
 import { nationalCampDay, nationalChemistryFor, nationalTogether, seedNationalChemistry } from './nationalChemistry.ts';
 import { Rng } from '../core/rng.ts';
 import { bankFor } from './names.ts';
@@ -63,11 +63,13 @@ import { pickLineup } from '../season/seasonEngine.ts';
 import { ensureManagerAttributes, type ManagerContract } from './career.ts';
 import { postMessage } from './inbox.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from './nations.ts';
+import { baseNation, isYouthSide, sideAge, youthSide, type YouthAge } from './sides.ts';
+import { ensureYouthTeams, planYouthTournaments, youthCapsOf, youthScore } from './youthNational.ts';
 import { postNews } from './news.ts';
 import { applyMatchInjuries, matchInjuryRng } from './progression.ts';
 import { recordFixture } from './records.ts';
 import {
-  DAYS_PER_SEASON, euros, type Competition, type Fixture, type GameMessage, type World,
+  DAYS_PER_SEASON, euros, type Competition, type Fixture, type GameMessage, type NationalTeam, type World,
 } from './world.ts';
 
 export type TournamentKind = 'nationsLeague' | 'continental' | 'worlds' | 'olympics' | 'qualifier' | 'friendly';
@@ -130,6 +132,8 @@ export interface Tournament {
   places?: number;
   /** A friendly tournament of four or eight (see preseasonCups.ts): a trophy for the cabinet, and nothing else. */
   cup?: { size: 4 | 8 };
+  /** A youth tournament: its sides are the nations' U21s or U19s (see sides.ts and youthNational.ts). */
+  youth?: YouthAge;
 }
 
 /** A finished tournament, kept for good. */
@@ -145,6 +149,8 @@ export interface TournamentRecord {
   mvp: number;
   /** The medallists' squads. */
   medallists: Array<[number, number[]]>;
+  /** A youth tournament's record. */
+  youth?: YouthAge;
 }
 
 /** A federation's offer of its head coach's job, waiting on the manager's answer in the inbox. */
@@ -205,6 +211,14 @@ export interface Internationals {
   /** The manager's provisional squad this season, and the players he is going to watch — see nationalExtras.ts. */
   frame?: { season: number; players: number[] };
   watching?: Array<{ p: number; since: number }>;
+  /** The nations' U21 and U19 sides, by side id (see sides.ts) — kept apart from the senior teams and their ranking. */
+  youthTeams?: NationalTeam[];
+  /** Each player's matches for his country's youth sides. */
+  youthCaps?: Record<number, { u21: number; u19: number }>;
+  /** Players a senior coach has sent down to a youth side: its coach calls them, the seniors leave them be. */
+  sentDown?: Record<number, number[]>;
+  /** Prospects a club has put forward to a youth side's coach this season: a word in his ear. */
+  recommended?: Array<{ p: number; side: number; season: number }>;
 }
 
 // ---- What the manager is told: the reports behind the messages ----------------------------
@@ -305,6 +319,7 @@ const RANKING_K: Readonly<Record<TournamentKind, number>> = {
 
 /** National jobs: always a few open, and how long one waits for the manager. */
 const MIN_VACANCIES = 3;
+const MIN_YOUTH_VACANCIES = 2;
 const VACANCY_DAYS = 90;
 /** Places worse than its seed a nation can finish before its coach is in trouble. */
 const DISAPPOINTMENT = 6;
@@ -346,25 +361,33 @@ function shortName(t: Tournament): string {
   return t.name.replace(/ \d{4}$/, '');
 }
 
+/** A side's name: "Italy", "Italy U21". */
 export function nationName(n: number): string {
-  return NATIONS[n]?.name ?? '?';
+  const name = NATIONS[baseNation(n)]?.name ?? '?';
+  const age = sideAge(n);
+  return age === 0 ? name : `${name} U${age}`;
 }
 
-function teamOf(world: World, nation: number) {
+/** A side's team: a nation's senior team, or one of its youth sides. */
+export function nationalTeamOf(world: World, nation: number): NationalTeam | undefined {
+  if (isYouthSide(nation)) return world.internationals?.youthTeams?.find((x) => x.nation === nation);
   return world.nationalTeams.find((x) => x.nation === nation);
 }
+
+const teamOf = nationalTeamOf;
 
 // ---- Who plays where ---------------------------------------------------------------------
 
 /** The competition a kind of tournament is filed under, made the first time it is needed. */
-function competitionFor(world: World, kind: TournamentKind, conf: Confederation | null): Competition {
-  const key = `intl:${kind}${conf !== null ? `:${conf}` : ''}`;
+function competitionFor(world: World, kind: TournamentKind, conf: Confederation | null, youth?: YouthAge): Competition {
+  const key = `intl:${youth !== undefined ? `u${youth}:` : ''}${kind}${conf !== null ? `:${conf}` : ''}`;
   const found = world.competitions.find((c) => c.key === key);
   if (found !== undefined) return found;
-  const name = kind === 'worlds' ? 'World Championship' : kind === 'olympics' ? 'Summer Games'
+  const senior = kind === 'worlds' ? 'World Championship' : kind === 'olympics' ? 'Summer Games'
     : kind === 'friendly' ? 'International friendly'
     : kind === 'nationsLeague' ? 'Nations Cup'
       : kind === 'qualifier' ? `${CONTINENTAL[conf ?? 'CEV'].name} Qualifiers` : CONTINENTAL[conf ?? 'CEV'].name;
+  const name = youth !== undefined ? `U${youth} ${senior}` : senior;
   const comp: Competition = {
     id: world.competitions.length,
     name,
@@ -376,7 +399,8 @@ function competitionFor(world: World, kind: TournamentKind, conf: Confederation 
     participants: [],
     table: [],
     fixtureIds: [],
-    reputation: kind === 'olympics' ? 10000 : kind === 'worlds' ? 9500 : kind === 'qualifier' ? 5000 : kind === 'friendly' ? 3000 : 8000,
+    reputation: youth !== undefined ? (kind === 'worlds' ? 4500 : 3500)
+      : kind === 'olympics' ? 10000 : kind === 'worlds' ? 9500 : kind === 'qualifier' ? 5000 : kind === 'friendly' ? 3000 : 8000,
     promotionSlots: 0,
     relegationSlots: 0,
     hasPlayoffs: false,
@@ -408,6 +432,20 @@ export function worldRanking(world: World): number[] {
   return [...world.nationalTeams].sort((a, b) => b.rankingPoints - a.rankingPoints).map((t) => t.nation);
 }
 
+/** The ranking a side is in, best first: the world ranking for the seniors, the U21s' or U19s' own for a youth side. */
+export function rankingFor(world: World, age: 0 | YouthAge): number[] {
+  if (age === 0) return worldRanking(world);
+  return (internationals(world).youthTeams ?? [])
+    .filter((t) => sideAge(t.nation) === age)
+    .sort((a, b) => b.rankingPoints - a.rankingPoints)
+    .map((t) => t.nation);
+}
+
+/** A side's place in its ranking, 1 the best — 0 if it has none. */
+export function sideRank(world: World, side: number): number {
+  return rankingFor(world, sideAge(side)).indexOf(side) + 1;
+}
+
 /** The key a tournament's field is known by, before it is drawn: "continental:CEV:2028". */
 export function fieldKey(kind: TournamentKind, conf: Confederation | null, year: number): string {
   return `${kind}:${conf ?? 'FIVB'}:${year}`;
@@ -418,7 +456,7 @@ function editionOf(world: World, kind: TournamentKind, conf: Confederation | nul
   const history = internationals(world).history;
   for (let i = history.length - 1; i >= 0; i--) {
     const h = history[i];
-    if (h.kind === kind && h.confederation === conf && h.year === year) return h;
+    if (h.kind === kind && h.confederation === conf && h.year === year && h.youth === undefined) return h;
   }
   return undefined;
 }
@@ -545,19 +583,19 @@ function orient(t: Pick<Tournament, 'host'>, a: number, b: number): [number, num
   return b === t.host ? [b, a] : [a, b];
 }
 
-/** Draw a tournament: snake-seeded pools, every pool match on its day. */
-function createTournament(
+/** Draw a tournament: snake-seeded pools, every pool match on its day. A youth tournament may set its own pools. */
+export function createTournament(
   world: World, kind: TournamentKind, conf: Confederation | null, teams: number[], host: number, year: number,
-  when: TournamentWindow,
+  when: TournamentWindow, youth?: YouthAge, format?: { pools: number; advance: number },
 ): Tournament | null {
   const { callUp, start } = when;
   if (teams.length < 2) return null;
   const I = internationals(world);
-  const comp = competitionFor(world, kind, conf);
+  const comp = competitionFor(world, kind, conf, youth);
   // Qualifiers are pools of four and nothing after them.
-  const { pools: poolCount, advance } = kind === 'qualifier'
+  const { pools: poolCount, advance } = format ?? (kind === 'qualifier'
     ? { pools: Math.ceil(teams.length / QUALIFIER_POOL), advance: 0 }
-    : formatFor(teams.length);
+    : formatFor(teams.length));
   const pools = Array.from({ length: poolCount }, (_, i) => ({ name: `Pool ${String.fromCharCode(65 + i)}`, teams: [] as number[] }));
   teams.forEach((n, i) => {
     const lap = Math.floor(i / poolCount);
@@ -586,6 +624,7 @@ function createTournament(
     placings: [],
     mvp: -1,
     stats: new Map(),
+    ...(youth !== undefined ? { youth } : {}),
   };
   // The knockout rounds count back from the final on the last day: the semi-finals the day
   // before, the quarter-finals three days before it, each round earlier a few days more.
@@ -616,7 +655,7 @@ function createTournament(
 }
 
 /** When a tournament is played: squads named, first match, final, and any match days of its own. */
-interface TournamentWindow {
+export interface TournamentWindow {
   callUp: number;
   start: number;
   end: number;
@@ -632,7 +671,8 @@ const KNOCKOUT_BACK = [0, 1, 3, 6, 9, 12];
  */
 export function createFriendly(world: World, home: number, away: number, day: number): Tournament {
   const I = internationals(world);
-  const comp = competitionFor(world, 'friendly', null);
+  const age = sideAge(home);
+  const comp = competitionFor(world, 'friendly', null, age === 0 ? undefined : age);
   const t: Tournament = {
     id: I.nextTournamentId++,
     kind: 'friendly',
@@ -655,6 +695,7 @@ export function createFriendly(world: World, home: number, away: number, day: nu
     placings: [],
     mvp: -1,
     stats: new Map(),
+    ...(age !== 0 ? { youth: age } : {}),
   };
   I.tournaments.push(t);
   return t;
@@ -669,7 +710,8 @@ export function createFriendly(world: World, home: number, away: number, day: nu
  */
 export function createFriendlyCup(world: World, name: string, host: number, teams: readonly number[], startDay: number, size: 4 | 8): Tournament {
   const I = internationals(world);
-  const comp = competitionFor(world, 'friendly', null);
+  const age = sideAge(host >= 0 ? host : teams[0] ?? 0);
+  const comp = competitionFor(world, 'friendly', null, age === 0 ? undefined : age);
   const points = (n: number): number => teamOf(world, n)?.rankingPoints ?? 0;
   const seeded = [...new Set(teams)].slice(0, size).sort((a, b) => points(b) - points(a));
   const groups = size === 4 ? [seeded] : [[seeded[0], seeded[3], seeded[4], seeded[7]], [seeded[1], seeded[2], seeded[5], seeded[6]]];
@@ -696,6 +738,7 @@ export function createFriendlyCup(world: World, name: string, host: number, team
     mvp: -1,
     stats: new Map(),
     cup: { size },
+    ...(age !== 0 ? { youth: age } : {}),
   };
   for (const pool of t.pools) {
     const [a, b, c, d] = pool.teams;
@@ -774,6 +817,8 @@ export function planInternationals(world: World): void {
   // Next June's Nations League — its finals in the summer after this season.
   const vnl = when('nationsLeague', null, year + 1);
   if (vnl !== null) drawField(world, 'nationsLeague', null, nationsLeagueField(world, ranked), -1, year + 1, vnl);
+  // The U21s and U19s: their summer's championships, between the Nations League and the majors.
+  planYouthTournaments(world, year, rng);
   ensureVacancies(world, ranked, rng);
 }
 
@@ -825,12 +870,12 @@ function planQualifiers(world: World, ranked: number[], rng: Rng, target: number
 }
 
 /** The manager's nation, told whether it made the field — and how. */
-function fieldNotice(world: World, t: Tournament): void {
+export function fieldNotice(world: World, t: Tournament): void {
   const mine = userNation(world);
-  if (mine < 0 || t.kind === 'qualifier') return;
+  if (mine < 0 || t.kind === 'qualifier' || sideAge(mine) !== (t.youth ?? 0)) return;
   const entry = t.entry?.find(([n]) => n === mine);
   // Only a field his nation could have been in.
-  if (entry === undefined && t.confederation !== null && NATIONS[mine]?.confederation !== t.confederation) return;
+  if (entry === undefined && t.confederation !== null && NATIONS[baseNation(mine)]?.confederation !== t.confederation) return;
   postMessage(world, {
     subject: entry !== undefined ? `${nationName(mine)} are in the ${t.name}` : `${nationName(mine)} miss out on the ${t.name}`,
     body: entry !== undefined
@@ -969,17 +1014,41 @@ export function tiedNation(world: World, p: number): number | undefined {
   return world.internationals?.tiedTo?.get(p);
 }
 
-/** Everyone a nation could call: senior players eligible for it, fit, not away with another team. */
+/** Everyone a side could call: for a nation's seniors, its senior players; for its U21s or U19s, its
+ *  players of that age or younger — academy players too — bar those the seniors are keeping. */
 export function eligibleFor(world: World, nation: number): number[] {
   const store = world.players;
   const out: number[] = [];
+  const age = sideAge(nation);
+  const base = baseNation(nation);
   for (let i = 0; i < store.count; i++) {
-    if (!store.isActive(i) || store.hasFlag(i, PlayerFlag.Youth)) continue;
-    if (store.nation[i] !== nation && store.nation2[i] !== nation) continue;
-    if (!nationsOf(world, i).includes(nation)) continue;
+    if (!store.isActive(i)) continue;
+    if (store.nation[i] !== base && store.nation2[i] !== base) continue;
+    if (age === 0) {
+      if (store.hasFlag(i, PlayerFlag.Youth)) continue;
+    } else if (store.ageOn(i, world.year, 181) > age || heldBySeniors(world, i, base, nation)) continue;
+    if (!nationsOf(world, i).includes(base)) continue;
     out.push(i);
   }
   return out;
+}
+
+/**
+ * A young player the seniors are keeping: in the nation's last senior squad, or — the manager's
+ * own nation — in his provisional squad; unless the senior coach has sent him down to this side.
+ */
+export function heldBySeniors(world: World, p: number, nation: number, side: number): boolean {
+  if (world.internationals?.sentDown?.[side]?.includes(p) === true) return false;
+  if (world.nationalTeams.find((x) => x.nation === nation)?.squad.includes(p) === true) return true;
+  return userNation(world) === nation && frameOf(world).includes(p);
+}
+
+/** His matches for a side: caps for the seniors, youth caps for the U21s or U19s. */
+export function capsFor(world: World, p: number, side: number): number {
+  const age = sideAge(side);
+  if (age === 0) return world.players.nationalCaps[p];
+  const c = youthCapsOf(world, p);
+  return age === 21 ? c.u21 : c.u19;
 }
 
 /** His average rating over his last few matches, or an ordinary one without any. */
@@ -995,10 +1064,16 @@ export function selectionScore(world: World, p: number): number {
     - (store.condition[p] < 60 ? 40 : 0);
 }
 
-/** The best fourteen from a pool in the usual shape, the spares to the best left. */
-export function pickSquad(world: World, pool: readonly number[]): number[] {
+/** How a side's coach rates a player: the seniors' way, or a youth coach's — with an eye on what he could become. */
+export function sideScore(world: World, p: number, side: number): number {
+  return isYouthSide(side) ? youthScore(world, p, side) : selectionScore(world, p);
+}
+
+/** The best fourteen from a pool in the usual shape, the spares to the best left — rated as `side`'s coach rates them. */
+export function pickSquad(world: World, pool: readonly number[], side = -1): number[] {
   const store = world.players;
-  const ranked = [...pool].sort((a, b) => selectionScore(world, b) - selectionScore(world, a));
+  const score = new Map(pool.map((p) => [p, sideScore(world, p, side)]));
+  const ranked = [...pool].sort((a, b) => score.get(b)! - score.get(a)!);
   const squad: number[] = [];
   for (const [pos, count] of Object.entries(SQUAD_SHAPE)) {
     squad.push(...ranked.filter((p) => store.position[p] === Number(pos)).slice(0, count));
@@ -1014,7 +1089,18 @@ export function pickSquad(world: World, pool: readonly number[]): number[] {
 export function suggestSquad(world: World, nation: number): number[] {
   const pool = eligibleFor(world, nation).filter((p) => canPlayForCountry(world, p) && !world.players.hasFlag(p, PlayerFlag.OnDuty));
   // The manager's nation: his provisional squad first.
-  return nation === userNation(world) ? framedSquad(world, pool) : pickSquad(world, pool);
+  return nation === userNation(world) ? framedSquad(world, pool) : aiSquad(world, nation, pool);
+}
+
+/** A side's fourteen picked by its own coach: a youth side takes the players sent down to it first. */
+function aiSquad(world: World, side: number, pool: readonly number[]): number[] {
+  if (!isYouthSide(side)) return pickSquad(world, pool, side);
+  const sent = (world.internationals?.sentDown?.[side] ?? []).filter((p) => pool.includes(p)).slice(0, SQUAD_SIZE);
+  if (sent.length === 0) return pickSquad(world, pool, side);
+  const rest = pickSquad(world, pool.filter((p) => !sent.includes(p)), side);
+  const squad = [...sent];
+  for (const p of rest) if (squad.length < SQUAD_SIZE) squad.push(p);
+  return squad;
 }
 
 /** The next tournament the nation plays in that has not finished. */
@@ -1063,10 +1149,21 @@ function callUp(world: World, t: Tournament): void {
   // Who each nation could call: fit, not away with another team — a dual
   // national on both lists until one of them takes him.
   const pools = new Map<number, number[]>(t.teams.map((n) => [n, []]));
+  const youth = t.youth;
   for (let i = 0; i < store.count; i++) {
-    if (!store.isActive(i) || store.hasFlag(i, PlayerFlag.Youth) || store.injuryDaysLeft[i] > 0) continue;
+    if (!store.isActive(i) || store.injuryDaysLeft[i] > 0) continue;
     if (store.hasFlag(i, PlayerFlag.OnDuty)) continue;
-    for (const n of nationsOf(world, i)) pools.get(n)?.push(i);
+    if (youth === undefined) {
+      if (store.hasFlag(i, PlayerFlag.Youth)) continue;
+      for (const n of nationsOf(world, i)) pools.get(n)?.push(i);
+    } else {
+      // A youth side: his age, his academy too — and not if the seniors are keeping him.
+      if (store.ageOn(i, world.year, 181) > youth) continue;
+      for (const n of nationsOf(world, i)) {
+        const side = youthSide(n, youth);
+        if (pools.has(side) && !heldBySeniors(world, i, n, side)) pools.get(side)!.push(i);
+      }
+    }
   }
   const mine = userNation(world);
   const order = [...t.teams].sort((a, b) => Number(b === mine) - Number(a === mine));
@@ -1079,7 +1176,7 @@ function callUp(world: World, t: Tournament): void {
       squad = I.chosen.players.filter((p) => pool.includes(p));
       if (squad.length < SQUAD_SIZE) squad.push(...framedSquad(world, pool.filter((p) => !squad.includes(p))).slice(0, SQUAD_SIZE - squad.length));
     } else {
-      squad = n === mine ? framedSquad(world, pool) : pickSquad(world, pool);
+      squad = n === mine ? framedSquad(world, pool) : aiSquad(world, n, pool);
     }
     // The provisional squad hears how it stands.
     if (n === mine) frameVerdict(world, squad);
@@ -1087,23 +1184,26 @@ function callUp(world: World, t: Tournament): void {
     t.squads.push([n, squad]);
     const team = teamOf(world, n);
     if (team !== undefined) {
-      for (const p of team.squad) store.setFlag(p, PlayerFlag.NationalTeam, false);
+      // The national-team mark is the seniors': a youth call-up leaves it as it is.
+      if (youth === undefined) for (const p of team.squad) store.setFlag(p, PlayerFlag.NationalTeam, false);
       team.squad = [...squad];
     }
     for (const p of squad) {
-      store.setFlag(p, PlayerFlag.NationalTeam, true);
+      if (youth === undefined) store.setFlag(p, PlayerFlag.NationalTeam, true);
       store.setFlag(p, PlayerFlag.OnDuty, true);
       store.morale[p] = Math.min(100, store.morale[p] + 3);
     }
   }
   t.status = 'called';
   if (I.chosen?.tournamentId === t.id) I.chosen = null;
+  // The players sent down have gone with their side: the seniors may call them again.
+  if (youth !== undefined && I.sentDown !== undefined) for (const n of t.teams) delete I.sentDown[n];
 
   const called = t.squads.flatMap(([n, squad]) => ours(world, squad).map((p) => [p, n] as const));
   if (called.length > 0) {
     const finalDay = t.knockoutDays[t.knockoutDays.length - 1];
     const lines = called.map(([p, n]) =>
-      `• ${store.fullName(p)} — ${nationName(n)}${store.nationalCaps[p] === 0 ? ' (first call-up)' : ` (${store.nationalCaps[p]} caps)`}`);
+      `• ${store.fullName(p)} — ${nationName(n)}${capsFor(world, p, n) === 0 ? ' (first call-up)' : ` (${capsFor(world, p, n)} caps)`}`);
     postMessage(world, {
       subject: called.length === 1
         ? `${store.fullName(called[0][0])} called up for the ${t.name}`
@@ -1117,7 +1217,7 @@ function callUp(world: World, t: Tournament): void {
       category: 'international',
       intl: {
         kind: 'callup', tournamentId: t.id, tournament: t.name,
-        callUps: called.map(([p, n]) => ({ p, nation: n, caps: store.nationalCaps[p] })),
+        callUps: called.map(([p, n]) => ({ p, nation: n, caps: capsFor(world, p, n) })),
       },
     });
   }
@@ -1222,9 +1322,16 @@ export function applyIntlResult(world: World, t: Tournament, m: IntlMatch, resul
   for (const [stats, nation, setsFor, setsAgainst] of sides) {
     for (const [p, s] of stats) {
       if (!playedInMatch(s)) continue;
-      store.nationalCaps[p] = Math.min(65535, store.nationalCaps[p] + 1);
+      if (t.youth !== undefined) {
+        // A youth cap: his own count, and no tie — only a senior cap commits a dual national.
+        const caps = (I.youthCaps ??= {})[p] ??= { u21: 0, u19: 0 };
+        if (t.youth === 21) caps.u21++;
+        else caps.u19++;
+      } else {
+        store.nationalCaps[p] = Math.min(65535, store.nationalCaps[p] + 1);
+        if (!I.tiedTo.has(p)) I.tiedTo.set(p, nation);
+      }
       store.condition[p] = Math.max(20, store.condition[p] - world.rng.int(8, 18));
-      if (!I.tiedTo.has(p)) I.tiedTo.set(p, nation);
       const line = t.stats.get(p) ?? [0, 0, 0, 0];
       line[0]++;
       line[1] += s.attackKills + s.serveAces + s.blockPoints;
@@ -1487,7 +1594,7 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
         body: place === 0
           ? `${nationName(mine)} beat ${nationName(podium[1])} ${score} in the final and lift the ${t.name} — a friendly trophy for the cabinet. It counts for nothing else.`
           : `${nationName(mine)} finished ${ordinal(place + 1)} in the ${t.name}. ${nationName(podium[0])} took the trophy, beating ${nationName(podium[1])} ${score} in the final.`,
-        from: `${nationName(t.host)} federation`,
+        from: `${nationName(baseNation(t.host))} federation`,
         category: 'international',
         aboutNation: t.host,
       });
@@ -1505,8 +1612,8 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
   const comp = world.competitions[t.competitionId];
   if (comp !== undefined) comp.champion = podium[0];
 
-  // Medals: pride, and a name that travels.
-  const medal = [1.08, 1.04, 1.04];
+  // Medals: pride, and a name that travels — a youth medal less far.
+  const medal = t.youth !== undefined ? [1.03, 1.015, 1.015] : [1.08, 1.04, 1.04];
   podium.slice(0, 3).forEach((n, i) => {
     for (const p of squadOf(t, n)) {
       store.morale[p] = Math.min(100, store.morale[p] + (i === 0 ? 12 : 6));
@@ -1517,9 +1624,10 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
   const mine = userNation(world);
   const place = t.placings.indexOf(mine);
   if (place >= 0 && place < 3) {
-    world.career.reputation = Math.min(10000, Math.round(world.career.reputation * (place === 0 ? 1.06 : 1.03) + 50));
-    // A medal of his own, for the record — and his achievements (achievements.ts).
-    if (t.kind !== 'qualifier' && t.kind !== 'friendly') {
+    const lift = t.youth !== undefined ? (place === 0 ? 1.03 : 1.015) : place === 0 ? 1.06 : 1.03;
+    world.career.reputation = Math.min(10000, Math.round(world.career.reputation * lift + (t.youth !== undefined ? 20 : 50)));
+    // A medal of his own, for the record — and his achievements (achievements.ts). A senior one.
+    if (t.kind !== 'qualifier' && t.kind !== 'friendly' && t.youth === undefined) {
       (world.career.nationalMedals ??= []).push({ nation: mine, kind: t.kind, year: t.year, place });
     }
   }
@@ -1533,16 +1641,24 @@ function finish(world: World, t: Tournament, final: IntlMatch, bronze: IntlMatch
     placings: [...t.placings],
     mvp,
     medallists: podium.slice(0, 3).map((n) => [n, [...squadOf(t, n)]]),
+    ...(t.youth !== undefined ? { youth: t.youth } : {}),
   });
   if (t.kind === 'nationsLeague') turnOverNationsLeague(world, t);
   for (const n of t.teams) release(world, t, n);
+  // A youth title makes the paper when the manager's side was in it; his club's players hear in the inbox as they come home.
+  if (t.youth !== undefined) {
+    if (!t.teams.includes(userNation(world))) {
+      judgeCoaches(world, t);
+      return;
+    }
+  }
 
   const score = `${Math.max(final.homeSets, final.awaySets)}-${Math.min(final.homeSets, final.awaySets)}`;
   postNews(world, {
     kind: 'title',
     headline: `${nationName(podium[0])} are ${championsTitle(t)}`,
     body: `${nationName(podium[0])} beat ${nationName(podium[1])} ${score} in the final of the ${t.name}` +
-      `${t.host >= 0 ? `, played in ${nationName(t.host)}` : ''}.` +
+      `${t.host >= 0 ? `, played in ${nationName(baseNation(t.host))}` : ''}.` +
       `${podium[2] !== undefined ? ` ${nationName(podium[2])} took bronze, beating ${nationName(podium[3])}.` : ''}` +
       `${mvp >= 0 ? ` ${store.fullName(mvp)} was named the tournament's Most Valuable Player.` : ''}`,
     nation: podium[0],
@@ -1577,6 +1693,8 @@ function turnOverNationsLeague(world: World, t: Tournament): void {
 
 /** A nation's standing in the world, on the scale of a club's reputation (0-10000). */
 export function nationStanding(world: World, nation: number): number {
+  // A youth side's job is a step below its nation's — a way in for a coach making his name.
+  if (isYouthSide(nation)) return Math.round(nationStanding(world, baseNation(nation)) * (sideAge(nation) === 21 ? 0.55 : 0.45));
   const rank = worldRanking(world).indexOf(nation);
   return Math.max(1500, 7500 - Math.max(0, rank) * 160);
 }
@@ -1607,8 +1725,20 @@ function ensureVacancies(world: World, ranked: number[], rng: Rng): void {
   const I = internationals(world);
   const mine = userNation(world);
   const candidates = ranked.slice(4, 40).filter((n) => n !== mine && !I.vacancies.some((v) => v.nation === n));
-  while (I.vacancies.length < MIN_VACANCIES && candidates.length > 0) {
+  while (I.vacancies.filter((v) => !isYouthSide(v.nation)).length < MIN_VACANCIES && candidates.length > 0) {
     const n = candidates.splice(rng.int(0, candidates.length - 1), 1)[0];
+    I.vacancies.push({ nation: n, since: world.day, fillsOn: world.day + VACANCY_DAYS });
+  }
+  // And a couple of youth sides, the U21s or the U19s of a nation in the top forty.
+  const youth = ranked.slice(0, 40).flatMap((n) => [youthSide(n, 21), youthSide(n, 19)])
+    .filter((n) => n !== mine && teamOf(world, n) !== undefined && !I.vacancies.some((v) => v.nation === n));
+  while (I.vacancies.filter((v) => isYouthSide(v.nation)).length < MIN_YOUTH_VACANCIES && youth.length > 0) {
+    // One of each age where it can be: the age with fewer jobs open goes first.
+    const open = (age: YouthAge): number => I.vacancies.filter((v) => sideAge(v.nation) === age).length;
+    const want: YouthAge = open(21) <= open(19) ? 21 : 19;
+    const pool = youth.some((n) => sideAge(n) === want) ? youth.filter((n) => sideAge(n) === want) : youth;
+    const n = pool[rng.int(0, pool.length - 1)];
+    youth.splice(youth.indexOf(n), 1);
     I.vacancies.push({ nation: n, since: world.day, fillsOn: world.day + VACANCY_DAYS });
   }
 }
@@ -1759,6 +1889,7 @@ function judgeCoaches(world: World, t: Tournament): void {
       }
     } else if (!I.vacancies.some((v) => v.nation === n) && rng.chance(0.3)) {
       I.vacancies.push({ nation: n, since: world.day, fillsOn: world.day + VACANCY_DAYS });
+      if (t.youth !== undefined) return;
       postNews(world, {
         kind: 'coach',
         headline: `${nationName(n)} part company with their head coach`,
@@ -1807,6 +1938,7 @@ function nationalJobsDay(world: World): void {
     if (I.offers.some((o) => o.nation === v.nation)) continue;
     I.vacancies = I.vacancies.filter((x) => x !== v);
     (I.coachTurns ??= {})[v.nation] = (I.coachTurns[v.nation] ?? 0) + 1;
+    if (isYouthSide(v.nation)) continue;
     postNews(world, {
       kind: 'coach',
       headline: `${nationName(v.nation)} name ${nationalCoachName(world, v.nation)} as national team coach`,
@@ -1834,14 +1966,14 @@ export function offerNationalJob(world: World, nation: number, applied: boolean)
   // The job isn't open: they would be parting with the man they have.
   const sitting = I.vacancies.some((v) => v.nation === nation) ? null : nationalCoachName(world, nation);
   const next = nextTournamentFor(world, nation);
-  const rank = worldRanking(world).indexOf(nation) + 1;
+  const rank = sideRank(world, nation);
   const club = world.userClubId >= 0 ? world.clubs[world.userClubId] : undefined;
   postMessage(world, {
     subject: applied ? `${nationName(nation)} offer you the national team job` : `${nationName(nation)} want you as their head coach`,
     body: (applied
       ? `The ${nationName(nation)} Volleyball Federation has considered your approach and would like you to coach the national team${sitting !== null ? `, in place of ${sitting}` : ''}.`
       : `The ${nationName(nation)} Volleyball Federation is looking for a head coach for the national team, and would like it to be you.`) +
-      ` ${nationName(nation)} are ${ordinal(rank)} in the world ranking` +
+      ` ${nationName(nation)} are ${ordinal(rank)} in the ${isYouthSide(nation) ? `U${sideAge(nation)} ranking` : 'world ranking'}` +
       `${next !== undefined ? `, and their next tournament is the ${next.name}, starting on ${dateLabel(world, next.startDay)}` : ''}.` +
       `${club !== undefined ? ` The job goes alongside your work at ${club.name}.` : ''}` +
       `${userNation(world) >= 0 ? ` Accepting it means leaving ${nationName(userNation(world))}.` : ''}` +
@@ -1900,10 +2032,12 @@ function nationalApproaches(world: World): void {
   const mine = userNation(world);
   const ranking = worldRanking(world);
   const rng = new Rng(`napp:${world.seed}:${world.day}`);
+  // A youth job is offered to a manager without a national team; a senior job to one coaching a youth side,
+  // or one well above his nation.
   const candidates = I.vacancies
     .map((v) => v.nation)
     .filter((n) => !I.applications.some((a) => a.nation === n) && nationalHiringChance(world, n) >= 0.55)
-    .filter((n) => mine < 0 || ranking.indexOf(n) + 8 <= ranking.indexOf(mine));
+    .filter((n) => mine < 0 || (!isYouthSide(n) && (isYouthSide(mine) || ranking.indexOf(n) + 8 <= ranking.indexOf(mine))));
   for (const n of candidates) {
     if (!rng.chance(mine < 0 ? 0.12 : 0.05)) continue;
     offerNationalJob(world, n, false);
@@ -1920,7 +2054,7 @@ export function nationalCoachName(world: World, nation: number): string | null {
   const I = internationals(world);
   if (I.vacancies.some((v) => v.nation === nation)) return null;
   const rng = new Rng(`ncoach:${world.seed}:${nation}:${I.coachTurns?.[nation] ?? 0}`);
-  const bank = bankFor(NATIONS[nation]?.nameGroup ?? '');
+  const bank = bankFor(NATIONS[baseNation(nation)]?.nameGroup ?? '');
   return `${rng.pick(bank.first)} ${rng.pick(bank.last)}`;
 }
 
@@ -1952,10 +2086,12 @@ export function expressNationalInterest(world: World, nation: number): number | 
 
 /** What a federation opens with: more the higher it stands in the world and the bigger his name, for two seasons or so. */
 function openingTerms(world: World, nation: number): { terms: ManagerContract; ceiling: number } {
-  const rank = Math.max(0, worldRanking(world).indexOf(nation));
+  const rank = Math.max(0, worldRanking(world).indexOf(baseNation(nation)));
   const standing = Math.pow(Math.max(0, 1 - rank / 50), 1.5);
   const name = 0.8 + (world.career.reputation / 10000) * 0.6;
-  const wage = Math.round(((60_000 + 340_000 * standing) * name) / 1000) * 1000;
+  // A youth side pays a good deal less than the seniors.
+  const scale = isYouthSide(nation) ? (sideAge(nation) === 21 ? 0.4 : 0.3) : 1;
+  const wage = Math.round(((60_000 + 340_000 * standing) * name * scale) / 1000) * 1000;
   const ceiling = Math.round((wage * (1.2 + 0.4 * nationalHiringChance(world, nation))) / 1000) * 1000;
   // This season counts only if most of it is still to run.
   const untilSeason = world.season + (world.day % DAYS_PER_SEASON > 180 ? 2 : 1);
@@ -2165,18 +2301,20 @@ function headlines(world: World, t: Tournament, today: IntlMatch[]): void {
   // The field by world ranking, best first.
   const points = (n: number): number => teamOf(world, n)?.rankingPoints ?? 0;
   const rank = [...t.teams].sort((a, b) => points(b) - points(a));
-  if (world.day === t.startDay) {
+  // A youth tournament makes the paper with its champions and the manager's own matches only.
+  const youth = t.youth !== undefined;
+  if (world.day === t.startDay && !youth) {
     const favourites = rank.slice(0, 3).map(nationName);
     postNews(world, {
       kind: 'result',
-      headline: `The ${t.name} gets under way${t.host >= 0 ? ` in ${nationName(t.host)}` : ''}`,
+      headline: `The ${t.name} gets under way${t.host >= 0 ? ` in ${nationName(baseNation(t.host))}` : ''}`,
       body: t.kind === 'qualifier'
         ? `${t.teams.length} nations in ${t.pools.length} pools of four, playing for ${t.places ?? 0} places — ` +
           `the top two in each pool and the best of the thirds go through. ` +
           `The world ranking makes ${favourites.join(', ')} the favourites.`
         : `${t.teams.length} nations, ${t.pools.length} pool${t.pools.length === 1 ? '' : 's'}, and one title. ` +
           `The world ranking makes ${favourites.join(', ')} the favourites` +
-          `${t.host >= 0 ? `; ${nationName(t.host)} have home advantage` : ''}.`,
+          `${t.host >= 0 ? `; ${nationName(baseNation(t.host))} have home advantage` : ''}.`,
       nation: t.host >= 0 ? t.host : -1,
       competitionId: t.competitionId,
       fans: { story: 'tournament', nation: t.host >= 0 ? t.host : undefined },
@@ -2184,7 +2322,7 @@ function headlines(world: World, t: Tournament, today: IntlMatch[]): void {
   }
   // A shock: one of the favourites beaten by a side ranked well below it.
   const gap = Math.max(4, Math.round(t.teams.length / 3));
-  for (const m of today) {
+  for (const m of youth ? [] : today) {
     const w = winnerOf(m);
     const l = loserOf(m);
     const rw = rank.indexOf(w);
@@ -2260,7 +2398,7 @@ export function askForSquad(world: World): GameMessage | undefined {
   I.squadAsked.push(t.id);
   return postMessage(world, {
     subject: `${nationName(nation)}: name your squad for the ${t.name}`,
-    body: `The ${t.name} starts on ${dateLabel(world, t.startDay)}${t.host >= 0 ? ` in ${nationName(t.host)}` : ''}, ` +
+    body: `The ${t.name} starts on ${dateLabel(world, t.startDay)}${t.host >= 0 ? ` in ${nationName(baseNation(t.host))}` : ''}, ` +
       `and the federation needs your fourteen by ${dateLabel(world, t.callUpDay)}. Here are the players you can call — ` +
       'two setters, two opposites, four outside hitters, four middles and two liberos is the usual shape. ' +
       'Until you confirm your squad, the day squads are due will wait for you.',
@@ -2272,6 +2410,7 @@ export function askForSquad(world: World): GameMessage | undefined {
 
 /** The day's international business: squads named, matches played, rounds drawn, players home, jobs. */
 export function internationalDay(world: World): void {
+  ensureYouthTeams(world);
   planInternationals(world);
   const I = internationals(world);
   // A new world, or a save from before: each nation's core has played together before.
@@ -2309,7 +2448,9 @@ export function internationalNotes(world: World, day: number): Array<{ label: st
   const notes = new Map<string, string>();
   const continental = I.tournaments.filter((t) => t.kind === 'continental');
   for (const t of I.tournaments) {
-    const short = t.kind === 'continental' && continental.length > 1 ? 'Continental championships' : shortName(t);
+    const many = continental.filter((x) => x.youth === t.youth).length > 1;
+    const short = t.kind === 'continental' && many
+      ? `${t.youth !== undefined ? `U${t.youth} c` : 'C'}ontinental championships` : shortName(t);
     if (day === t.callUpDay) notes.set(`${short}-call`, `${short}: squads named`);
     if (day === t.startDay) notes.set(`${short}-start`, `${short} begins`);
     if (day === t.knockoutDays[t.knockoutDays.length - 1]) notes.set(`${short}-final`, `${short} final`);

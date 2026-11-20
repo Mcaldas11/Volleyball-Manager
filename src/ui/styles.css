@@ -8745,3 +8745,16 @@ input[type="range"]:disabled { cursor: default; opacity: 0.45; }
 .acx-plans .dd { min-width: 150px; }
 .acx-plans .pos { color: var(--good); font-weight: 600; }
 .acx-plans .neg { color: var(--bad); font-weight: 600; }
+
+/* Youth national sides: the senior coach's U21/U19 panel, and the academy's internationals tab. */
+.nat-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.nat-card-head .nat-h { margin: 0; }
+.nat-youth-lead { margin: 0 0 6px; font-size: 12px; }
+.nat-kept td { background: color-mix(in srgb, var(--gold, #c9a227) 6%, transparent); }
+.acx-intl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 14px; }
+.acx-intl-head .acx-lead { flex: 1; }
+.acx-tag { margin-left: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.acx-status.away { color: var(--good, #3fb950); font-weight: 600; }
+.acx-status.named { color: var(--gold, #c9a227); }
+.acx-status.outside { color: var(--text-dim, #888); }
+.acx-away td { background: color-mix(in srgb, var(--good, #3fb950) 7%, transparent); }

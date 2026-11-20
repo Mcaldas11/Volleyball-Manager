@@ -4,6 +4,7 @@ import {
   eligibleFor, nationResults, nationTournaments, userNation, worldRanking,
 } from '../../engine/world/internationals.ts';
 import { NATIONS, type Confederation } from '../../engine/world/nations.ts';
+import { sideName } from '../../engine/world/sides.ts';
 import { abilityClass, Card, ClubLink, Empty, Flag, KV, PlayerFace, Pos, StarMeter } from '../components.tsx';
 import { InterestButton } from '../nationCoach.tsx';
 import { nationalCoachName } from '../../engine/world/internationals.ts';
@@ -157,7 +158,7 @@ export function NationProfile(): JSX.Element | null {
             return (
               <div key={`${t.id}-${m.id}`} className="nation-result" onClick={() => g.openTournament(t.id)}>
                 <span className="nation-result-main">
-                  <span className="nation-result-opp"><Flag nation={opp} /> {NATIONS[opp]?.name ?? '?'}</span>
+                  <span className="nation-result-opp"><Flag nation={opp} /> {sideName(opp)}</span>
                   <span className="faint">{t.name} · {m.stage}</span>
                 </span>
                 <span className={`ov-result ${us > them ? 'win' : 'loss'}`}>{us}-{them}</span>

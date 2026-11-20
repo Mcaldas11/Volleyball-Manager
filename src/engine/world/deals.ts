@@ -29,9 +29,12 @@ import {
   startLoan, wageRoom, type LoanPlayingTime,
 } from './loans.ts';
 import { moveDay, pendingMoveOf, seasonOfDay, windowOpeningLabel } from './moves.ts';
-import { euros, seasonEndDay, seasonEndYear, windowCloseDay, type GameMessage, type World } from './world.ts';
+import { contractEndSeason, euros, seasonEndDay, seasonEndYear, windowCloseDay, type GameMessage, type World } from './world.ts';
 import { AFFILIATE_DISCOUNT, affiliateLoanBlock, isAffiliate } from './affiliates.ts';
 import { agentOf, agentPatience, extrasOf, pruneExtras, releaseClauseOf, setExtras } from './contractTerms.ts';
+import {
+  clubKeepsHim, makePreContract, newsPreContract, nextSeasonSquad, nextSeasonWageRoom, preContractJoinDay,
+} from './preContracts.ts';
 
 export interface TalksOffer {
   /** Transfer fee — only while talking to the selling club. */
@@ -87,6 +90,9 @@ export interface Talks {
   expiresOn: number;
   /** Run by the Director of Football, not the manager — see director.ts. */
   byDirector?: boolean;
+  /** A pre-contract: straight to the player in the last six months of his deal, no fee —
+   *  he joins on a free when it runs out. See preContracts.ts. */
+  preContract?: boolean;
 }
 
 /** How long each kind of answer takes, in days (both ends inclusive). */
@@ -264,7 +270,7 @@ export function completeDueMoves(world: World, byDay = world.day): void {
     if (userIn) {
       say(world, {
         subject: `${name} arrives`,
-        body: `The window is open and ${name} has joined${from !== undefined ? ` from ${from.name}` : ''}, ` +
+        body: `The window is open and ${name} has joined${from !== undefined ? ` from ${from.name}` : ''}${m.preContract === true ? ' on a free transfer' : ''}, ` +
           `on the contract agreed: ${euros(m.wage)} a season until 30 June ${seasonEndYear(world, seasonOfDay(m.contractEnd))}.`,
         playerIdx: p,
         clubId: from?.id,
@@ -333,6 +339,29 @@ export function openTalks(world: World, club: Club, playerIdx: number, kind: Tal
   return talks;
 }
 
+/** Go to a player in the last six months of his contract: his terms only, no fee — see preContracts.ts. */
+export function openPreContractTalks(world: World, club: Club, playerIdx: number): Talks {
+  const t = openTalks(world, club, playerIdx, 'transfer');
+  makePreContract(t);
+  return t;
+}
+
+/** Sign a pre-contract: no fee, and he joins on 1 July, when his contract has run out.
+ *  `years` counts from next season. Returns the day he joins. */
+function agreePreContract(world: World, buyer: Club, playerIdx: number, wage: number, years: number): number {
+  const store = world.players;
+  const day = preContractJoinDay(world);
+  const contractEnd = seasonEndDay(seasonOfDay(day) + years - 1);
+  newsPreContract(world, playerIdx, buyer.id);
+  store.setFlag(playerIdx, PlayerFlag.Transferable, false);
+  store.setFlag(playerIdx, PlayerFlag.LoanListed, false);
+  world.pendingMoves.push({
+    kind: 'transfer', playerIdx, fromClubId: store.clubId[playerIdx], toClubId: buyer.id, movesOn: day, fee: 0, wage, contractEnd,
+    wageShare: 0, preContract: true,
+  });
+  return day;
+}
+
 /** Send an offer off. Returns the day the answer comes back. */
 export function submitOffer(world: World, talks: Talks, offer: TalksOffer): number {
   // A loan is the lending club's decision alone, like a bid.
@@ -353,6 +382,8 @@ function stillAvailable(world: World, t: Talks): boolean {
   // One of ours out on loan is still ours to renew.
   const ours = club === world.userClubId || loanOf(world, t.playerIdx)?.parentClubId === world.userClubId;
   // A player who has agreed a move and is waiting on the window is spoken for.
+  // A pre-contract stands only while his deal is running out: renewed, there is nothing to talk about.
+  if (t.preContract === true && contractEndSeason(world.players.contractUntil[t.playerIdx]) !== world.season) return false;
   return world.players.isActive(t.playerIdx) && pendingMoveOf(world, t.playerIdx) === undefined &&
     (t.kind === 'renewal' ? ours : club === t.sellingClubId && club !== world.userClubId && !ours);
 }
@@ -371,8 +402,11 @@ function signForRival(world: World, t: Talks, rival: RivalSuitor): void {
   const store = world.players;
   const club = world.clubs[rival.clubId];
   if (club === undefined) return;
-  const fee = t.sellingClubId >= 0 ? Math.max(t.agreedFee, store.value[t.playerIdx]) : 0;
-  const day = agreeTransfer(world, club, t.playerIdx, rival.wage, fee, world.rng.int(1, 3) + 1);
+  const fee = t.sellingClubId >= 0 && t.preContract !== true ? Math.max(t.agreedFee, store.value[t.playerIdx]) : 0;
+  const years = world.rng.int(1, 3) + 1;
+  const day = t.preContract === true
+    ? agreePreContract(world, club, t.playerIdx, rival.wage, years)
+    : agreeTransfer(world, club, t.playerIdx, rival.wage, fee, years);
   say(world, {
     subject: `${store.fullName(t.playerIdx)} joins ${club.name}`,
     body: `${store.fullName(t.playerIdx)} has ${day > world.day ? 'agreed to join' : 'signed for'} ${club.name} instead — ` +
@@ -413,6 +447,13 @@ function tableRivalBid(world: World, t: Talks): void {
 /** Why an agreed deal can no longer go through, if it can't. */
 function dealProblem(world: World, club: Club, t: Talks, offer: TalksOffer): string | null {
   const store = world.players;
+  if (t.preContract === true) {
+    // He joins next season: it is next season's squad and wage bill he has to fit.
+    if (nextSeasonSquad(world, club) >= MAX_SQUAD) return 'the squad for next season is full';
+    if (offer.wage > nextSeasonWageRoom(world, club)) return "there is no longer room in next season's wage budget";
+    if ((offer.agentFee ?? 0) > club.finances.balance) return "the club can no longer afford the agent's fee";
+    return null;
+  }
   if (t.kind === 'transfer' && squadSize(world, club) >= MAX_SQUAD) return 'the squad is full';
   const room = wageRoom(world, club) + (t.kind === 'renewal' ? store.wage[t.playerIdx] : 0);
   if (offer.wage > room) return 'there is no longer room in the wage budget';
@@ -530,7 +571,7 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
   const response = respondToOffer(t.demands, offer, t.patience);
   // A contract runs from the season he joins in — next season's, for a deal
   // that has to wait for the summer window.
-  const endSeason = (renewal ? world.season : joinSeason(world, p)) + offer.years - 1;
+  const endSeason = (renewal ? world.season : t.preContract === true ? world.season + 1 : joinSeason(world, p)) + offer.years - 1;
   const ends = `30 June ${seasonEndYear(world, endSeason)}`;
 
   if (response.outcome === 'accepted') {
@@ -558,6 +599,20 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
       return;
     }
     const seller = t.sellingClubId >= 0 ? world.clubs[t.sellingClubId] : undefined;
+    if (t.preContract === true) {
+      const day = agreePreContract(world, club, p, offer.wage, offer.years);
+      const print = signSmallPrint(world, club, p, offer, seasonEndDay(seasonOfDay(day) + offer.years - 1));
+      say(world, {
+        subject: `${name} signs a pre-contract`,
+        body: `${name} has agreed terms: ${euros(offer.wage)} a season until ${ends}. His contract with ${seller?.name ?? 'his club'} ` +
+          `runs out on 30 June ${seasonEndYear(world, world.season)}; he stays and plays for them until then, and joins you on a free transfer on ${windowOpeningLabel(world, day)}.${print}`,
+        playerIdx: p,
+        clubId: seller?.id,
+        category,
+      });
+      closeTalks(world, t);
+      return;
+    }
     const day = agreeTransfer(world, club, p, offer.wage, t.agreedFee, offer.years);
     const print = signSmallPrint(world, club, p, offer, seasonEndDay(seasonOfDay(day) + offer.years - 1));
     const paid = (seller !== undefined && t.agreedFee > 0 ? ` ${euros(t.agreedFee)} has been paid to ${seller.name}.` : '') + print;
@@ -708,6 +763,21 @@ function processTalks(world: World, club: Club): void {
       const rival = t.rivals.find((r) => r.clubId === t.rivalBid!.clubId) ?? t.rivals[0];
       if (rival !== undefined) { signForRival(world, t, rival); continue; }
       t.rivalBid = undefined;
+    }
+    // His club's last chance to keep a player the manager is talking to about a pre-contract.
+    if (t.preContract === true && clubKeepsHim(world, t)) {
+      const seller = world.clubs[t.sellingClubId];
+      say(world, {
+        subject: `${store.fullName(t.playerIdx)} stays at ${seller?.name ?? 'his club'}`,
+        body: `${store.fullName(t.playerIdx)} has signed a new contract with ${seller?.name ?? 'his club'}, running to 30 June ` +
+          `${seasonEndYear(world, contractEndSeason(store.contractUntil[t.playerIdx]))}. Your pre-contract talks with him are over.`,
+        playerIdx: t.playerIdx,
+        clubId: seller?.id,
+        from: `${store.fullName(t.playerIdx)}'s agent`,
+        category: 'offer',
+      });
+      closeTalks(world, t);
+      continue;
     }
     if (t.kind === 'transfer' && t.stage === 'fee' && t.rivalBid === undefined && t.rivals.length > 0 &&
       world.rng.chance(RIVAL_TABLES_BID_CHANCE)) {

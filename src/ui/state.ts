@@ -32,7 +32,8 @@ import { canWatch, commitWatched, nextWatchDay, spectatorSetup, watchableToday, 
 import { bookCamp, type CampKind } from '../engine/world/camp.ts';
 import { requestLowerTarget, requestWages } from '../engine/world/board.ts';
 import { setUiGame } from './gameGender.ts';
-import { arrangeFriendly, toggleFrame, toggleWatch } from '../engine/world/nationalExtras.ts';
+import { arrangeFriendly, frameOf, toggleFrame, toggleWatch } from '../engine/world/nationalExtras.ts';
+import { recommendToYouthSide, sentDownTo, toggleSendDown } from '../engine/world/youthNational.ts';
 import { startCourse } from '../engine/world/courses.ts';
 import { requestExpansion } from '../engine/world/supporters.ts';
 import { askOwner } from '../engine/world/owners.ts';
@@ -75,7 +76,8 @@ import {
 import { requestUpgrade, upgradeBlock, type FacilityKind } from '../engine/world/facilities.ts';
 import { chooseSponsor, setTicketPrice } from '../engine/world/commercial.ts';
 import { endAffiliation, proposeAffiliation } from '../engine/world/affiliates.ts';
-import { loanToAffiliate } from '../engine/world/deals.ts';
+import { loanToAffiliate, openPreContractTalks } from '../engine/world/deals.ts';
+import { nextSeasonWageRoom, preContractBlock, preContractJoinDay } from '../engine/world/preContracts.ts';
 import { challengeChecksFor, type ChallengeCheck, type ChallengeResult, type LastCall } from '../engine/match/engine.ts';
 import type { BallMark } from '../engine/match/landing.ts';
 import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
@@ -88,7 +90,7 @@ import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
 import { calendarOf } from '../engine/world/calendar.ts';
 import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
 import {
-  currentPhase, dayOfSeason, DAYS_PER_SEASON, euros, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
+  contractEndSeason, currentPhase, dayOfSeason, DAYS_PER_SEASON, euros, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
   transferWindowOn,
   type Fixture, type GameMessage, type ManagerLook, type ManagerProfile, type World,
 } from '../engine/world/world.ts';
@@ -105,7 +107,7 @@ import {
   expressNationalInterest, nationalInterestBlock, type NationalCounter,
   leaveNationalJob, matchImportance, nameSquad,
   nationalApplicationBlock, nationName, nationSetup, nextTournamentFor, postMatchReport, squadDue, squadOf,
-  startNationalCareer, suggestSquad, userMatchToday, userNation, type IntlMatch, type Tournament,
+  startNationalCareer, suggestSquad, userMatchToday, userNation, nationalTeamOf, type IntlMatch, type Tournament,
 } from '../engine/world/internationals.ts';
 import {
   answerOffers, applyForJobs, countHolidayDay, DEFAULT_HOLIDAY, returnDay, type HolidayPlan,
@@ -122,6 +124,7 @@ import {
   arrivalsFor, moveDay, pendingMoveOf, seasonOfDay, type PendingMove,
 } from '../engine/world/moves.ts';
 import { NATIONS } from '../engine/world/nations.ts';
+import { baseNation, isYouthSide, sideAge, type YouthAge } from '../engine/world/sides.ts';
 import { isCupFinal, trophyAtStake } from '../engine/season/cups.ts';
 import { answerMindGame, type MindGameReply } from '../engine/world/mindGames.ts';
 import { startChallenge, type ChallengeId } from '../engine/world/challenges.ts';
@@ -132,7 +135,7 @@ import {
   boardArrangeFriendly, friendlyBlock, isFriendly, requestFriendly, withdrawFriendlyRequest,
 } from '../engine/season/friendlies.ts';
 import {
-  beginTestCoaching, bookTestMatch, endTestCoaching, settleTestMatch, testMatchToday as testFixtureToday, TEST_SIDE_NAME,
+  beginTestCoaching, bookTestMatch, canBookTestMatch, endTestCoaching, settleTestMatch, testMatchToday as testFixtureToday, TEST_SIDE_NAME,
 } from '../engine/season/testMatch.ts';
 import {
   answerCupInvite as answerTournamentInvite, cancelCup, cupMatchTitle, hostBlock, hostCup, hostNationCup, type CupSize,
@@ -366,6 +369,8 @@ export interface ScoutFilters {
   potentialMin: number;
   valueMax: number | null;
   freeAgentOnly: boolean;
+  /** Only players whose contracts end this June — open to a pre-contract from 1 January. Absent in filters saved before it. */
+  expiringOnly?: boolean;
 }
 
 export const DEFAULT_SCOUT_FILTERS: ScoutFilters = {
@@ -378,6 +383,7 @@ export const DEFAULT_SCOUT_FILTERS: ScoutFilters = {
   potentialMin: 0,
   valueMax: null,
   freeAgentOnly: false,
+  expiringOnly: false,
 };
 
 export interface IncomingOfferReview {
@@ -1105,8 +1111,8 @@ class Game {
       id,
       managerName: `${world.manager.firstName} ${world.manager.lastName}`,
       nationCode: NATIONS[world.manager.nation]?.code ?? '???',
-      clubName: this.club?.name ?? (nationalTeam >= 0 ? `${NATIONS[nationalTeam].name} national team` : 'Unemployed'),
-      clubNationCode: this.club ? NATIONS[this.club.nation].code : nationalTeam >= 0 ? NATIONS[nationalTeam].code : '',
+      clubName: this.club?.name ?? (nationalTeam >= 0 ? `${nationName(nationalTeam)} national team` : 'Unemployed'),
+      clubNationCode: this.club ? NATIONS[this.club.nation].code : nationalTeam >= 0 ? NATIONS[baseNation(nationalTeam)]?.code ?? '' : '',
       scale: this.currentScale ?? 'standard',
       inGameDate: this.dateLabel(),
       season: world.season,
@@ -2193,7 +2199,8 @@ class Game {
    */
   ensureTutorialMatch(): void {
     const world = this.world;
-    if (world === null || world.testMatch !== undefined || this.matchday !== null || this.postMatch !== null || this.processing) return;
+    if (world === null || this.matchday !== null || this.postMatch !== null || this.processing || this.task !== null) return;
+    if (!canBookTestMatch(world)) return;
     if (this.ownFixtureToday() !== null || userMatchToday(world) !== null) return;
     const f = bookTestMatch(world);
     if (f === null) return;
@@ -2415,6 +2422,7 @@ class Game {
     }
     if (world === null || f === null || this.processing) return;
     if (this.openPendingDecision()) return;
+    if (world.testMatch?.fixtureId === f.id) world.testMatch.coached = true;
     playFixture(world, this.ctx, f, true);
     this.captureWatched(f);
     this.checkChampionshipWin(world, f);
@@ -2671,7 +2679,7 @@ class Game {
     const world = this.world;
     if (world === null) return null;
     const own = nation === userNation(world);
-    const team = own ? this.nationalSheet() : world.nationalTeams.find((x) => x.nation === nation);
+    const team = own ? this.nationalSheet() : nationalTeamOf(world, nation);
     if (team === null || team === undefined) return null;
     const matchId = -1 - fixtureId;
     const t = world.internationals?.tournaments.find((x) => x.matches.some((m) => m.id === matchId));
@@ -2749,6 +2757,8 @@ class Game {
       this.openHoliday(next.day);
       return;
     }
+    // The tutorial's practice match, taken: it is not booked again.
+    if (world.testMatch?.fixtureId === next.id) world.testMatch.coached = true;
     if (this.openPendingDecision()) return;
     // Six to put on the court — either side short, and it is decided by default before it starts.
     if (forfeitIfShort(world, this.ctx, next)) {
@@ -3660,7 +3670,7 @@ class Game {
     if (md.national != null) {
       // A national bench: as sharp as the nation is strong.
       const other = md.sides[md.userIsHome ? 1 : 0];
-      const nation = NATIONS.findIndex((n) => n.name === other.name);
+      const nation = NATIONS.findIndex((n) => n.name === other.name.replace(/ U(21|19)$/, ''));
       quality = nation >= 0 ? Math.min(1, 0.3 + (NATIONS[nation].strength / 100) * 0.6) : 0.5;
     } else {
       const theirClub = world.clubs[md.userIsHome ? md.fixture.away : md.fixture.home];
@@ -4516,6 +4526,30 @@ class Game {
   toggleWatch(p: number): void {
     if (this.world === null) return;
     this.notice = toggleWatch(this.world, p);
+    this.emit();
+  }
+
+  /** As senior national coach: send a young player down to the U21s or U19s, or take back the word. */
+  toggleSendDown(p: number, age: YouthAge): void {
+    if (this.world === null) return;
+    this.notice = toggleSendDown(this.world, p, age);
+    this.emit();
+  }
+
+  /** As senior national coach: bring a youth player up — into the provisional squad, and off the youth side's list. */
+  promoteFromYouth(p: number): void {
+    const world = this.world;
+    if (world === null) return;
+    const side = sentDownTo(world, p);
+    if (side >= 0) toggleSendDown(world, p, sideAge(side) as YouthAge);
+    this.notice = frameOf(world).includes(p) ? `${world.players.fullName(p)} is already in the provisional squad.` : toggleFrame(world, p);
+    this.emit();
+  }
+
+  /** As the club's manager: put a prospect forward to his youth side's coach. */
+  recommendToYouthSide(p: number): void {
+    if (this.world === null) return;
+    this.notice = recommendToYouthSide(this.world, p).text;
     this.emit();
   }
 
@@ -5620,7 +5654,7 @@ class Game {
   private nationalSheet(): SheetOwner | null {
     const world = this.world;
     const nation = world === null ? -1 : userNation(world);
-    const team = world?.nationalTeams.find((t) => t.nation === nation);
+    const team = world === null ? undefined : nationalTeamOf(world, nation);
     if (team === undefined) return null;
     team.tactics ??= defaultTactics();
     team.preferredLineup ??= [];
@@ -5707,7 +5741,8 @@ class Game {
   }
 
   private nationalSide(t: Tournament, nation: number): MatchSide {
-    return { clubId: -1, nation, name: nationName(nation), shortName: NATIONS[nation]?.code ?? '?', players: squadOf(t, nation) };
+    const code = NATIONS[baseNation(nation)]?.code ?? '?';
+    return { clubId: -1, nation, name: nationName(nation), shortName: isYouthSide(nation) ? `${code}${sideAge(nation)}` : code, players: squadOf(t, nation) };
   }
 
   /** The national team's match as a fixture, for the matchday screens. */
@@ -6306,6 +6341,7 @@ class Game {
       if (q !== '' && !store.fullName(i).toLowerCase().includes(q)) continue;
       if (filters.position !== null && store.position[i] !== filters.position) continue;
       if (filters.freeAgentOnly && store.clubId[i] !== NO_CLUB) continue;
+      if (filters.expiringOnly === true && (store.clubId[i] === NO_CLUB || contractEndSeason(store.contractUntil[i]) !== world.season)) continue;
 
       const age = store.ageOn(i, world.year, 181);
       if (filters.ageMin !== null && age < filters.ageMin) continue;
@@ -6483,6 +6519,50 @@ class Game {
       return;
     }
     this.openTalksView(openTalks(world, club, playerIdx, 'transfer').id);
+  }
+
+  /** Why the manager can't approach a player for a pre-contract today — null when he can. */
+  preContractBlock(playerIdx: number): string | null {
+    const world = this.world;
+    if (world === null) return 'No game loaded.';
+    if (this.club === null) return world.career.nationalTeam !== undefined ? "A national team coach can't sign club players." : 'You need a club to sign players.';
+    return preContractBlock(world, playerIdx);
+  }
+
+  /** The day a pre-contract signed today is honoured: 1 July. */
+  preContractJoinDay(): number {
+    return this.world === null ? 0 : preContractJoinDay(this.world);
+  }
+
+  /** Next season's wage room — what a pre-contract signing has to fit in. */
+  nextSeasonWageRoom(): number {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? 0 : nextSeasonWageRoom(world, club);
+  }
+
+  /** Go straight to a player in the last six months of his contract: his terms, no fee — he joins on a free in July. */
+  startPreContract(playerIdx: number): void {
+    const world = this.world;
+    const club = this.club;
+    if (world === null || club === null) return;
+    const existing = this.talksWith(playerIdx, 'transfer');
+    if (existing !== null) {
+      if (existing.preContract !== true) {
+        this.notice = `You are already in transfer talks with ${world.players.fullName(playerIdx)}'s club — withdraw them first.`;
+        this.emit();
+        return;
+      }
+      this.openTalksView(existing.id);
+      return;
+    }
+    const block = this.preContractBlock(playerIdx);
+    if (block !== null) {
+      this.notice = block;
+      this.emit();
+      return;
+    }
+    this.openTalksView(openPreContractTalks(world, club, playerIdx).id);
   }
 
   /** Open contract talks with one of the user's own players. */

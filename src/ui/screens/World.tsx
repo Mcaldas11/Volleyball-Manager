@@ -5,6 +5,7 @@ import { useState, type JSX } from 'react';
 import { attackEfficiency, receptionPositivity } from '../../engine/match/stats.ts';
 import type { Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { sideName } from '../../engine/world/sides.ts';
 import { averageRating, seasonTotals } from '../../engine/world/records.ts';
 import {
   abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, RatingBadge, Segmented, StarMeter, Paged } from '../components.tsx';
@@ -62,7 +63,7 @@ function NationalStats(): JSX.Element {
     <div className="national-stats">
       <div className="comp-bar">
         <div className="comp-bar-title">
-          <span className="comp-bar-name"><Flag nation={nation} /> {NATIONS[nation]?.name} · tournament stats</span>
+          <span className="comp-bar-name"><Flag nation={nation} /> {sideName(nation)} · tournament stats</span>
           <span className="faint">The competitions the national team plays</span>
         </div>
         {all.length > 1 && (
@@ -71,7 +72,7 @@ function NationalStats(): JSX.Element {
         )}
       </div>
       {t === undefined
-        ? <Empty>No tournament played yet — the stats come once {NATIONS[nation]?.name ?? 'the national team'} takes the court.</Empty>
+        ? <Empty>No tournament played yet — the stats come once {sideName(nation)} takes the court.</Empty>
         : <TournamentStats key={t.id} t={t} home={nation} />}
     </div>
   );

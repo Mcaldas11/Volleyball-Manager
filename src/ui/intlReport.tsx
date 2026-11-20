@@ -6,19 +6,20 @@
  * game; and the way home as each player's whole tournament, medal and all.
  */
 
+import { nationName as sideName } from '../engine/world/internationals.ts';
 import type { CSSProperties, JSX } from 'react';
 import { POSITION_SHORT, type Position } from '../engine/model/positions.ts';
 import type {
   IntlMatchCard, IntlPlayerLine, IntlReport, IntlTournamentLine,
 } from '../engine/world/internationals.ts';
-import { NATIONS } from '../engine/world/nations.ts';
 import { Flag, PlayerFace, POSITION_ACCENT, RatingBadge } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
 import { NationalTactics, PlayerTable, SquadPicker } from './screens/National.tsx';
 
+/** A side's name — "Italy", or "Italy U21" for a youth side. */
 function nationName(n: number): string {
-  return NATIONS[n]?.name ?? '?';
+  return sideName(n);
 }
 
 function pct(n: number, of: number): string {

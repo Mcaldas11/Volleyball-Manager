@@ -22,6 +22,7 @@ import { postMessage } from './inbox.ts';
 import {
   createFriendly, eligibleFor, internationals, nationName, pickSquad, userNation, type Tournament,
 } from './internationals.ts';
+import { sideAge } from './sides.ts';
 import { DAYS_PER_SEASON, phaseOfSeason, SeasonPhase, type Fixture, type World } from './world.ts';
 
 /** Friendlies a season, at most. */
@@ -87,7 +88,10 @@ export function friendliesThisSeason(world: World): number {
 /** The nations he could play: every one with a team, the strongest first. */
 export function friendlyOpponents(world: World): number[] {
   const mine = userNation(world);
-  return [...world.nationalTeams].filter((t) => t.nation !== mine).sort((a, b) => b.rankingPoints - a.rankingPoints).map((t) => t.nation);
+  // A youth side plays other sides of its age.
+  const age = sideAge(mine);
+  const teams = age === 0 ? world.nationalTeams : (internationals(world).youthTeams ?? []).filter((t) => sideAge(t.nation) === age);
+  return [...teams].filter((t) => t.nation !== mine).sort((a, b) => b.rankingPoints - a.rankingPoints).map((t) => t.nation);
 }
 
 /** Arrange a friendly. Returns what happened, or why not. */
@@ -128,11 +132,11 @@ export function toggleFrame(world: World, p: number): string {
 /** The assistant's fourteen, from the frame first. */
 export function framedSquad(world: World, pool: readonly number[]): number[] {
   const frame = new Set(frameOf(world));
-  if (frame.size === 0) return pickSquad(world, pool);
+  if (frame.size === 0) return pickSquad(world, pool, userNation(world));
   const inFrame = pool.filter((p) => frame.has(p));
-  const squad = pickSquad(world, inFrame);
+  const squad = pickSquad(world, inFrame, userNation(world));
   if (squad.length >= 14) return squad;
-  const rest = pickSquad(world, pool.filter((p) => !squad.includes(p)));
+  const rest = pickSquad(world, pool.filter((p) => !squad.includes(p)), userNation(world));
   return [...squad, ...rest.slice(0, 14 - squad.length)];
 }
 

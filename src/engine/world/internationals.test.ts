@@ -45,8 +45,9 @@ function runTo(world: World, ctx: SeasonContext, day: number): void {
   }
 }
 
+// The seniors' tournaments: the youth sides' (youthNational.test.ts) are counted apart.
 const byKind = (world: World, kind: Tournament['kind']): Tournament[] =>
-  internationals(world).tournaments.filter((t) => t.kind === kind);
+  internationals(world).tournaments.filter((t) => t.kind === kind && t.youth === undefined);
 
 test('the summer of 2026 is the continental championships, and every season ends with a Nations League', () => {
   const { world } = start(41);
@@ -123,7 +124,7 @@ test('the FIVB cycle: a World Championship in 2027, then in 2028 the Olympic Gam
   const { world, ctx } = start(45);
   const I = internationals(world);
   const edition = (kind: Tournament['kind'], conf: string | null, year: number) =>
-    I.history.find((h) => h.kind === kind && h.confederation === conf && h.year === year)!;
+    I.history.find((h) => h.kind === kind && h.confederation === conf && h.year === year && h.youth === undefined)!;
   // The Nations League turns over: the last-placed down, the best-ranked outside up. Its finals are on 1 August.
   const vnl2027 = I.tournaments.find((t) => t.kind === 'nationsLeague' && t.year === 2027)!;
   runTo(world, ctx, Math.max(...vnl2027.knockoutDays) + 1);

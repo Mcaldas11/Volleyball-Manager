@@ -25,7 +25,8 @@ import { Rng } from '../core/rng.ts';
 import { MatchFormat } from '../match/engine.ts';
 import { compareTableRows, newTableRow, type LeagueTableRow } from '../model/club.ts';
 import { formatDay, postMessage } from '../world/inbox.ts';
-import { createFriendlyCup, internationals, nationName, userNation, worldRanking } from '../world/internationals.ts';
+import { createFriendlyCup, internationals, nationName, rankingFor, userNation } from '../world/internationals.ts';
+import { sideAge } from '../world/sides.ts';
 import { friendlyCupDays } from '../world/nationalExtras.ts';
 import { postNews } from '../world/news.ts';
 import { addFixture, DAYS_PER_SEASON, type Fixture, type World } from '../world/world.ts';
@@ -399,7 +400,7 @@ export function inviteNationToCup(world: World, host: number, size: CupSize, sta
   if (mine < 0 || host === mine) return null;
   const free = friendlyCupDays(world, size, [mine, host]);
   if (!free.includes(startDay)) return null;
-  const ranked = worldRanking(world).filter((n) => n !== mine && n !== host && friendlyCupDays(world, size, [n]).includes(startDay));
+  const ranked = rankingFor(world, sideAge(mine)).filter((n) => n !== mine && n !== host && friendlyCupDays(world, size, [n]).includes(startDay));
   const at = Math.max(0, ranked.indexOf(host));
   const others = ranked.slice(Math.max(0, at - 6), at + 10).slice(0, size - 2);
   if (others.length < size - 2) return null;
@@ -716,7 +717,7 @@ function rollNationInvite(world: World): void {
   const rng = new Rng(`cup-nation-invite:${world.seed}:${world.day}`);
   if (dates.length === 0 || !rng.chance(0.04)) return;
   s.nationInvitedSeason = world.season;
-  const ranked = worldRanking(world);
+  const ranked = rankingFor(world, sideAge(mine));
   const at = ranked.indexOf(mine);
   const hosts = ranked.filter((n) => n !== mine).slice(Math.max(0, at - 8), at + 8);
   const startDay = dates[rng.int(0, Math.min(5, dates.length - 1))];

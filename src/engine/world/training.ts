@@ -458,7 +458,7 @@ export function trainingDay(world: World): void {
     }
   }
   // The national sides meet seldom: their tactic comes slowly.
-  for (const team of world.nationalTeams) if (team.tactics !== undefined) learnTactic(team.tactics, NATIONAL_GAIN);
+  for (const team of [...world.nationalTeams, ...(world.internationals?.youthTeams ?? [])]) if (team.tactics !== undefined) learnTactic(team.tactics, NATIONAL_GAIN);
   // Days gone by have nothing more to look up.
   const days = dayIndex.get(world);
   if (days !== undefined) for (const d of days.keys()) if (d < world.day - 14) days.delete(d);

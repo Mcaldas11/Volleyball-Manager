@@ -11,7 +11,8 @@ import {
   QUARTER_FINAL, userCups, type CupInvite, type CupSize, type PreseasonCup,
 } from '../engine/season/preseasonCups.ts';
 import { friendlyCupDays } from '../engine/world/nationalExtras.ts';
-import { nationName, poolTable, userNation, worldRanking, type Tournament } from '../engine/world/internationals.ts';
+import { nationName, poolTable, rankingFor, userNation, type Tournament } from '../engine/world/internationals.ts';
+import { sideAge } from '../engine/world/sides.ts';
 import type { LeagueTableRow } from '../engine/model/club.ts';
 import { ClubCrest, Flag, Segmented } from './components.tsx';
 import { Dropdown } from './dropdown.tsx';
@@ -393,8 +394,8 @@ function HostNation({ onDone }: { onDone: () => void }): JSX.Element {
   const start = day !== null && dates.includes(day) ? day : dates[0] ?? null;
   const candidates = useMemo(() => {
     if (start === null) return [];
-    const ranked = worldRanking(world).filter((n) => n !== mine);
-    const at = Math.max(0, worldRanking(world).indexOf(mine) - 8);
+    const ranked = rankingFor(world, sideAge(mine)).filter((n) => n !== mine);
+    const at = Math.max(0, rankingFor(world, sideAge(mine)).indexOf(mine) - 8);
     return [...ranked.slice(at), ...ranked.slice(0, at)].filter((n) => friendlyCupDays(world, size, [n]).includes(start)).slice(0, 30);
   }, [world, start, size, mine]);
   const [picked, setPicked] = useState<number[]>([]);

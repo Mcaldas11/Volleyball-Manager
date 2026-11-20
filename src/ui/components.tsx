@@ -17,6 +17,7 @@ import { Position, POSITION_SHORT } from '../engine/model/positions.ts';
 import { INJURY_NAMES, PlayerFlag, type PlayerStore } from '../engine/model/players.ts';
 import type { ManagerProfile } from '../engine/world/world.ts';
 import { flagImageUrlForCode, NATION_BY_CODE, NATIONS } from '../engine/world/nations.ts';
+import { baseNation } from '../engine/world/sides.ts';
 import { playerFaceUrl, portraitUrl } from './faces.ts';
 import { usePortrait } from './portraits.ts';
 import { Icon, type IconName } from './icons.tsx';
@@ -297,8 +298,9 @@ export function FlagByCode({ code }: { code: string }): JSX.Element {
   return <img className="flag-img" src={url} alt={name} title={name} loading="lazy" />;
 }
 
+/** A nation's flag — a youth side's (sides.ts) is its nation's. */
 export function Flag({ nation }: { nation: number }): JSX.Element {
-  const n = NATIONS[nation];
+  const n = NATIONS[baseNation(nation)];
   if (n === undefined) return <span className="flag-img flag-fallback" title="Unknown nation" />;
   return <FlagByCode code={n.code} />;
 }

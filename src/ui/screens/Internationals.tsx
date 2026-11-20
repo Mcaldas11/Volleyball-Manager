@@ -9,10 +9,12 @@
  * nation's squad.
  */
 
+import { nationName as sideName } from '../../engine/world/internationals.ts';
 import { useMemo, useState, type JSX, type ReactNode } from 'react';
+import { baseNation, isYouthSide, sideAge, sideSuffix, type YouthAge } from '../../engine/world/sides.ts';
 import { POSITION_NAMES, type Position } from '../../engine/model/positions.ts';
 import {
-  championsTitle, internationalCalendar, poolTable, userNation, worldRanking,
+  championsTitle, internationalCalendar, poolTable, sideRank, userNation,
   type CalendarEvent, type IntlMatch, type Tournament, type TournamentKind,
 } from '../../engine/world/internationals.ts';
 import { competitionStats } from '../../engine/world/competitionStats.ts';
@@ -25,8 +27,9 @@ import { Dropdown } from '../dropdown.tsx';
 
 const MEDALS = ['gold', 'silver', 'bronze'] as const;
 
+/** A side's name — "Italy", or "Italy U21" for a youth side. */
 function nationName(n: number): string {
-  return NATIONS[n]?.name ?? '?';
+  return sideName(n);
 }
 
 function Nation({ n, bold = false }: { n: number; bold?: boolean }): JSX.Element {
@@ -90,16 +93,22 @@ export function InternationalsScreen(): JSX.Element {
   const world = g.world!;
   const I = world.internationals;
   const today = world.day;
-  const tournaments = I?.tournaments ?? [];
+  // The seniors, the U21s or the U19s: the manager's own level first.
+  const [level, setLevel] = useState<0 | YouthAge>(() => {
+    const focus = I?.tournaments.find((x) => x.id === g.focusTournament);
+    return focus !== undefined ? focus.youth ?? 0 : sideAge(userNation(world));
+  });
+  const all = I?.tournaments ?? [];
+  const tournaments = all.filter((x) => (x.youth ?? 0) === level);
   const nowOn = tournaments.filter(live).sort((a, b) => a.startDay - b.startDay);
   const coming = tournaments.filter((t) => t.status === 'planned' || t.status === 'called').sort((a, b) => a.startDay - b.startDay);
   const done = tournaments.filter((t) => t.status === 'done').sort((a, b) => b.startDay - a.startDay);
   const [picked, setPicked] = useState<number | null>(g.focusTournament);
   /** A competition open on a page of its own: a tournament, or the past editions of one long gone. */
-  const [opened, setOpened] = useState<{ id: number | null; name: string; kind: TournamentKind; confederation: Confederation | null } | null>(null);
-  const t = tournaments.find((x) => x.id === picked) ?? nowOn[0] ?? coming[0] ?? done[0];
+  const [opened, setOpened] = useState<{ id: number | null; name: string; kind: TournamentKind; confederation: Confederation | null; youth?: YouthAge } | null>(null);
+  const t = all.find((x) => x.id === picked) ?? nowOn[0] ?? coming[0] ?? done[0];
   const home = followedNation(g);
-  const conf = NATIONS[home]?.confederation ?? 'CEV';
+  const conf = NATIONS[baseNation(home)]?.confederation ?? 'CEV';
   const calendar = internationalCalendar(world, conf).slice(0, 5);
 
   const pick = (x: Tournament): JSX.Element => (
@@ -108,7 +117,7 @@ export function InternationalsScreen(): JSX.Element {
       <small>
         {x.status === 'done' && x.kind !== 'qualifier' && <Flag nation={x.placings[0]} />}
         {statusLabel(x, today)}
-        {x.teams.includes(home) && x.status !== 'done' && <span className="intl-in">{NATIONS[home]?.code ?? ''} in</span>}
+        {x.teams.includes(home) && x.status !== 'done' && <span className="intl-in">{NATIONS[baseNation(home)]?.code ?? ''}{sideSuffix(home)} in</span>}
       </small>
     </button>
   );
@@ -116,7 +125,7 @@ export function InternationalsScreen(): JSX.Element {
   if (opened !== null) {
     return (
       <div className="intl intl-open">
-        <CompetitionPage key={`${opened.id}-${opened.name}`} t={tournaments.find((x) => x.id === opened.id)} series={opened}
+        <CompetitionPage key={`${opened.id}-${opened.name}`} t={all.find((x) => x.id === opened.id)} series={opened}
           onBack={() => setOpened(null)} />
       </div>
     );
@@ -127,7 +136,9 @@ export function InternationalsScreen(): JSX.Element {
       <aside className="intl-side">
         <h2 className="intl-title">International</h2>
         <NationCard nation={home} calendar={calendar} onPick={setPicked} />
-        <Paged className="intl-list" items=":scope > *">
+        <Segmented<0 | YouthAge> size="sm" options={[[0, 'Senior'], [21, 'U21'], [19, 'U19']]} value={level}
+          onChange={(v) => { setLevel(v); setPicked(null); }} />
+        <Paged key={level} className="intl-list" items=":scope > *">
           {nowOn.length > 0 && <span className="intl-group live"><i /> Live now</span>}
           {nowOn.map(pick)}
           {coming.length > 0 && <span className="intl-group">Coming up</span>}
@@ -138,9 +149,9 @@ export function InternationalsScreen(): JSX.Element {
         </Paged>
         <h3 className="intl-h">Honours</h3>
         <Paged className="intl-honours" items=":scope > *">
-          {[...(I?.history ?? [])].reverse().map((h, i) => (
+          {[...(I?.history ?? [])].filter((h) => (h.youth ?? 0) === level).reverse().map((h, i) => (
             <button key={`${h.name}-${i}`} className="intl-honour" title="Open this competition"
-              onClick={() => setOpened({ id: tournaments.find((x) => x.name === h.name)?.id ?? null, name: h.name, kind: h.kind, confederation: h.confederation })}>
+              onClick={() => setOpened({ id: tournaments.find((x) => x.name === h.name)?.id ?? null, name: h.name, kind: h.kind, confederation: h.confederation, youth: h.youth })}>
               <span className="faint">{h.name}</span>
               <Nation n={h.podium[0]} />
             </button>
@@ -150,7 +161,7 @@ export function InternationalsScreen(): JSX.Element {
       </aside>
       <section className="intl-main">
         <RoadAhead events={calendar} picked={t?.id ?? null} onPick={setPicked} />
-        {t !== undefined ? <TournamentView key={t.id} t={t} onOpen={() => setOpened({ id: t.id, name: t.name, kind: t.kind, confederation: t.confederation })} /> : <Empty>Nothing on the international calendar yet.</Empty>}
+        {t !== undefined ? <TournamentView key={t.id} t={t} onOpen={() => setOpened({ id: t.id, name: t.name, kind: t.kind, confederation: t.confederation, youth: t.youth })} /> : <Empty>Nothing on the international calendar yet.</Empty>}
       </section>
     </div>
   );
@@ -162,8 +173,8 @@ function NationCard({ nation, calendar, onPick }: {
 }): JSX.Element | null {
   const g = useGame();
   const world = g.world!;
-  if (NATIONS[nation] === undefined) return null;
-  const rank = worldRanking(world).indexOf(nation) + 1;
+  if (NATIONS[baseNation(nation)] === undefined) return null;
+  const rank = sideRank(world, nation);
   const coached = userNation(world) === nation;
   // Its next tournament: one it is in, or — not drawn yet — the next it could be.
   const next = calendar.find((e) => e.tournament === undefined || e.tournament.teams.includes(nation));
@@ -174,7 +185,7 @@ function NationCard({ nation, calendar, onPick }: {
         <Flag nation={nation} />
         <div>
           <b>{nationName(nation)}</b>
-          <span className="faint">{coached ? 'Your national team' : 'Your nation'} · #{rank} in the world</span>
+          <span className="faint">{coached ? 'Your national team' : 'Your nation'} · #{rank} {isYouthSide(nation) ? `in the ${sideSuffix(nation)} ranking` : 'in the world'}</span>
         </div>
       </div>
       {!coached && <NationCoachLine nation={nation} />}
@@ -280,7 +291,7 @@ function TournamentHead({ t, action }: { t: Tournament; action?: ReactNode }): J
       <div className="intl-head-top">
         <span className="intl-kicker">
           <Icon name="world" size={14} /> {t.confederation ?? 'FIVB'} · {t.teams.length} nations
-          {t.host >= 0 && <> · Hosts <Flag nation={t.host} /> {nationName(t.host)}</>}
+          {t.host >= 0 && <> · Hosts <Flag nation={t.host} /> {nationName(baseNation(t.host))}</>}
         </span>
         <span className="intl-head-actions">
           {action}
@@ -466,7 +477,7 @@ type CompTab = 'overview' | 'pools' | 'knockout' | 'results' | 'squads' | 'stats
  */
 function CompetitionPage({ t, series, onBack }: {
   t?: Tournament;
-  series: { name: string; kind: TournamentKind; confederation: Confederation | null };
+  series: { name: string; kind: TournamentKind; confederation: Confederation | null; youth?: YouthAge };
   onBack: () => void;
 }): JSX.Element {
   const g = useGame();
@@ -521,7 +532,7 @@ function CompetitionPage({ t, series, onBack }: {
           )}
           {t !== undefined && tab === 'squads' && <SquadCard t={t} home={home} />}
           {t !== undefined && tab === 'stats' && <TournamentStats t={t} home={home} />}
-          {tab === 'past' && <PastEditions kind={series.kind} confederation={series.confederation} />}
+          {tab === 'past' && <PastEditions kind={series.kind} confederation={series.confederation} youth={series.youth} />}
         </div>
       </div>
     </section>
@@ -643,12 +654,12 @@ export function TournamentStats({ t, home }: { t: Tournament; home: number }): J
 }
 
 /** A competition's finished editions, the latest first, and any one's final placings. */
-function PastEditions({ kind, confederation }: { kind: TournamentKind; confederation: Confederation | null }): JSX.Element {
+function PastEditions({ kind, confederation, youth }: { kind: TournamentKind; confederation: Confederation | null; youth?: YouthAge }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const home = followedNation(g);
   const records = (world.internationals?.history ?? [])
-    .filter((h) => h.kind === kind && h.confederation === confederation)
+    .filter((h) => h.kind === kind && h.confederation === confederation && h.youth === youth)
     .sort((a, b) => b.year - a.year);
   const [year, setYear] = useState<number | null>(null);
   const r = records.find((x) => x.year === year) ?? records[0];

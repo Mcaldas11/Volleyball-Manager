@@ -38,17 +38,19 @@ export function NegotiationScreen(): JSX.Element | null {
   const store = world.players;
   const player = t.playerIdx;
   const renewal = t.kind === 'renewal';
+  // A pre-contract: no fee, no talks with his club — he joins on a free when his contract runs out.
+  const pre = t.preContract === true;
   const sellingClub = !renewal && t.sellingClubId >= 0 ? world.clubs[t.sellingClubId] ?? null : null;
   const ceiling = Math.min(club.finances.transferBudget, club.finances.balance);
-  const steps = sellingClub !== null ? ['Transfer fee', 'Personal terms'] : [renewal ? 'New contract' : 'Personal terms'];
+  const steps = sellingClub !== null && !pre ? ['Transfer fee', 'Personal terms'] : [renewal ? 'New contract' : 'Personal terms'];
   const currentStep = t.stage === 'fee' && sellingClub !== null ? 0 : steps.length - 1;
   const endsLabel = (season: number): string => `30 Jun ${world.startYear + season + 1}`;
   const txWindow = g.transferWindowStatus();
   // Talks run all year, but a player under contract only moves in a window:
   // agreed now, he joins on this day — and his contract counts from that season.
-  const joinDay = g.joinDay(player);
+  const joinDay = pre ? g.preContractJoinDay() : g.joinDay(player);
   const joinsLater = !renewal && joinDay > world.day;
-  const startSeason = renewal ? world.season : g.joinSeason(player);
+  const startSeason = renewal ? world.season : pre ? world.season + 1 : g.joinSeason(player);
   const windowHint = txWindow.open
     ? <> · window closes {g.dateLabelForDay(txWindow.untilDay)}</>
     : <> · window shut: {t.kind === 'loan' ? 'the loan would start' : 'he would join'} on {g.dateLabelForDay(joinDay)}</>;
@@ -248,7 +250,8 @@ export function NegotiationScreen(): JSX.Element | null {
     ? endsLabel(startSeason + d.minYears - 1)
     : `${endsLabel(startSeason + d.minYears - 1)} – ${endsLabel(startSeason + d.maxYears - 1)}`;
   // A renewal's new wage replaces what he earns now.
-  const wageRoom = g.wageRoom() + (renewal ? store.wage[player] : 0);
+  // A pre-contract signing is paid from next season, when those leaving have gone.
+  const wageRoom = pre ? g.nextSeasonWageRoom() : g.wageRoom() + (renewal ? store.wage[player] : 0);
 
   return (
     <ContractPaper
@@ -256,7 +259,8 @@ export function NegotiationScreen(): JSX.Element | null {
       title={store.fullName(player)}
       subtitle={renewal
         ? `Talks over a new deal at ${club.name}`
-        : sellingClub !== null ? `Signing from ${sellingClub.name}` : 'Signing as a free agent'}
+        : pre && sellingClub !== null ? `Pre-contract · free transfer from ${sellingClub.name}`
+          : sellingClub !== null ? `Signing from ${sellingClub.name}` : 'Signing as a free agent'}
       playerId={store.id[player]}
       onClose={() => g.cancelNegotiation()}
     >
@@ -268,7 +272,9 @@ export function NegotiationScreen(): JSX.Element | null {
           {(renewal || store.clubId[player] >= 0) && (
             <ContractRow label="Contract until">{endsLabel(contractEndSeason(store.contractUntil[player]))}</ContractRow>
           )}
-          {sellingClub !== null
+          {pre
+            ? <ContractRow label="Fee"><span className="gold-text">None</span> <span className="faint">· free transfer</span></ContractRow>
+            : sellingClub !== null
             ? <ContractRow label="Agreed fee"><span className="gold-text">{money(t.agreedFee)}</span></ContractRow>
             : <ContractRow label="Market value">{money(store.value[player])}</ContractRow>}
           <ContractRow label="Agent">
@@ -377,8 +383,10 @@ export function NegotiationScreen(): JSX.Element | null {
                 </div>
               </div>
               <p className="contract-hint">
-                Room in the wage budget: <b className={wageRoom < n.termsWage ? 'bad' : ''}>{money(wageRoom)}</b>
-                {joinsLater && <> · the window is shut: he joins on {g.dateLabelForDay(joinDay)}</>}
+                {pre ? "Room in next season's wage budget" : 'Room in the wage budget'}: <b className={wageRoom < n.termsWage ? 'bad' : ''}>{money(wageRoom)}</b>
+                {pre
+                  ? <> · his contract runs out: he joins on a free on {g.dateLabelForDay(joinDay)}</>
+                  : joinsLater && <> · the window is shut: he joins on {g.dateLabelForDay(joinDay)}</>}
               </p>
             </>
           )}

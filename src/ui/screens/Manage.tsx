@@ -839,6 +839,14 @@ export function ScoutingScreen(): JSX.Element {
               />
               Free agents only
             </label>
+            <label className="filter-check" title="Contracts ending on 30 June: from 1 January you can agree a pre-contract with them, no fee">
+              <input
+                type="checkbox"
+                checked={filters.expiringOnly === true}
+                onChange={(e) => setFilter('expiringOnly', e.target.checked)}
+              />
+              Expiring (pre-contract)
+            </label>
           </FilterField>
         </div>
       </Card>
@@ -1063,6 +1071,8 @@ export function TransfersScreen(): JSX.Element {
                   <td className="dim">
                     {t.kind === 'renewal'
                       ? 'Contract renewal'
+                      : t.preContract === true
+                        ? <>Pre-contract · free from <ClubLink id={t.sellingClubId} short /></>
                       : t.stage === 'fee'
                         ? <>Fee with <ClubLink id={t.sellingClubId} short /></>
                         : t.sellingClubId >= 0 ? 'Personal terms' : 'Free agent terms'}

@@ -23,7 +23,8 @@ import { POSITION_SHORT, type Position } from '../model/positions.ts';
 import { StaffRole } from '../model/staff.ts';
 import { OffensiveSystem, ServeStrategy, Tempo } from '../match/tactics.ts';
 import { MONTH_STARTS, ordinal, postMessage } from './inbox.ts';
-import { nationName, poolTable, squadOf, userNation, worldRanking, type IntlMatch, type Tournament } from './internationals.ts';
+import { eligibleFor, nationalTeamOf, nationName, poolTable, squadOf, userNation, worldRanking, type IntlMatch, type Tournament } from './internationals.ts';
+import { isYouthSide } from './sides.ts';
 import { defaultTactics } from '../match/tactics.ts';
 import { NATIONS } from './nations.ts';
 import { currentPhase, dayOfSeason, inboxPrefsOf, SeasonPhase, type ReportTable, type World } from './world.ts';
@@ -77,9 +78,10 @@ function clubSeasonOn(world: World): boolean {
 
 /** The national squad as it stands — or, before one is named, the country's best. */
 function nationalPool(world: World, nation: number): number[] {
-  const team = world.nationalTeams.find((t) => t.nation === nation);
+  const team = nationalTeamOf(world, nation);
   if (team !== undefined && team.squad.length > 0) return team.squad.filter((p) => world.players.isActive(p));
   const store = world.players;
+  if (isYouthSide(nation)) return eligibleFor(world, nation).sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 14);
   const pool: number[] = [];
   for (let p = 0; p < store.count; p++) {
     if (store.isActive(p) && store.nation[p] === nation && !store.hasFlag(p, PlayerFlag.Youth)) pool.push(p);
@@ -122,7 +124,7 @@ export function nationalFormReport(world: World): void {
 
   const inForm = rows.filter((r) => r.tone === 'good').map((r) => store.shortName(r.p!));
   const hurt = squad.filter((p) => store.injuryDaysLeft[p] > 0).map((p) => store.shortName(p));
-  const name = NATIONS[nation]?.name ?? 'The national team';
+  const name = nationName(nation);
   const lines = [
     `How ${name}'s players are getting on at their clubs.`,
     inForm.length > 0 ? `In form: ${inForm.slice(0, 3).join(', ')}.` : 'Nobody is setting the world alight just now.',
@@ -159,11 +161,11 @@ export function nationalFormReport(world: World): void {
 export function nationalInjuryNews(world: World): void {
   const nation = world.career.nationalTeam;
   if (nation === undefined || nation < 0 || !inboxPrefsOf(world).nationalInjuries) return;
-  const team = world.nationalTeams.find((t) => t.nation === nation);
+  const team = nationalTeamOf(world, nation);
   if (team === undefined) return;
   const store = world.players;
   const seen = (world.intlInjuries ??= {});
-  const name = NATIONS[nation]?.name ?? 'the national team';
+  const name = nationName(nation);
   for (const p of team.squad) {
     const out = store.injuryDaysLeft[p];
     if (out > 0 && seen[p] === undefined) {
@@ -196,7 +198,7 @@ export function rankingReport(world: World): void {
   const last = (world.lastRanks ??= {})[nation];
   world.lastRanks[nation] = rank;
   const move = last === undefined || last === rank ? 'unchanged' : last > rank ? `up ${last - rank}` : `down ${rank - last}`;
-  const name = NATIONS[nation]?.name ?? 'The national team';
+  const name = nationName(nation);
   const show = new Set([...order.slice(0, 8), ...order.slice(Math.max(0, rank - 3), rank + 2)]);
   postMessage(world, {
     category: 'international', from: 'FIVB',
@@ -388,7 +390,7 @@ function postNationalScouting(world: World, t: Tournament, m: IntlMatch, nation:
   });
   const key = [...lines].sort((a, b) => store.currentAbility[b.p] - store.currentAbility[a.p]).slice(0, 5);
   const danger = [...lines].filter((x) => x.apps > 0).sort((a, b) => b.ppm - a.ppm)[0];
-  const tactics = world.nationalTeams.find((x) => x.nation === opp)?.tactics ?? defaultTactics();
+  const tactics = nationalTeamOf(world, opp)?.tactics ?? defaultTactics();
   const where = t.host === nation ? 'at home — the hall will be ours'
     : t.host === opp ? 'in their own hall, in front of their own crowd' : 'on neutral ground';
   const body = [

@@ -30,6 +30,8 @@ export interface PendingMove {
   wageShare: number;
   /** Loans: the playing time the borrowing club has promised. */
   playingTime?: LoanPlayingTime;
+  /** A pre-contract: he joins on a free when his contract runs out (see preContracts.ts). */
+  preContract?: boolean;
 }
 
 /** The day a deal agreed today is completed: today, while a window is open;

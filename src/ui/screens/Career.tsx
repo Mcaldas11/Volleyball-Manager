@@ -1,6 +1,7 @@
 import { InterestButton } from '../nationCoach.tsx';
 import { useListPages } from '../components.tsx';
-import { nationalCoachName } from '../../engine/world/internationals.ts';
+import { nationalCoachName, nationName, rankingFor } from '../../engine/world/internationals.ts';
+import { baseNation, sideAge, type YouthAge } from '../../engine/world/sides.ts';
 import { useMemo, useState, type JSX } from 'react';
 import type { Club } from '../../engine/model/club.ts';
 import {
@@ -189,7 +190,7 @@ function careerSpells(world: World): Spell[] {
 function nationalTitles(world: World): Honour[] {
   return (world.career.nationalJobs ?? [])
     .flatMap((j) => nationalRecord(world, j.nation, j.startDay, j.endDay).titles
-      .map((t) => honourOf(world, t.competitionId, t.year, NATIONS[j.nation]?.code, { nation: j.nation })))
+      .map((t) => honourOf(world, t.competitionId, t.year, NATIONS[baseNation(j.nation)]?.code, { nation: j.nation })))
     .filter((h): h is Honour => h !== null);
 }
 
@@ -229,7 +230,7 @@ function HistoryTable({ limit }: { limit?: number }): JSX.Element {
                     {s.nation !== undefined && (
                       <>
                         <Flag nation={s.nation} />
-                        <span className="strong">{NATIONS[s.nation]?.name ?? '—'}</span>
+                        <span className="strong">{nationName(s.nation) ?? '—'}</span>
                         <span className="role-tag national">National team</span>
                       </>
                     )}
@@ -274,7 +275,7 @@ function HistoryRows(): JSX.Element {
             <span className="dim">{g.dateLabelForDay(s.from)} – {s.to < 0 ? 'present' : g.dateLabelForDay(s.to)}</span>
             <span className="cp-hist-club">
               {s.club !== undefined && <><ClubCrest club={s.club} size={18} /> {s.club.name}</>}
-              {s.nation !== undefined && <><Flag nation={s.nation} /> {NATIONS[s.nation]?.name ?? '—'} <span className="role-tag national">National team</span></>}
+              {s.nation !== undefined && <><Flag nation={s.nation} /> {nationName(s.nation) ?? '—'} <span className="role-tag national">National team</span></>}
             </span>
             <span className="dim">Head Coach · {s.won}W {s.lost}L{n > 0 ? ` (${Math.round((s.won / n) * 100)}%)` : ''}</span>
             <span className={s.trophies > 0 ? 'gold-text' : 'dim'}>{s.trophies > 0 ? `${s.trophies} trophies` : ''}</span>
@@ -382,13 +383,13 @@ export function CareerScreen(): JSX.Element {
           {club !== null ? (
             <>
               <span className="cp-kicker">Contracted to <span className="club-link" onClick={() => g.selectClub(club.id)}><ClubCrest club={club} size={16} /> {club.name}</span></span>
-              <b>Head Coach{nationalTeam !== undefined ? ` · ${NATIONS[nationalTeam]?.name ?? ''} national team` : ''}</b>
+              <b>Head Coach{nationalTeam !== undefined ? ` · ${nationName(nationalTeam) ?? ''} national team` : ''}</b>
               <span>{contract !== undefined ? `${money(contract.wage)} a season until 30 June ${contractEndYear(world, contract)}` : 'No contract on record'}</span>
             </>
           ) : nationalTeam !== undefined ? (
             <>
               <span className="cp-kicker">National team</span>
-              <b><Flag nation={nationalTeam} /> {NATIONS[nationalTeam]?.name ?? '—'}</b>
+              <b><Flag nation={nationalTeam} /> {nationName(nationalTeam) ?? '—'}</b>
               <span>Head coach — no club job alongside it</span>
             </>
           ) : (
@@ -541,7 +542,7 @@ function ContractBlock(): JSX.Element | null {
       <KV k="Contract"><span className={lastSeason ? 'warn' : undefined}>Until 30 June {contractEndYear(world, contract)}</span></KV>
       <KV k="Wage">{money(contract.wage)} a season</KV>
       {nationalContract !== undefined && (
-        <KV k={`${NATIONS[world.career.nationalTeam ?? -1]?.name ?? 'National team'} contract`}>
+        <KV k={`${nationName(world.career.nationalTeam ?? -1) ?? 'National team'} contract`}>
           {money(nationalContract.wage)} a season, until June {contractEndYear(world, nationalContract)}
         </KV>
       )}
@@ -577,7 +578,7 @@ function NationalJobBlock({ nation }: { nation: number }): JSX.Element {
       <div className="coach-row career-job-head">
         <Flag nation={nation} />
         <div className="coach-row-text">
-          <strong>{NATIONS[nation]?.name} national team</strong>
+          <strong>{nationName(nation)} national team</strong>
           <span className="faint">Head coach{since !== undefined ? ` since ${g.dateLabelForDay(since)}` : ''} · #{rank} in the world</span>
         </div>
       </div>
@@ -587,7 +588,7 @@ function NationalJobBlock({ nation }: { nation: number }): JSX.Element {
         </button>
       ) : (
         <div className="career-confirm">
-          <p>Step down as head coach of <b>{NATIONS[nation]?.name}</b>? The federation will look for someone else.</p>
+          <p>Step down as head coach of <b>{nationName(nation)}</b>? The federation will look for someone else.</p>
           <div className="career-confirm-actions">
             <button className="danger" disabled={busy} onClick={() => { setConfirming(false); g.resignNationalJob(); }}>Step down</button>
             <button className="ghost" onClick={() => setConfirming(false)}>Cancel</button>
@@ -862,17 +863,20 @@ function NationalVacancies(): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const I = world.internationals;
-  const ranking = worldRanking(world);
-  const vacant = new Set((I?.vacancies ?? []).map((v) => v.nation));
+  // The seniors, or the nations' U21s or U19s — one national job at a time, alongside a club.
+  const [level, setLevel] = useState<0 | YouthAge>(0);
+  const ranking = rankingFor(world, level);
+  const vacant = new Set((I?.vacancies ?? []).map((v) => v.nation).filter((n) => sideAge(n) === level));
   // Those looking for a coach first, then the rest by their place in the world.
   const rows = [...ranking].sort((a, b) => Number(vacant.has(b)) - Number(vacant.has(a)) || ranking.indexOf(a) - ranking.indexOf(b));
-  const { shown, more } = useListPages(rows, 'nations', -1, 6);
+  const { shown, more } = useListPages(rows, `nations-${level}`, -1, 6);
   return (
-    <Card title={`National teams (${vacant.size} looking for a coach)`} icon="world" flush>
+    <Card title={`National teams (${vacant.size} looking for a coach)`} icon="world" flush
+      actions={<Segmented<0 | YouthAge> size="sm" options={[[0, 'Senior'], [21, 'U21'], [19, 'U19']]} value={level} onChange={setLevel} />}>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>Nation</th><th className="num">World rank</th><th>Head coach</th><th>Next tournament</th><th>Interest</th><th /></tr>
+            <tr><th>Nation</th><th className="num">{level === 0 ? 'World rank' : `U${level} rank`}</th><th>Head coach</th><th>Next tournament</th><th>Interest</th><th /></tr>
           </thead>
           <tbody>
             {shown.map((n) => {
@@ -882,7 +886,7 @@ function NationalVacancies(): JSX.Element {
               const coach = nationalCoachName(world, n);
               return (
                 <tr key={n}>
-                  <td><span className="name-cell"><Flag nation={n} /> <span className="strong">{NATIONS[n]?.name}</span></span></td>
+                  <td><span className="name-cell"><Flag nation={n} /> <span className="strong">{nationName(n)}</span></span></td>
                   <td className="num">{ranking.indexOf(n) + 1}</td>
                   <td>{coach ?? <span className="warn">Vacant</span>}</td>
                   <td className="dim">{next !== undefined ? `${next.name} · ${g.dateLabelForDay(next.startDay)}` : '—'}</td>

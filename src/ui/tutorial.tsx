@@ -690,8 +690,10 @@ export function TutorialOverlay(): JSX.Element | null {
 
   // The first match: a practice match today, the moment the tour gets to it — a career loaded there too.
   useEffect(() => {
+    // Every redraw while the step is up, not just when it opens: the day may still have been
+    // processing then (the Continue of the step before), and a match passed by is booked again.
     if (step?.id === 'to-match') g.ensureTutorialMatch();
-  }, [step?.id, world?.day]);
+  });
 
   // Keep the spotlight on the target as the screen moves under it.
   useEffect(() => {

@@ -16,6 +16,7 @@ import {
   ClubCrest, clubThemeStyle, Flag, initials, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss, WorkspaceHeading,
 } from './components.tsx';
 import { NATIONS } from '../engine/world/nations.ts';
+import { baseNation, sideCode, sideName } from '../engine/world/sides.ts';
 import { userNation, worldRanking } from '../engine/world/internationals.ts';
 import { Icon, type IconName } from './icons.tsx';
 import { FullscreenButton, useFullscreenKey } from './fullscreen.tsx';
@@ -395,8 +396,8 @@ function TeamSwitch({ disabled }: { disabled: boolean }): JSX.Element | null {
       <button className={national ? '' : 'on'} disabled={disabled} onClick={() => g.setTeamView('club')} title={`${club.name} — squad, team sheet and instructions`}>
         <ClubCrest club={club} size={16} /><span>{club.shortName}</span>
       </button>
-      <button className={national ? 'on' : ''} disabled={disabled} onClick={() => g.setTeamView('national')} title={`${NATIONS[nation]?.name} national team — its own squad, team sheet and instructions`}>
-        <Flag nation={nation} /><span>{NATIONS[nation]?.code}</span>
+      <button className={national ? 'on' : ''} disabled={disabled} onClick={() => g.setTeamView('national')} title={`${sideName(nation)} national team — its own squad, team sheet and instructions`}>
+        <Flag nation={nation} /><span>{sideCode(nation)}</span>
       </button>
     </div>
   );
@@ -590,7 +591,7 @@ function Header(): JSX.Element {
           <button className="hdr-club" onClick={() => g.selectNation(nationalTeam)} disabled={takeover} title="National team">
             <span className="side-flag hdr-flag"><Flag nation={nationalTeam} /></span>
             <span className="hdr-club-text">
-              <strong translate="no">{NATIONS[nationalTeam]?.name}</strong>
+              <strong translate="no">{sideName(nationalTeam)}</strong>
               <span>National team</span>
             </span>
           </button>
@@ -607,7 +608,7 @@ function Header(): JSX.Element {
             <PersonFace photoUrl={managerPhotoUrl(world.manager)} name={manager} size={36} />
             <span className="hdr-club-text">
               <strong>{manager}</strong>
-              <span>{nationalTeam >= 0 ? `${NATIONS[nationalTeam]?.name} national team` : 'Out of work'}</span>
+              <span>{nationalTeam >= 0 ? `${sideName(nationalTeam)} national team` : 'Out of work'}</span>
             </span>
           </button>
         )}
@@ -720,6 +721,11 @@ function ContinueButton(): JSX.Element {
     label = decision.label;
     icon = decision.kind === 'interview' ? 'press' : decision.kind === 'squad' ? 'world' : 'offer';
     action = () => { g.openPendingDecision(); };
+  } else if (g.testMatchToday() !== null) {
+    // The tutorial's practice match: the button the tutorial points at says what it says.
+    label = 'Play match';
+    icon = 'ball';
+    action = () => g.openMatchday();
   } else if (inInbox && unread > 0) {
     label = 'Next unread';
     icon = 'inbox';
@@ -785,7 +791,7 @@ function ContinueButton(): JSX.Element {
               )}
               {next === null && nat !== null && natDay !== null && (
                 <span className="faint">
-                  {nat.opponent >= 0 ? `vs ${NATIONS[nat.opponent]?.name ?? '?'}` : nat.tournament} · {g.dateLabelForDay(natDay)}
+                  {nat.opponent >= 0 ? `vs ${sideName(nat.opponent)}` : nat.tournament} · {g.dateLabelForDay(natDay)}
                 </span>
               )}
             </span>
@@ -1132,8 +1138,8 @@ function TrophyOverlay(): JSX.Element | null {
         {club !== undefined && (
           <div className="trophy-club"><ClubCrest club={club} size={32} /> {club.name}</div>
         )}
-        {cel.nation !== undefined && NATIONS[cel.nation] !== undefined && (
-          <div className="trophy-club"><Flag nation={cel.nation} /> {NATIONS[cel.nation].name}</div>
+        {cel.nation !== undefined && NATIONS[baseNation(cel.nation)] !== undefined && (
+          <div className="trophy-club"><Flag nation={cel.nation} /> {sideName(cel.nation)}</div>
         )}
         <div className="trophy-competition">{cel.competitionName}</div>
         <button className="primary" onClick={() => g.dismissTrophyCelebration()}>Continue</button>

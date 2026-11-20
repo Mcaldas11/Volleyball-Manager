@@ -8,7 +8,7 @@ import { useState, type JSX } from 'react';
 import {
   nationalCoachName, nationalInterestBlock, nationalLongestTerm, nationalOfferTerms, type NationalOffer,
 } from '../engine/world/internationals.ts';
-import { NATIONS } from '../engine/world/nations.ts';
+import { sideName } from '../engine/world/sides.ts';
 import { money, MoneyInput, Segmented } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
@@ -60,7 +60,7 @@ export function NegotiateNationalOffer({ offer }: { offer: NationalOffer }): JSX
   const [seasons, setSeasons] = useState(firstLeft);
   const [reply, setReply] = useState<string | null>(null);
   const longest = nationalLongestTerm(world, offer.nation);
-  const name = NATIONS[offer.nation]?.name ?? '';
+  const name = sideName(offer.nation);
   return (
     <>
       <button className="paper-btn" onClick={() => setOpen(true)}><Icon name="contract" size={15} /> Negotiate</button>

@@ -5,15 +5,17 @@
  * page of a career spent at a national team alone.
  */
 
+import { nationName as sideName } from '../../engine/world/internationals.ts';
 import { FRAME_MAX, frameOf, friendliesThisSeason, friendlyDays, friendlyOpponents, MAX_FRIENDLIES, watchingList } from '../../engine/world/nationalExtras.ts';
 import { useMemo, useState, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import { Formation, FORMATION_NAMES } from '../../engine/match/tactics.ts';
 import {
-  eligibleFor, nextTournamentFor, recentForm, selectionScore, squadOf, squadProblem, SQUAD_SHAPE, SQUAD_SIZE,
-  userNation, worldRanking, type IntlMatch, type Tournament,
+  capsFor, eligibleFor, nationalTeamOf, nextTournamentFor, rankingFor, recentForm, sideRank, sideScore, squadOf, squadProblem,
+  SQUAD_SHAPE, SQUAD_SIZE, userNation, type IntlMatch, type Tournament,
 } from '../../engine/world/internationals.ts';
-import { NATIONS } from '../../engine/world/nations.ts';
+import { baseNation, isYouthSide, sideAge, sideSuffix, youthSide, type YouthAge } from '../../engine/world/sides.ts';
+import { keptBySeniors, sentDownTo, youthCapsOf, youthSideSquad } from '../../engine/world/youthNational.ts';
 import {
   abilityClass, Bar, ChoiceField, ClubLink, Flag, PlayerLink, Pos, RatingBadge, Segmented, SortTh, sortBy,
   useSort,
@@ -24,8 +26,9 @@ import { useGame } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
 import { DEFENSE_OPTIONS, OFFENSE_OPTIONS, SERVE_OPTIONS, TEMPO_OPTIONS } from './Manage.tsx';
 
+/** A side's name — "Italy", or "Italy U21" for a youth side. */
 function nationName(n: number): string {
-  return NATIONS[n]?.name ?? '?';
+  return sideName(n);
 }
 
 /** How the national team plays: its system and its instructions. */
@@ -88,9 +91,9 @@ export function SquadPicker({ t, nation, compact = false }: {
       case 'age': return age(p);
       case 'ca': return store.currentAbility[p];
       case 'form': return recentForm(world, p);
-      case 'caps': return store.nationalCaps[p];
+      case 'caps': return capsFor(world, p, nation);
       case 'club': return store.clubId[p] >= 0 ? world.clubs[store.clubId[p]]?.name ?? '' : '';
-      default: return selectionScore(world, p);
+      default: return sideScore(world, p, nation);
     }
   });
 
@@ -106,7 +109,7 @@ export function SquadPicker({ t, nation, compact = false }: {
           <span className="faint">
             {daysToCall > 0 ? `Due ${g.dateLabelForDay(t.callUpDay)} (${daysToCall} day${daysToCall === 1 ? '' : 's'})` : 'Due today'}
             {' · '}first match {g.dateLabelForDay(t.startDay)}
-            {t.host >= 0 && <> · hosted by {nationName(t.host)}</>}
+            {t.host >= 0 && <> · hosted by {nationName(baseNation(t.host))}</>}
           </span>
         </div>
         <div className="nat-shape" title="Picked, against the usual shape of a squad">
@@ -177,11 +180,11 @@ export function SquadPicker({ t, nation, compact = false }: {
                   <td className="nat-club">{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
                   <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
                   <td className="num"><RatingBadge value={recentForm(world, p)} size="sm" /></td>
-                  {!compact && <td className="num">{store.nationalCaps[p]}</td>}
+                  {!compact && <td className="num">{capsFor(world, p, nation)}</td>}
                   <td>{store.injuryDaysLeft[p] > 0
                     ? <span className="bad">Injured · {store.injuryDaysLeft[p]}d</span>
                     : <Bar value={store.condition[p]} />}</td>
-                  {!compact && <td className="num dim">{Math.round(selectionScore(world, p))}</td>}
+                  {!compact && <td className="num dim">{Math.round(sideScore(world, p, nation))}</td>}
                 </tr>
               );
             })}
@@ -214,7 +217,7 @@ export function NationMatch({ m, nation, host }: { m: IntlMatch; nation: number;
 }
 
 /** A list of players with what matters for a national team. */
-export function PlayerTable({ players, t }: { players: number[]; t?: Tournament }): JSX.Element {
+export function PlayerTable({ players, t, side = -1 }: { players: number[]; t?: Tournament; side?: number }): JSX.Element {
   const g = useGame();
   const world = g.world!;
   const store = world.players;
@@ -237,7 +240,7 @@ export function PlayerTable({ players, t }: { players: number[]; t?: Tournament 
               <td><Pos pos={store.position[p] as Position} /></td>
               <td>{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
               <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
-              <td className="num">{store.nationalCaps[p]}</td>
+              <td className="num">{side >= 0 ? capsFor(world, p, side) : store.nationalCaps[p]}</td>
               {t !== undefined && (
                 <>
                   <td className="num">{s?.[0] ?? 0}</td>
@@ -273,8 +276,9 @@ export function NationalHome(): JSX.Element {
   const next = t !== undefined && t.status !== 'planned' && !t.out.includes(nation) ? matches.find((x) => !x.played) : undefined;
   const opp = next === undefined ? -1 : next.home === nation ? next.away : next.home;
   const today = g.nationalMatchToday();
-  const ranking = worldRanking(world);
+  const ranking = rankingFor(world, sideAge(nation));
   const rank = ranking.indexOf(nation) + 1;
+  const rankLabel = isYouthSide(nation) ? `${sideSuffix(nation)} ranking` : 'World ranking';
   const players = t !== undefined && t.status !== 'planned' ? squadOf(t, nation) : g.suggestedNationalSquad();
   const store = world.players;
   const news = [...world.news].reverse().slice(0, 10);
@@ -288,7 +292,7 @@ export function NationalHome(): JSX.Element {
     : t === undefined
       ? 'No tournament coming up — the national team is between majors.'
       : t.status === 'planned'
-        ? `${t.name}${t.host >= 0 ? ` in ${nationName(t.host)}` : ''} · name your squad by ${g.dateLabelForDay(t.callUpDay)} · first match ${g.dateLabelForDay(t.startDay)}`
+        ? `${t.name}${t.host >= 0 ? ` in ${nationName(baseNation(t.host))}` : ''} · name your squad by ${g.dateLabelForDay(t.callUpDay)} · first match ${g.dateLabelForDay(t.startDay)}`
         : `${t.name} · out of the tournament`;
 
   return (
@@ -310,7 +314,7 @@ export function NationalHome(): JSX.Element {
           <div className="hm-sub">{sub}</div>
         </div>
         <div className="hm-banner-side">
-          <span className="hm-chip">World ranking <b>#{rank}</b></span>
+          <span className="hm-chip">{rankLabel} <b>#{rank}</b></span>
           {today !== null ? (
             <div className="hm-side-line">
               <button className="hm-ghost" disabled={g.processing} onClick={() => g.instantResult()}>Instant result</button>
@@ -346,7 +350,7 @@ export function NationalHome(): JSX.Element {
         </section>
         <section className="hm-card">
           <header className="hm-card-head">
-            <h3>World ranking</h3>
+            <h3>{rankLabel}</h3>
             <button className="hm-link" onClick={() => g.go('rankings')}>All <Icon name="arrowRight" size={13} /></button>
           </header>
           <div className="hm-scroll">
@@ -356,7 +360,7 @@ export function NationalHome(): JSX.Element {
                   <tr key={n} className={n === nation ? 'me' : ''}>
                     <td className="num faint">{ranking.indexOf(n) + 1}</td>
                     <td><span className="intl-nation"><Flag nation={n} /> {nationName(n)}</span></td>
-                    <td className="num">{world.nationalTeams.find((x) => x.nation === n)?.rankingPoints ?? 0}</td>
+                    <td className="num">{nationalTeamOf(world, n)?.rankingPoints ?? 0}</td>
                   </tr>
                 ))}
               </tbody>
@@ -437,14 +441,17 @@ export function NationalSquadScreen(): JSX.Element {
   const watching = watchingList(world);
   const pool = useMemo(
     () => eligibleFor(world, nation).filter((p) => !players.includes(p))
-      .sort((a, b) => selectionScore(world, b) - selectionScore(world, a)).slice(0, 40),
+      .sort((a, b) => sideScore(world, b, nation) - sideScore(world, a, nation)).slice(0, 40),
     [world, nation, world.day, players.join(',')],
   );
+  // The senior coach looks down at his nation's U21s and U19s too.
+  const [view, setView] = useState<'contention' | YouthAge>('contention');
+  const senior = !isYouthSide(nation);
 
   const status = t === undefined
     ? 'No tournament on the calendar — the fourteen below are your assistant’s pick for now.'
     : t.status === 'planned'
-      ? `${t.name}${t.host >= 0 ? ` in ${nationName(t.host)}` : ''} · the squad is named by ${g.dateLabelForDay(t.callUpDay)} · first match ${g.dateLabelForDay(t.startDay)}`
+      ? `${t.name}${t.host >= 0 ? ` in ${nationName(baseNation(t.host))}` : ''} · the squad is named by ${g.dateLabelForDay(t.callUpDay)} · first match ${g.dateLabelForDay(t.startDay)}`
       : t.out.includes(nation) ? `${t.name} · out of the tournament` : `${t.name} · under way`;
 
   return (
@@ -468,10 +475,16 @@ export function NationalSquadScreen(): JSX.Element {
         <div className="nat-squad-grid">
           <section className="nat-card">
             <h3 className="nat-h">{named ? 'The squad' : 'Your assistant’s fourteen'} · {players.length}</h3>
-            <div className="nat-scroll"><PlayerTable players={players} t={running} /></div>
+            <div className="nat-scroll"><PlayerTable players={players} t={running} side={nation} /></div>
           </section>
           <section className="nat-card">
-            <h3 className="nat-h">In contention <span className="faint">· provisional squad {frame.length}/{FRAME_MAX}{watching.length > 0 ? ` · watching ${watching.length}` : ''}</span></h3>
+            <div className="nat-card-head">
+              <h3 className="nat-h">{view === 'contention' ? 'In contention' : `${nationName(youthSide(nation, view))}`} <span className="faint">· provisional squad {frame.length}/{FRAME_MAX}{watching.length > 0 ? ` · watching ${watching.length}` : ''}</span></h3>
+              {senior && (
+                <Segmented<'contention' | YouthAge> size="sm" options={[['contention', 'In contention'], [21, 'U21'], [19, 'U19']]} value={view} onChange={setView} />
+              )}
+            </div>
+            {view !== 'contention' && senior ? <YouthSidePanel nation={nation} age={view} /> : (
             <div className="nat-scroll">
               <table className="data-table">
                 <thead>
@@ -498,13 +511,14 @@ export function NationalSquadScreen(): JSX.Element {
                       <td>{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
                       <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
                       <td className="num"><RatingBadge value={recentForm(world, p)} size="sm" /></td>
-                      <td className="num">{store.nationalCaps[p]}</td>
-                      <td className="num dim">{Math.round(selectionScore(world, p))}</td>
+                      <td className="num">{capsFor(world, p, nation)}</td>
+                      <td className="num dim">{Math.round(sideScore(world, p, nation))}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            )}
           </section>
         </div>
       )}
@@ -530,7 +544,7 @@ function FriendlyDialog({ onClose }: { onClose: () => void }): JSX.Element {
         <p className="faint">For the practice: it counts for caps, not for the ranking. {left > 0 ? `${left} more this season.` : 'No more this season.'}</p>
         <div className="field-row"><span className="field-label">Against</span>
           <Dropdown<number> value={opp} searchable onChange={(v) => { setOpp(v); setDay(friendlyDays(world, v)[0] ?? -1); }}
-            options={opponents.map((n) => ({ value: n, label: nationName(n), text: nationName(n), icon: <Flag nation={n} />, hint: `#${worldRanking(world).indexOf(n) + 1}` }))} />
+            options={opponents.map((n) => ({ value: n, label: nationName(n), text: nationName(n), icon: <Flag nation={n} />, hint: `#${sideRank(world, n)}` }))} />
         </div>
         <div className="field-row"><span className="field-label">On</span>
           <Dropdown<number> value={dayOk} onChange={setDay} placeholder="No free date"
@@ -545,5 +559,71 @@ function FriendlyDialog({ onClose }: { onClose: () => void }): JSX.Element {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---- The youth sides, as the senior coach sees them ----------------------------------------
+
+/**
+ * A senior coach's look down at his nation's U21s or U19s: their squad (at a
+ * tournament, the last named, or their coach's pick) and the young players
+ * the seniors are keeping from them. He can send one down — out of the
+ * provisional squad, and called by the youth side next time — or bring one up.
+ */
+function YouthSidePanel({ nation, age }: { nation: number; age: YouthAge }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const side = youthSide(nation, age);
+  const frame = frameOf(world);
+  const squad = youthSideSquad(world, side);
+  const kept = keptBySeniors(world, side).filter((p) => !squad.includes(p));
+  const t = nextTournamentFor(world, side);
+  const rows = [...kept, ...squad];
+  return (
+    <>
+      <p className="faint nat-youth-lead">
+        {t !== undefined ? `Next: ${t.name}, from ${g.dateLabelForDay(t.startDay)}. ` : 'No tournament on the calendar. '}
+        Send a young player down and the {sideSuffix(side)} coach calls him; bring one up and he joins your provisional squad.
+      </p>
+      <div className="nat-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Player</th><th className="nat-act">Move</th><th>Pos</th><th className="num">Age</th><th>Club</th>
+              <th className="num">Ability</th><th className="num" title={`Matches for the ${sideSuffix(side)}s`}>{sideSuffix(side)} caps</th>
+              <th className="num" title="Senior caps">Caps</th><th>Where he is</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((p) => {
+              const down = sentDownTo(world, p) === side;
+              const keptUp = kept.includes(p);
+              const caps = youthCapsOf(world, p);
+              return (
+                <tr key={p} className={keptUp ? 'nat-kept' : ''}>
+                  <td><PlayerLink idx={p} /></td>
+                  <td className="nat-act">
+                    {keptUp || frame.includes(p)
+                      ? <button className="sm" title={`Release him to the ${sideSuffix(side)}s`} onClick={() => g.toggleSendDown(p, age)}>Send down</button>
+                      : down
+                        ? <button className="sm ghost" title="Take back the word: the seniors keep their claim" onClick={() => g.toggleSendDown(p, age)}>Undo</button>
+                        : <button className="sm" title="Into your provisional squad" onClick={() => g.promoteFromYouth(p)}>Bring up</button>}
+                  </td>
+                  <td><Pos pos={store.position[p] as Position} /></td>
+                  <td className="num">{store.ageOn(p, world.year, 181)}</td>
+                  <td>{store.clubId[p] >= 0 ? <ClubLink id={store.clubId[p]} /> : <span className="faint">Free agent</span>}</td>
+                  <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                  <td className="num">{age === 21 ? caps.u21 : caps.u19}</td>
+                  <td className="num">{store.nationalCaps[p]}</td>
+                  <td className="faint">{keptUp ? 'With the seniors' : down ? 'Sent down' : `${sideSuffix(side)} squad`}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {rows.length === 0 && <p className="faint">No players of this age.</p>}
+      </div>
+    </>
   );
 }

@@ -8,6 +8,7 @@
 
 import { useEffect, useState, type CSSProperties, type JSX } from 'react';
 import { flagImageUrl, NATIONS } from '../../engine/world/nations.ts';
+import { sideName } from '../../engine/world/sides.ts';
 import type { NewsItem, NewsKind } from '../../engine/world/news.ts';
 import { fanComments, fanName, type FanComment } from '../../engine/world/fans.ts';
 import { ClubCrest, Empty, PlayerFace, listPage, Paged, useListPages } from '../components.tsx';
@@ -128,7 +129,7 @@ export function NewsScreen(): JSX.Element {
               { value: ALL_COUNTRIES, label: 'All countries', icon: <Icon name="world" size={14} /> },
               ...nations.map((id) => ({
                 value: id,
-                label: id < 0 ? 'International' : NATIONS[id]?.name ?? '?',
+                label: id < 0 ? 'International' : sideName(id),
                 icon: id < 0 ? <Icon name="world" size={14} /> : <Flag nation={id} />,
               })),
             ]}
@@ -178,7 +179,7 @@ function Story({ item: n }: { item: NewsItem }): JSX.Element {
       <span className="news-kicker"><Icon name={NEWS_KIND[n.kind].icon} size={14} /> {NEWS_KIND[n.kind].label}</span>
       <h1 className="news-headline">{n.headline}</h1>
       <span className="news-meta">
-        <Flag nation={n.nation} /> {n.nation >= 0 ? NATIONS[n.nation]?.name : 'International'} <i>|</i> {when(n.day)}
+        <Flag nation={n.nation} /> {n.nation >= 0 ? sideName(n.nation) : 'International'} <i>|</i> {when(n.day)}
       </span>
       <div className="news-hero"><NewsVisual item={n} size={132} /></div>
       <p className="news-body">{n.body}</p>

@@ -14,6 +14,8 @@ import { MAX_SQUAD, POSITION_NAMES, type Position } from '../model/positions.ts'
 import { agentFeeRate, agentOf, type AgentStyle } from './contractTerms.ts';
 import { directorTaskFor } from './director.ts';
 import { postMessage } from './inbox.ts';
+import { pendingMoveOf } from './moves.ts';
+import { newsPreContract } from './preContracts.ts';
 import { loanOf, wageRoom } from './loans.ts';
 import { completeTransfer } from './negotiation.ts';
 import { hash01 } from './offerStance.ts';
@@ -133,6 +135,7 @@ export function agentPoaching(world: World): number[] {
     if (contractEndSeason(store.contractUntil[p]) !== world.season || pre[p]?.season === world.season) continue;
     if (store.ageOn(p, world.year, 181) >= 33 || willRetire(world, p)) continue;
     if (directorTaskFor(world, p) !== undefined || world.talks.some((t) => t.playerIdx === p)) continue;
+    if (pendingMoveOf(world, p) !== undefined) continue;
     const prof = agentProfile(world, p);
     if (hash01(store.id[p] + world.day, 0x90a) >= POACH_CHANCE[prof.style]) continue;
     // A club at his level or better, with room for him — abroad, if the agent's contacts reach.
@@ -145,6 +148,7 @@ export function agentPoaching(world: World): number[] {
     const wage = Math.round(store.wage[p] * (1.15 + 0.15 * hash01(store.id[p], 0x77)) / 1000) * 1000;
     pre[p] = { clubId: suitor.id, wage, day: world.day, season: world.season };
     taken.push(p);
+    newsPreContract(world, p, suitor.id);
     postMessage(world, {
       category: 'contract', from: `${prof.name}, ${prof.agency}`,
       subject: `${suitor.name} want ${store.fullName(p)}`,

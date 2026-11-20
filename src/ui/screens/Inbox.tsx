@@ -32,6 +32,7 @@ import { CompetitionReviewSheet } from '../competitionReviewSheet.tsx';
 import { AwardsNightSheet, TeamOfSeasonSheet } from '../awardsSheet.tsx';
 import { RetirementSheet } from '../retirementSheet.tsx';
 import { NATIONS } from '../../engine/world/nations.ts';
+import { baseNation, sideName } from '../../engine/world/sides.ts';
 import { useGame } from '../state.ts';
 import { fanNameIn, previewReplies, type MatchPreview } from '../../engine/world/matchPreview.ts';
 import type { FanComment } from '../../engine/world/fans.ts';
@@ -269,7 +270,7 @@ function AvatarIn({ world, message: m, size }: { world: World; message: GameMess
   if (club !== undefined) {
     return <span className="mail-avatar mail-avatar-crest" style={{ width: size, height: size }}><ClubCrest club={club} size={size * 0.72} /></span>;
   }
-  if (m.aboutNation !== undefined && NATIONS[m.aboutNation] !== undefined) {
+  if (m.aboutNation !== undefined && NATIONS[baseNation(m.aboutNation)] !== undefined) {
     return <span className="mail-avatar mail-avatar-flag" style={{ width: size, height: size }}><Flag nation={m.aboutNation} /></span>;
   }
   if (m.playerIdx !== undefined && store.isActive(m.playerIdx)) {
@@ -435,7 +436,7 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     return (
       <div className="paper-report">
         <div className="paper-label">The national team job</div>
-        <ReportRow k="Nation"><Flag nation={nation} /> {NATIONS[nation]?.name}</ReportRow>
+        <ReportRow k="Nation"><Flag nation={nation} /> {sideName(nation)}</ReportRow>
         <ReportRow k="World ranking">{worldRanking(world).indexOf(nation) + 1}</ReportRow>
         <ReportRow k="Next tournament">{next !== undefined ? `${next.name} · ${g.longDateLabel(next.startDay)}` : '—'}</ReportRow>
         <ReportRow k="Status" tone={offer !== undefined || accepted ? 'good' : undefined}>

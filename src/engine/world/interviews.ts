@@ -29,7 +29,8 @@ import { isCupCompetition, isCupFinal, stageLabel } from '../season/cups.ts';
 import { playoffTieOf, tieHasFixture } from '../season/playoffs.ts';
 import { PLAYOFF_ROUND_BASE } from '../season/schedule.ts';
 import { cityBankFor } from './cities.ts';
-import { nationName, squadOf, userNation, type IntlMatch, type Tournament } from './internationals.ts';
+import { nationalTeamOf, nationName, squadOf, userNation, type IntlMatch, type Tournament } from './internationals.ts';
+import { baseNation } from './sides.ts';
 import { NATIONS } from './nations.ts';
 import { dayOfSeason, type Competition, type Fixture, type World } from './world.ts';
 import {
@@ -1660,7 +1661,7 @@ function nationalContextFor(
 ): { ctx: Ctx; stakes: Stakes; occasion: string } | null {
   if (m.home !== nation && m.away !== nation) return null;
   const oppNation = m.home === nation ? m.away : m.home;
-  if (NATIONS[oppNation] === undefined) return null;
+  if (NATIONS[baseNation(oppNation)] === undefined) return null;
   const side = (n: number): Side => ({ id: n, name: nationName(n), arenaName: '' });
   const tags = new Set<Tag>(['national']);
   if (t.host === nation) tags.add('hosts');
@@ -1703,7 +1704,7 @@ function nationalContextFor(
   if (run >= 3) tags.add('winningRun');
   if (run <= -3) tags.add('losingRun');
   if (oppRun >= 3) tags.add('oppForm');
-  const ranking = (n: number): number => world.nationalTeams.find((x) => x.nation === n)?.rankingPoints ?? 0;
+  const ranking = (n: number): number => nationalTeamOf(world, n)?.rankingPoints ?? 0;
   if (ranking(nation) - ranking(oppNation) > FAVOURITE_POINTS) tags.add('favourite');
   if (ranking(oppNation) - ranking(nation) > FAVOURITE_POINTS) tags.add('underdog');
   const own = stars(world, { players: ownSquad });

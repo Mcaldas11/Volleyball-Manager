@@ -20,7 +20,7 @@ import { defaultTactics } from '../match/tactics.ts';
 import { newClub, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { Position } from '../model/positions.ts';
-import { nationName, suggestSquad, userNation } from '../world/internationals.ts';
+import { nationalTeamOf, nationName, suggestSquad, userNation } from '../world/internationals.ts';
 import { generatePlayer } from '../world/playerGen.ts';
 import { addFixture, seasonEndDay, type Fixture, type World } from '../world/world.ts';
 import { friendlyCompetition } from './friendlies.ts';
@@ -36,6 +36,8 @@ export interface TestMatchState {
   side: number;
   /** A side lent for the day: while he coaches it, the club he had before (-1 for none). */
   coaching?: { was: number };
+  /** The manager coached it on its matchday — the tutorial has had its match. */
+  coached?: boolean;
   /** Over: the made-up players gone. */
   settled?: boolean;
 }
@@ -57,8 +59,28 @@ export function testMatchToday(world: World): Fixture | null {
   return f !== undefined && !f.played && f.day === world.day ? f : null;
 }
 
+/**
+ * Whether a practice match can be booked today: none booked yet — or the one booked has gone by
+ * on a day before this one without the manager coaching it.
+ */
+export function canBookTestMatch(world: World): boolean {
+  const t = world.testMatch;
+  if (t === undefined) return true;
+  const f = world.fixtures[t.fixtureId];
+  if (f === undefined) return true;
+  if (f.day >= world.day) return false;
+  return t.coached !== true;
+}
+
 /** A made-up side's club: no league, no money worth the name, no part in anything else. */
 function exhibitionClub(world: World, name: string, nation: number): Club {
+  // A side that lent its name before, empty since: taken again rather than another made.
+  const old = world.clubs.find((c) => c.exhibition === true && c.name === name && c.players.length === 0);
+  if (old !== undefined) {
+    old.nation = nation;
+    old.tactics = defaultTactics();
+    return old;
+  }
   const club = newClub(world.clubs.length, name, nation, 0);
   club.exhibition = true;
   club.shortName = name === TEST_SIDE_NAME ? 'TUT' : name.slice(0, 3).toUpperCase();
@@ -117,7 +139,9 @@ function levelOf(world: World, players: readonly number[]): number {
  * Once a career; null when it has been booked already, or there is no side to give him.
  */
 export function bookTestMatch(world: World): Fixture | null {
-  if (world.testMatch !== undefined) return null;
+  if (!canBookTestMatch(world)) return null;
+  // One passed by before it was played — gone on holiday over it: settled, and another booked.
+  settleTestMatch(world);
   const rng = new Rng(`test-match:${world.seed}:${world.day}`);
   const nation = userNation(world);
   let side: Club | undefined;
@@ -130,7 +154,7 @@ export function bookTestMatch(world: World): Fixture | null {
     side = exhibitionClub(world, nationName(nation), nation);
     side.shortName = nationName(nation).slice(0, 3).toUpperCase();
     side.players = squad;
-    const team = world.nationalTeams.find((t) => t.nation === nation);
+    const team = nationalTeamOf(world, nation);
     side.tactics = structuredClone(team?.tactics ?? defaultTactics());
     const lineup = team?.preferredLineup ?? [];
     side.preferredLineup = lineup.length === 6 && lineup.every((p) => squad.includes(p)) ? [...lineup] : [];
@@ -173,6 +197,7 @@ export function beginTestCoaching(world: World): boolean {
   if (t === undefined || testMatchToday(world) === null || world.userClubId === t.side) return false;
   t.coaching = { was: world.userClubId };
   world.userClubId = t.side;
+  t.coached = true;
   return true;
 }
 

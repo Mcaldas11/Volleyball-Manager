@@ -8,7 +8,7 @@ import { Dropdown, type DropOption } from '../dropdown.tsx';
 import { ConfirmDialog } from '../confirmDialog.tsx';
 import { PATH_NAMES } from '../../engine/world/academyPlans.ts';
 import type { TimelineItem } from '../../engine/world/playerTimeline.ts';
-import { AcademyDevelopment, AcademyFacilities, AcademyPlans, AcademyRecruitment } from './AcademyPlus.tsx';
+import { AcademyDevelopment, AcademyFacilities, AcademyInternationals, AcademyPlans, AcademyRecruitment } from './AcademyPlus.tsx';
 import {
   ATTR_LABELS, HIDDEN_ATTR_SET, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS,
   type AttributeName,
@@ -815,8 +815,8 @@ export function PlayerDetail(): JSX.Element | null {
             {move !== null && (
               <span className="loan-note">
                 <Icon name="clock" size={13} />
-                {move.kind === 'loan' ? 'Joins' : 'Agreed to join'} <ClubLink id={move.toClubId} short />
-                {move.kind === 'loan' ? ' on loan' : ''} on {g.dateLabelForDay(move.movesOn)}
+                {move.kind === 'loan' ? 'Joins' : move.preContract === true ? 'Pre-contract: joins' : 'Agreed to join'} <ClubLink id={move.toClubId} short />
+                {move.kind === 'loan' ? ' on loan' : move.preContract === true ? ' on a free' : ''} on {g.dateLabelForDay(move.movesOn)}
               </span>
             )}
           </div>
@@ -923,9 +923,23 @@ export function PlayerDetail(): JSX.Element | null {
                   <Icon name="back" size={14} /> Recall from loan
                 </button>
               )}
-              {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && (
+              {elsewhere && move === null && expiring && (() => {
+                const block = transferTalks?.preContract === true ? null : g.preContractBlock(p);
+                return (
+                  <button
+                    className="primary"
+                    disabled={block !== null}
+                    title={block ?? `His contract ends on ${contractLabel}: agree terms with him now, no fee, and he joins on a free on ${g.dateLabelForDay(g.preContractJoinDay())}`}
+                    onClick={() => g.startPreContract(p)}
+                  >
+                    <Icon name="contract" size={14} />
+                    {transferTalks?.preContract === true ? 'Pre-contract talks' : 'Approach (free)'}
+                  </button>
+                );
+              })()}
+              {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && transferTalks?.preContract !== true && (
                 <button
-                  className="primary"
+                  className={elsewhere && expiring ? undefined : 'primary'}
                   title={joinsLater ? `The window is shut — agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(p))}` : undefined}
                   onClick={() => g.startNegotiation(p)}
                 >
@@ -1272,7 +1286,7 @@ function assessment(pa: number): { text: string; cls: string } {
   return { text: 'Unlikely to make the grade', cls: 'dim' };
 }
 
-type AcademyTab = 'players' | 'plans' | 'development' | 'recruitment' | 'facilities' | 'league';
+type AcademyTab = 'players' | 'plans' | 'development' | 'recruitment' | 'facilities' | 'intl' | 'league';
 
 /**
  * The academy: its prospects — what they might become, how their season in
@@ -1345,7 +1359,7 @@ export function YouthScreen(): JSX.Element {
       </div>
 
       <div className="academy-tabs">
-        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['plans', 'Career plans'], ['development', 'Development'], ['recruitment', 'Recruitment'], ['facilities', 'Facilities'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
+        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['plans', 'Career plans'], ['development', 'Development'], ['recruitment', 'Recruitment'], ['facilities', 'Facilities'], ['intl', 'Internationals'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
         <span className="faint">
           {tab === 'players'
             ? 'A new intake arrives each summer. Who plays for the U19s gets the minutes that make training stick.'
@@ -1353,6 +1367,7 @@ export function YouthScreen(): JSX.Element {
             : tab === 'development' ? 'Money and weeks put into one prospect at a time — no promise of a star.'
             : tab === 'recruitment' ? "The scouts paid to find youngsters in other clubs' academies."
             : tab === 'facilities' ? 'What the academy is built on — asked of the board.'
+            : tab === 'intl' ? "Your young players and their countries' U19 and U21 sides — call-ups, caps and a word in the coach's ear."
             : "Your academy side against the other clubs' — a round every week from late August."}
         </span>
       </div>
@@ -1361,6 +1376,7 @@ export function YouthScreen(): JSX.Element {
         : tab === 'development' ? <AcademyDevelopment />
         : tab === 'recruitment' ? <AcademyRecruitment />
         : tab === 'facilities' ? <AcademyFacilities />
+        : tab === 'intl' ? <AcademyInternationals />
         : tab === 'players' ? (
         <>
           <div className="athlete-toolbar">

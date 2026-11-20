@@ -7,6 +7,7 @@ import { useState, type JSX } from 'react';
 import type { CompetitionKind, World } from '../engine/world/world.ts';
 import { accoladeTitle, type Accolade } from '../engine/world/accolades.ts';
 import { NATIONS } from '../engine/world/nations.ts';
+import { baseNation, sideName } from '../engine/world/sides.ts';
 import { ClubCrest, Empty, Flag } from './components.tsx';
 import { Icon } from './icons.tsx';
 
@@ -129,8 +130,8 @@ export function AccoladeList({ accolades, world, empty = 'No individual awards y
 
 /** Whose a title or an award was: a club or a nation, shown with its crest or flag. */
 function teamOf(world: World, h: { clubId?: number; nation?: number }): { key: string; name: string; badge: JSX.Element } | null {
-  if (h.nation !== undefined && NATIONS[h.nation] !== undefined) {
-    return { key: `n${h.nation}`, name: NATIONS[h.nation].name, badge: <span className="hall-flag"><Flag nation={h.nation} /></span> };
+  if (h.nation !== undefined && NATIONS[baseNation(h.nation)] !== undefined) {
+    return { key: `n${h.nation}`, name: sideName(h.nation), badge: <span className="hall-flag"><Flag nation={h.nation} /></span> };
   }
   const club = h.clubId !== undefined ? world.clubs[h.clubId] : undefined;
   return club !== undefined ? { key: `c${club.id}`, name: club.name, badge: <ClubCrest club={club} size={18} /> } : null;
