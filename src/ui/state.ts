@@ -1141,14 +1141,17 @@ class Game {
   private async pickCareerFile(name: string): Promise<FileSystemFileHandle | null | 'cancelled'> {
     const pick = (window as unknown as { showSaveFilePicker?: (options: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
     if (typeof pick !== 'function') return null;
+    const asked = Date.now();
     try {
       return await pick.call(window, {
         suggestedName: name,
         types: [{ description: 'Volleyball Manager career', accept: { 'application/octet-stream': ['.vmcareer'] } }],
       });
     } catch (err) {
-      // Not allowed here (an embedded page, say): it downloads instead.
-      return err instanceof DOMException && err.name === 'AbortError' ? 'cancelled' : null;
+      // Closed by the player: cancelled. Refused by the browser (an embedded page, or one like Opera that
+      // turns the dialog down at once, with the same error a player's Cancel gives): it downloads instead.
+      const cancelled = err instanceof DOMException && err.name === 'AbortError' && Date.now() - asked > 600;
+      return cancelled ? 'cancelled' : null;
     }
   }
 
@@ -1156,7 +1159,11 @@ class Game {
    *  picked, or downloaded. The game waits while it is written. The last of
    *  `steps` is the writing; `load` takes the task through any before it. */
   private async exportTo(meta: SaveMeta, steps: string[], load: () => Promise<{ world: World; season: SeasonContext }>): Promise<void> {
-    if (this.task !== null) return;
+    if (this.task !== null) {
+      this.notice = 'Something is still being saved or loaded: try the export again in a moment.';
+      this.emit();
+      return;
+    }
     const name = careerFileName(meta);
     const target = await this.pickCareerFile(name);
     if (target === 'cancelled') return;
@@ -5256,6 +5263,16 @@ class Game {
     const md = this.matchday;
     // Once a set is won, changes wait for the set break's team sheet.
     if (md === null || md.stage !== 'live' || md.setBreakPending) return;
+    // The rally on screen has been played already: on its last point the match (or the set) is over
+    // in the engine, and a man brought on now would never play a ball, though the court shows him on.
+    const sim = this.liveSim;
+    if (sim !== null && (sim.snapshot().matchOver || sim.setDecided())) {
+      this.notice = sim.snapshot().matchOver
+        ? 'The last point has been played: no more changes in this match.'
+        : 'This point ends the set: make the change on the team sheet at the set break.';
+      this.emit();
+      return;
+    }
     const teamIdx = md.userIsHome ? 0 : 1;
     const warmth = this.warmthOf(inPlayerIdx);
     if (this.matchday !== null) this.matchday.videoCheck = false;
