@@ -1141,6 +1141,8 @@ class Game {
   private async pickCareerFile(name: string): Promise<FileSystemFileHandle | null | 'cancelled'> {
     const pick = (window as unknown as { showSaveFilePicker?: (options: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
     if (typeof pick !== 'function') return null;
+    // Opera has the dialog but never answers it: there, straight to the downloads.
+    if (/OPR\//.test(navigator.userAgent)) return null;
     const asked = Date.now();
     try {
       return await pick.call(window, {

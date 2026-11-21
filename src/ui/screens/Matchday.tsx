@@ -999,6 +999,9 @@ function LiveTeamCard({ team, serving, ratings, onPick }: {
     .filter((p, i, all) => all.indexOf(p) === i)
     .sort((a, b) => ROLE_ORDER[roles[a] as Position] - ROLE_ORDER[roles[b] as Position]);
   const knocks = g.liveKnocks();
+  // Just the surname, unless two on this side share it: then "D. Martins" and "G. Martins".
+  const surname = (p: number): string => store.shortName(p).split(' ').pop() ?? '';
+  const shared = new Set(rows.map(surname).filter((n, i, all) => all.indexOf(n) !== i));
   return (
     <section className="card lv-team">
       <header className="lv-team-head">
@@ -1018,7 +1021,7 @@ function LiveTeamCard({ team, serving, ratings, onPick }: {
             >
               <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={22} />
               <span className="lv-team-name">
-                {store.shortName(p).split(' ').pop()}
+                {shared.has(surname(p)) ? store.shortName(p) : surname(p)}
                 {knocks.has(p) && <span className="lv-knock" title="Playing on with a knock, below his best, and it may get worse">+</span>}
               </span>
               <Pos pos={roles[p] as Position} />
