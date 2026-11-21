@@ -290,8 +290,8 @@ function headline(world: World, review: SeasonReview, club: Club): string {
       ? `Champions! ${club.name} won the ${name}.`
       : `${club.name} finished ${ordinal(league.position)} of ${league.teams} in the ${name}.`);
   }
-  if (review.movement === 'promoted') parts.push('Promotion secured — next season is a division higher.');
-  if (review.movement === 'relegated') parts.push('Relegated — next season starts a division lower.');
+  if (review.movement === 'promoted') parts.push('Promotion secured, next season is a division higher.');
+  if (review.movement === 'relegated') parts.push('Relegated, next season starts a division lower.');
   for (const s of review.standings) {
     if (s === league || !s.champion) continue;
     parts.push(`Winners of the ${world.competitions[s.competitionId].name} too.`);

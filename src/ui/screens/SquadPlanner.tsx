@@ -18,9 +18,9 @@ const TAG_META: Readonly<Record<PlanTag, { label: string; tone: string; title: s
   retiring: { label: 'Retiring', tone: 'bad', title: 'He stops at the end of this season' },
   mayRetire: { label: 'May retire', tone: 'dim-bad', title: 'Old enough by then that he may stop' },
   loanIn: { label: 'Loan', tone: 'dim', title: 'Here on loan: back to his club at the season\'s end' },
-  loanOut: { label: 'Out on loan', tone: 'info', title: 'Ours, out on loan this season — back for the next' },
+  loanOut: { label: 'Out on loan', tone: 'info', title: 'Ours, out on loan this season, back for the next' },
   listed: { label: 'Listed', tone: 'dim', title: 'On the transfer list' },
-  joining: { label: 'Joining', tone: 'good', title: 'Signed — joins when the window opens' },
+  joining: { label: 'Joining', tone: 'good', title: 'Signed, joins when the window opens' },
 };
 
 export function SquadPlannerScreen(): JSX.Element {
@@ -149,7 +149,7 @@ function TargetPicker({ position, season, onClose }: { position: Position; seaso
         <header className="plan-picker-head">
           <div>
             <h3><Pos pos={position} /> Targets: {POSITION_NAMES[position].toLowerCase()} for {seasonLabel(world, season)}</h3>
-            <p>The scouts' list — within reach first (a fee you can find, a free agent, or a contract that will have run out), then the nearly good enough, then the ones it would take more money or a bigger club to land.</p>
+            <p>The scouts' list, within reach first (a fee you can find, a free agent, or a contract that will have run out), then the nearly good enough, then the ones it would take more money or a bigger club to land.</p>
           </div>
           <button className="ghost" onClick={onClose} title="Close"><Icon name="close" size={16} /></button>
         </header>

@@ -61,7 +61,7 @@ export function interviewQuestions(club: Club): InterviewQuestion[] {
       topic: 'budget',
       ask: 'How would you work with the budget we have?',
       answers: [
-        { id: 'invest', text: 'I need investment — the right signings will pay for themselves.' },
+        { id: 'invest', text: 'I need investment, the right signings will pay for themselves.' },
         { id: 'within', text: 'I work within what the board gives me. Every euro counts.' },
         { id: 'sell', text: 'Sell well, buy smart: the squad pays for its own improvement.' },
       ],
@@ -85,7 +85,7 @@ export function interviewReaction(world: World, club: Club, topic: InterviewTopi
     const a = ambition(world, club);
     const target = { title: 0, top: 0.2, mid: 0.45, survive: 0.85 }[answer] ?? 0.5;
     const gap = Math.abs(target - a);
-    if (gap < 0.17) return { score: 1, line: 'The chairman nods — that is exactly the season the board has in mind.' };
+    if (gap < 0.17) return { score: 1, line: 'The chairman nods, that is exactly the season the board has in mind.' };
     if (target < a) {
       return gap > 0.45
         ? { score: -1, line: 'Glances round the table. The board thinks you are promising what this squad cannot deliver.' }
@@ -106,7 +106,7 @@ export function interviewReaction(world: World, club: Club, topic: InterviewTopi
     if (answer === 'within') {
       return prudent || !rich
         ? { score: 1, line: 'Music to the finance director\'s ears.' }
-        : { score: 0.2, line: 'Sensible — though the board would back a bolder plan.' };
+        : { score: 0.2, line: 'Sensible, though the board would back a bolder plan.' };
     }
     return rich ? { score: 0.2, line: 'Smart business. The board can live with that.' } : { score: 0.8, line: 'The board likes that very much: a club like this has to trade well.' };
   }
@@ -126,7 +126,7 @@ export function interviewEffect(reactions: readonly InterviewReaction[]): number
 
 /** The board's verdict, in a line, from how the interview went. */
 export function interviewVerdict(effect: number): string {
-  if (effect >= 0.2) return 'The interview went very well — the board was impressed.';
+  if (effect >= 0.2) return 'The interview went very well, the board was impressed.';
   if (effect >= 0.05) return 'The interview went well.';
   if (effect > -0.1) return 'A mixed interview. Your name will have to do the rest.';
   return 'The interview went badly. You will need your reputation to carry you.';

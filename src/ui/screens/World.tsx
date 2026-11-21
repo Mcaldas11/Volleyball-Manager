@@ -8,7 +8,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import { sideName } from '../../engine/world/sides.ts';
 import { averageRating, seasonTotals } from '../../engine/world/records.ts';
 import {
-  abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, RatingBadge, Segmented, StarMeter, Paged } from '../components.tsx';
+  abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, RatingBadge, Segmented, StarMeter, Paged, useListPages, formatInt } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -72,7 +72,7 @@ function NationalStats(): JSX.Element {
         )}
       </div>
       {t === undefined
-        ? <Empty>No tournament played yet — the stats come once {sideName(nation)} takes the court.</Empty>
+        ? <Empty>No tournament played yet, the stats come once {sideName(nation)} takes the court.</Empty>
         : <TournamentStats key={t.id} t={t} home={nation} />}
     </div>
   );
@@ -135,6 +135,9 @@ function ClubStats(): JSX.Element {
     })
     .slice(0, 50);
 
+  // A page at a time, as the list scrolls: a long season lists hundreds of players.
+  const { shown: statRows, more: statMore } = useListPages(rows, `stats-${sort}-${ownLeagueOnly}-${world.day}`, -1, 14);
+
   return (
     <>
       <div className="comp-bar">
@@ -158,7 +161,7 @@ function ClubStats(): JSX.Element {
         actions={<Segmented size="sm" options={STAT_COLUMNS} value={sort} onChange={setSort} />}
       >
         {rows.length === 0
-          ? <Empty>No statistics yet — play some matches first.</Empty>
+          ? <Empty>No statistics yet, play some matches first.</Empty>
           : (
             <Paged className="table-wrap" items="tbody > tr">
               <table className="data-table">
@@ -179,7 +182,7 @@ function ClubStats(): JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
+                  {statRows.map((r, i) => (
                     <tr
                       key={r.s.playerIdx}
                       className={`clickable${store.clubId[r.s.playerIdx] === world.userClubId ? ' me' : ''}`}
@@ -213,6 +216,7 @@ function ClubStats(): JSX.Element {
                       </td>
                     </tr>
                   ))}
+                {statMore}
                 </tbody>
               </table>
             </Paged>
@@ -247,6 +251,8 @@ export function RankingsScreen(): JSX.Element {
     .filter((r) => r.squad.length >= 8)
     .sort((a, b) => b.team.rankingPoints - a.team.rankingPoints);
 
+  const { shown: rankedShown, more: rankedMore } = useListPages(ranked, `rankings-${world.day}`, ranked.findIndex((r) => r.team.nation === userNation), 10);
+
   return (
     <>
       <p className="page-intro">
@@ -264,7 +270,7 @@ export function RankingsScreen(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {ranked.map((r, i) => {
+              {rankedShown.map((r, i) => {
                 const best = [...r.squad].sort(
                   (a, b) => store.currentAbility[b] - store.currentAbility[a],
                 )[0];
@@ -293,6 +299,7 @@ export function RankingsScreen(): JSX.Element {
                   </tr>
                 );
               })}
+            {rankedMore}
             </tbody>
           </table>
         </Paged>
@@ -310,7 +317,7 @@ export function HallOfFameScreen(): JSX.Element {
   return (
     <>
       <p className="page-intro">
-        {entries.length} inductees. Admission is strict — a career of sustained excellence, not merely
+        {entries.length} inductees. Admission is strict, a career of sustained excellence, not merely
         a long one.
       </p>
 
@@ -321,7 +328,7 @@ export function HallOfFameScreen(): JSX.Element {
               <Icon name="trophy" size={44} />
               <Empty>
                 Nobody has been inducted yet. The Hall of Fame fills as the first generation of players
-                reaches the end of their careers — usually a decade or so into a save.
+                reaches the end of their careers, usually a decade or so into a save.
               </Empty>
             </div>
           </Card>
@@ -347,7 +354,7 @@ export function HallOfFameScreen(): JSX.Element {
                       <td><Flag nation={store.nation[e.player]} /></td>
                       <td><Pos pos={store.position[e.player] as Position} /></td>
                       <td className="num dim">{e.inductedYear}</td>
-                      <td className="num">{e.careerPoints.toLocaleString()}</td>
+                      <td className="num">{formatInt(e.careerPoints)}</td>
                       <td className="num gold-text">{e.titles}</td>
                       <td className="num dim">{e.caps}</td>
                       <td className="faint citation">{e.citation}</td>

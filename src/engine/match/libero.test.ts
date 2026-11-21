@@ -33,7 +33,7 @@ function liberoSets(seeds: number[]): Array<{ set: RallyContact; quality: number
   return out;
 }
 
-test('the libero never sets overhead inside the 3 m line: he bumps it, or jump-sets from behind the line — beyond it, as he likes', () => {
+test('the libero never sets overhead inside the 3 m line: he bumps it, or jump-sets from behind the line, beyond it, as he likes', () => {
   const sets = liberoSets([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   const inside = sets.filter((s) => s.quality >= 0.58);
   const beyond = sets.filter((s) => s.quality < 0.58);

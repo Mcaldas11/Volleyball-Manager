@@ -399,7 +399,7 @@ const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>>
     nation: [
       ['delighted', 'CHAMPIONS! So proud of this team!'],
       ['delighted', '{n} on top of the world!'],
-      ['happy', '{p} — what a tournament!'],
+      ['happy', '{p}, what a tournament!'],
       ['delighted', 'Best day of my life. Thank you, boys!'],
     ],
     otherNation: [

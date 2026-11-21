@@ -140,7 +140,7 @@ export function SquadPicker({ t, nation, compact = false }: {
           onChange={setPos}
         />
         <span className="faint">{pool.length} eligible · click a row to pick or drop a player</span>
-        {named && <span className="nat-named"><Icon name="check" size={12} /> Named — you can still change it until {g.dateLabelForDay(t.callUpDay)}</span>}
+        {named && <span className="nat-named"><Icon name="check" size={12} /> Named, you can still change it until {g.dateLabelForDay(t.callUpDay)}</span>}
       </div>
       <div className="nat-scroll">
         <table className="data-table nat-pick-table">
@@ -290,7 +290,7 @@ export function NationalHome(): JSX.Element {
   const sub = next !== undefined && t !== undefined
     ? `${t.name} · ${next.stage} · ${next.day === world.day ? 'Today' : next.day === world.day + 1 ? 'Tomorrow' : `${g.dateLabelForDay(next.day)}`}`
     : t === undefined
-      ? 'No tournament coming up — the national team is between majors.'
+      ? 'No tournament coming up, the national team is between majors.'
       : t.status === 'planned'
         ? `${t.name}${t.host >= 0 ? ` in ${nationName(baseNation(t.host))}` : ''} · name your squad by ${g.dateLabelForDay(t.callUpDay)} · first match ${g.dateLabelForDay(t.startDay)}`
         : `${t.name} · out of the tournament`;
@@ -449,7 +449,7 @@ export function NationalSquadScreen(): JSX.Element {
   const senior = !isYouthSide(nation);
 
   const status = t === undefined
-    ? 'No tournament on the calendar — the fourteen below are your assistant’s pick for now.'
+    ? 'No tournament on the calendar, the fourteen below are your assistant’s pick for now.'
     : t.status === 'planned'
       ? `${t.name}${t.host >= 0 ? ` in ${nationName(baseNation(t.host))}` : ''} · the squad is named by ${g.dateLabelForDay(t.callUpDay)} · first match ${g.dateLabelForDay(t.startDay)}`
       : t.out.includes(nation) ? `${t.name} · out of the tournament` : `${t.name} · under way`;
@@ -490,7 +490,7 @@ export function NationalSquadScreen(): JSX.Element {
                 <thead>
                   <tr>
                     <th>Player</th>
-                    <th className="nat-act" title={`Your provisional squad — up to ${FRAME_MAX} — and the club matches you will go and watch`}>Frame · Watch</th>
+                    <th className="nat-act" title={`Your provisional squad, up to ${FRAME_MAX}, and the club matches you will go and watch`}>Frame · Watch</th>
                     <th>Pos</th><th>Club</th><th className="num">Ability</th>
                     <th className="num" title="Average rating over his last matches">Form</th><th className="num">Caps</th>
                     <th className="num" title="How the assistant rates him for a place">Rating</th>
@@ -501,10 +501,10 @@ export function NationalSquadScreen(): JSX.Element {
                     <tr key={p}>
                       <td><PlayerLink idx={p} /></td>
                       <td className="nat-act">
-                        <button className={`sm icon-btn nat-frame${frame.includes(p) ? ' on' : ''}`} title={frame.includes(p) ? 'In the provisional squad — take him out' : 'Put him in the provisional squad'}
+                        <button className={`sm icon-btn nat-frame${frame.includes(p) ? ' on' : ''}`} title={frame.includes(p) ? 'In the provisional squad, take him out' : 'Put him in the provisional squad'}
                           onClick={() => g.toggleFrame(p)}><Icon name="star" size={13} /></button>
                         <button className={`sm icon-btn nat-watch${watching.includes(p) ? ' on' : ''}`} disabled={store.clubId[p] < 0}
-                          title={watching.includes(p) ? 'Going to his next match — call it off' : 'Go and watch his next club match'}
+                          title={watching.includes(p) ? 'Going to his next match, call it off' : 'Go and watch his next club match'}
                           onClick={() => g.toggleWatch(p)}><Icon name="user" size={13} /></button>
                       </td>
                       <td><Pos pos={store.position[p] as Position} /></td>

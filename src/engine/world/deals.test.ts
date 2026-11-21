@@ -44,7 +44,7 @@ test('a renewal is never answered in under two days', () => {
   assert.ok(world.messages.some((m) => m.subject === `New contract: ${world.players.fullName(p)}`));
 });
 
-test('a bid takes days to answer; once accepted, terms follow — and the player signs', () => {
+test('a bid takes days to answer; once accepted, terms follow, and the player signs', () => {
   const { world, club } = setup(32);
   const seller = world.clubs.find((c) => c.id !== club.id && c.players.length >= 12)!;
   const p = seller.players[0];
@@ -82,7 +82,7 @@ test('a rival offering him more can take the player from under you', () => {
   assert.ok(world.messages.some((m) => m.subject === `${world.players.fullName(free)} joins ${rival.name}`));
 });
 
-test('talks left idle lapse — or a rival gets there first', () => {
+test('talks left idle lapse, or a rival gets there first', () => {
   const { world, club } = setup(34);
   const seller = world.clubs.find((c) => c.id !== club.id && c.players.length >= 12)!;
   const t = openTalks(world, club, seller.players[3], 'transfer');

@@ -93,7 +93,7 @@ export function TacticPicker(): JSX.Element | null {
             disabled={slots.length >= MAX_TACTICS}
             onClick={() => { g.newTactic(); setOpen(false); }}
           >
-            + New tactic <span className="faint">— from the defaults</span>
+            + New tactic <span className="faint">from the defaults</span>
           </button>
           <p className="tactic-note">
             Each tactic keeps its own formation, instructions, rotations and team sheet. Changes to the loaded one

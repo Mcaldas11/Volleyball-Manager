@@ -581,20 +581,20 @@ function seasonAwardLines(world: World, record: SeasonRecord): SeasonAwardLine[]
   if (record.topScorer.player >= 0) {
     lines.push({
       label: 'Top Scorer', playerIdx: record.topScorer.player,
-      detail: `${describe(record.topScorer.player)} — ${record.topScorer.points} pts`,
+      detail: `${describe(record.topScorer.player)}, ${record.topScorer.points} pts`,
     });
   }
   if (record.mostImproved.player >= 0) {
     lines.push({
       label: 'Most Improved', playerIdx: record.mostImproved.player,
-      detail: `${describe(record.mostImproved.player)} — ability +${record.mostImproved.gain}`,
+      detail: `${describe(record.mostImproved.player)}, ability +${record.mostImproved.gain}`,
     });
   }
   if (record.youngestPlayer >= 0) {
     const age = store.ageOn(record.youngestPlayer, world.year, 181);
     lines.push({
       label: 'Youngest Player', playerIdx: record.youngestPlayer,
-      detail: `${describe(record.youngestPlayer)} — age ${age}`,
+      detail: `${describe(record.youngestPlayer)}, age ${age}`,
     });
   }
   return lines;

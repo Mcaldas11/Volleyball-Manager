@@ -15,7 +15,7 @@ function setup(seed: number): { world: World; club: World['clubs'][number] } {
   return { world, club };
 }
 
-test('a following grows with wins, trophies and stars — and a bigger one fills the arena and sells the shirts', () => {
+test('a following grows with wins, trophies and stars, and a bigger one fills the arena and sells the shirts', () => {
   const { world, club } = setup(151);
   const start = fansOf(club);
   assert.equal(start, club.arenaCapacity * 3, 'three for every seat to begin with');

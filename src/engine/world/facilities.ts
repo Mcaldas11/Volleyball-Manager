@@ -84,10 +84,10 @@ export function upgradeBlock(world: World, club: Club, kind: FacilityKind): stri
   const project = club.facilityProject;
   if (project !== undefined) {
     return project.stage === 'asked' ? 'The board is still considering your last request.'
-      : `Work on the ${FACILITY_NAMES[project.kind].toLowerCase()} is under way — one project at a time.`;
+      : `Work on the ${FACILITY_NAMES[project.kind].toLowerCase()} is under way, one project at a time.`;
   }
   const refused = club.facilityRefused?.[kind];
-  if (refused !== undefined && refused > world.day) return `The board turned it down — ask again in ${refused - world.day} days.`;
+  if (refused !== undefined && refused > world.day) return `The board turned it down, ask again in ${refused - world.day} days.`;
   return null;
 }
 
@@ -129,7 +129,7 @@ export function facilitiesDay(world: World): void {
       category: 'board', from: 'The Board',
       subject: `Upgrade turned down: ${name}`,
       body: !affordable
-        ? `The board can't find ${euros(project.cost)} for the ${name.toLowerCase()} — the club would want a good deal more than that in the bank first.`
+        ? `The board can't find ${euros(project.cost)} for the ${name.toLowerCase()}, the club would want a good deal more than that in the bank first.`
         : `The board isn't ready to spend ${euros(project.cost)} on the ${name.toLowerCase()} with results as they are. Win them round first.`,
     });
     return;

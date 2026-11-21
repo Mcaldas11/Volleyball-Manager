@@ -63,7 +63,7 @@ function holds(world: World, l: Licence): boolean {
 /** Why he can't start a course now — or null when he can. */
 export function courseBlock(world: World, c: Course): string | null {
   const career = world.career;
-  if (career.course !== undefined) return 'You are on a course already — one at a time.';
+  if (career.course !== undefined) return 'You are on a course already, one at a time.';
   if (c.licence !== undefined && holds(world, c.licence)) return 'You hold it already.';
   if (c.needs !== undefined && !holds(world, c.needs)) return `It needs the ${LICENCE_NAMES[c.needs]} first.`;
   if (c.minReputation !== undefined && career.reputation < c.minReputation) return 'It is for coaches with more of a name.';
@@ -113,7 +113,7 @@ export function coursesDay(world: World): void {
     category: 'career', from: 'Coaching Federation',
     subject: c.licence !== undefined ? `You have your ${LICENCE_NAMES[c.licence]}` : `Course completed: ${c.name}`,
     body: `You have completed the ${c.name}.` +
-      (grown.length > 0 ? ' It shows in your coaching — your attributes are on your profile.' : '') +
+      (grown.length > 0 ? ' It shows in your coaching, your attributes are on your profile.' : '') +
       (c.reputation !== undefined ? ' And the sport has taken note of the qualification.' : ''),
   });
 }

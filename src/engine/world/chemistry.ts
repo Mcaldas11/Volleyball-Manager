@@ -98,7 +98,7 @@ export function noteTogether(world: World, ...sides: ReadonlyArray<Map<number, P
             category: 'staff',
             from: 'Assistant coach',
             subject: `${store.shortName(s)} and ${store.shortName(h)} have clicked`,
-            body: `${store.fullName(s)} and ${store.fullName(h)} are reading each other perfectly now — ` +
+            body: `${store.fullName(s)} and ${store.fullName(h)} are reading each other perfectly now, ` +
               `${store.shortName(h)} is on every set before it leaves ${store.shortName(s)}'s hands. ` +
               'Keep them on court together and that understanding is worth points.',
             playerIdx: h,

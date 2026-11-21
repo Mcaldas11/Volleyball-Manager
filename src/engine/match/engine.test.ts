@@ -324,7 +324,7 @@ test('snapshot() names the libero for whichever side of the ball the team is on 
   }
 });
 
-test('setLibero() swaps liberos freely — and whoever is named libero plays libero', () => {
+test('setLibero() swaps liberos freely, and whoever is named libero plays libero', () => {
   const { store, setup, reception, defence } = buildTwoLiberoMatch(10, 1010);
   const sim = new MatchSimulator(store, setup);
   sim.step();
@@ -380,7 +380,7 @@ test('ability decides most matches, but a clearly weaker side wins some on its n
   assert.ok(dogWins / n < 0.48, `the underdog won ${dogWins} of ${n}`);
 });
 
-test('the weaker the side, the rarer its night — but a far weaker one still has it now and then', () => {
+test('the weaker the side, the rarer its night, but a far weaker one still has it now and then', () => {
   const world = generateWorld({ seed: 555, startYear: 2026, scale: 'small', manager: stubManager() });
   const store = world.players;
   const sides = world.clubs.filter((c) => c.players.length >= 12).map((c) => toTeamSetup(store, c));
@@ -430,7 +430,7 @@ test('a side whose tactic the opposition has read wins less often', () => {
 /** Matches enough to see a coach's changes: in a well-matched pair they are a few a season, not every night. */
 const COACHED_MATCHES = Array.from({ length: 30 }, (_, i) => i + 1);
 
-test('an engine-coached side makes its own changes; one left alone makes none — but those an injury forces', () => {
+test('an engine-coached side makes its own changes; one left alone makes none, but those an injury forces', () => {
   const { store, setup: base } = buildMatch(4, 0);
   const benchUsed = (autoCoach: boolean): number => {
     let used = 0;

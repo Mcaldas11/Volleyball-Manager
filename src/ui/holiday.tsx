@@ -60,7 +60,7 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
     const opp = world.clubs[next.home === world.userClubId ? next.away : next.home];
     presets.push({
       key: 'match',
-      label: `Next match — ${next.home === world.userClubId ? 'vs' : 'at'} ${opp?.shortName ?? '?'} (${g.dateLabelForDay(next.day)})`,
+      label: `Next match, ${next.home === world.userClubId ? 'vs' : 'at'} ${opp?.shortName ?? '?'} (${g.dateLabelForDay(next.day)})`,
       day: next.day,
     });
   }
@@ -74,8 +74,8 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
       presets.push({
         key: 'national',
         label: nat.opponent >= 0
-          ? `Next national match — vs ${NATIONS[nat.opponent]?.name ?? '?'} (${g.dateLabelForDay(nat.match)})`
-          : `Next national match — ${nat.tournament} (${g.dateLabelForDay(nat.match)})`,
+          ? `Next national match, vs ${NATIONS[nat.opponent]?.name ?? '?'} (${g.dateLabelForDay(nat.match)})`
+          : `Next national match, ${nat.tournament} (${g.dateLabelForDay(nat.match)})`,
         day: nat.match,
       });
     }
@@ -219,7 +219,7 @@ function HolidayForm({ preset }: { preset: number | null }): JSX.Element {
             </label>
             <p className="hol-note">
               {back === null
-                ? 'You will be back when something needs you — a job offer, the board, the end of the season — or when you choose.'
+                ? 'You will be back when something needs you, a job offer, the board, the end of the season, or when you choose.'
                 : `Back on ${g.longDateLabel(back)}.`}
               {' '}
               {matches.length === 0

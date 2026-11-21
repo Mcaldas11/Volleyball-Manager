@@ -221,7 +221,7 @@ function signForRival(world: World, t: StaffTalks, rival: StaffTalks['rivals'][n
   postMessage(world, {
     category: 'staff',
     subject: `${staffName(s)} joins ${club.name}`,
-    body: `${staffName(s)} has gone to ${club.name} instead — they moved faster, offering ${euros(rival.wage)} a season. ` +
+    body: `${staffName(s)} has gone to ${club.name} instead, they moved faster, offering ${euros(rival.wage)} a season. ` +
       'Your talks with him are over.',
     clubId: club.id,
     staffId: s.id,
@@ -263,7 +263,7 @@ function resolveFee(world: World, t: StaffTalks, offer: StaffTalksOffer): void {
     clubId: his.id,
     subject: `Approach turned down: ${staffName(s)}`,
     body: `${his.name} won't let their ${roleName(s)} ${staffName(s)} go for ${euros(offer.fee)}` +
-      `${ratio < 0.7 ? ' — that is well below what he is worth to them' : ''}. They want around ${euros(valuation)}.${hurry}`,
+      `${ratio < 0.7 ? ', that is well below what he is worth to them' : ''}. They want around ${euros(valuation)}.${hurry}`,
     staffTalksId: t.id,
     staffId: s.id,
   });
@@ -315,7 +315,7 @@ function resolveTerms(world: World, club: Club, t: StaffTalks, offer: StaffTalks
       subject: renewal ? `New contract: ${name}` : `${name} joins`,
       body: renewal
         ? `${name} has signed a new contract: ${euros(offer.wage)} a season until ${ends}.`
-        : `${name} joins as ${STAFF_ROLE_NAMES[s.role]} — ${euros(offer.wage)} a season until ${ends}.` +
+        : `${name} joins as ${STAFF_ROLE_NAMES[s.role]}, ${euros(offer.wage)} a season until ${ends}.` +
           `${from !== undefined && t.agreedFee > 0 ? ` ${euros(t.agreedFee)} has gone to ${from.name} in compensation.` : ''}`,
       staffId: s.id,
     });
@@ -434,12 +434,12 @@ export function answerStaffApproach(world: World, id: number, accept: boolean): 
     // A man kept from a bigger club, who wanted it, will want more to stay.
     if (suitor.reputation > club.reputation && s.attributes.ambition >= 11) s.unsettled = true;
     return s.unsettled === true
-      ? `You have told ${suitor.name} he is not for sale. ${staffName(s)} is disappointed — he will want more to stay.`
+      ? `You have told ${suitor.name} he is not for sale. ${staffName(s)} is disappointed, he will want more to stay.`
       : `You have told ${suitor.name} that ${staffName(s)} is not for sale.`;
   }
   a.status = 'deciding';
   a.resolvesOn = world.day + world.rng.int(REPLY_DAYS.decision[0], REPLY_DAYS.decision[1]);
-  return `${suitor.name} can talk to ${staffName(s)} — he will decide by the end of the week whether to go.`;
+  return `${suitor.name} can talk to ${staffName(s)}, he will decide by the end of the week whether to go.`;
 }
 
 /** Ask the suitor for more. They answer in a day or two. */
@@ -450,7 +450,7 @@ export function counterStaffApproach(world: World, id: number, fee: number): str
   a.status = 'countered';
   a.counterFee = Math.max(a.fee, Math.round(fee / 1000) * 1000);
   a.resolvesOn = world.day + world.rng.int(REPLY_DAYS.counter[0], REPLY_DAYS.counter[1]);
-  return `You have asked ${suitor.name} for ${euros(a.counterFee)} — they will answer in a day or two.`;
+  return `You have asked ${suitor.name} for ${euros(a.counterFee)}, they will answer in a day or two.`;
 }
 
 /** Whether he wants the move: the rise and the club against what keeps him where he is. */
@@ -513,7 +513,7 @@ function processApproaches(world: World): void {
       postMessage(world, {
         category: 'staff', from: name, staffId: s.id,
         subject: `${name} turns down ${suitor.name}`,
-        body: `${name} has talked to ${suitor.name} and turned them down — he is staying.`,
+        body: `${name} has talked to ${suitor.name} and turned them down, he is staying.`,
       });
     }
   }
@@ -532,7 +532,7 @@ function processApproaches(world: World): void {
     if (fee > suitor.finances.balance) continue;
     const wage = Math.round(Math.max(top.wage, s.wage * world.rng.range(1.15, 1.4)) / 1000) * 1000;
     approach(world, s, suitor, fee, wage,
-      `${suitor.name} have joined the race for ${staffName(s)}, offering ${euros(fee)} in compensation — topping the ${euros(top.fee)} already on the table. ` +
+      `${suitor.name} have joined the race for ${staffName(s)}, offering ${euros(fee)} in compensation, topping the ${euros(top.fee)} already on the table. ` +
       `They would pay him ${euros(wage)} a season.`, `Rival approach for ${staffName(s)}`);
   }
 }
@@ -574,7 +574,7 @@ function listedApproaches(world: World): void {
     const wage = Math.round(Math.max(2_000, s.wage * world.rng.range(1.0, 1.25)) / 1000) * 1000;
     approach(world, s, suitor, fee, wage,
       `${suitor.name} have seen that your ${roleName(s)} ${staffName(s)} is available, and offer ${euros(fee)} in compensation. ` +
-      `They would pay him ${euros(wage)} a season — he is on ${euros(s.wage)} with you.`,
+      `They would pay him ${euros(wage)} a season, he is on ${euros(s.wage)} with you.`,
       `${suitor.name} interested in ${staffName(s)}`);
   }
 }

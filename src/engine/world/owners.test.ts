@@ -13,7 +13,7 @@ function setup(seed: number): { world: World; club: World['clubs'][number] } {
   return { world, club };
 }
 
-test('every club has an owner, the same one until it is sold — big clubs draw the money', () => {
+test('every club has an owner, the same one until it is sold, big clubs draw the money', () => {
   const { world } = setup(141);
   const kinds = new Map<string, number>();
   for (const c of world.clubs) {
@@ -56,7 +56,7 @@ test('the owner\'s wish for the season: set when the manager arrives, judged at 
   assert.ok(world.messages.some((m) => m.subject === 'The owner is disappointed'));
 });
 
-test('asking him for money: an answer in days — yes puts it in, no is final for a while, and more than he has is no', () => {
+test('asking him for money: an answer in days, yes puts it in, no is final for a while, and more than he has is no', () => {
   const { world, club } = setup(143);
   const o = ownerOf(world, club);
   o.wealth = 5; o.ambition = 5; o.goodwill = 95;

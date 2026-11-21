@@ -85,7 +85,7 @@ export function CoursesScreen(): JSX.Element {
               </span>
               <div className="crs-foot">
                 {mine
-                  ? <span className="biz-status">Under way — done {g.dateLabelForDay(career.course!.until)}</span>
+                  ? <span className="biz-status">Under way, done {g.dateLabelForDay(career.course!.until)}</span>
                   : <button className="sm" disabled={block !== null} title={block ?? 'Enrol'} onClick={() => g.startCourse(c.id)}><Icon name="check" size={13} /> Enrol</button>}
                 {block !== null && !mine && <span className="faint crs-why">{block}</span>}
               </div>

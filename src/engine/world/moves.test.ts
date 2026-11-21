@@ -71,7 +71,7 @@ test('a signing agreed with the window shut is paid for now, and he joins when i
   assert.ok(move !== undefined && move.toClubId === club.id);
   assert.equal(move.movesOn, WINTER_OPENS);
   assert.equal(world.players.clubId[p], seller.id, 'he stays where he is until the window opens');
-  assert.equal(club.finances.balance, balance - t.agreedFee - (t.demands.agentFee ?? 0), 'the fee — and the agent\'s — is paid when the deal is done');
+  assert.equal(club.finances.balance, balance - t.agreedFee - (t.demands.agentFee ?? 0), 'the fee, and the agent\'s, is paid when the deal is done');
   assert.ok(world.messages.some((m) => m.subject === `${world.players.fullName(p)} signs` && m.body.includes('window is shut')));
 
   runDays(world, WINTER_OPENS - world.day - 1);

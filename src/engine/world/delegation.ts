@@ -70,7 +70,7 @@ export function handlerName(world: World, handler: Handler): string {
 export function setDelegation(world: World, task: DelegableTask, handler: Handler): string {
   if (!TASK_HANDLERS[task].includes(handler)) return 'Nobody does that job.';
   if (!handlerAvailable(world, handler)) {
-    return handler === 'director' ? 'The club has no Director of Football — hire one on the Staff screen.' : 'The club has no assistant coach to hand it to.';
+    return handler === 'director' ? 'The club has no Director of Football, hire one on the Staff screen.' : 'The club has no assistant coach to hand it to.';
   }
   world.delegation = { ...delegationOf(world), [task]: handler };
   if (handler === 'manager') return `${TASK_NAMES[task]}: back in your hands.`;
@@ -105,7 +105,7 @@ export function delegationDay(world: World): void {
       postMessage(world, {
         category: 'matchday', from: handlerName(world, friendlies),
         subject: `Friendly arranged: ${opp?.name ?? 'a club'}`,
-        body: `I have booked a pre-season friendly ${home ? 'at home to' : 'away at'} ${opp?.name ?? 'a club'} — good practice, at the right level for this time of the summer.`,
+        body: `I have booked a pre-season friendly ${home ? 'at home to' : 'away at'} ${opp?.name ?? 'a club'}, good practice, at the right level for this time of the summer.`,
         clubId: opp?.id,
       });
     }
@@ -145,7 +145,7 @@ export function directorRenewals(world: World): void {
     subject: 'Contracts running out: my plan',
     body: [
       kept.length > 0 ? `I have opened talks to keep ${kept.join(', ')}.` : '',
-      let_go.length > 0 ? `I don't think ${let_go.join(', ')} ${let_go.length === 1 ? 'is' : 'are'} worth a new deal — ${let_go.length === 1 ? 'he leaves' : 'they leave'} on a free in June unless you say otherwise.` : '',
+      let_go.length > 0 ? `I don't think ${let_go.join(', ')} ${let_go.length === 1 ? 'is' : 'are'} worth a new deal, ${let_go.length === 1 ? 'he leaves' : 'they leave'} on a free in June unless you say otherwise.` : '',
     ].filter((l) => l !== '').join(' '),
   });
 }

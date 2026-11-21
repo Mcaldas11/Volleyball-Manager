@@ -248,7 +248,7 @@ export function SquadScreen(): JSX.Element {
             <table className={`data-table athlete-roster-table view-${view}`}>
               <thead>
                 <tr>
-                  <SortTh k="number" sort={sort} onSort={onSort} title="Shirt number — click one to change it">No.</SortTh>
+                  <SortTh k="number" sort={sort} onSort={onSort} title="Shirt number, click one to change it">No.</SortTh>
                   <SortTh k="name" sort={sort} onSort={onSort}>Player</SortTh>
                   <SortTh k="pos" sort={sort} onSort={onSort}>Pos</SortTh>
                   {view === 'sport' && (
@@ -377,7 +377,7 @@ export function SquadScreen(): JSX.Element {
             <div><span>Av Rat</span><RatingBadge value={avgRating(sel)} size="lg" /></div>
           </div>
           <div className="athlete-dossier-actions">
-            <button className="primary athlete-wide" onClick={() => g.select(sel)}>Open full profile <Icon name="arrowRight" size={15} /></button>
+            <button className="primary athlete-wide" data-tour="open-profile" onClick={() => g.select(sel)}>Open full profile <Icon name="arrowRight" size={15} /></button>
             <Dropdown<number>
               value={null}
               placeholder="Compare with…"
@@ -521,7 +521,7 @@ function CareerTimeline({ p }: { p: number }): JSX.Element {
   return (
     <Card title="Career Timeline" icon="career" flush className="timeline-card"
       actions={<span className="faint">{clubs} club{clubs === 1 ? '' : 's'} · {titles} title{titles === 1 ? '' : 's'} · {awards} award{awards === 1 ? '' : 's'}</span>}>
-      {items.length === 0 ? <Empty>Nothing on the record yet — his story starts with his first match.</Empty> : (
+      {items.length === 0 ? <Empty>Nothing on the record yet, his story starts with his first match.</Empty> : (
         <div className="timeline">
           {seasons.map((season) => (
             <section key={season} className="tl-season">
@@ -658,7 +658,7 @@ export function MarketTags({ p, borrowed }: { p: number; borrowed: boolean }): J
       {leaving && (
         <span
           className="role-tag leaving"
-          title={`Agreed to ${move.kind === 'loan' ? 'go on loan to' : 'join'} ${world.clubs[move.toClubId]?.name ?? 'another club'} — leaves ${g.dateLabelForDay(move.movesOn)}`}
+          title={`Agreed to ${move.kind === 'loan' ? 'go on loan to' : 'join'} ${world.clubs[move.toClubId]?.name ?? 'another club'}, leaves ${g.dateLabelForDay(move.movesOn)}`}
         >
           OUT
         </span>
@@ -849,7 +849,7 @@ export function PlayerDetail(): JSX.Element | null {
         <StatTile label="Condition" value={`${store.condition[p]}%`} sub={<Bar value={store.condition[p]} wide />} />
         <StatTile label="Morale" value={<Morale value={store.morale[p]} />} sub={<Bar value={store.morale[p]} wide />} />
         <StatTile label="Status" value={<Status store={store} i={p} />}
-          sub={g.atRisk(p) ? <span className="warn-text">rushed back — may break down</span> : undefined} />
+          sub={g.atRisk(p) ? <span className="warn-text">rushed back, may break down</span> : undefined} />
         <StatTile
           label="Average rating"
           value={<RatingBadge value={averageRating(season)} size="lg" />}
@@ -940,7 +940,7 @@ export function PlayerDetail(): JSX.Element | null {
               {(elsewhere || (managing && club === null && store.isActive(p))) && move === null && transferTalks?.preContract !== true && (
                 <button
                   className={elsewhere && expiring ? undefined : 'primary'}
-                  title={joinsLater ? `The window is shut — agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(p))}` : undefined}
+                  title={joinsLater ? `The window is shut, agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(p))}` : undefined}
                   onClick={() => g.startNegotiation(p)}
                 >
                   <Icon name="transfers" size={14} />
@@ -951,7 +951,7 @@ export function PlayerDetail(): JSX.Element | null {
                 <button
                   disabled={!g.canBorrow(p) && loanTalks === null}
                   title={!g.canBorrow(p) ? 'Not available for loan right now'
-                    : joinsLater ? `The window is shut — a loan agreed now starts on ${g.dateLabelForDay(g.joinDay(p))}`
+                    : joinsLater ? `The window is shut, a loan agreed now starts on ${g.dateLabelForDay(g.joinDay(p))}`
                       : 'Borrow him until the end of the season'}
                   onClick={() => g.startLoanRequest(p)}
                 >
@@ -987,7 +987,7 @@ export function PlayerDetail(): JSX.Element | null {
           )}
           <CompareMenu p={p} />
           {store.isActive(p) && g.matchday === null && (
-            <button onClick={() => g.editPlayer(p)} title="Change his club, name, age, position or any attribute in the editor — an edited career earns no achievements">
+            <button onClick={() => g.editPlayer(p)} title="Change his club, name, age, position or any attribute in the editor, an edited career earns no achievements">
               <Icon name="pencil" size={14} /> Edit
             </button>
           )}
@@ -1036,7 +1036,7 @@ export function PlayerDetail(): JSX.Element | null {
             actions={(
               <span
                 className="attr-hidden-hint"
-                title="Hidden attributes — injury proneness, consistency, big-match performance, loyalty, ambition and the rest — are never shown as numbers. They are inferred from scout reports and from how the player actually behaves."
+                title="Hidden attributes, injury proneness, consistency, big-match performance, loyalty, ambition and the rest, are never shown as numbers. They are inferred from scout reports and from how the player actually behaves."
               >
                 <Icon name="help" size={13} /> Hidden attributes
               </span>
@@ -1139,7 +1139,7 @@ export function PlayerDetail(): JSX.Element | null {
             {isOwn && g.preContractOf(p) !== undefined && (
               <KV k="Summer move">
                 <span className="warn-text">
-                  {world.clubs[g.preContractOf(p)!.clubId]?.name} have offered him a contract from July — renew him, or he goes.
+                  {world.clubs[g.preContractOf(p)!.clubId]?.name} have offered him a contract from July, renew him, or he goes.
                 </span>
               </KV>
             )}
@@ -1324,10 +1324,10 @@ export function YouthScreen(): JSX.Element {
     const loans = block === null ? g.academyLoanOffers(p) : [];
     const loan: Array<DropOption<number>> = loans.length > 0
       ? loans.map((o) => ({
-        value: LOAN_BASE + o.clubId, group: 'Loan to — senior games, to the end of the season',
+        value: LOAN_BASE + o.clubId, group: 'Loan to, senior games, to the end of the season',
         label: world.clubs[o.clubId]?.name ?? '?', icon: crest(o.clubId), hint: PLAYING_TIME_NAMES[o.playingTime],
       }))
-      : [{ value: NO_LOAN, group: 'Loan to — senior games, to the end of the season', label: block ?? 'No club can promise him games', disabled: true }];
+      : [{ value: NO_LOAN, group: 'Loan to, senior games, to the end of the season', label: block ?? 'No club can promise him games', disabled: true }];
     return [...sell, ...loan, { value: RELEASE, group: 'Let him go', label: 'Release from the academy' }];
   };
   const stats = world.youth?.stats;
@@ -1363,12 +1363,12 @@ export function YouthScreen(): JSX.Element {
         <span className="faint">
           {tab === 'players'
             ? 'A new intake arrives each summer. Who plays for the U19s gets the minutes that make training stick.'
-            : tab === 'plans' ? 'The path each prospect is on — and the head of youth seeing it through.'
-            : tab === 'development' ? 'Money and weeks put into one prospect at a time — no promise of a star.'
+            : tab === 'plans' ? 'The path each prospect is on, and the head of youth seeing it through.'
+            : tab === 'development' ? 'Money and weeks put into one prospect at a time, no promise of a star.'
             : tab === 'recruitment' ? "The scouts paid to find youngsters in other clubs' academies."
-            : tab === 'facilities' ? 'What the academy is built on — asked of the board.'
-            : tab === 'intl' ? "Your young players and their countries' U19 and U21 sides — call-ups, caps and a word in the coach's ear."
-            : "Your academy side against the other clubs' — a round every week from late August."}
+            : tab === 'facilities' ? 'What the academy is built on, asked of the board.'
+            : tab === 'intl' ? "Your young players and their countries' U19 and U21 sides, call-ups, caps and a word in the coach's ear."
+            : "Your academy side against the other clubs', a round every week from late August."}
         </span>
       </div>
 
@@ -1464,7 +1464,7 @@ export function YouthScreen(): JSX.Element {
 
       {tab === 'players' && lent.length > 0 && (
         <Card title="On Loan" icon="transfers" flush className="academy-card academy-loans"
-          actions={<span className="faint">Senior games elsewhere — back in the academy in the summer</span>}>
+          actions={<span className="faint">Senior games elsewhere, back in the academy in the summer</span>}>
           <div className="table-wrap">
             <table className="data-table">
               <thead>
@@ -1591,7 +1591,7 @@ function YouthLeagueView({ league }: { league: YouthLeague }): JSX.Element {
       <div className="stack academy-side">
         <Card title="Results" icon="ball" flush className="academy-card">
           {results.length === 0
-            ? <Empty>No matches played yet — the first round is in late August.</Empty>
+            ? <Empty>No matches played yet, the first round is in late August.</Empty>
             : (
               <div className="academy-results">
                 {results.map((r) => {
@@ -1639,7 +1639,7 @@ function InterestedClubs({ p }: { p: number }): JSX.Element {
   const why = { bid: 'bid', loan: 'loan offer', rumour: 'in the papers', watching: 'keeping tabs' } as const;
   return (
     <KV k="Interested clubs">
-      {list.length === 0 ? <span className="faint">{retiring ? 'None — he is retiring' : 'None that we know of'}</span> : (
+      {list.length === 0 ? <span className="faint">{retiring ? 'None, he is retiring' : 'None that we know of'}</span> : (
         <span className="interest-list">
           {list.map((i) => (
             <span key={i.clubId} className={`interest-tag ${i.why}`}>

@@ -14,7 +14,7 @@ import { stubManager } from '../world/world.ts';
  * that loses most. The manager's edge has to come from fitting the tactic to
  * the players, not from one setting the other coaches never found.
  */
-test('no single tactical choice wins — or loses — most matches between equal sides', () => {
+test('no single tactical choice wins, or loses, most matches between equal sides', () => {
   const world = generateWorld({ seed: 4243, startYear: 2026, scale: 'small', manager: stubManager() });
   const store = world.players;
   const top = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12).sort((a, b) => b.reputation - a.reputation);

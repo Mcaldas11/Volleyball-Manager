@@ -36,7 +36,7 @@ test('a free ball is no attack, and a setter dump is his own: the box score coun
         if (c.kind === 'attack' && c.shot === 'recycle') swings++;
       }
       const counted = [...team.players.values()].reduce((n, s) => n + s.attacksTotal, 0);
-      assert.equal(counted, swings, 'every attack in the log is in the box score — free balls are not');
+      assert.equal(counted, swings, 'every attack in the log is in the box score, free balls are not');
       assert.ok(dumps <= swings);
     }
   }

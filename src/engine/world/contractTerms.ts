@@ -225,7 +225,7 @@ export function takeUpOption(world: World, p: number): { ok: boolean; text: stri
   const restless = store.morale[p] < 45 || world.transferRequests?.[p] !== undefined;
   if (restless) store.morale[p] = Math.max(0, store.morale[p] - 6);
   const text = `The club has taken up the option in ${name}'s contract: he stays on the same terms until 30 June ${seasonEndYear(world, world.season + 1)}.` +
-    (restless ? ' He is not pleased — he had hoped to be free to go.' : '');
+    (restless ? ' He is not pleased, he had hoped to be free to go.' : '');
   postMessage(world, { category: 'contract', from: 'Director of Football', playerIdx: p, subject: `Option taken up: ${name}`, body: text });
   return { ok: true, text };
 }

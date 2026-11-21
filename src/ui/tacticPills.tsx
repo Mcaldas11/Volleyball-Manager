@@ -64,10 +64,10 @@ export function TacticPills({ tactics: t, national = false, chemistry = null }: 
             </div>
           ))}
           <p>
-            Learnt in training — a tactical session or a day's preparation the most — and by playing it. Changing an
+            Learnt in training, a tactical session or a day's preparation the most, and by playing it. Changing an
             instruction costs familiarity in its part, the more the bigger the change. Not knowing it, the side sets,
             blocks, digs, passes and serves a little worse.
-            {national && ' A national side learns it a little every day — keep the same system from one window to the next.'}
+            {national && ' A national side learns it a little every day, keep the same system from one window to the next.'}
           </p>
         </div>
       </div>
@@ -80,7 +80,7 @@ export function TacticPills({ tactics: t, national = false, chemistry = null }: 
             <span style={{ color: intensityColor(intensity) }}>{intensityLabel(intensity)} · {toll > 0 ? '+' : ''}{toll}% fatigue</span>
           </div>
           <p>
-            How hard the tactic works the players — the tempo most, then the defence, the offence, the combinations
+            How hard the tactic works the players, the tempo most, then the defence, the offence, the combinations
             and the serve. {toll === 0 ? 'They tire as fast as usual.' : `In a match they tire ${Math.abs(toll)}% ${toll > 0 ? 'faster' : 'slower'} than with the usual tactic.`}
           </p>
         </div>
@@ -111,18 +111,18 @@ export function ChemistryPill({ value, national }: { value: number; national: bo
         </div>
         {national ? (
           <p>
-            A national side builds it in bursts: every day the squad is together for a tournament — the week before it
-            and every day of it — and most of all every match a setter and a hitter share on court. Club-mates bring
+            A national side builds it in bursts: every day the squad is together for a tournament, the week before it
+            and every day of it, and most of all every match a setter and a hitter share on court. Club-mates bring
             their club's understanding with them, and players with many caps start ahead. Between windows it hardly
             fades, so calling up the same core year after year keeps what they built.
           </p>
         ) : (
           <p>
             Grows with every match a setter and a hitter play together, fast at first. It eases a little over the
-            summer and is gone when one of them leaves — keeping the spine of the side together pays.
+            summer and is gone when one of them leaves, keeping the spine of the side together pays.
           </p>
         )}
-        <p className="dim">The better they know each other, the more sets arrive on time — the quick most of all.</p>
+        <p className="dim">The better they know each other, the more sets arrive on time, the quick most of all.</p>
       </div>
     </div>
   );

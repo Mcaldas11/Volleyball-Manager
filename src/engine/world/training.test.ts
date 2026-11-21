@@ -45,7 +45,7 @@ test('the week is laid out around the match: preparation the day before, recover
   assert.ok(days.some((d) => d.session === 'rest' || d.session === 'recovery'));
 });
 
-test('a day set by hand keeps its session — except a match day — and the week\'s focus decides the rest', () => {
+test('a day set by hand keeps its session, except a match day, and the week\'s focus decides the rest', () => {
   const world = hired(603);
   const club = world.clubs[world.userClubId];
   const plan = planOf(club);
@@ -83,7 +83,7 @@ test('the assistant works each player on the weakest part of his game, and rests
   const extra = weekEffect(world, club, setter);
   plan.individual[setter] = { focus: 'physical', load: 'reduced' };
   const reduced = weekEffect(world, club, setter);
-  assert.ok(extra.dev > reduced.dev && extra.injury > reduced.injury, 'more work, more to gain — and to lose');
+  assert.ok(extra.dev > reduced.dev && extra.injury > reduced.injury, 'more work, more to gain, and to lose');
 });
 
 test('a training day costs condition, a rest day gives it back', () => {

@@ -22,7 +22,7 @@ function squad(seed: number): { world: World; club: World['clubs'][number]; youn
   return { world, club, young, old: club.players.filter((p) => age(p) >= 28) };
 }
 
-test('a veteran takes young players under his wing — two at most, at his own club', () => {
+test('a veteran takes young players under his wing, two at most, at his own club', () => {
   const { world, young, old } = squad(111);
   assert.match(mentorBlock(world, young[0], old[0])!, /23 and under/);
   assert.match(mentorBlock(world, young[1], young[0])!, /28 or over/);
@@ -42,7 +42,7 @@ test('a veteran takes young players under his wing — two at most, at his own c
   assert.equal(mentorOf(world, young[0]), null);
 });
 
-test('a mentored young player comes on quicker — most with a mentor of his own position', () => {
+test('a mentored young player comes on quicker, most with a mentor of his own position', () => {
   // The one with the most room to grow, over most of a season.
   const run = (mentored: boolean, seed: number): number => {
     const { world, young, old } = squad(seed);
@@ -75,7 +75,7 @@ test('a mentored young player comes on quicker — most with a mentor of his own
   }
 });
 
-test('something of the mentor rubs off — a trait now and then — and it ends when one of them goes', () => {
+test('something of the mentor rubs off, a trait now and then, and it ends when one of them goes', () => {
   const { world, club, young, old } = squad(114);
   const store = world.players;
   // A libero-to-libero or outside-to-outside pairing that can pass on "digs everything".

@@ -49,7 +49,7 @@ test('a derby: the scouts call it one, the papers and the fans make it one', () 
   while (!derby.played) advanceDay(world, ctx, { detailedClubs: new Set([club.id]) });
 
   const opp = world.clubs[derby.home === club.id ? derby.away : derby.home];
-  assert.ok(world.messages.some((m) => m.subject === `Scouting report: ${opp.name} — derby` && m.body.includes(rivalryName(world, derby)!)));
+  assert.ok(world.messages.some((m) => m.subject === `Scouting report: ${opp.name}, derby` && m.body.includes(rivalryName(world, derby)!)));
   const story = world.news.find((n) => n.fans?.story === 'derby' && (n.clubId === club.id || n.otherClubId === club.id));
   assert.ok(story !== undefined, 'the paper calls it the derby');
   assert.ok(story.body.includes(rivalryName(world, derby)!));

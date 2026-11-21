@@ -64,7 +64,7 @@ test('the assistant says it is too early on a few points, and holds when nothing
   for (const f of full.findings) assert.ok(f.title.length > 0 && f.detail.length > 0);
 });
 
-test('a weak passer on the other side is found, and serving at him is offered — not offered once it is the plan', () => {
+test('a weak passer on the other side is found, and serving at him is offered, not offered once it is the plan', () => {
   // Read the away side's passing over several matches, from the home side's point of view.
   const rs = play([4, 5, 6, 7]);
   const ours = rs.reduce((s, r) => mergeStats(s, playStats(r.log!, 0)), emptyStats());
@@ -83,7 +83,7 @@ test('a weak passer on the other side is found, and serving at him is offered �
   assert.equal(again.findings.find((x) => x.id === 'serve-weakest'), undefined, 'already the plan');
 });
 
-test('serving safer is advised only for a serve that is truly wild — the engine rewards pressure', () => {
+test('serving safer is advised only for a serve that is truly wild, the engine rewards pressure', () => {
   const rs = play([8, 9]);
   const s = rs.reduce((acc, r) => mergeStats(acc, playStats(r.log!, 0)), emptyStats());
   const t = { ...toTeamSetup(world.players, A).tactics, serve: ServeStrategy.Risky };

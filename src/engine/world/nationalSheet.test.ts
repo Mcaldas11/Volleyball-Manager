@@ -6,7 +6,7 @@ import { nationSetup, suggestSquad, type Tournament } from './internationals.ts'
 import { generateWorld } from './worldGen.ts';
 import { stubManager } from './world.ts';
 
-test("a national team plays to its own instructions and team sheet — not its coach's club's", () => {
+test("a national team plays to its own instructions and team sheet, not its coach's club's", () => {
   const world = generateWorld({ seed: 91, startYear: 2026, scale: 'small', manager: stubManager() });
   const store = world.players;
   const team = world.nationalTeams.find((t) => suggestSquad(world, t.nation).length >= 14)!;

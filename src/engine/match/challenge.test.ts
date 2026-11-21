@@ -14,7 +14,7 @@ function sim(seed: number): MatchSimulator {
   });
 }
 
-test('a video challenge on what looked close: a wrong call is turned over — the point, the serve and the box score — and the challenge kept', () => {
+test('a video challenge on what looked close: a wrong call is turned over, the point, the serve and the box score, and the challenge kept', () => {
   let overturned = 0;
   let upheld = 0;
   for (const seed of [1, 2, 3, 4, 5, 6]) {
@@ -79,7 +79,7 @@ test('the video only turns over what it is asked about: the wrong question loses
       if (a.overturned === true) break;
     }
   }
-  assert.ok(missed > 0, 'some of those calls were wrong — and only the right question turned them over');
+  assert.ok(missed > 0, 'some of those calls were wrong, and only the right question turned them over');
 });
 
 test('a side can only challenge a point it lost, and has two a set', () => {

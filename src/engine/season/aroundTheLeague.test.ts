@@ -32,7 +32,7 @@ test('the table as it stands: a set lead counted as the win it would be', () => 
   assert.equal(fourth.points, 9);
 });
 
-test('at kick-off the rest of the round is played, the table kept as it stood — and the day does not play it twice', () => {
+test('at kick-off the rest of the round is played, the table kept as it stood, and the day does not play it twice', () => {
   const world = generateWorld({ seed: 12, startYear: 2026, scale: 'small', manager: stubManager() });
   const ctx = newSeasonContext();
   startSeason(world, ctx);

@@ -80,7 +80,7 @@ export function planDeadline(world: World): DeadlinePlan {
       if (s === undefined) continue;
       events.push({
         at: at(10 * 60, 21 * 60, store.id[p] + world.day), kind: 'rumour', p, clubId: s.id,
-        text: `${s.name} are said to be weighing a late move for ${store.fullName(p)} — one of your shortlist`,
+        text: `${s.name} are said to be weighing a late move for ${store.fullName(p)}, one of your shortlist`,
       });
     }
     const best = [...club.players].filter((p) => !store.hasFlag(p, PlayerFlag.Youth))
@@ -104,7 +104,7 @@ export function planDeadline(world: World): DeadlinePlan {
     (p: number, c: string): string => `${c} make a late enquiry for ${store.fullName(p)}`,
     (p: number, c: string): string => `${c} have a bid for ${store.fullName(p)} turned down`,
     (p: number, c: string): string => `Talks under way: ${store.fullName(p)} could be on his way to ${c}`,
-    (p: number, c: string): string => `${store.fullName(p)} spotted at ${c}'s training centre — a medical?`,
+    (p: number, c: string): string => `${store.fullName(p)} spotted at ${c}'s training centre, a medical?`,
     (p: number, c: string): string => `${c} deny any interest in ${store.fullName(p)}`,
     (p: number, c: string): string => `${store.fullName(p)}'s agent seen arriving at ${c}`,
   ];

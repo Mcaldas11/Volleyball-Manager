@@ -135,9 +135,9 @@ export function highlightAwards(world: World, competitionId: number, month: stri
       category: 'awards',
       from: comp.name,
       clubId: (top.starTeam === 0 ? top.home : top.away),
-      subject: `${label}: ${world.players.shortName(top.star)}${ours ? ' — one of yours' : ''}`,
+      subject: `${label}: ${world.players.shortName(top.star)}${ours ? ', one of yours' : ''}`,
       body: `The ${comp.name} ${label} for ${month} goes to ${creditOf(world, top)}, for ${describeHighlight(world, top)}.` +
-        (list.length > 1 ? ' Here is the shortlist — every one of them there to watch again.' : ' Watch it again below.'),
+        (list.length > 1 ? ' Here is the shortlist, every one of them there to watch again.' : ' Watch it again below.'),
       playerIdx: top.star,
       award: { kind, competitionId, month, highlights: list },
     });
@@ -157,10 +157,10 @@ export function playerOfMonthMessage(world: World, competitionId: number, month:
     category: 'awards',
     from: comp.name,
     clubId: top.clubId,
-    subject: `Player of the Month: ${world.players.shortName(top.p)}${ours ? ' — one of yours' : ''}`,
+    subject: `Player of the Month: ${world.players.shortName(top.p)}${ours ? ', one of yours' : ''}`,
     body: `${world.players.fullName(top.p)}${club !== undefined ? ` of ${club.name}` : ''} is the ${comp.name} Player of the ` +
       `Month for ${month}: ${top.points} points in ${top.apps} matches at an average rating of ${top.avg.toFixed(2)}.` +
-      (ours ? ' A fine month — and the dressing room knows it.' : ''),
+      (ours ? ' A fine month, and the dressing room knows it.' : ''),
     playerIdx: top.p,
     award: { kind: 'player', competitionId, month, players: lines },
   });

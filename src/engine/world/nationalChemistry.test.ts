@@ -71,7 +71,7 @@ test('a stable squad reaches a good understanding within a season or two of wind
   summerNationalChemistry(w);
   window(w, nation, squad, setter, hitter, 12, 5);
   const two = nationalChemistryOf(w, nation, setter, hitter);
-  assert.ok(two >= 0.45, `after two seasons ${two} — good`);
+  assert.ok(two >= 0.45, `after two seasons ${two}, good`);
 
   // A big one: the Nations League and a major run to the final every year.
   const v = world();
@@ -81,7 +81,7 @@ test('a stable squad reaches a good understanding within a season or two of wind
   window(v, pair.nation, pair.squad, pair.setter, pair.hitter, 21, 10);
   window(v, pair.nation, pair.squad, pair.setter, pair.hitter, 18, 7);
   const season = nationalChemistryOf(v, pair.nation, pair.setter, pair.hitter);
-  assert.ok(season >= 0.6 && season < 0.8, `after a full season ${season} — strong, not yet telepathic`);
+  assert.ok(season >= 0.6 && season < 0.8, `after a full season ${season}, strong, not yet telepathic`);
 });
 
 test("what is built for the country stays the country's: club chemistry is untouched, and another nation's is apart", () => {
@@ -95,7 +95,7 @@ test("what is built for the country stays the country's: club chemistry is untou
   assert.equal(w.nationalChemistry!.has(nationalChemKey(nation + 1, setter, hitter)), false);
 });
 
-test('between windows a national pair keeps most of it — whatever clubs they move to — and a retired one is forgotten', () => {
+test('between windows a national pair keeps most of it, whatever clubs they move to, and a retired one is forgotten', () => {
   const w = world();
   const store = w.players;
   const { nation, squad, setter, hitter } = squadPair(w);

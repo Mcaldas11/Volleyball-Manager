@@ -52,7 +52,7 @@ test('a friendly: arranged on a free date in the national months, three a season
   assert.match(tooMany.text, new RegExp(`${MAX_FRIENDLIES} friendlies`));
 });
 
-test('the provisional squad: up to 25 in the frame, the assistant\'s fourteen from them first — and they hear how they stand', () => {
+test('the provisional squad: up to 25 in the frame, the assistant\'s fourteen from them first, and they hear how they stand', () => {
   const { world, nation } = setup(182);
   const pool = eligibleFor(world, nation).sort((a, b) => selectionScore(world, a) - selectionScore(world, b));
   // The weakest few in the frame: they make the assistant's fourteen.

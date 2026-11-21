@@ -21,7 +21,7 @@ function january(seed: number): { world: World; club: World['clubs'][number]; ct
   return { world, club, ctx };
 }
 
-test('in January the players who will stop say so — in the paper, on their profiles, and to the manager when they are his', () => {
+test('in January the players who will stop say so, in the paper, on their profiles, and to the manager when they are his', () => {
   const { world, club } = january(401);
   const store = world.players;
   // A veteran of the manager's, at the very end.
@@ -71,7 +71,7 @@ test('talked round, a player plays on another season; the rest go as the season 
   if (going.length > 0) assert.ok(world.news.some((n) => n.kind === 'retirement' && n.headline.endsWith('retires') && n.playerIdx === going[0]));
 });
 
-test('asked onto the staff, a retiring player becomes a coach as he stops — what he did on court is what he teaches', () => {
+test('asked onto the staff, a retiring player becomes a coach as he stops, what he did on court is what he teaches', () => {
   const { world, club, ctx } = january(403);
   const store = world.players;
   for (const s of backroomOf(world, club).filter((x) => x.role === StaffRole.AssistantCoach)) releaseStaff(world, club, s);
@@ -118,7 +118,7 @@ test("a player's profile names the clubs after him: who has bid, and who is keep
   assert.ok(interestedClubs(world, best).some((i) => i.why === 'watching'));
 });
 
-test('volleyball careers run long: a new world has its forty-somethings, the oldest about 43 — one who wants to go on usually does, and the odd one goes on near 50', () => {
+test('volleyball careers run long: a new world has its forty-somethings, the oldest about 43, one who wants to go on usually does, and the odd one goes on near 50', () => {
   const world = generateWorld({ seed: 405, startYear: 2026, scale: 'small', manager: stubManager() });
   const store = world.players;
   const ages: number[] = [];

@@ -206,7 +206,7 @@ function cmdCareer(args: string[]): void {
 
 function usage(): void {
   console.log(`
-${BOLD}Volleyball Manager${RESET} — simulation CLI
+${BOLD}Volleyball Manager${RESET}, simulation CLI
 
   ${BOLD}calibrate${RESET} [matches]         Check engine output against real volleyball statistics
   ${BOLD}world${RESET} [small|standard|large]  Generate a world and report its shape

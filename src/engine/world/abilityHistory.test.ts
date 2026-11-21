@@ -6,7 +6,7 @@ import { abilityTimeline, HISTORY_SEASONS, recordAbilities } from './abilityHist
 import { generateWorld } from './worldGen.ts';
 import { stubManager } from './world.ts';
 
-test('every player\'s ability is kept as each season closes — the last twenty — and charted with now', () => {
+test('every player\'s ability is kept as each season closes, the last twenty, and charted with now', () => {
   const world = generateWorld({ seed: 131, startYear: 2026, scale: 'small', manager: stubManager() });
   const ctx = newSeasonContext();
   startSeason(world, ctx);

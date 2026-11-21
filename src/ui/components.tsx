@@ -72,6 +72,12 @@ export function useListPages<T>(
  * of at least `rowPx` (the tightest are 28px, in panels a good 200px shorter than the window),
  * and no more — every row drawn is time before the screen shows.
  */
+/** A whole number as the screens write it ("12,345"), from one formatter made once: `toLocaleString` builds one a call. */
+const INT_FORMAT = new Intl.NumberFormat();
+export function formatInt(n: number): string {
+  return INT_FORMAT.format(n);
+}
+
 export function listPage(rowPx = 30): number {
   return Math.max(12, Math.ceil((typeof window === 'undefined' ? 800 : window.innerHeight) / rowPx));
 }
@@ -96,7 +102,7 @@ function ListMore({ onNear, colSpan }: { onNear: () => void; colSpan?: number })
       timer = window.setTimeout(() => {
         io = new IntersectionObserver((seen) => {
           if (seen.some((e) => e.isIntersecting)) near.current();
-        }, { root: scrollParent(el), rootMargin: '600px 0px' });
+        }, { root: scrollParent(el), rootMargin: '300px 0px' });
         io.observe(el);
       }, 0);
     });

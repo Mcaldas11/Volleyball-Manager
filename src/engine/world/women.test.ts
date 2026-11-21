@@ -11,7 +11,7 @@ import { stubManager, type World } from './world.ts';
 
 const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / Math.max(1, xs.length);
 
-test('every naming tradition has its women\'s names — and surnames take the feminine form where the language does', () => {
+test('every naming tradition has its women\'s names, and surnames take the feminine form where the language does', () => {
   for (const group of Object.keys(NAME_BANKS)) {
     const women = bankFor(group, true);
     assert.ok(women.first.length >= 15, group);

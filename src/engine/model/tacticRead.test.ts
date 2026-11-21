@@ -18,7 +18,7 @@ test('a new tactic gives nothing away; one played for most of a season starts to
   assert.ok(Math.abs(exposure(watched(10), t) - 10) < 1e-9, 'exposure counts matches watched');
 });
 
-test('each instruction changed is new to them — a few tweaks throw them, the rest they still know', () => {
+test('each instruction changed is new to them, a few tweaks throw them, the rest they still know', () => {
   const t = defaultTactics();
   const read = watched(45, t);
   const before = readLevel(read, t);
@@ -48,7 +48,7 @@ test('what is no longer played fades from memory', () => {
   assert.ok(exposure(read, t) < exposure(watched(75, t), t), 'so going back to it is part new again');
 });
 
-test('the assistant names what they know best — the heaviest parts of the plan first', () => {
+test('the assistant names what they know best, the heaviest parts of the plan first', () => {
   const t = defaultTactics();
   assert.deepEqual(bestKnown(undefined, t), []);
   assert.deepEqual(bestKnown(watched(5, t), t), ['offence', 'system', 'defence']);

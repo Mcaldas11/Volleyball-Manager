@@ -59,7 +59,7 @@ export function reviewMatch(world: World, team: TeamMatchStats, sets: number, ne
   }
   const worst = hitters[hitters.length - 1];
   if (worst !== undefined && worst !== best && attackEff(worst) < 0.12) {
-    failed.push(`${name(worst.playerIdx)} struggled in attack — ${pct(attackEff(worst))} efficiency, ${worst.attackErrors + worst.attackBlocked} errors and blocks.`);
+    failed.push(`${name(worst.playerIdx)} struggled in attack, ${pct(attackEff(worst))} efficiency, ${worst.attackErrors + worst.attackBlocked} errors and blocks.`);
     change.push(`Fewer sets to ${name(worst.playerIdx)} next time, or a fresh pair of legs from the bench.`);
   }
   // Passing.
@@ -68,7 +68,7 @@ export function reviewMatch(world: World, team: TeamMatchStats, sets: number, ne
     if (passing >= 0.55) worked.push(`The passing held up: ${pct(passing)} good passes gave the setter options.`);
     else if (passing < 0.42) {
       failed.push(`Our reception broke down: only ${pct(passing)} good passes.`);
-      change.push('Work on reception in training this week — and think about a defensive libero or a steadier passer in the six.');
+      change.push('Work on reception in training this week, and think about a defensive libero or a steadier passer in the six.');
     }
   }
   // Serving.
@@ -76,7 +76,7 @@ export function reviewMatch(world: World, team: TeamMatchStats, sets: number, ne
   if (all.serveAces >= Math.max(4, sets * 1.3)) worked.push(`The serve hurt them: ${all.serveAces} aces.`);
   if (serveErr >= 0.18 && all.servesTotal >= 20) {
     failed.push(`We gave too much away from the line: ${all.serveErrors} service errors (${pct(serveErr)} of our serves).`);
-    change.push('Take a little off the serve — safer targets, fewer free points.');
+    change.push('Take a little off the serve, safer targets, fewer free points.');
   }
   // The block.
   if (all.blockPoints >= Math.max(6, sets * 2.4)) worked.push(`The block was a wall: ${all.blockPoints} stuff blocks.`);
@@ -90,16 +90,16 @@ export function reviewMatch(world: World, team: TeamMatchStats, sets: number, ne
     if (top.sideOut >= 0.68) worked.push(`Rotation P${top.i + 1} sided out ${pct(top.sideOut)} of the time.`);
     if (low.sideOut < 0.5) {
       failed.push(`Rotation P${low.i + 1} got stuck: ${pct(low.sideOut)} side-out.`);
-      change.push(`Look at P${low.i + 1} in the Rotations screen — a different first-choice attacker there, or a different starting rotation to spend less time in it.`);
+      change.push(`Look at P${low.i + 1} in the Rotations screen, a different first-choice attacker there, or a different starting rotation to spend less time in it.`);
     }
   }
   if (next !== null) {
     change.push(next.threat !== null
-      ? `Next up is ${next.name}. Watch ${next.threat} — their main threat this season.`
+      ? `Next up is ${next.name}. Watch ${next.threat}, their main threat this season.`
       : `Next up is ${next.name}.`);
   }
   if (worked.length === 0) worked.push('Not much, if I am honest. We have to be better.');
-  if (failed.length === 0) failed.push('Nothing glaring — a solid, all-round performance.');
+  if (failed.length === 0) failed.push('Nothing glaring, a solid, all-round performance.');
   if (change.length === 0) change.push('Keep the same plan. It is working.');
   return { worked, failed, change };
 }

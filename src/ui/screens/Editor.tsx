@@ -251,7 +251,7 @@ function KitDesigner({ club }: { club: Club }): JSX.Element {
       <div className="ed-kit">
         <div className="ed-kit-controls">
           <label className="ed-colour ed-hue">
-            <span>Club colour <small>— the crest, the club's pages, the kit if not designed</small></span>
+            <span>Club colour <small>the crest, the club's pages, the kit if not designed</small></span>
             <input type="range" min={0} max={359} value={Math.round(hueOf(club))}
               onChange={(e) => {
                 const hue = Number(e.target.value);
@@ -442,8 +442,8 @@ export function EditorScreen(): JSX.Element {
         {world.edited === true
           ? 'This career has been edited: it earns no achievements.'
           : tab === 'kits' || tab === 'logos'
-            ? 'Changes are made at once, to this career only — new colours keep its achievements.'
-            : 'Changes are made at once, to this career only — and an edited career earns no achievements (kits and crests excepted).'}
+            ? 'Changes are made at once, to this career only, new colours keep its achievements.'
+            : 'Changes are made at once, to this career only, and an edited career earns no achievements (kits and crests excepted).'}
       </p>
       {tab === 'clubs' && club !== undefined && <ClubEditor key={club.id} club={club} />}
       {tab === 'kits' && club !== undefined && <KitDesigner key={club.id} club={club} />}

@@ -38,7 +38,7 @@ test('a line of two stands between the spots, three on them, four spread across 
   }
 });
 
-test('left to himself, a server mostly serves from behind zone 1, some from 6 and a few from 5 — always the same man the same', () => {
+test('left to himself, a server mostly serves from behind zone 1, some from 6 and a few from 5, always the same man the same', () => {
   const zones = Array.from({ length: 400 }, (_, p) => usualZone(p));
   const share = (z: number): number => zones.filter((x) => x === z).length / zones.length;
   assert.ok(share(1) > 0.45 && share(6) > 0.15 && share(5) > 0.08, `1 ${share(1)}, 6 ${share(6)}, 5 ${share(5)}`);
@@ -75,7 +75,7 @@ test('a server serves as he was told: every home serve a jump float when the coa
   assert.ok(serves.every((c) => c.speed === undefined || (c.speed > 50 && c.speed < 100)), 'at a float\'s pace');
 });
 
-test('a line told to take the float overhead does so — and only against a float', () => {
+test('a line told to take the float overhead does so, and only against a float', () => {
   const log = match((a) => {
     a.tactics = { ...a.tactics, receive: { ...defaultReceivePlans(), float: { ...receivePreset('close'), overhead: true } } };
   }, 400);

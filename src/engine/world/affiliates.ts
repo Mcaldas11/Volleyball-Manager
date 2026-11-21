@@ -56,7 +56,7 @@ export function proposeAffiliation(world: World, club: Club, target: Club): stri
   const block = proposalBlock(world, club, target);
   if (block !== null) return block;
   (world.affiliateTalks ??= []).push({ clubId: target.id, resolvesOn: world.day + world.rng.int(ANSWER_DAYS[0], ANSWER_DAYS[1]) });
-  return `Your proposal is with ${target.name} — they will answer within the week.`;
+  return `Your proposal is with ${target.name}, they will answer within the week.`;
 }
 
 /** End an affiliation. */

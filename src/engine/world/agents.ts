@@ -109,7 +109,7 @@ export function agentPitch(world: World): number | null {
   const prof = agentProfile(world, p);
   const where = store.clubId[p] < 0 ? 'He is a free agent: no fee.'
     : contractEndSeason(store.contractUntil[p]) <= world.season
-      ? `His contract at ${world.clubs[store.clubId[p]]?.name} runs out on 30 June ${seasonEndYear(world, world.season)} — his club would take a small fee now, or he comes for nothing in the summer.`
+      ? `His contract at ${world.clubs[store.clubId[p]]?.name} runs out on 30 June ${seasonEndYear(world, world.season)}, his club would take a small fee now, or he comes for nothing in the summer.`
       : `He wants out of ${world.clubs[store.clubId[p]]?.name}, and they would listen to offers.`;
   const temper = prof.style === 'hardball' ? 'I won\'t pretend he comes cheap.' : prof.style === 'easy' ? 'We are not looking to hold anyone to ransom.' : 'We can find terms that work for everyone.';
   postMessage(world, {

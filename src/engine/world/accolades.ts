@@ -315,7 +315,7 @@ function announce(world: World, night: AwardsNight, from: string, name: string):
   const body = [
     player !== undefined ? `${nomineeName(world, player)} is the ${kind}Player of the Year.` : '',
     you ? `And the ${kind}Coach of the Year is you.`
-      : coach !== undefined ? `${nomineeName(world, coach)} is the ${kind}Coach of the Year${shortlisted ? ' — you were on the shortlist' : ''}.` : '',
+      : coach !== undefined ? `${nomineeName(world, coach)} is the ${kind}Coach of the Year${shortlisted ? ', you were on the shortlist' : ''}.` : '',
     ours.length > 0 ? `From your squad, ${ours.join(', ')} ${ours.length === 1 ? 'makes' : 'make'} the ${night.scope === 'world' ? 'World Team of the Year' : 'Team of the Season'}.` : '',
   ].filter((x) => x !== '').join(' ');
   postMessage(world, {

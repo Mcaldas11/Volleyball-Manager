@@ -15,7 +15,7 @@ function career() {
   return { world, ctx, club };
 }
 
-test('before a league starts, the papers tip its table — the strongest squads at the top — and the manager hears his tip', () => {
+test('before a league starts, the papers tip its table, the strongest squads at the top, and the manager hears his tip', () => {
   const { world, ctx, club } = career();
   const league = world.competitions[club.leagueId];
   for (let d = 0; d < 200 && predictionFor(world, league.id) === undefined; d++) advanceDay(world, ctx, {});
@@ -51,7 +51,7 @@ test('the season over, beating the tips by a distance pleases the board, falling
   }
 });
 
-test('a career from before the tips, its league already under way: the table gets them at once — quietly, and judged by nobody', () => {
+test('a career from before the tips, its league already under way: the table gets them at once, quietly, and judged by nobody', () => {
   const { world, ctx, club } = career();
   const league = world.competitions[club.leagueId];
   // Played into the season with no tips printed, as a save from before them was.

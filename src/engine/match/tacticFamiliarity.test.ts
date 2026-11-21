@@ -45,7 +45,7 @@ test('a change costs familiarity in its own part, at once, and the bigger the ch
   assert.ok(out.attack === 100 && out.defence < 100 && out.serve < 100);
 });
 
-test('it is learnt back on the training ground — a tactical day more than a physical one — and by playing', () => {
+test('it is learnt back on the training ground, a tactical day more than a physical one, and by playing', () => {
   const tactical = defaultTactics();
   const physical = defaultTactics();
   for (const t of [tactical, physical]) {

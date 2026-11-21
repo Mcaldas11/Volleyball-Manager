@@ -47,7 +47,7 @@ test("a player's career reads as a timeline: his clubs, each season's line, and 
   assert.ok(again.some((i) => i.kind === 'injury' && /weeks/.test(i.detail ?? '')));
 });
 
-test("the season notes the manager's own players' moments — and, elsewhere, only what a career is remembered by", () => {
+test("the season notes the manager's own players' moments, and, elsewhere, only what a career is remembered by", () => {
   const { world, run } = managed(72);
   generateYouthIntake(world);
   run(160);

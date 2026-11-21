@@ -260,9 +260,9 @@ export function noteDeparture(world: World, club: Club, p: number): void {
       category: 'news',
       from: 'Dressing room',
       subject: `The squad feels ${store.fullName(p)}'s departure`,
-      body: `${store.fullName(p)} was one of the voices the dressing room listened to${room.captain === p ? ' — and its captain' : ''}. ` +
+      body: `${store.fullName(p)} was one of the voices the dressing room listened to${room.captain === p ? ', and its captain' : ''}. ` +
         (heir >= 0
-          ? `${store.fullName(heir)}, his vice-captain, takes the armband — the squad knew it would be him, and it has settled quicker for it.`
+          ? `${store.fullName(heir)}, his vice-captain, takes the armband, the squad knew it would be him, and it has settled quicker for it.`
           : 'His going has unsettled the squad for now: it will take a while for the rest to fill the gap.'),
       playerIdx: p,
     });

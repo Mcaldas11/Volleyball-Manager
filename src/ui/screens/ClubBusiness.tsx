@@ -18,7 +18,7 @@ import {
   buildDays, FACILITY_EFFECTS, FACILITY_KINDS, FACILITY_NAMES, facilityLevel, upgradeCost,
 } from '../../engine/world/facilities.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
-import { Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, PlayerFace, Pos, StarMeter, StatTile, Paged } from '../components.tsx';
+import { Bar, Card, ClubCrest, ClubLink, Empty, Flag, KV, money, PlayerFace, Pos, StarMeter, StatTile, Paged, formatInt } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 
@@ -57,7 +57,7 @@ export function CommercialScreen(): JSX.Element {
                 return (
                   <tr key={p} className={p === price ? 'me' : ''}>
                     <td className="strong">{label} <span className="faint">{Math.round(p * 100)}%</span></td>
-                    <td className="num">{at.crowd.toLocaleString()}</td>
+                    <td className="num">{formatInt(at.crowd)}</td>
                     <td className="num dim">{Math.round((at.crowd / Math.max(1, club.arenaCapacity)) * 100)}%</td>
                     <td className="num">{money(at.gate)}</td>
                     <td className="num">
@@ -142,7 +142,7 @@ export function FacilitiesScreen(): JSX.Element {
               <p className="biz-note">{FACILITY_EFFECTS[kind]}</p>
               {level < 20 && <KV k="Next level">{money(upgradeCost(club, kind))} · about {Math.round(buildDays(club, kind) / 30)} months' work</KV>}
               {mine && project !== undefined && (
-                <p className="biz-status">{project.stage === 'asked' ? `With the board — answer by ${g.dateLabelForDay(project.until)}` : `Being built — done ${g.dateLabelForDay(project.until)}`}</p>
+                <p className="biz-status">{project.stage === 'asked' ? `With the board, answer by ${g.dateLabelForDay(project.until)}` : `Being built, done ${g.dateLabelForDay(project.until)}`}</p>
               )}
               <div className="biz-foot">
                 <button className="sm" disabled={block !== null} title={block ?? 'Ask the board to pay for it'} onClick={() => g.requestUpgrade(kind)}>
@@ -178,7 +178,7 @@ function ArenaCard(): JSX.Element {
         {fansOf(club).toLocaleString('en-GB')} supporters. A bigger following than the arena fills it; a new stand pays only if they come.
       </p>
       {project !== undefined && (
-        <p className="biz-status">{project.stage === 'asked' ? `With the board — answer by ${g.dateLabelForDay(project.until)}` : `${project.seats.toLocaleString('en-GB')} seats being built — open ${g.dateLabelForDay(project.until)}`}</p>
+        <p className="biz-status">{project.stage === 'asked' ? `With the board, answer by ${g.dateLabelForDay(project.until)}` : `${project.seats.toLocaleString('en-GB')} seats being built, open ${g.dateLabelForDay(project.until)}`}</p>
       )}
       <div className="biz-foot biz-arena">
         {expansionOptions(club).map((o) => (
@@ -207,7 +207,7 @@ export function AffiliatesScreen(): JSX.Element {
   return (
     <div className="biz-affiliates">
       <Card title={`Your affiliates (${mine.length}/${MAX_AFFILIATES})`} icon="club" flush className="biz-aff-card">
-        {mine.length === 0 && <Empty>No affiliates yet. Smaller clubs will take your young players on loan and play them — and let theirs come to you cheaply.</Empty>}
+        {mine.length === 0 && <Empty>No affiliates yet. Smaller clubs will take your young players on loan and play them, and let theirs come to you cheaply.</Empty>}
         <div className="biz-aff-list">
           {mine.map((a) => {
             const comp = world.competitions[a.leagueId];
@@ -221,7 +221,7 @@ export function AffiliatesScreen(): JSX.Element {
                   </div>
                   <button className="sm danger" onClick={() => g.endAffiliation(a.id)}>End</button>
                 </div>
-                <span className="section-label">Their best young players — a quarter off for you</span>
+                <span className="section-label">Their best young players, a quarter off for you</span>
                 {affiliateProspects(world, a).map((p) => (
                   <div key={p} className="biz-prospect">
                     <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={24} />
@@ -318,7 +318,7 @@ function BoardMeetingCard(): JSX.Element {
         <button className="sm" disabled={block !== null} title={block ?? 'Ask the board for more money for wages'} onClick={() => g.boardRequest('wages')}>
           <Icon name="coin" size={13} /> More for wages
         </button>
-        <button className="sm" disabled={block !== null} title={block ?? 'Ask the board to expect less this season — it will cost you some of their confidence'} onClick={() => g.boardRequest('target')}>
+        <button className="sm" disabled={block !== null} title={block ?? 'Ask the board to expect less this season, it will cost you some of their confidence'} onClick={() => g.boardRequest('target')}>
           <Icon name="trophy" size={13} /> A lower target
         </button>
       </div>
@@ -355,13 +355,13 @@ export function OwnerScreen(): JSX.Element {
           <p className="biz-note">
             {o.kind === 'members' ? 'The members own the club: there is little money to call on, but all the patience in the world.'
               : o.kind === 'local' ? 'A local man who loves the club: some money, and a feeling for its young players.'
-                : o.kind === 'tycoon' ? 'Big money and big ideas — and he wants to see it on the trophy shelf, soon.'
+                : o.kind === 'tycoon' ? 'Big money and big ideas, and he wants to see it on the trophy shelf, soon.'
                   : 'Investors: there is money, and they want it to make money.'}
             {o.wealth >= 3 ? ' He will not let the club end a season in the red.' : ''}
           </p>
         </Card>
         <Card title="Ask him for money" icon="coin">
-          <p className="biz-note">For the transfer budget. He gives what his means allow, to a manager he believes in — and every euro costs some of his goodwill.</p>
+          <p className="biz-note">For the transfer budget. He gives what his means allow, to a manager he believes in, and every euro costs some of his goodwill.</p>
           <div className="own-asks">
             {asks.map((a) => (
               <button key={a} className="sm" disabled={block !== null} title={block ?? `Ask him for ${money(a)}`} onClick={() => g.askOwner(a)}>
@@ -369,7 +369,7 @@ export function OwnerScreen(): JSX.Element {
               </button>
             ))}
           </div>
-          {club.ownerAsk !== undefined && <p className="biz-status">Asked for {money(club.ownerAsk.amount)} — he answers by {g.dateLabelForDay(club.ownerAsk.until)}.</p>}
+          {club.ownerAsk !== undefined && <p className="biz-status">Asked for {money(club.ownerAsk.amount)}, he answers by {g.dateLabelForDay(club.ownerAsk.until)}.</p>}
           {block !== null && club.ownerAsk === undefined && <p className="faint biz-why">{block}</p>}
         </Card>
         </Paged>

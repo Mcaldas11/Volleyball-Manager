@@ -52,11 +52,11 @@ export function LineupScreen(): JSX.Element {
             <summary>{national ? 'National team sheet' : 'Default team sheet'}</summary>
             <span className="dim">
               {national
-                ? 'Used for every national team match — the starting point on match day, from the squad named for the tournament. Your club keeps its own. Anyone hurt or not called up is swapped for the next best fit.'
-                : 'Used automatically for every match — the six, the liberos and the rest of the fourteen — and the starting point whenever you rearrange it on match day. Anyone injured or sold is swapped for the next best fit.'}
+                ? 'Used for every national team match, the starting point on match day, from the squad named for the tournament. Your club keeps its own. Anyone hurt or not called up is swapped for the next best fit.'
+                : 'Used automatically for every match, the six, the liberos and the rest of the fourteen, and the starting point whenever you rearrange it on match day. Anyone injured or sold is swapped for the next best fit.'}
             </span>
           </details>
-          <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
+          <div className="lineup-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal, the one in the back row sets, the one at the net attacks.">
             <span className="faint">Formation</span>
             <Segmented<Formation>
               size="sm"

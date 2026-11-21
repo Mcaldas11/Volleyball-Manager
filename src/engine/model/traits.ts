@@ -53,17 +53,17 @@ export const TRAIT_NAMES: Readonly<Record<Trait, string>> = {
 
 export const TRAIT_HINTS: Readonly<Record<Trait, string>> = {
   [Trait.JumpServer]: 'Goes up for the jump serve, and hits it harder than most.',
-  [Trait.FloatSpecialist]: 'His float serve dips and swerves — and lands where he wants it.',
+  [Trait.FloatSpecialist]: 'His float serve dips and swerves, and lands where he wants it.',
   [Trait.PipeHitter]: 'Wants the ball in the pipe from the back row, and gets it more often.',
-  [Trait.QuickHitter]: 'Fast off the floor for the quick — the setter looks for him.',
+  [Trait.QuickHitter]: 'Fast off the floor for the quick, the setter looks for him.',
   [Trait.Tooler]: 'Uses the block rather than hitting into it: fewer of his attacks come back.',
-  [Trait.ReadBlocker]: 'Reads the setter, not the ball — he is there when the attack comes.',
+  [Trait.ReadBlocker]: 'Reads the setter, not the ball, he is there when the attack comes.',
   [Trait.FloorGeneral]: 'Runs the offence: his sets are cleaner, his choices sharper.',
   [Trait.DigMachine]: 'Gets a hand to everything in defence.',
   [Trait.RockInReception]: 'Takes the serve on the forearms without a flicker.',
   [Trait.Clutch]: 'At his best when the set is on the line.',
   [Trait.Tireless]: 'Plays the fifth set as he played the first.',
-  [Trait.VocalLeader]: 'Talks his team through it — he counts for more in the dressing room.',
+  [Trait.VocalLeader]: 'Talks his team through it, he counts for more in the dressing room.',
 };
 
 /** Most traits one player carries. */

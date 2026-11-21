@@ -16,7 +16,7 @@ function career() {
   return { world, ctx, club };
 }
 
-test('the day before a league match, the manager gets the odds, every result and the fans\' calls — once', () => {
+test('the day before a league match, the manager gets the odds, every result and the fans\' calls, once', () => {
   const { world, ctx, club } = career();
   const league = world.competitions[club.leagueId];
   for (let d = 0; d < 260 && !world.messages.some((m) => m.preview !== undefined); d++) advanceDay(world, ctx, {});

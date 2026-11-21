@@ -43,12 +43,12 @@ export const VOICE_LABEL: Readonly<Record<Voice, string>> = {
 
 /** How a question opens, voice by voice — often not at all. `{city}` is the club's city. */
 const OPENERS: Readonly<Record<Voice, readonly string[]>> = {
-  stats: ['', '', 'Looking at the numbers — ', 'One for the stat sheet: ', 'The data says one thing — '],
+  stats: ['', '', 'Looking at the numbers, ', 'One for the stat sheet: ', 'The data says one thing, '],
   blunt: ['', '', 'Straight question: ', 'Coach, ', "I'll be direct. ", 'Simple one: '],
-  local: ['', '', 'For the fans back home — ', 'People in {city} are asking: ', 'Our listeners want to know: '],
-  tactical: ['', '', 'On the tactical side — ', 'Tactically, ', 'Looking at the matchup, '],
+  local: ['', '', 'For the fans back home, ', 'People in {city} are asking: ', 'Our listeners want to know: '],
+  tactical: ['', '', 'On the tactical side, ', 'Tactically, ', 'Looking at the matchup, '],
   story: ['', '', "It's been quite a week. ", 'Take us inside the dressing room. ', 'A broader one, if I may. '],
-  tabloid: ['', '', 'Our readers want to know: ', "Everyone's talking about it — ", 'Let me put it to you: '],
+  tabloid: ['', '', 'Our readers want to know: ', "Everyone's talking about it, ", 'Let me put it to you: '],
 };
 
 /** Words a question can start with that read as well in lower case after an opener. */
@@ -349,7 +349,7 @@ export function briefOf(c: Ctx, kind: InterviewKind, occasion: string): string[]
   const out: string[] = [];
   const f = c.facts;
   const n = (p: number): string => c.world.players.fullName(p);
-  out.push(`${kind === 'pre' ? 'Before' : 'After'} ${c.club.name} v ${c.opp.name} — ${occasion}${c.compName !== '' ? `, ${c.compName}` : ''}.`);
+  out.push(`${kind === 'pre' ? 'Before' : 'After'} ${c.club.name} v ${c.opp.name}, ${occasion}${c.compName !== '' ? `, ${c.compName}` : ''}.`);
   if (kind === 'post') out.push(`Result for ${c.club.name}: ${c.tags.has('won') ? 'won' : 'lost'} ${c.score}; sets ${f.sets.map(([a, b]) => `${a}-${b}`).join(', ')}.`);
   if (c.ownPos > 0) out.push(`${c.club.name} are ${ordinalOf(c.ownPos)} in the league${c.oppPos > 0 ? `, ${c.opp.name} ${ordinalOf(c.oppPos)}` : ''}.`);
   if (c.run >= 2) out.push(`${c.club.name} have won ${c.run} in a row.`);
@@ -401,7 +401,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       const t = c.facts.own!.top!;
       return r.pick([
         `${nm(c, t.p)} finished with ${t.pts} points tonight. How much did you lean on him?`,
-        `${t.pts} points for ${nm(c, t.p)} — ${t.kills} of them in attack. Is he playing the best volleyball of his career?`,
+        `${t.pts} points for ${nm(c, t.p)}, ${t.kills} of them in attack. Is he playing the best volleyball of his career?`,
         `Talk us through ${nm(c, t.p)}'s night: ${t.kills} kills${t.aces > 0 ? `, ${plural(t.aces, 'ace')}` : ''}${t.blocks > 0 ? `, ${plural(t.blocks, 'block')}` : ''}.`,
       ]);
     },
@@ -410,7 +410,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       return [
         r.pick([`${nm(c, t.p)} was outstanding. He carried the attack when we needed it.`, `He was immense. ${t.pts} points doesn't even tell the whole story.`]),
         r.pick(['He deserves every bit of the credit tonight.', 'When he plays like that, we are a different team.']),
-        r.pick(['The points come from the passes before them. It was a team effort.', 'He finished the rallies — but somebody built them first.']),
+        r.pick(['The points come from the passes before them. It was a team effort.', 'He finished the rallies, but somebody built them first.']),
         r.pick(['He did his job. So did others.', "A good night for him. Tomorrow it's someone else's turn."]),
         r.pick(["Good, but he left points out there too. I'll show him the tape.", 'He can be even better, and he knows it.']),
         r.pick(["I expect that from him every match. It's his level.", "That's his standard. Anything less and we'll talk."]),
@@ -424,7 +424,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       const t = c.facts.opp!.top!;
       return r.pick([
         `${nm(c, t.p)} put ${t.pts} points past you. Why couldn't you contain him?`,
-        `${c.opp.name}'s ${pos(c, t.p)} ${nm(c, t.p)} scored ${t.pts}. ${won(c) ? 'You won anyway — but should that worry you?' : 'Did he beat you on his own?'}`,
+        `${c.opp.name}'s ${pos(c, t.p)} ${nm(c, t.p)} scored ${t.pts}. ${won(c) ? 'You won anyway, but should that worry you?' : 'Did he beat you on his own?'}`,
         `Was there a plan for ${nm(c, t.p)}? He finished with ${t.pts} points.`,
       ]);
     },
@@ -446,9 +446,9 @@ export const POST_TOPICS: readonly Archetype[] = [
     prompt: (c, r) => {
       const o = c.facts.own!;
       return r.pick([
-        `You gave away ${o.errors} points in errors${o.serveErrors >= 8 ? ` — ${o.serveErrors} of them on the serve` : ''}. Where does that come from?`,
+        `You gave away ${o.errors} points in errors${o.serveErrors >= 8 ? `, ${o.serveErrors} of them on the serve` : ''}. Where does that come from?`,
         `${o.errors} errors tonight${c.facts.opp ? ` against ${c.facts.opp.errors} from ${c.opp.name}` : ''}. ${won(c) ? 'Can you keep winning like that?' : 'Did you beat yourselves?'}`,
-        `The error count — ${o.errors} — jumps off the sheet. Is it nerves, fatigue or something else?`,
+        `The error count, ${o.errors}, jumps off the sheet. Is it nerves, fatigue or something else?`,
       ]);
     },
     answers: (c, r) => [
@@ -503,7 +503,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       if (o.blocks >= 10) {
         const b = o.blocker!;
         return r.pick([
-          `${o.blocks} blocks tonight — ${b.blocks} of them from ${nm(c, b.p)}. Is that wall your biggest weapon?`,
+          `${o.blocks} blocks tonight, ${b.blocks} of them from ${nm(c, b.p)}. Is that wall your biggest weapon?`,
           `A wall at the net: ${plural(o.blocks, 'block')}. What's the secret?`,
         ]);
       }
@@ -516,7 +516,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       if ((c.facts.own?.blocks ?? 0) >= 10) {
         return [
           r.pick(['The middles were fantastic. Reading, timing, everything.', 'Our block was magnificent. The whole front row deserves credit.']),
-          'Blocking is teamwork — the serve makes it possible.',
+          'Blocking is teamwork, the serve makes it possible.',
           'We studied where they like to hit. The players did the rest.',
           'Some nights the timing is just right.',
           'Now I want the same discipline when the score is close.',
@@ -526,7 +526,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       return [
         'Their block was excellent. Credit to their middles.',
         'They read us well tonight. That happens.',
-        r.pick(['We needed to use the block more — tool it, tip, reset. We forced it.', 'Our setter had few options from a poor pass.']),
+        r.pick(['We needed to use the block more, tool it, tip, reset. We forced it.', 'Our setter had few options from a poor pass.']),
         "We'll look at our distribution. It became too obvious.",
         'Hitting into a block that many times is a choice. A bad one.',
         'The hitters have to be smarter. That is not a technical problem.',
@@ -541,11 +541,11 @@ export const POST_TOPICS: readonly Archetype[] = [
       return p <= 38
         ? r.pick([
           `Only ${p}% of your receptions were positive. How do you play from that?`,
-          `${c.opp.name}'s serve put your passers under pressure all night — ${p}% positive. What went wrong?`,
+          `${c.opp.name}'s serve put your passers under pressure all night, ${p}% positive. What went wrong?`,
         ])
         : r.pick([
           `${p}% positive reception. Is that the foundation of this result?`,
-          `Your passers were nearly perfect tonight — ${p}% positive. How much does that free the setter?`,
+          `Your passers were nearly perfect tonight, ${p}% positive. How much does that free the setter?`,
         ]);
     },
     answers: (c, r) => (c.facts.own!.passPct <= 38 ? [
@@ -576,7 +576,7 @@ export const POST_TOPICS: readonly Archetype[] = [
     },
     answers: (c, r) => ((c.facts.own!.longestRun >= (c.facts.opp?.longestRun ?? 0)) ? [
       'The server got hot and the block came alive. Momentum is real.',
-      'That run came from the bench too — everyone was on their feet.',
+      'That run came from the bench too, everyone was on their feet.',
       'One good serve leads to a dig, a dig to a point. That is volleyball.',
       'Runs happen both ways. We had the better one.',
       'That is what we can do when we stay aggressive. I want it every set.',
@@ -584,7 +584,7 @@ export const POST_TOPICS: readonly Archetype[] = [
     ] : [
       'It happens to every team. They showed character to come out of it.',
       'Their server was excellent in that spell.',
-      r.pick(['We should have broken it sooner — a time-out, a change.', 'We lost our side-out for a moment. We will look at why.']),
+      r.pick(['We should have broken it sooner, a time-out, a change.', 'We lost our side-out for a moment. We will look at why.']),
       'Runs happen. The reaction is what matters.',
       'We stopped thinking. That cannot happen at this level.',
       'In a spell like that you see who wants the ball. Not enough did.',
@@ -608,7 +608,7 @@ export const POST_TOPICS: readonly Archetype[] = [
         r.pick(['That is the kind of set fans remember.', 'Sets like that make you proud of a group.']),
         "At that stage it's about one serve, one dig. Details.",
         'You stay calm and stick to what works.',
-        won ? 'Good — but we should never have let it get that far.' : 'We had chances to close it. We did not take them.',
+        won ? 'Good, but we should never have let it get that far.' : 'We had chances to close it. We did not take them.',
         won ? 'Pressure is where we live. We win those.' : "We won't lose a set like that again this season.",
       ] as Six;
     },
@@ -619,11 +619,11 @@ export const POST_TOPICS: readonly Archetype[] = [
     prompt: (c, r) => {
       const s = c.facts.heavySet!;
       return s.score[0] > s.score[1]
-        ? r.pick([`${s.score[0]}-${s.score[1]} in the ${SET_NAMES[s.n - 1]} set — near perfect. What clicked?`, `You took the ${SET_NAMES[s.n - 1]} ${s.score[0]}-${s.score[1]}. Was that the best set you've played this season?`])
+        ? r.pick([`${s.score[0]}-${s.score[1]} in the ${SET_NAMES[s.n - 1]} set, near perfect. What clicked?`, `You took the ${SET_NAMES[s.n - 1]} ${s.score[0]}-${s.score[1]}. Was that the best set you've played this season?`])
         : r.pick([`${s.score[0]}-${s.score[1]} in the ${SET_NAMES[s.n - 1]}. What happened there?`, `You only scored ${s.score[0]} in the ${SET_NAMES[s.n - 1]} set. Did the team switch off?`]);
     },
     answers: (c) => (c.facts.heavySet!.score[0] > c.facts.heavySet!.score[1] ? [
-      'Everything flowed. Serve, block, transition — a joy to watch.',
+      'Everything flowed. Serve, block, transition, a joy to watch.',
       'The players were in a rhythm. Credit to them.',
       'Sometimes a set just runs away from the other team.',
       "One set. We'll take it and move on.",
@@ -631,7 +631,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       'That is our real level. The others should get used to it.',
     ] : [
       'One bad set does not define a group.',
-      'They switched off briefly — they switched back on.',
+      'They switched off briefly, they switched back on.',
       'Everything went against us in that set. It happens.',
       "We'll analyse it like any other.",
       'That set was unacceptable. Embarrassing, frankly.',
@@ -644,8 +644,8 @@ export const POST_TOPICS: readonly Archetype[] = [
     prompt: (c, r) => {
       const q = c.facts.callback!.text;
       return won(c)
-        ? r.pick([`Before the match you told us: "${q}" You delivered. Do you feel vindicated?`, `"${q}" — your words yesterday. Mission accomplished?`])
-        : r.pick([`Yesterday you said: "${q}" Do you regret it now?`, `"${q}" — that was you, before the match. What do you say to that now?`]);
+        ? r.pick([`Before the match you told us: "${q}" You delivered. Do you feel vindicated?`, `"${q}", your words yesterday. Mission accomplished?`])
+        : r.pick([`Yesterday you said: "${q}" Do you regret it now?`, `"${q}", that was you, before the match. What do you say to that now?`]);
     },
     answers: (c) => (won(c) ? [
       'The players delivered, not my words. All credit to them.',
@@ -671,7 +671,7 @@ export const POST_TOPICS: readonly Archetype[] = [
       const k = c.facts.own!.kid!;
       return r.pick([
         `${nm(c, k.p)} is only ${k.age} and scored ${k.pts}. Is he ready for this level?`,
-        `A big night for ${k.age}-year-old ${nm(c, k.p)} — ${k.pts} points. Where does he go from here?`,
+        `A big night for ${k.age}-year-old ${nm(c, k.p)}, ${k.pts} points. Where does he go from here?`,
       ]);
     },
     answers: (c) => {
@@ -760,7 +760,7 @@ export const PRE_TOPICS: readonly Archetype[] = [
         ? r.pick([`Level on points with ${c.opp.name}. Is this a six-pointer?`, `Nothing separates you from ${c.opp.name} in the table. How big is this one?`])
         : g > 0
           ? r.pick([`You're ${plural(g, 'point')} ahead of ${c.opp.name}. Can you afford to lose this?`, `A win puts real daylight between you and ${c.opp.name}. Is that the message?`])
-          : r.pick([`${c.opp.name} are ${plural(-g, 'point')} ahead of you. Is this the night to close the gap?`, `You're chasing ${c.opp.name} — ${-g} points behind. Must-win?`]);
+          : r.pick([`${c.opp.name} are ${plural(-g, 'point')} ahead of you. Is this the night to close the gap?`, `You're chasing ${c.opp.name}, ${-g} points behind. Must-win?`]);
     },
     answers: () => [
       'Every match is important. This one is no different.',
@@ -811,7 +811,7 @@ export const PRE_TOPICS: readonly Archetype[] = [
       const names = c.facts.injured.slice(0, 2).map((p) => nm(c, p)).join(' and ');
       return r.pick([
         `You're without ${plural(c.facts.injured.length, 'player')}, ${names} among them. How do you cope?`,
-        `The treatment room is busy — ${names} both out. Is the squad deep enough?`,
+        `The treatment room is busy, ${names} both out. Is the squad deep enough?`,
       ]);
     },
     answers: () => [
@@ -851,7 +851,7 @@ export const PRE_TOPICS: readonly Archetype[] = [
       const m = c.facts.milestone!;
       return r.pick([
         `${nm(c, m.p)} is set for his ${m.n}th career match. What does he bring to this group?`,
-        `A milestone tomorrow — match number ${m.n} for ${nm(c, m.p)}. Any words for him?`,
+        `A milestone tomorrow, match number ${m.n} for ${nm(c, m.p)}. Any words for him?`,
       ]);
     },
     answers: (c) => [
@@ -910,7 +910,7 @@ export const PRE_TOPICS: readonly Archetype[] = [
         ])
         : r.pick([
           `How have the players responded to the ${l.score} defeat to ${l.opp}?`,
-          `The ${l.score} loss to ${l.opp} — is it out of their heads?`,
+          `The ${l.score} loss to ${l.opp}, is it out of their heads?`,
         ]);
     },
     answers: (c) => (c.facts.last!.won ? [
@@ -936,7 +936,7 @@ export const PRE_TOPICS: readonly Archetype[] = [
       const q = c.facts.callback!.text;
       return r.pick([
         `After your last match you said: "${q}" How did the players take it?`,
-        `"${q}" — those were your words last time. Have you seen a reaction in training?`,
+        `"${q}", those were your words last time. Have you seen a reaction in training?`,
       ]);
     },
     answers: () => [
@@ -953,7 +953,7 @@ export const PRE_TOPICS: readonly Archetype[] = [
     prompt: (c, r) => r.pick([
       `How do you plan to deal with ${c.opp.name}'s serve?`,
       `Will we see any changes to your six against ${c.opp.name}?`,
-      `Where do you think this match will be won — at the net, or from the service line?`,
+      `Where do you think this match will be won, at the net, or from the service line?`,
       `What's the key to breaking down ${c.opp.name}'s defence?`,
     ]),
     answers: () => [
@@ -1017,7 +1017,7 @@ export function followUp(rng: Rng, c: { opp: string; won: boolean; score: string
         "Is that all you're going to give us?",
       ]),
       answers: [
-        "Fair enough. Honestly — I believe in this group, and I'll leave it there.",
+        "Fair enough. Honestly, I believe in this group, and I'll leave it there.",
         "I understand. What I'll say is: we are ready.",
         'I answered it the way I wanted to.',
         "Some things stay inside the dressing room.",
@@ -1049,11 +1049,11 @@ export function followUp(rng: Rng, c: { opp: string; won: boolean; score: string
 export function reactionLine(rng: Rng, name: string, voice: Voice | undefined, bl: BodyLanguage, tone: AnswerCategory, big: boolean): string {
   const first = name.split(' ')[0];
   if (tone === 'convince' && big && rng.chance(0.5)) {
-    return rng.pick(['Cameras flash. That one will be on the back pages.', 'A ripple through the room — phones come out to tweet it.', 'You can hear the pens scratching. That is tomorrow’s headline.']);
+    return rng.pick(['Cameras flash. That one will be on the back pages.', 'A ripple through the room, phones come out to tweet it.', 'You can hear the pens scratching. That is tomorrow’s headline.']);
   }
   const byMood: Readonly<Record<BodyLanguage, readonly string[]>> = {
     delighted: [`${first} is beaming. Exactly the quote they wanted.`, `${first} underlines something twice.`],
-    encouraged: [`${first} nods and writes quickly.`, `${first} smiles — that line will lead the piece.`, `"Thank you, coach." ${first} looks pleased.`],
+    encouraged: [`${first} nods and writes quickly.`, `${first} smiles, that line will lead the piece.`, `"Thank you, coach." ${first} looks pleased.`],
     pleased: [`${first} seems satisfied with that.`, `A small nod from ${first}.`, `${first} jots a note and moves on.`],
     neutral: [`${first} writes it down without a word.`, `${first} waits a moment, then nods.`],
     skeptical: [`${first} raises an eyebrow.`, `${first} isn't convinced: "We'll see."`, `${first} exchanges a look with a colleague.`, `${first} taps the pen against the notebook.`],
@@ -1061,8 +1061,8 @@ export function reactionLine(rng: Rng, name: string, voice: Voice | undefined, b
   };
   const voiceLine: Partial<Record<Voice, Partial<Record<BodyLanguage, string>>>> = {
     stats: { skeptical: `${first} glances at the numbers on the sheet and frowns.`, encouraged: `${first} ticks something off a page of figures.` },
-    tabloid: { encouraged: `${first} grins. Headline secured.`, skeptical: `${first} looks disappointed — no drama there.` },
-    tactical: { skeptical: `${first} clearly wanted more detail.`, encouraged: `${first} nods along — that's the detail they were after.` },
+    tabloid: { encouraged: `${first} grins. Headline secured.`, skeptical: `${first} looks disappointed, no drama there.` },
+    tactical: { skeptical: `${first} clearly wanted more detail.`, encouraged: `${first} nods along, that's the detail they were after.` },
     local: { encouraged: `${first} looks pleased: the fans will like that.` },
   };
   const special = voice !== undefined ? voiceLine[voice]?.[bl] : undefined;

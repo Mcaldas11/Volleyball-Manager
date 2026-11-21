@@ -158,7 +158,7 @@ function CupsWindow(): JSX.Element {
           {tab === 'trophies' && <TrophiesTab national={national} />}
         </div>
         <footer className="hol-foot fr-foot">
-          <span className="faint cupw-note">Friendly trophies are kept in their own cabinet — they are not honours or titles.</span>
+          <span className="faint cupw-note">Friendly trophies are kept in their own cabinet, they are not honours or titles.</span>
           <span className="flex-spacer" />
           <button onClick={() => g.closeCupsDialog()}>Close</button>
         </footer>
@@ -179,7 +179,7 @@ function CupsTab({ views, onHost }: { views: CupView[]; onHost: () => void }): J
     return (
       <div className="cupw-empty">
         <Icon name="trophy" size={28} />
-        <p>No tournaments this pre-season yet. Host one of your own, or wait for an invitation — they come to the inbox.</p>
+        <p>No tournaments this pre-season yet. Host one of your own, or wait for an invitation, they come to the inbox.</p>
         <button className="primary" onClick={onHost}>Host a tournament</button>
       </div>
     );
@@ -216,9 +216,9 @@ function CupsTab({ views, onHost }: { views: CupView[]; onHost: () => void }): J
 
         {view.groups.length === 0 ? (
           <div className="cupw-forming">
-            <h4>The field — {view.teams.length} of {view.size}</h4>
+            <h4>The field, {view.teams.length} of {view.size}</h4>
             {view.teams.map((s) => <div key={`t${s.id}`} className="cupw-row"><Icon name="check" size={13} /> <SideName s={s} /></div>)}
-            {view.pending.map((s) => <div key={`p${s.id}`} className="cupw-row faint"><Icon name="clock" size={13} /> {s.name} — asked</div>)}
+            {view.pending.map((s) => <div key={`p${s.id}`} className="cupw-row faint"><Icon name="clock" size={13} /> {s.name}, asked</div>)}
           </div>
         ) : (
           <>
@@ -333,7 +333,7 @@ function HostClub({ onDone }: { onDone: () => void }): JSX.Element {
   const valid = picked.filter((c) => club !== null && start !== null && clubFreeFor(world, c, start, size));
   if (club === null) return <div className="cupw-empty"><p>You need a club to host a tournament.</p></div>;
   if (dates.length === 0) {
-    return <div className="cupw-empty"><Icon name="calendar" size={28} /><p>There are no free dates left in the pre-season for a tournament of {size} — {size === 8 ? 'try four, or ' : ''}wait for next summer.</p>
+    return <div className="cupw-empty"><Icon name="calendar" size={28} /><p>There are no free dates left in the pre-season for a tournament of {size}, {size === 8 ? 'try four, or ' : ''}wait for next summer.</p>
       {size === 8 && <button onClick={() => setSize(4)}>Four teams</button>}</div>;
   }
   const toggle = (id: number): void => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < size - 1 ? [...p, id] : p));
@@ -421,7 +421,7 @@ function HostNation({ onDone }: { onDone: () => void }): JSX.Element {
           <b className="cupw-count">{picked.length} / {size - 1}</b>
         </div>
       </div>
-      <p className="faint cupw-p">At home. Friendlies all — caps, never the ranking. The squad is called three days before.</p>
+      <p className="faint cupw-p">At home. Friendlies all, caps, never the ranking. The squad is called three days before.</p>
       <div className="fr-list">
         {candidates.map((n) => {
           const on = picked.includes(n);

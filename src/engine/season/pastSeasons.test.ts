@@ -7,7 +7,7 @@ import { championOf, pastCupEditions, pastLeagueTable, pastSeasonsOf, seasonLabe
 import { endSeason } from './rollover.ts';
 import { advanceDay, isSeasonOver, newSeasonContext, startSeason } from './seasonEngine.ts';
 
-test('a finished season\'s table, drawn up again from its matches, is the table it ended with — and last season\'s cups are there', () => {
+test('a finished season\'s table, drawn up again from its matches, is the table it ended with, and last season\'s cups are there', () => {
   const world = generateWorld({ seed: 33, startYear: 2026, scale: 'small', manager: stubManager() });
   const ctx = newSeasonContext();
   startSeason(world, ctx);

@@ -67,7 +67,7 @@ export function runDemo(): void {
   }
 
   // Box score for the home side.
-  console.log(`\n${BOLD}${home.name} — box score${RESET}`);
+  console.log(`\n${BOLD}${home.name}, box score${RESET}`);
   console.log(
     `  ${DIM}${'Player'.padEnd(24)}${'Pos'.padEnd(5)}${'Pts'.padStart(5)}${'K/Att'.padStart(9)}` +
     `${'Eff'.padStart(8)}${'Ace'.padStart(5)}${'Blk'.padStart(5)}${'Rec+'.padStart(7)}${RESET}`,
@@ -100,7 +100,7 @@ export function runDemo(): void {
   );
 
   // Rotation report — the screen that shows where a match was actually lost.
-  console.log(`\n${BOLD}${home.name} — rotation report${RESET}`);
+  console.log(`\n${BOLD}${home.name}, rotation report${RESET}`);
   console.log(`  ${DIM}${'Rot'.padEnd(6)}${'Side-out'.padStart(10)}${'Break pt'.padStart(10)}${RESET}`);
   result.stats.home.rotations.forEach((r, i) => {
     console.log(

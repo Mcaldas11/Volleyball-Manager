@@ -61,9 +61,9 @@ export function planAdvice(world: World, p: number): { path: CareerPath; reason:
   const ability = store.currentAbility[p];
   const bench = benchLevel(world, club);
   if (readyToPromote(world, club, p)) return { path: 'promote', reason: 'He is already as good as the squad\'s bench.' };
-  if (store.playingTime[p] < 40 && age < 17) return { path: 'grow', reason: 'He needs the U19s\' minutes first — he hardly plays.' };
+  if (store.playingTime[p] < 40 && age < 17) return { path: 'grow', reason: 'He needs the U19s\' minutes first, he hardly plays.' };
   if (age >= 16 && ability >= bench * 0.82) return { path: 'loan', reason: 'Close to senior level: games against men would bring him on.' };
-  return { path: 'grow', reason: mentorOf(world, p) === null && age >= 15 ? 'Let him grow — a mentor would help.' : 'Let him grow: the U19s, a programme, time.' };
+  return { path: 'grow', reason: mentorOf(world, p) === null && age >= 15 ? 'Let him grow, a mentor would help.' : 'Let him grow: the U19s, a programme, time.' };
 }
 
 /** The plan a prospect is on, if any. */

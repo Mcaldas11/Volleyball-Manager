@@ -83,7 +83,7 @@ export function congratulate(world: World, club: Club, m: GameMessage): { ok: bo
     return {
       ok: true,
       text: `You congratulate ${name}. He is clearly touched that you took the time.`,
-      reply: 'Thanks, boss — it means a lot, coming from you.',
+      reply: 'Thanks, boss, it means a lot, coming from you.',
     };
   }
   const names = who.map((p) => store.shortName(p));
@@ -91,6 +91,6 @@ export function congratulate(world: World, club: Club, m: GameMessage): { ok: bo
   return {
     ok: true,
     text: `You gather ${listed} and congratulate them together. The group is in high spirits.`,
-    reply: 'Thanks, boss — we did it together.',
+    reply: 'Thanks, boss, we did it together.',
   };
 }

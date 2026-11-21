@@ -28,10 +28,10 @@ export const TALK_OPTIONS: Readonly<Record<TalkMoment, readonly TalkTone[]>> = {
 };
 
 export const TALK_LINES: Readonly<Record<TalkTone, string>> = {
-  calm: 'Stay calm — play our game',
+  calm: 'Stay calm, play our game',
   believe: 'You can beat anyone',
   demand: 'I expect a win',
-  praise: 'Well done — keep it going',
+  praise: 'Well done, keep it going',
   criticise: 'That wasn’t good enough',
   passion: 'Show me some fire',
 };

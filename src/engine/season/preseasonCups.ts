@@ -414,7 +414,7 @@ export function inviteNationToCup(world: World, host: number, size: CupSize, sta
   postMessage(world, {
     subject: `Invitation: the ${name}`,
     body: `The ${nationName(host)} federation invite ${nationName(mine)} to the ${name}, a friendly tournament of ${size} national teams ` +
-      `from ${formatDay(world, startDay)} — with ${others.map(nationName).join(', ')}. ` +
+      `from ${formatDay(world, startDay)}, with ${others.map(nationName).join(', ')}. ` +
       `${size === 4 ? 'A round robin, then the semi-finals (first against fourth, second against third)' : 'Two groups of four, then the quarter-finals and semi-finals'}, ` +
       `the final and a match for third place. It counts for caps, not for the ranking. Answer by ${formatDay(world, invite.expiresOn)}.`,
     from: `${nationName(host)} federation`,
@@ -591,7 +591,7 @@ function finishCup(world: World, cup: PreseasonCup, final: Fixture, third: Fixtu
   postMessage(world, {
     subject: place === 0 ? `Winners of the ${cup.name}` : `The ${cup.name}: ${['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'][place]}`,
     body: place === 0
-      ? `${winner.name} beat ${runnerUp.name} ${score} in the final and lift the ${cup.name} — a friendly trophy for the cabinet, ` +
+      ? `${winner.name} beat ${runnerUp.name} ${score} in the final and lift the ${cup.name}, a friendly trophy for the cabinet, ` +
         `and ${(cup.prize / 1000).toFixed(0)}k in prize money. It is the pre-season: it counts for nothing else.`
       : `${world.clubs[user].name} ${places[place] ?? `finished ${place + 1}th in`} the ${cup.name}. ${winner.name} took the trophy, beating ${runnerUp.name} ${score} in the final.`,
     from: world.clubs[cup.host]?.name ?? 'Organisers',

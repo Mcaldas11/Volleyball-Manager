@@ -59,7 +59,7 @@ export interface OwnerDemand {
 }
 
 export const DEMAND_TEXT: Readonly<Record<DemandKind, string>> = {
-  trophy: 'Win a trophy this season — any of them.',
+  trophy: 'Win a trophy this season, any of them.',
   profit: 'Finish the season with more money in the bank than it started with.',
   youth: 'Give three players of 21 or under ten competitive matches each.',
   top3: 'Finish in the league\'s top three.',
@@ -137,7 +137,7 @@ export function ownerSeasonStart(world: World): void {
         subject: `Takeover: ${o.name} buys the club`,
         body: `${previous} has sold the club to ${o.name} (${OWNER_KIND_NAMES[o.kind].toLowerCase()}). ` +
           (kitty > 0 ? `The new owner has put ${euros(kitty)} into the transfer budget as a statement of intent. ` : '') +
-          'He will judge you on his own terms — the board is keeping an open mind for now.',
+          'He will judge you on his own terms, the board is keeping an open mind for now.',
       });
     }
   }
@@ -212,7 +212,7 @@ export function ownerSeasonEnd(world: World): void {
       subject: done ? 'The owner is pleased' : 'The owner is disappointed',
       body: done
         ? `${o.name} wanted this: ${DEMAND_TEXT[d.kind].toLowerCase()} You delivered, and the board has noticed.`
-        : `${o.name} asked for one thing — ${DEMAND_TEXT[d.kind].toLowerCase()} It did not happen, and he has made sure the board knows how he feels.`,
+        : `${o.name} asked for one thing, ${DEMAND_TEXT[d.kind].toLowerCase()} It did not happen, and he has made sure the board knows how he feels.`,
     });
   }
   // A rich owner won't see the club in the red.
@@ -224,7 +224,7 @@ export function ownerSeasonEnd(world: World): void {
     postMessage(world, {
       category: 'board', from: o.name,
       subject: 'The owner covers the losses',
-      body: `The club finished the season ${euros(-(f.balance - put))} in the red. ${o.name} has put in ${euros(put)} to cover it — ` +
+      body: `The club finished the season ${euros(-(f.balance - put))} in the red. ${o.name} has put in ${euros(put)} to cover it, ` +
         'but he will not do it every year.',
     });
   }
@@ -233,7 +233,7 @@ export function ownerSeasonEnd(world: World): void {
 /** Why the manager can't go to the owner for money now — or null when he can. */
 export function askBlock(world: World, club: Club): string | null {
   if (club.ownerAsk !== undefined) return 'He is still considering your last request.';
-  if ((club.ownerRefusedUntil ?? -1) > world.day) return `He said no — ask again in ${club.ownerRefusedUntil! - world.day} days.`;
+  if ((club.ownerRefusedUntil ?? -1) > world.day) return `He said no, ask again in ${club.ownerRefusedUntil! - world.day} days.`;
   return null;
 }
 
@@ -268,7 +268,7 @@ export function ownerDay(world: World): void {
     postMessage(world, {
       category: 'board', from: o.name,
       subject: `The owner puts in ${euros(ask.amount)}`,
-      body: `${o.name} has agreed: ${euros(ask.amount)} goes into the transfer budget. Spend it well — he will be watching.`,
+      body: `${o.name} has agreed: ${euros(ask.amount)} goes into the transfer budget. Spend it well, he will be watching.`,
     });
     return;
   }

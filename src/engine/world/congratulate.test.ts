@@ -41,7 +41,7 @@ test('a milestone or a Player of the Month of ours: congratulate him, once, and 
   assert.deepEqual(honouredIn(world, month), [mine[1]]);
 });
 
-test('a team of the season with several of ours in it: the group is congratulated together — nobody else\'s players', () => {
+test('a team of the season with several of ours in it: the group is congratulated together, nobody else\'s players', () => {
   const { world, mine, theirs } = career();
   const club = world.clubs[world.userClubId];
   const picks = [mine[0], mine[1], mine[2], theirs].map((p, i) => ({ pos: i, p, clubId: i < 3 ? club.id : -1, rating: 7 }));
@@ -101,7 +101,7 @@ test('a club record is read for the position: a libero\'s digs and passes, a set
   assert.match(clubRecordHeadline(Position.Setter, record()), /2800 assists/);
 });
 
-test('the main position is what he has played the most for his club, not his own — and congratulating says so', () => {
+test('the main position is what he has played the most for his club, not his own, and congratulating says so', () => {
   const { world, mine } = career();
   const club = world.clubs[world.userClubId];
   const p = mine.find((x) => world.players.position[x] === Position.OutsideHitter)!;

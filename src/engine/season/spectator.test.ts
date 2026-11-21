@@ -74,7 +74,7 @@ test('the papers see him there, and say why he came', () => {
   world.career.jobs.push({ clubId: f.away, startDay: 0, endDay: world.day - 30, exit: 'resigned', won: 10, lost: 8, trophies: [] });
   assert.deepEqual(watchAngle(world, f), { kind: 'former', clubId: f.away });
   const former = commitWatched(world, ctx, f, watchLive(world, f))!;
-  assert.ok(former.body.includes(`for ${world.clubs[f.away].name}'s match against ${world.clubs[f.home].name} — his former club`), former.body);
+  assert.ok(former.body.includes(`for ${world.clubs[f.away].name}'s match against ${world.clubs[f.home].name}, his former club`), former.body);
   assert.equal(former.fans?.story, 'homecoming');
   assert.equal(former.clubId, f.away);
   assert.ok(fanComments(world, former).every((c) => !/[{}]/.test(c.text)));

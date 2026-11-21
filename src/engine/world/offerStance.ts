@@ -41,8 +41,8 @@ export function stanceLine(world: World, offer: IncomingOffer): string {
   const held = promised?.kind === 'sale' && offer.fee >= promised.fee * RIGHT_OFFER && offer.loan === undefined
     ? ' You told him he could go if a bid like this came in.' : '';
   switch (stanceOf(world, offer)) {
-    case 'keen': return `${name} knows about it, and wants to go to ${buyer} — turn it down and he will want a word with you.${held}`;
-    case 'staying': return `${name} is happy here and would rather stay — he may well refuse to go even if you accept.`;
+    case 'keen': return `${name} knows about it, and wants to go to ${buyer}, turn it down and he will want a word with you.${held}`;
+    case 'staying': return `${name} is happy here and would rather stay, he may well refuse to go even if you accept.`;
     default: return `${name} could go either way.${held}`;
   }
 }
@@ -108,7 +108,7 @@ export function bidTurnedDown(world: World, offer: IncomingOffer, how: 'declined
     postMessage(world, {
       category: 'contract', from: name, playerIdx: p,
       subject: `${name} is glad to stay`,
-      body: `${name} heard you turned down ${buyer}. He is pleased the club wants to keep him — he never wanted to go.`,
+      body: `${name} heard you turned down ${buyer}. He is pleased the club wants to keep him, he never wanted to go.`,
     });
     return;
   }
@@ -128,7 +128,7 @@ export function bidTurnedDown(world: World, offer: IncomingOffer, how: 'declined
   postMessage(world, {
     category: 'contract', from: name, playerIdx: p,
     subject: `${name} is unhappy`,
-    body: `${name} is disappointed that ${what} — he wanted to go. He has accepted it for now, but he is unsettled. ` +
+    body: `${name} is disappointed that ${what}, he wanted to go. He has accepted it for now, but he is unsettled. ` +
       'A word with him might help.',
   });
 }

@@ -455,10 +455,10 @@ export interface ChallengeResult {
 
 /** What the video showed when the call stands: on the thing asked about. */
 function callStands(call: LastCall, check: ChallengeCheck, mark?: BallMark): string {
-  if (!challengeChecksFor(call.call, call.blockout).includes(check)) return 'Nothing to see there — the call stands.';
-  if (check === 'netTouch') return 'No net touch — the call stands.';
-  if (check === 'blockTouch') return call.blockout ? 'Touch on the block — the call stands.' : 'No touch on the block — the call stands.';
-  const how = mark !== undefined ? ` — ${gapWords(mark.gap)}` : '';
+  if (!challengeChecksFor(call.call, call.blockout).includes(check)) return 'Nothing to see there, the call stands.';
+  if (check === 'netTouch') return 'No net touch, the call stands.';
+  if (check === 'blockTouch') return call.blockout ? 'Touch on the block, the call stands.' : 'No touch on the block, the call stands.';
+  const how = mark !== undefined ? `, ${gapWords(mark.gap)}` : '';
   return call.call === 'attackError' ? `Out${how}. The call stands.` : `In${how}. The call stands.`;
 }
 
@@ -1205,9 +1205,9 @@ export class MatchSimulator {
       own(end.team, end.player).attackErrors++;
       if (setter !== undefined) own(end.team, setter).setAssists--;
       this.teams[lost].stats.opponentErrors++;
-      verdict = check === 'netTouch' ? 'The hitter touched the net — the call is overturned.'
-        : check === 'blockTouch' ? 'No touch on the block — it was out. The call is overturned.'
-          : `Out — ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
+      verdict = check === 'netTouch' ? 'The hitter touched the net, the call is overturned.'
+        : check === 'blockTouch' ? 'No touch on the block, it was out. The call is overturned.'
+          : `Out, ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
     } else if (end.kind === 'ace') {
       // The serve was out: no ace, and no pass missed — there was nothing to pass.
       own(end.team, end.player).serveAces--;
@@ -1217,7 +1217,7 @@ export class MatchSimulator {
         own(lost, end.passer).receptionsTotal--;
       }
       this.teams[lost].stats.opponentErrors++;
-      verdict = `The serve was out — ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
+      verdict = `The serve was out, ${mark !== undefined ? gapWords(mark.gap) : 'over the line'}. The call is overturned.`;
     } else if (end.kind === 'attackError') {
       own(end.team, end.player).attackErrors--;
       this.teams[lost].stats.opponentErrors--;
@@ -1228,9 +1228,9 @@ export class MatchSimulator {
       } else {
         this.teams[end.team].stats.opponentErrors++;
       }
-      verdict = check === 'netTouch' ? 'A blocker touched the net — the call is overturned.'
-        : check === 'blockTouch' ? 'Touch off the block — the call is overturned.'
-          : `In — ${mark !== undefined ? gapWords(mark.gap) : 'it caught the line'}. The call is overturned.`;
+      verdict = check === 'netTouch' ? 'A blocker touched the net, the call is overturned.'
+        : check === 'blockTouch' ? 'Touch off the block, the call is overturned.'
+          : `In, ${mark !== undefined ? gapWords(mark.gap) : 'it caught the line'}. The call is overturned.`;
     } else {
       // The blocker in the net: no stuff block, but a fault — the hitter's side's point.
       own(end.team, end.player).attackBlocked--;
@@ -1239,7 +1239,7 @@ export class MatchSimulator {
         own(won, end.by).blockErrors++;
       }
       this.teams[end.team].stats.opponentErrors++;
-      verdict = 'The blocker touched the net — the call is overturned.';
+      verdict = 'The blocker touched the net, the call is overturned.';
     }
     // ...and give it the other way.
     entry.winner = team;
@@ -1824,7 +1824,7 @@ export class MatchSimulator {
     if (!t.ratings.has(inPlayerIdx)) return 'That player is not part of the squad.';
     if (t.court.includes(inPlayerIdx)) return 'That player is already on court.';
     if (t.registeredLiberos.has(inPlayerIdx)) return 'A libero named for the match cannot play in the six.';
-    if (t.outForMatch.has(inPlayerIdx)) return 'He went off hurt — he takes no further part.';
+    if (t.outForMatch.has(inPlayerIdx)) return 'He went off hurt, he takes no further part.';
     if (this.subsUsedThisSet[team] >= SUBS_PER_SET) return 'No substitutions left this set.';
 
     const pairing = this.subPairing[team];
@@ -2035,7 +2035,7 @@ export class MatchSimulator {
     }
     if (!t.ratings.has(playerIdx)) return { ok: false, reason: 'That player is not part of the squad.' };
     if (t.court.includes(playerIdx)) return { ok: false, reason: 'That player is already on court.' };
-    if (t.outForMatch.has(playerIdx)) return { ok: false, reason: 'He went off hurt — he takes no further part.' };
+    if (t.outForMatch.has(playerIdx)) return { ok: false, reason: 'He went off hurt, he takes no further part.' };
     if (!t.registeredLiberos.has(playerIdx)) return { ok: false, reason: 'Only the two liberos named for the match can play libero.' };
     // Whoever is named libero plays libero, whatever he is by trade.
     t.assign(playerIdx, Position.Libero);
@@ -2085,7 +2085,7 @@ export class MatchSimulator {
     if (lineup.some((p) => !t.ratings.has(p))) return { ok: false, reason: 'That player is not part of the squad.' };
     if (lineup.some((p) => t.registeredLiberos.has(p))) return { ok: false, reason: 'A libero named for the match cannot play in the six.' };
     if ([...lineup, libero, defensiveLibero].some((p) => t.outForMatch.has(p))) {
-      return { ok: false, reason: 'He went off hurt — he takes no further part.' };
+      return { ok: false, reason: 'He went off hurt, he takes no further part.' };
     }
     for (const l of [libero, defensiveLibero]) {
       if (l < 0) continue;

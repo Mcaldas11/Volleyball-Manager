@@ -32,7 +32,7 @@ function answered(world: World, club: Club): void {
   careerDay(world);
 }
 
-test('any club can be approached, vacancy or not — a vacancy is an ordinary application', () => {
+test('any club can be approached, vacancy or not, a vacancy is an ordinary application', () => {
   const world = outOfWork(301);
   const club = coached(world)[5];
   assert.equal(interestBlock(world, club.id), null);
@@ -61,7 +61,7 @@ test('a top club with a settled coach turns an unknown name down, and will not h
   assert.ok(reply !== undefined && reply.body.includes('greater standing'), 'the board says why');
 });
 
-test('a small club whose board has lost faith in its coach takes a bigger name — and the coach makes way', () => {
+test('a small club whose board has lost faith in its coach takes a bigger name, and the coach makes way', () => {
   const world = outOfWork(303);
   world.career.reputation = 8000;
   const small = coached(world).filter((c) => c.reputation < 3000).slice(0, 10);

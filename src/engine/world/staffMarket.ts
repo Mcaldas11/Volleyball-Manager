@@ -70,17 +70,17 @@ const ROLE_EDGE: Readonly<Record<StaffRole, number>> = {
 /** What each role does for the club — as the staff screen tells it. */
 export const STAFF_DUTIES: Readonly<Record<StaffRole, string>> = {
   [StaffRole.HeadCoach]: 'Runs the team.',
-  [StaffRole.AssistantCoach]: 'Coaches in training — the best coach at the club sets how fast the players improve.',
+  [StaffRole.AssistantCoach]: 'Coaches in training, the best coach at the club sets how fast the players improve.',
   [StaffRole.StrengthCoach]: 'Coaches fitness and physique in training, and counts as a coach for development.',
-  [StaffRole.Doctor]: 'Keeps injuries away — with the medical facilities, how often players break down.',
-  [StaffRole.Physiotherapist]: 'Gets the injured back — with the facilities, how fast they recover.',
+  [StaffRole.Doctor]: 'Keeps injuries away, with the medical facilities, how often players break down.',
+  [StaffRole.Physiotherapist]: 'Gets the injured back, with the facilities, how fast they recover.',
   [StaffRole.SportsPsychologist]: 'Lifts morale week by week, after defeats and injuries.',
   [StaffRole.PerformanceAnalyst]: 'Studies the opposition: every match is better prepared.',
-  [StaffRole.HeadScout]: 'Runs scouting — the precision of every report on a player.',
-  [StaffRole.Scout]: 'Scouts players — best where he knows the region.',
+  [StaffRole.HeadScout]: 'Runs scouting, the precision of every report on a player.',
+  [StaffRole.Scout]: 'Scouts players, best where he knows the region.',
   [StaffRole.RecruitmentAnalyst]: 'Judges players for the scouting reports.',
   [StaffRole.YouthCoach]: 'Develops the academy, and counts as a coach for development.',
-  [StaffRole.DirectorOfFootball]: 'Does the club\'s deals for you: signings and renewals within a budget you set — and any task you hand him.',
+  [StaffRole.DirectorOfFootball]: 'Does the club\'s deals for you: signings and renewals within a budget you set, and any task you hand him.',
 };
 
 /** The roles the manager hires for — everyone but the head coach, which is him. */
@@ -224,10 +224,10 @@ export function staffOfferBlock(world: World, club: Club, s: Staff): string | nu
   if (s.retired === true) return `${staffName(s)} has retired.`;
   if (s.role === StaffRole.HeadCoach) return 'Head coaches are not hired here.';
   const blocked = world.staffTalks?.[s.id];
-  if (blocked !== undefined && blocked.until > world.day) return `${staffName(s)} has had enough of talking for now — try again after ${blocked.until - world.day} days.`;
+  if (blocked !== undefined && blocked.until > world.day) return `${staffName(s)} has had enough of talking for now, try again after ${blocked.until - world.day} days.`;
   if (s.clubId !== club.id) {
     const { have, max } = roleCount(world, club, s.role);
-    if (have >= max) return `You already have ${max} ${STAFF_ROLE_NAMES[s.role].toLowerCase()}${max > 1 ? 's' : ''} — release one first.`;
+    if (have >= max) return `You already have ${max} ${STAFF_ROLE_NAMES[s.role].toLowerCase()}${max > 1 ? 's' : ''}, release one first.`;
     if (staffInterest(world, s, club) === 'refuses') return `${staffName(s)} won't consider a club of your standing.`;
   }
   return null;
@@ -378,7 +378,7 @@ function courtManagersStaff(world: World): void {
       clubId: suitor.id,
       subject: `${suitor.name} want ${staffName(s)}`,
       body: `${suitor.name} have asked for permission to speak to your ${STAFF_ROLE_NAMES[s.role].toLowerCase()} ${staffName(s)}, ` +
-        `and offer ${euros(fee)} in compensation. They would pay him ${euros(wage)} a season — he is on ${euros(s.wage)} with you. ` +
+        `and offer ${euros(fee)} in compensation. They would pay him ${euros(wage)} a season, he is on ${euros(s.wage)} with you. ` +
         `Let them talk to him, ask for more, or keep him: turning down a move he wants won't please him, though a new contract might.`,
       staffApproachId: id,
       staffId: s.id,

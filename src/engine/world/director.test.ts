@@ -42,7 +42,7 @@ test('without a director, there is nobody to hand a deal to', () => {
   assert.match(directorBlock(world, club, target(world, club.id), 'transfer') ?? '', /no Director of Football/);
 });
 
-test('given room to work, the director signs the player — and never past the limit', () => {
+test('given room to work, the director signs the player, and never past the limit', () => {
   const { world, ctx, club } = career();
   const store = world.players;
   const p = target(world, club.id);

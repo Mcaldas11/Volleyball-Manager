@@ -8,7 +8,7 @@ import { toTeamSetup } from '../season/seasonEngine.ts';
 const world = generateWorld({ seed: 7, startYear: 2026, scale: 'small', manager: stubManager() });
 const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 14);
 
-test('a side starts the set in the rotation its coach names — and a set-break sheet can start the next in another', () => {
+test('a side starts the set in the rotation its coach names, and a set-break sheet can start the next in another', () => {
   for (let r = 0; r < 6; r++) {
     const home = toTeamSetup(world.players, a);
     const sim = new MatchSimulator(world.players, {

@@ -17,7 +17,7 @@ import type { Fixture, World } from './world.ts';
 export type MindGameReply = 'fire' | 'calm' | 'praise';
 
 export const MIND_GAME_REPLIES: ReadonlyArray<{ id: MindGameReply; name: string; line: string; hint: string }> = [
-  { id: 'fire', name: 'Fire back', line: 'Let them talk. We will do our talking on the court — and they won’t like what they hear.', hint: 'Lifts your players — win, and the board loves it; lose, and it haunts you' },
+  { id: 'fire', name: 'Fire back', line: 'Let them talk. We will do our talking on the court, and they won’t like what they hear.', hint: 'Lifts your players, win, and the board loves it; lose, and it haunts you' },
   { id: 'calm', name: 'Play it down', line: 'Every coach has his opinion. We focus on ourselves.', hint: 'A calm room, and nothing to lose' },
   { id: 'praise', name: 'Praise them', line: 'They are a very good side and he is a very good coach. It will be a great match.', hint: 'Takes the heat out of it' },
 ];
@@ -114,7 +114,7 @@ export function mindGamesDay(world: World): void {
       category: 'board', from: `${user.name} Board`,
       subject: won ? 'Your words, backed up on the court' : 'Your words came back to haunt you',
       body: won
-        ? `You fired back at ${g.coach} — and your team backed you up. The dressing room and the board loved it.`
+        ? `You fired back at ${g.coach}, and your team backed you up. The dressing room and the board loved it.`
         : `You fired back at ${g.coach}, and then lost. The press are enjoying it; the board and the players are not.`,
     });
   }
@@ -138,7 +138,7 @@ export function answerMindGame(world: World, fixtureId: number, reply: MindGameR
     fans: { story: reply === 'fire' ? 'pressBold' : 'press', club: user.id, other: g.clubId, coach: manager },
   });
   return reply === 'fire'
-    ? 'Your reply is all over the papers. The players love it — now you have to back it up.'
+    ? 'Your reply is all over the papers. The players love it, now you have to back it up.'
     : reply === 'calm' ? 'You kept it calm. The dressing room stays focused.' : 'You took the heat out of it.';
 }
 

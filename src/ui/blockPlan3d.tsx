@@ -33,12 +33,12 @@ export const BLOCK_TARGET_NAMES: Readonly<Record<BlockTarget, string>> = { outsi
 function focusOptions(t: BlockTarget): Array<[BlockFocus, string, string]> {
   return t === 'pipe'
     ? [
-      [BlockFocus.Read, 'Read the hitter', 'Go with the set and put hands on the ball. Safe — nothing taken away, nothing given.'],
+      [BlockFocus.Read, 'Read the hitter', 'Go with the set and put hands on the ball. Safe, nothing taken away, nothing given.'],
       [BlockFocus.Line, 'Take the seam', 'Close straight down the middle: he has to cut it to the angles, where the defence waits.'],
       [BlockFocus.Cross, 'Take the angle', 'Shut his favourite angle and leave the seam to the middle back.'],
     ]
     : [
-      [BlockFocus.Read, 'Read the hitter', 'Go with the set and put hands on the ball. Safe — nothing taken away, nothing given.'],
+      [BlockFocus.Read, 'Read the hitter', 'Go with the set and put hands on the ball. Safe, nothing taken away, nothing given.'],
       [BlockFocus.Line, 'Take the line', 'Set the block on the sideline: he has to hit cross-court, into the diggers.'],
       [BlockFocus.Cross, 'Take the cross', 'Set the block inside, on the angle: the line is left to the back-row defender.'],
     ];
@@ -46,7 +46,7 @@ function focusOptions(t: BlockTarget): Array<[BlockFocus, string, string]> {
 
 const NUMBER_OPTIONS: Array<[BlockNumbers, string, string]> = [
   [BlockNumbers.Single, 'One up', 'One blocker: the rest stay back for the tip and are free to attack off the dig.'],
-  [BlockNumbers.Double, 'Two up', 'The pin blocker and the middle — the usual block.'],
+  [BlockNumbers.Double, 'Two up', 'The pin blocker and the middle, the usual block.'],
   [BlockNumbers.Triple, 'Three up', 'All three front-row players on a big hitter: more stuff blocks, but the tip is open and the counter slower.'],
 ];
 
@@ -67,7 +67,7 @@ function ownBlockWords(p: BlockPlan, t: BlockTarget): string {
     : lean > 0.66 ? 'shutting the line' : lean > 0.33 ? 'leaning on the line'
       : lean < -0.66 ? 'shutting the cross' : lean < -0.33 ? 'leaning on the cross' : 'reading the hitter';
   const gap = blockGap(p);
-  const hands = p.numbers === BlockNumbers.Single ? '' : gap > 0.9 ? ' — a gap between their hands he can hit through' : gap < 0.5 ? ' — squeezed into each other' : ', hands together';
+  const hands = p.numbers === BlockNumbers.Single ? '' : gap > 0.9 ? ', a gap between their hands he can hit through' : gap < 0.5 ? ', squeezed into each other' : ', hands together';
   return `${on}${hands}`;
 }
 
@@ -89,7 +89,7 @@ type Scenario = 'plan' | 'late' | 'misread';
 const SCENARIOS: readonly Scenario[] = ['plan', 'plan', 'late', 'plan', 'misread'];
 const SCENARIO_TEXT: Readonly<Record<Scenario, string>> = {
   plan: 'As planned',
-  late: 'The middle is late across — a seam opens in the block',
+  late: 'The middle is late across, a seam opens in the block',
   misread: 'The block reads him wrong and shuts the other shot',
 };
 
@@ -619,7 +619,7 @@ export function BlockPlanDialog({ tactics: t, ours, theirs, onChange, onClose, s
               <span><i className="red" /> Taken away by the block</span>
               <span><i className="green" /> Left open</span>
               <span><i className="yellow" /> Either way</span>
-              <span className="faint">Drag a blocker along the net, a defender on the floor — or the court, to turn it</span>
+              <span className="faint">Drag a blocker along the net, a defender on the floor, or the court, to turn it</span>
             </div>
           </div>
           <div className="bp3-side">
@@ -635,7 +635,7 @@ export function BlockPlanDialog({ tactics: t, ours, theirs, onChange, onClose, s
               <h4>Where the block sets up</h4>
               {plan.spots !== undefined && (
                 <div className="bp3-own">
-                  <span><b>Your own block</b> — {ownBlockWords(plan, target)}.</span>
+                  <span><b>Your own block</b>, {ownBlockWords(plan, target)}.</span>
                   <button className="sm" onClick={() => set({ spots: undefined })} title="Back to the preset">Reset</button>
                 </div>
               )}
@@ -657,7 +657,7 @@ export function BlockPlanDialog({ tactics: t, ours, theirs, onChange, onClose, s
             </div>
             <p className="bp3-note">
               <Icon name="alert" size={13} /> However good the plan, a block can go wrong: the middle can be late across to
-              the pin — more so against a fast set, a combination, or on tired legs — and a blocker can read the hitter the
+              the pin, more so against a fast set, a combination, or on tired legs, and a blocker can read the hitter the
               wrong way and shut the shot he wasn't going to hit.
             </p>
           </div>

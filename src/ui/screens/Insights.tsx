@@ -14,7 +14,7 @@ import { NATIONS } from '../../engine/world/nations.ts';
 import { socialFeed } from '../../engine/world/socialFeed.ts';
 import { POSITION_NAMES, POSITIONS, type Position } from '../../engine/model/positions.ts';
 import type { Club } from '../../engine/model/club.ts';
-import { abilityClass, Card, ClubCrest, Empty, Flag, PlayerFace, Pos, Segmented, StarMeter, Paged } from '../components.tsx';
+import { abilityClass, Card, ClubCrest, Empty, Flag, PlayerFace, Pos, Segmented, StarMeter, Paged, useListPages, formatInt, listPage } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon } from '../icons.tsx';
 import { clubKit } from '../kits.ts';
@@ -186,13 +186,15 @@ export function SocialScreen(): JSX.Element {
   const [filter, setFilter] = useState<'all' | 'club'>('all');
   const feed = useMemo(() => socialFeed(world, g.club !== null ? filter : 'all'), [world, world.day, filter]);
   const trending = [...feed].sort((a, b) => b.likes - a.likes).slice(0, 6);
+  // A page of the timeline drawn at a time, as it scrolls: a long career has a lot to say.
+  const { shown: posts, more: morePosts } = useListPages(feed, `social-${filter}-${world.day}`, -1, undefined, 8);
   return (
     <div className="social">
       <Card title="Timeline" icon="news" flush className="social-feed-card"
         actions={g.club !== null ? <Segmented size="sm" value={filter} onChange={setFilter} options={[['all', 'Everyone'], ['club', 'Your club']]} /> : undefined}>
         <Paged className="social-feed" items=".social-post">
-          {feed.length === 0 && <Empty>Nothing yet — the season is young.</Empty>}
-          {feed.map((post) => {
+          {feed.length === 0 && <Empty>Nothing yet, the season is young.</Empty>}
+          {posts.map((post) => {
             const club = post.clubId !== undefined ? world.clubs[post.clubId] : undefined;
             return (
               <article key={post.key} className={`social-post k-${post.kind}`}>
@@ -209,7 +211,7 @@ export function SocialScreen(): JSX.Element {
                   </div>
                   <p className="social-text">{post.text}</p>
                   <div className="social-meta faint">
-                    <span>♥ {post.likes.toLocaleString()}</span><span>↻ {post.reposts.toLocaleString()}</span>
+                    <span>♥ {formatInt(post.likes)}</span><span>↻ {formatInt(post.reposts)}</span>
                     {post.replies.length > 0 && <span>💬 {post.replies.length}</span>}
                   </div>
                   {post.replies.map((r, i) => (
@@ -221,6 +223,7 @@ export function SocialScreen(): JSX.Element {
               </article>
             );
           })}
+          {morePosts}
         </Paged>
       </Card>
       <Card title="Trending" icon="star" className="social-side">
@@ -229,7 +232,7 @@ export function SocialScreen(): JSX.Element {
             <li key={p.key}>
               <b>{p.author}</b>
               <span>{p.text.split('\n')[0]}</span>
-              <small className="faint">♥ {p.likes.toLocaleString()}</small>
+              <small className="faint">♥ {formatInt(p.likes)}</small>
             </li>
           ))}
         </Paged>
@@ -249,14 +252,16 @@ export function CoachesScreen(): JSX.Element {
   const [nation, setNation] = useState(world.manager.nation);
   const legends = useMemo(() => coachLegends(world, by === 'club' ? { clubId } : { nation }), [world, by, clubId, nation]);
   const clubs = world.clubs.filter((c) => c.tier === 1 && c.players.length > 0).sort((a, b) => a.name.localeCompare(b.name));
+  // A page of the ranking drawn at a time (as it scrolls into view), the manager's own row always.
+  const { shown: rankShown, more: rankMore } = useListPages(ranking, `coaches-${world.day}`, ranking.findIndex((c) => c.staffId === -1), 6, listPage(44));
   return (
     <div className="coaches">
-      <Card title="World ranking — head coaches" icon="career" flush className="coaches-card">
+      <Card title="World ranking, head coaches" icon="career" flush className="coaches-card">
         <Paged className="table-wrap coaches-table" items="tbody > tr">
           <table className="data-table">
             <thead><tr><th className="num">#</th><th>Coach</th><th>Club</th><th className="num">Reputation</th><th className="num">Titles</th><th className="num">W–L</th></tr></thead>
             <tbody>
-              {ranking.map((c, i) => {
+              {rankShown.map((c, i) => {
                 const club = world.clubs[c.clubId];
                 return (
                   <tr key={c.staffId} className={c.staffId === -1 ? 'row-you' : ''}>
@@ -273,6 +278,7 @@ export function CoachesScreen(): JSX.Element {
                   </tr>
                 );
               })}
+            {rankMore}
             </tbody>
           </table>
         </Paged>
@@ -285,7 +291,7 @@ export function CoachesScreen(): JSX.Element {
             : <Dropdown size="sm" value={nation} onChange={setNation} options={NATIONS.map((n, i) => ({ value: i, label: n.name, icon: <Flag nation={i} /> }))} />}
         </div>
         <div className="coaches-legends">
-          {legends.length === 0 && <Empty>No coach has won a title here yet — the first will be a legend.</Empty>}
+          {legends.length === 0 && <Empty>No coach has won a title here yet, the first will be a legend.</Empty>}
           {legends.slice(0, 30).map((c, i) => (
             <div key={c.staffId} className="coaches-legend">
               <span className={`coaches-rank${i < 3 ? ` top${i}` : ''}`}>{i + 1}</span>
@@ -471,7 +477,7 @@ function ChallengeDialog({ onClose }: { onClose: () => void }): JSX.Element {
               <button key={c.id} className={`chal-item${id === c.id ? ' on' : ''}`} disabled={!possible} onClick={() => { setId(c.id); setClubId(null); }}>
                 <b>{c.name}</b>
                 <span>{c.goal}</span>
-                <small className="faint">{possible ? (c.seasons === 1 ? 'One season' : `${c.seasons} seasons`) : 'Not in this world — try a bigger one'}</small>
+                <small className="faint">{possible ? (c.seasons === 1 ? 'One season' : `${c.seasons} seasons`) : 'Not in this world, try a bigger one'}</small>
               </button>
             );
           })}
@@ -529,7 +535,7 @@ function CreateClubDialog({ onClose }: { onClose: () => void }): JSX.Element {
           <div className="cc-preview cc-wide">
             <span className="cc-badge" style={{ background: shirt, color: shorts }}>{short.trim() || '???'}</span>
             <span className="faint">
-              Takes the place of {replaced !== undefined ? <b>{world.clubs[replaced].name}</b> : 'the weakest club'} — its fixtures, ground and finances.
+              Takes the place of {replaced !== undefined ? <b>{world.clubs[replaced].name}</b> : 'the weakest club'}, its fixtures, ground and finances.
             </span>
           </div>
           <label className="rc-check cc-wide">

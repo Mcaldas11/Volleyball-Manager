@@ -62,7 +62,7 @@ export function LivePlayerStats({ names, ratings, onCourt }: {
                 <tr key={p} className={court.has(p) ? '' : 'lv-stats-off'}>
                   <td className="strong">
                     <span className="lv-stats-who" style={{ '--pos-c': `var(--pos-${POS_VAR[store.position[p] as Position]})` } as CSSProperties}>
-                      <span className="player-link" title={`${store.fullName(p)}${r !== undefined ? ` · rating ${r.toFixed(1)}` : ''} · ${s.digsTotal} digs — open his profile`} onClick={() => g.select(p)}>
+                      <span className="player-link" title={`${store.fullName(p)}${r !== undefined ? ` · rating ${r.toFixed(1)}` : ''} · ${s.digsTotal} digs, open his profile`} onClick={() => g.select(p)}>
                         {store.shortName(p)}
                       </span>
                     </span>

@@ -104,7 +104,7 @@ export function CompetitionReviewSheet({ review: r }: { review: CompetitionRevie
             <span className="crv-team-head">The favourites going in</span>
             {r.favourites.map((f, i) => (
               <div key={f.clubId}>
-                {note(f, `${i === 0 ? 'Strongest' : `${ordinal(i + 1)} strongest`} squad — finished ${f.actual > 0 ? ordinal(f.actual) : '—'}`)}
+                {note(f, `${i === 0 ? 'Strongest' : `${ordinal(i + 1)} strongest`} squad, finished ${f.actual > 0 ? ordinal(f.actual) : '—'}`)}
               </div>
             ))}
           </div>

@@ -37,7 +37,7 @@ test('the head of youth advises a path: a prospect as good as the bench is ready
   assert.equal(planAdvice(world, p).path, 'grow');
 });
 
-test('a promotion plan brings the prospect up the day he is ready — and the plan ends there', () => {
+test('a promotion plan brings the prospect up the day he is ready, and the plan ends there', () => {
   const { world, run } = managed(62);
   const club = world.clubs[world.userClubId];
   const store = world.players;

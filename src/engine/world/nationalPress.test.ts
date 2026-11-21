@@ -114,7 +114,7 @@ test("a national team's match: the scouts on the other nation, the press the day
   assert.ok(nationalSession(world, first, 'post') !== undefined, 'the one after it still waits');
 });
 
-test("a nation's press talk of the tournament and the country — never a league, a board or a season", () => {
+test("a nation's press talk of the tournament and the country, never a league, a board or a season", () => {
   const { world, ctx, euro, nation } = clubAndCountry(51);
   const asked: string[] = [];
   // Every match of the tournament: the conference before it, the match, the one after.
@@ -134,7 +134,7 @@ test("a nation's press talk of the tournament and the country — never a league
   assert.deepEqual(wrong, []);
 });
 
-test("the scouts' plan for a nation: from its fourteen and its instructions, into the national team's — and back", () => {
+test("the scouts' plan for a nation: from its fourteen and its instructions, into the national team's, and back", () => {
   const { world, euro, nation, first } = clubAndCountry(52);
   const opp = first.home === nation ? first.away : first.home;
   const team = world.nationalTeams.find((t) => t.nation === nation)!;

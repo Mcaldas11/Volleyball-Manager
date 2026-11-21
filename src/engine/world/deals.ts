@@ -409,7 +409,7 @@ function signForRival(world: World, t: Talks, rival: RivalSuitor): void {
     : agreeTransfer(world, club, t.playerIdx, rival.wage, fee, years);
   say(world, {
     subject: `${store.fullName(t.playerIdx)} joins ${club.name}`,
-    body: `${store.fullName(t.playerIdx)} has ${day > world.day ? 'agreed to join' : 'signed for'} ${club.name} instead — ` +
+    body: `${store.fullName(t.playerIdx)} has ${day > world.day ? 'agreed to join' : 'signed for'} ${club.name} instead, ` +
       `they moved faster, offering ${euros(rival.wage)} a season. Your talks with him are over.`,
     playerIdx: t.playerIdx,
     clubId: club.id,
@@ -510,7 +510,7 @@ function resolveFee(world: World, t: Talks, offer: TalksOffer): void {
   const result = rivalBid !== undefined
     ? offer.fee > rivalBid.fee
       ? { accepted: true, reason: `It beats ${world.clubs[rivalBid.clubId]?.name ?? 'the rival'}'s bid.`, valuation: rivalBid.fee }
-      : { accepted: false, reason: `${world.clubs[rivalBid.clubId]?.name ?? 'Another club'} have bid ${euros(rivalBid.fee)} — you will have to beat it.`, valuation: rivalBid.fee }
+      : { accepted: false, reason: `${world.clubs[rivalBid.clubId]?.name ?? 'Another club'} have bid ${euros(rivalBid.fee)}, you will have to beat it.`, valuation: rivalBid.fee }
     : evaluateFeeOffer(world, seller, t.playerIdx, offer.fee, buyer !== undefined && isAffiliate(buyer, seller.id) ? AFFILIATE_DISCOUNT : 1);
   if (result.accepted) t.rivalBid = undefined;
   t.valuation = result.valuation;
@@ -714,7 +714,7 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
   if (!playerAgreesToLoan(world, club, p, minutes)) {
     say(world, {
       subject: `${name} turns down the loan`,
-      body: `${parent.name} were willing to let him go, but ${name} doesn't want to join ${club.name} on loan — ` +
+      body: `${parent.name} were willing to let him go, but ${name} doesn't want to join ${club.name} on loan, ` +
         (minutes === 'backup' ? 'he wants to play, not sit on the bench.' : 'he is holding out for a bigger club.'),
       playerIdx: p,
       from: `${name}'s agent`,
@@ -732,7 +732,7 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
       ? `${parent.name} will loan you ${name} from ${windowOpeningLabel(world, day)}, when the window opens, until ${until}. `
       : `${name} has joined on loan from ${parent.name} until ${until}. `) +
       `You pay ${shareText} (${euros(Math.round(store.wage[p] * share))} a season); ${parent.name} cover the rest. ` +
-      `You have promised him playing time as a ${PLAYING_TIME_NAMES[minutes].toLowerCase()} — ` +
+      `You have promised him playing time as a ${PLAYING_TIME_NAMES[minutes].toLowerCase()}, ` +
       `${parent.name} will be watching.`,
     playerIdx: p,
     clubId: parent.id,
@@ -934,8 +934,8 @@ function processSales(world: World): void {
       say(world, {
         subject: `${name} rejects ${buyer.name}`,
         body: stance === 'staying'
-          ? `${name} has turned down the move to ${buyer.name}. He never wanted to leave — and he is hurt that the club was ready to let him go.`
-          : `${name} has turned down the move to ${buyer.name} — he is staying.`,
+          ? `${name} has turned down the move to ${buyer.name}. He never wanted to leave, and he is hurt that the club was ready to let him go.`
+          : `${name} has turned down the move to ${buyer.name}, he is staying.`,
         playerIdx: o.playerIdx,
         from: name,
         category: 'offer',
@@ -1050,7 +1050,7 @@ function answerLoanCounter(world: World, o: IncomingOffer, borrower: Club): void
   say(world, {
     subject: `Loan terms refused: ${name}`,
     body: `${borrower.name} won't take ${name} on ${terms(asked)}. ${result.reason} ` +
-      `Their offer — ${terms(offered)} — still stands.`,
+      `Their offer, ${terms(offered)}, still stands.`,
     offerId: o.id,
     playerIdx: o.playerIdx,
     from: borrower.name,
@@ -1087,8 +1087,8 @@ function resolveLoanOut(world: World, o: IncomingOffer, borrower: Club): void {
     say(world, {
       subject: `${name} rejects ${borrower.name}`,
       body: minutes === 'backup'
-        ? `${name} doesn't want to go to ${borrower.name} to sit on the bench — he is staying.`
-        : `${name} doesn't want to go to ${borrower.name} on loan — he is staying.`,
+        ? `${name} doesn't want to go to ${borrower.name} to sit on the bench, he is staying.`
+        : `${name} doesn't want to go to ${borrower.name} on loan, he is staying.`,
       playerIdx: p,
       from: name,
       category: 'offer',

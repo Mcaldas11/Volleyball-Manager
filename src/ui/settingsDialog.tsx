@@ -99,7 +99,7 @@ export function PreferencesDialog(): JSX.Element | null {
                 <Row label="Window mode" hint="F11 toggles full screen. Esc returns to a window.">
                   <FullscreenButton />
                 </Row>
-                <Row label="Text size" hint="The whole interface grows with it — as far as the window has room for it.">
+                <Row label="Text size" hint="The whole interface grows with it, as far as the window has room for it.">
                   <Seg value={p.textScale} options={SCALES} onChange={(v) => set({ ...p, textScale: v })} />
                 </Row>
                 <Row check label="Colour-blind friendly colours" hint="Good and bad, won and lost, up and down in blue and orange instead of green and red.">
@@ -120,22 +120,22 @@ export function PreferencesDialog(): JSX.Element | null {
               <>
                 <div className="settings-group">
                   <h4>Quality</h4>
-                  <Row label="Graphics quality" hint={quality === 'custom' ? 'Custom — the details below set by hand.' : 'A preset for the details below: lower runs smoother on a slower computer.'}>
+                  <Row label="Graphics quality" hint={quality === 'custom' ? 'Custom, the details below set by hand.' : 'A preset for the details below: lower runs smoother on a slower computer.'}>
                     <Seg<Quality | 'custom'> value={quality} options={QUALITIES} onChange={(v) => { if (v !== 'custom') set({ ...p, graphics: QUALITY[v] }); }} />
                   </Row>
-                  <Row label="3D resolution" hint={`Pixels drawn for each pixel of the page — never more than the screen has (this one: ${Math.round(screenRatio * 100)}%).`}>
+                  <Row label="3D resolution" hint={`Pixels drawn for each pixel of the page, never more than the screen has (this one: ${Math.round(screenRatio * 100)}%).`}>
                     <Seg value={p.graphics.pixelRatio} options={RATIOS} onChange={(v) => setGraphics({ pixelRatio: v })} />
                   </Row>
                   <Row label="Shadows" hint="The players' shadows on the court: off, or softer to sharper.">
                     <Seg value={p.graphics.shadows} options={SHADOWS} onChange={(v) => setGraphics({ shadows: v })} />
                   </Row>
-                  <Row check label="Anti-aliasing" hint="Smooths jagged edges — taken up the next time a 3D view opens.">
+                  <Row check label="Anti-aliasing" hint="Smooths jagged edges, taken up the next time a 3D view opens.">
                     <input type="checkbox" checked={p.graphics.antialias} onChange={(e) => setGraphics({ antialias: e.target.checked })} />
                   </Row>
                 </div>
                 <div className="settings-group">
                   <h4>Frame rate</h4>
-                  <Row label="Frame rate limit" hint="The most frames a second the 3D views draw — fewer is easier on a laptop's battery and fans.">
+                  <Row label="Frame rate limit" hint="The most frames a second the 3D views draw, fewer is easier on a laptop's battery and fans.">
                     <Seg value={p.frameCap} options={CAPS} onChange={(v) => set({ ...p, frameCap: v })} />
                   </Row>
                   <Row check label="Show frame rate" hint="A counter of frames a second in the corner of the screen.">
@@ -156,7 +156,7 @@ export function PreferencesDialog(): JSX.Element | null {
                     <Dropdown<CameraMode>
                       value={g.courtCamera}
                       onChange={(v) => g.setCourtCamera(v)}
-                      options={CAMERA_MODES.map((c) => ({ value: c.mode, label: `${c.name} — ${c.hint}` }))}
+                      options={CAMERA_MODES.map((c) => ({ value: c.mode, label: `${c.name}, ${c.hint}` }))}
                     />
                   </span>
                 </Row>

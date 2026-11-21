@@ -334,16 +334,16 @@ export function describeRally(r: RallyLogEntry, store: NameLookup): string {
 
 /** What went wrong for the block, when something did: told after the attack. */
 function blockNote(c: RallyContact): string {
-  if (c.lateMiddle === true) return ' — the middle was late';
-  if (c.misread === true) return ' — the block went the wrong way';
+  if (c.lateMiddle === true) return ', the middle was late';
+  if (c.misread === true) return ', the block went the wrong way';
   return '';
 }
 
 function describeContact(c: RallyContact, store: NameLookup): string {
   const who = store.shortName(c.player);
   if (c.detail === SECOND_BALL && (c.kind === 'attack' || c.kind === 'kill' || c.kind === 'blocked' || c.kind === 'attackError')) {
-    if (c.kind === 'kill') return `KILL ${who} — setter dump on the second ball`;
-    if (c.kind === 'blocked') return `${who} dumps the second ball — STUFFED`;
+    if (c.kind === 'kill') return `KILL ${who}, setter dump on the second ball`;
+    if (c.kind === 'blocked') return `${who} dumps the second ball, STUFFED`;
     if (c.kind === 'attackError') return `${who} dumps the second ball into the net`;
     return `${who} dumps the second ball`;
   }
@@ -352,7 +352,7 @@ function describeContact(c: RallyContact, store: NameLookup): string {
     case 'ace': return `ACE ${who}`;
     case 'serveError': return `${who} serve error`;
     case 'reception': return `${who} passes ${c.detail}`;
-    case 'receptionError': return `${who} shanks the pass — an ace`;
+    case 'receptionError': return `${who} shanks the pass, an ace`;
     case 'set': return c.detail === 'bump' ? `${who} bump-sets it (inside the 3 m)` : c.detail === 'jump' ? `${who} jump-sets from behind the 3 m line` : '';
     case 'setError': return c.detail === 'bump' ? `${who} bump set goes astray` : `${who} setting error`;
     case 'attack': return `${who} attacks (${c.detail})${blockNote(c)}`;
@@ -361,7 +361,7 @@ function describeContact(c: RallyContact, store: NameLookup): string {
     case 'blocked': return `${who} STUFFED`;
     case 'blockTouch': return `${who} touch`;
     case 'dig': return `${who} digs`;
-    case 'freeball': return c.detail !== undefined ? `${who} can't swing at it — free ball over` : 'free ball over';
+    case 'freeball': return c.detail !== undefined ? `${who} can't swing at it, free ball over` : 'free ball over';
     default: return '';
   }
 }
@@ -381,14 +381,14 @@ const SHOT_TITLES: Partial<Record<Shot, string>> = {
 
 /** One-line headline for a rally, built around whoever decided the point — for the live ticker. */
 const HIGHLIGHT_TEMPLATES: Partial<Record<RallyContact['kind'], [string, string]>> = {
-  ace: ['Ace — ', ' serves it straight through.'],
-  kill: ['Kill — ', ' finishes it off.'],
-  blocked: ['Stuffed at the net — ', "'s attack goes nowhere."],
-  attackError: ['Attack error — ', ' puts it wide.'],
-  serveError: ['Serve error — ', ' into the net.'],
-  receptionError: ['Reception error — ', ' shanks the pass.'],
-  setError: ['Setting error — ', ' the set goes astray.'],
-  digError: ['Dig error — ', " can't keep it up."],
+  ace: ['Ace, ', ' serves it straight through.'],
+  kill: ['Kill, ', ' finishes it off.'],
+  blocked: ['Stuffed at the net, ', "'s attack goes nowhere."],
+  attackError: ['Attack error, ', ' puts it wide.'],
+  serveError: ['Serve error, ', ' into the net.'],
+  receptionError: ['Reception error, ', ' shanks the pass.'],
+  setError: ['Setting error, ', ' the set goes astray.'],
+  digError: ['Dig error, ', " can't keep it up."],
 };
 
 export function describeRallyHighlight(
@@ -405,14 +405,14 @@ export function describeRallyHighlight(
     const title = monster ? 'Monster spike' : play !== undefined ? PLAY_NAMES[play] : shot !== undefined ? SHOT_TITLES[shot] ?? 'Kill' : 'Kill';
     const how = shot !== undefined ? SHOT_VERBS[shot] : monster ? 'hammers it down' : 'finishes it off';
     const off = play !== undefined && !monster ? '' : play !== undefined ? ` off the ${PLAY_NAMES[play].toLowerCase()}` : '';
-    return { before: `${title} — `, player: store.shortName(last.player), after: ` ${how}${off} (${reading(last.speed, last.height)}).` };
+    return { before: `${title}, `, player: store.shortName(last.player), after: ` ${how}${off} (${reading(last.speed, last.height)}).` };
   }
   if (last?.kind === 'attackError' && last.shot !== undefined) {
-    return { before: 'Attack error — ', player: store.shortName(last.player), after: ` ${SHOT_VERBS[last.shot]}.` };
+    return { before: 'Attack error, ', player: store.shortName(last.player), after: ` ${SHOT_VERBS[last.shot]}.` };
   }
   if (last?.kind === 'blocked' && last.by !== undefined) {
     return {
-      before: 'Stuffed at the net — ', player: store.shortName(last.by),
+      before: 'Stuffed at the net, ', player: store.shortName(last.by),
       after: ` blocks ${store.shortName(last.player)}${last.blockHeight !== undefined ? `, hands at ${last.blockHeight.toFixed(2)} m` : ''}.`,
     };
   }
@@ -421,13 +421,13 @@ export function describeRallyHighlight(
   if (last?.kind === 'receptionError' && serve !== undefined) {
     const read = reading(serve.speed, serve.height);
     return {
-      before: 'Ace — ', player: store.shortName(serve.player),
-      after: ` — ${store.shortName(last.player)} shanks the pass${read !== '' ? ` (${read})` : ''}.`,
+      before: 'Ace, ', player: store.shortName(serve.player),
+      after: `, ${store.shortName(last.player)} shanks the pass${read !== '' ? ` (${read})` : ''}.`,
     };
   }
   if (last?.kind === 'ace' && serve?.speed !== undefined) {
     return {
-      before: 'Ace — ', player: store.shortName(last.player),
+      before: 'Ace, ', player: store.shortName(last.player),
       after: ` ${serve.detail === 'jump' ? 'jump-serves' : 'floats'} it through (${reading(serve.speed, serve.height)}).`,
     };
   }
@@ -505,7 +505,7 @@ export function BoxScore({ watched: shown }: { watched?: WatchedMatch } = {}): J
                 ? (s.receptionPerfect + s.receptionPositive) / s.receptionsTotal : 0;
               return (
                 <tr key={s.playerIdx} className="clickable" onClick={() => g.select(s.playerIdx)}>
-                  <td className="strong" title={`${store.fullName(s.playerIdx)} — open his profile`}><span className="player-link">{store.shortName(s.playerIdx)}</span></td>
+                  <td className="strong" title={`${store.fullName(s.playerIdx)}, open his profile`}><span className="player-link">{store.shortName(s.playerIdx)}</span></td>
                   <td className="num">
                     <RatingBadge
                       value={matchRating(s, store.position[s.playerIdx] as Position, setsFor, setsAgainst)}
@@ -633,7 +633,7 @@ function RotationAnalysis(): JSX.Element {
       </div>
       <p className="footnote">
         Rotations are named for the zone the setter occupies. Side-out above 68% is strong; below 55%
-        is a rotation that needs a different first-ball option — change it under Tactics › Rotations.
+        is a rotation that needs a different first-ball option, change it under Tactics › Rotations.
       </p>
     </>
   );
@@ -779,9 +779,9 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
       )}
       {tab !== 'stats' && activeGroup === undefined && past < 0 && champSize > 0 && (
         <p className="legend">
-          <span className="zone-key champ" /> Top {champSize} — championship playoff
+          <span className="zone-key champ" /> Top {champSize}, championship playoff
           {relegationSize > 0 && (
-            <><span className="zone-key releg" /> Bottom {relegationSize} — relegation playoff</>
+            <><span className="zone-key releg" /> Bottom {relegationSize}, relegation playoff</>
           )}
         </p>
       )}
@@ -826,7 +826,7 @@ function PastTable({ comp, season }: { comp: Competition; season: number }): JSX
         </tbody>
       </table>
       {champion >= 0 && rows[0]?.clubId !== champion && (
-        <p className="legend">The regular season's table — the trophy marks the champions, who took the title in the playoffs.</p>
+        <p className="legend">The regular season's table, the trophy marks the champions, who took the title in the playoffs.</p>
       )}
     </div>
   );

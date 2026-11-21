@@ -22,7 +22,7 @@ function match(seed: number): { w: ReturnType<typeof generateWorld>; setup: Matc
 
 const kindOf = (type: InjuryType): number => MATCH_INJURIES.findIndex((k) => k.type === type);
 
-test('players get hurt in matches — about once in ten for a side, mostly knocks they can play on with', () => {
+test('players get hurt in matches, about once in ten for a side, mostly knocks they can play on with', () => {
   const { w, setup } = match(61);
   let events = 0;
   let knocks = 0;
@@ -57,7 +57,7 @@ test('a player hurt too badly to go on comes off before the next serve, and take
   assert.equal(inj.off, true);
 });
 
-test("the live coach answers for his own: the match waits for him — and when the six are used up, the exceptional substitution", () => {
+test("the live coach answers for his own: the match waits for him, and when the six are used up, the exceptional substitution", () => {
   const { w, setup } = match(63);
   const sim = new MatchSimulator(w.players, setup);
   sim.answerInjuriesFor(0, true);
@@ -87,7 +87,7 @@ test("the live coach answers for his own: the match waits for him — and when t
   assert.equal(sim.subsRemaining(0), 0, 'it used none of the six');
 });
 
-test('a libero hurt: a spare named for the match takes over — with none, the other libero alone, or none at all', () => {
+test('a libero hurt: a spare named for the match takes over, with none, the other libero alone, or none at all', () => {
   const { w, setup } = match(64);
   const sim = new MatchSimulator(w.players, setup);
   sim.step();
@@ -108,7 +108,7 @@ test('a libero hurt: a spare named for the match takes over — with none, the o
   assert.ok(sim.buildResult().homeSets + sim.buildResult().awaySets >= 3, 'and the match is played out');
 });
 
-test('a knock: the engine takes him off for a like-for-like change if it can — otherwise he plays on, below himself', () => {
+test('a knock: the engine takes him off for a like-for-like change if it can, otherwise he plays on, below himself', () => {
   const { w, setup } = match(65);
   const sim = new MatchSimulator(w.players, setup);
   sim.step();

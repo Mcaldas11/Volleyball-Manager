@@ -257,9 +257,27 @@ function mixRgb(a: readonly number[], b: readonly number[], k: number): [number,
  * brows in the hair's colour, the nostrils, the lips and the line between them; stubble, or a full
  * beard, over the jaw and chin and the upper lip.
  */
+/** Every face painted so far, by its look: painting one is pixel by pixel, and the same few are seen match after match. */
+const FACES = new Map<string, HTMLCanvasElement>();
+
 function faceTexture(skin: string, hair: string, beard: number, women: boolean): CanvasTexture {
-  const W = 512;
-  const H = 256;
+  const key = `${skin}|${hair}|${beard}|${women ? 1 : 0}`;
+  let c = FACES.get(key);
+  if (c === undefined) {
+    c = paintFace(skin, hair, beard, women);
+    FACES.set(key, c);
+  }
+  // A texture of its own for each figure (each is disposed with it), over the one painting.
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function paintFace(skin: string, hair: string, beard: number, women: boolean): HTMLCanvasElement {
+  // These figures are the officials and the bench staff, small on screen: half the size is plenty.
+  const W = 256;
+  const H = 128;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -326,10 +344,7 @@ function faceTexture(skin: string, hair: string, beard: number, women: boolean):
     }
   }
   ctx.putImageData(img, 0, 0);
-  const tex = new CanvasTexture(c);
-  tex.colorSpace = SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
+  return c;
 }
 
 // ---- The body's parts ------------------------------------------------------------------

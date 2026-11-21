@@ -16,7 +16,7 @@ function setup(seed: number): { world: World; club: World['clubs'][number] } {
   return { world, club };
 }
 
-test('the papers link the manager\'s best players with bigger clubs — and an ambitious one\'s head turns', () => {
+test('the papers link the manager\'s best players with bigger clubs, and an ambitious one\'s head turns', () => {
   const { world, club } = setup(171);
   const store = world.players;
   for (const p of club.players) store.setAttr(p, 'ambition', 18);

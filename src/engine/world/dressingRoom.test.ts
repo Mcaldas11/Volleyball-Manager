@@ -4,7 +4,7 @@ import { dressingRoom, dressingRoomWeek, noteDeparture, setCaptain, setViceCapta
 import { generateWorld } from './worldGen.ts';
 import { stubManager } from './world.ts';
 
-test('the vice-captain takes the armband when the captain goes — and the room takes it better', () => {
+test('the vice-captain takes the armband when the captain goes, and the room takes it better', () => {
   const shock = (withVice: boolean): { cohesionDrop: number; captain: number | undefined; heir: number } => {
     const world = generateWorld({ seed: 101, startYear: 2026, scale: 'small', manager: stubManager() });
     const club = world.clubs.find((c) => c.tier === 1 && c.players.length >= 12)!;

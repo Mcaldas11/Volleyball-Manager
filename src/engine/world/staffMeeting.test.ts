@@ -39,7 +39,7 @@ test('on the third of each month the staff meet, and the meeting comes to the in
   for (const it of meeting.items) assert.ok(!again.some((s) => s.kind === it.kind && s.p === it.p && s.position === it.position));
 });
 
-test('the suggestions are concrete: a key contract, a short position, an injury risk — and taking them does the thing', () => {
+test('the suggestions are concrete: a key contract, a short position, an injury risk, and taking them does the thing', () => {
   const { world, club } = career();
   const store = world.players;
   const seniors = club.players.filter((p) => !store.hasFlag(p, PlayerFlag.Youth));

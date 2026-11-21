@@ -94,7 +94,7 @@ export function achievementsDay(world: World): void {
     postMessage(world, {
       category: 'career', from: 'Your career',
       subject: `Achievement: ${a.title}`,
-      body: `${a.hint.replace(/\.$/, '')} — done. It goes in your career's record.`,
+      body: `${a.hint.replace(/\.$/, '')}, done. It goes in your career's record.`,
     });
   }
 }

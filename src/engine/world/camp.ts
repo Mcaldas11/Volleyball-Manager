@@ -27,7 +27,7 @@ export const CAMP_KINDS: readonly CampKind[] = ['home', 'altitude', 'abroad'];
 export const CAMPS: Readonly<Record<CampKind, { name: string; blurb: string; price: number; bond: number; morale: number }>> = {
   home: { name: 'At home', blurb: 'A week living in at the club: cheap, and good for the group.', price: 0.25, bond: 4, morale: 2 },
   altitude: {
-    name: 'At altitude', blurb: 'Hard, physical work in the mountains: the young players come back stronger — and everyone tired.',
+    name: 'At altitude', blurb: 'Hard, physical work in the mountains: the young players come back stronger, and everyone tired.',
     price: 0.6, bond: 3, morale: 1,
   },
   abroad: { name: 'Abroad', blurb: 'A week somewhere warm: the dearest, and the one that brings a squad together.', price: 1, bond: 9, morale: 5 },
@@ -66,12 +66,12 @@ export function campWindow(world: World): { first: number; last: number } | null
 export function campBlock(world: World, club: Club, kind: CampKind, start: number): string | null {
   if (club.camp !== undefined && club.camp.season === world.season) return 'There is a camp booked for this pre-season already.';
   const window = campWindow(world);
-  if (window === null) return 'The pre-season is too far gone for a camp — next summer.';
+  if (window === null) return 'The pre-season is too far gone for a camp, next summer.';
   if (start < window.first || start > window.last) return 'Pick a week in the pre-season, a few days ahead at least.';
   for (let d = start - 1; d <= start + CAMP_DAYS; d++) {
     for (const id of world.fixturesByDay.get(d) ?? []) {
       const f = world.fixtures[id];
-      if (f.home === club.id || f.away === club.id) return 'There is a match that week — the camp needs a week clear.';
+      if (f.home === club.id || f.away === club.id) return 'There is a match that week, the camp needs a week clear.';
     }
   }
   const cost = campCost(club, kind);

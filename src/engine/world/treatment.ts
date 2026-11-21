@@ -130,7 +130,7 @@ export function relapseAfterMatch(world: World, fixtureId: number, played: Itera
       postMessage(world, {
         category: 'medical', from: 'Medical Department', playerIdx: p,
         subject: `${name} breaks down again`,
-        body: `${name}'s ${injury} has gone again — he came back too soon. He is out for about ${Math.max(1, Math.round(days / 7))} weeks, ` +
+        body: `${name}'s ${injury} has gone again, he came back too soon. He is out for about ${Math.max(1, Math.round(days / 7))} weeks, ` +
           'and this time the doctors will do it their way.',
         injury: { type: r.type, days },
       });

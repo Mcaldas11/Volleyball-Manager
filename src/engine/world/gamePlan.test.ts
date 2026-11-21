@@ -9,7 +9,7 @@ import { applyPlan, followsPlan, suggestPlan, undoPlan } from './gamePlan.ts';
 import { generateWorld } from './worldGen.ts';
 import { stubManager } from './world.ts';
 
-test('the scouts\' plan: serve their weakest passer, block their offence, and it goes into every rotation — and comes back out', () => {
+test('the scouts\' plan: serve their weakest passer, block their offence, and it goes into every rotation, and comes back out', () => {
   const world = generateWorld({ seed: 97, startYear: 2026, scale: 'small', manager: stubManager() });
   startSeason(world, newSeasonContext());
   const [club, opp] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);

@@ -43,7 +43,7 @@ test('receiving side hides its setter at the net, whatever the rotation', () => 
   }
 });
 
-test('receiving with the setter in 1 and an outside in 2, the outside hits on the right and zone 4 on the left — a 5-1 and a 4-2 alike', () => {
+test('receiving with the setter in 1 and an outside in 2, the outside hits on the right and zone 4 on the left, a 5-1 and a 4-2 alike', () => {
   for (const formation of [Formation.FiveOne, Formation.FourTwo]) {
     const world = generateWorld({ seed: 74, startYear: 2026, scale: 'small', manager: stubManager() });
     const store = world.players;
@@ -344,7 +344,7 @@ test('the coach\'s serving orders show: each man serves behind the zone he was t
   assert.ok(home > 5 && away > 5, `serves seen: ${home} home, ${away} away`);
 });
 
-test('the receive line stands where its coach has it against the serve coming — and takes a float overhead if told to', () => {
+test('the receive line stands where its coach has it against the serve coming, and takes a float overhead if told to', () => {
   const world = generateWorld({ seed: 77, startYear: 2026, scale: 'small', manager: stubManager() });
   const store = world.players;
   const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);

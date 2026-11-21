@@ -32,7 +32,7 @@ export function CoachTalkScreen(): JSX.Element | null {
   // Once he has answered, the choice is what was asked — the options may have moved on.
   const requests = t.result === null ? coachRequests(world, p) : [t.request];
   const option = (r: LoanPlayingTime): string => (r === loan.playingTime && t.result === null
-    ? `Keep to the deal — ${PLAYING_TIME_NAMES[r].toLowerCase()}`
+    ? `Keep to the deal, ${PLAYING_TIME_NAMES[r].toLowerCase()}`
     : `${PLAYING_TIME_NAMES[r]} · about ${Math.round(PLAYING_TIME_SHARE[r] * 100)}% of the play`);
 
   return (

@@ -24,21 +24,21 @@ export const MOVE_REPLY_NAMES: Readonly<Record<MoveReply, string>> = {
   important: 'He is too important to sell',
   nextOffer: 'The right offer, and he can go',
   contract: 'A better contract to stay',
-  firm: 'He is staying — end of story',
+  firm: 'He is staying, end of story',
 };
 
 /** What the manager says, for each answer. */
 export const MOVE_REPLY_LINES: Readonly<Record<MoveReply, string>> = {
   important: 'You’re too important to this team. I couldn’t let you go.',
   nextOffer: 'That bid wasn’t good enough. If the right offer comes in, I won’t stand in your way.',
-  contract: 'Stay, and I’ll make it worth your while — a better contract.',
+  contract: 'Stay, and I’ll make it worth your while, a better contract.',
   firm: 'You’re under contract here, and you’re staying. End of discussion.',
 };
 
 export const MOVE_REPLY_HINTS: Readonly<Record<MoveReply, string>> = {
-  important: 'Rings true for a key player — not for one on the bench',
-  nextOffer: 'Settles him — but turn down the next fair bid and he asks to leave',
-  contract: 'If it is the money — and the new deal must follow within six weeks',
+  important: 'Rings true for a key player, not for one on the bench',
+  nextOffer: 'Settles him, but turn down the next fair bid and he asks to leave',
+  contract: 'If it is the money, and the new deal must follow within six weeks',
   firm: 'The professionals accept it; the rest ask to leave',
 };
 
@@ -96,7 +96,7 @@ export function askForWord(world: World, offer: IncomingOffer, what: string, pul
     category: 'contract', from: name, playerIdx: p, moveTalkOf: p,
     subject: `${name} wants a word`,
     body: `${name} has heard that ${what}, and he is not happy. He wanted that move, and he has asked to see you ` +
-      `about it. Don't keep him waiting — give him a week without an answer and he will take the silence as one.`,
+      `about it. Don't keep him waiting, give him a week without an answer and he will take the silence as one.`,
   });
 }
 
@@ -135,7 +135,7 @@ export function salePromiseBroken(world: World, offer: IncomingOffer, what: stri
   const store = world.players;
   store.morale[p] = Math.max(0, store.morale[p] - 20);
   requestToLeave(world, p, `${store.fullName(p)} is livid that ${what}. You told him that if the right offer came in ` +
-    `you would not stand in his way — he says this was it, and that your word means nothing.`);
+    `you would not stand in his way, he says this was it, and that your word means nothing.`);
   return true;
 }
 
@@ -170,20 +170,20 @@ export function answerGrievance(world: World, club: Club, p: number, reply: Move
       const key = rank < 6 || store.playingTime[p] >= 55;
       if (key && roll < 0.85 - g.pull * 0.35) {
         morale = 6;
-        text = `${name} is flattered — it matters to him that you see him as one of the team's key men. He'll put the move behind him.`;
-        said = 'I didn’t know you rated me that highly. Alright — I’ll put it behind me.';
+        text = `${name} is flattered, it matters to him that you see him as one of the team's key men. He'll put the move behind him.`;
+        said = 'I didn’t know you rated me that highly. Alright, I’ll put it behind me.';
       } else if (key) {
         morale = -3;
         unsettle(world, p);
-        text = `${name} has heard it all before. He accepts it for now, but he is not convinced — and he is unsettled.`;
+        text = `${name} has heard it all before. He accepts it for now, but he is not convinced, and he is unsettled.`;
         said = '...That’s what they all say, boss.';
       } else {
         morale = -8;
         asked = roll < 0.7;
         if (!asked) unsettle(world, p);
         text = asked
-          ? `${name} doesn't believe a word of it — he barely plays. He has handed in a transfer request.`
-          : `${name} doesn't believe a word of it — he barely plays. He is unsettled.`;
+          ? `${name} doesn't believe a word of it, he barely plays. He has handed in a transfer request.`
+          : `${name} doesn't believe a word of it, he barely plays. He is unsettled.`;
         said = 'Important? I hardly get on the court. Don’t insult me.';
       }
       break;
@@ -195,7 +195,7 @@ export function answerGrievance(world: World, club: Club, p: number, reply: Move
       };
       text = `${name} accepts it, and will hold you to it: turn down a bid of ${euros(Math.round(g.fee * RIGHT_OFFER))} ` +
         'or more in the next year and he will ask to leave.';
-      said = 'Alright. I’ll take you at your word — don’t make me regret it.';
+      said = 'Alright. I’ll take you at your word, don’t make me regret it.';
       break;
     case 'contract':
       if (roll < 0.75 - g.pull * 0.45) {
@@ -203,8 +203,8 @@ export function answerGrievance(world: World, club: Club, p: number, reply: Move
         (world.movePromises ??= {})[p] = {
           kind: 'contract', madeOn: world.day, due: world.day + CONTRACT_PROMISE_DAYS, fee: 0, contractWas: store.contractUntil[p],
         };
-        text = `${name} will stay — for a better deal. He expects new terms within six weeks: open contract talks from his profile.`;
-        said = 'If the club shows me I’m valued — properly — I’ll stay.';
+        text = `${name} will stay, for a better deal. He expects new terms within six weeks: open contract talks from his profile.`;
+        said = 'If the club shows me I’m valued, properly, I’ll stay.';
       } else {
         morale = -4;
         unsettle(world, p);
@@ -219,7 +219,7 @@ export function answerGrievance(world: World, club: Club, p: number, reply: Move
       asked = roll < chance;
       text = asked
         ? `${name} won't accept it. He has handed in a transfer request.`
-        : `${name} takes it — not happily, but he is a professional, and he'll get on with it.`;
+        : `${name} takes it, not happily, but he is a professional, and he'll get on with it.`;
       said = asked ? 'Then I want to go on the list. I’m putting it in writing.' : 'Fine. You’re the boss.';
       break;
     }
@@ -256,7 +256,7 @@ export function blockedMovesDay(world: World): void {
       postMessage(world, {
         category: 'contract', from: name, playerIdx: p,
         subject: `${name} is unhappy`,
-        body: `${name} waited a week for you to talk to him about ${buyer}, and nobody did. He has stopped asking — but he is unsettled.`,
+        body: `${name} waited a week for you to talk to him about ${buyer}, and nobody did. He has stopped asking, but he is unsettled.`,
       });
     }
   }
@@ -278,12 +278,12 @@ export function blockedMovesDay(world: World): void {
       postMessage(world, {
         category: 'contract', from: name, playerIdx: p,
         subject: `${name}: a promise kept`,
-        body: `You promised ${name} a better contract to stay, and he has it. He feels valued — the move is forgotten.`,
+        body: `You promised ${name} a better contract to stay, and he has it. He feels valued, the move is forgotten.`,
       });
     } else if (world.day >= pr.due) {
       delete world.movePromises![p];
       store.morale[p] = Math.max(0, store.morale[p] - 15);
-      requestToLeave(world, p, `You promised ${name} a better contract if he stayed. Six weeks on, he has not had one — ` +
+      requestToLeave(world, p, `You promised ${name} a better contract if he stayed. Six weeks on, he has not had one, ` +
         'and he has handed in a transfer request.');
     }
   }

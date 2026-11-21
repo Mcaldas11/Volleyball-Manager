@@ -72,7 +72,7 @@ test('two divisions trade as many clubs as they send, and a tier\'s groups stay 
   assert.deepEqual(world.competitions.filter((c) => c.tier === 5).map((c) => c.relegationSlots), Array(8).fill(1));
 });
 
-test('a pyramid out of shape is put back — one Group A of forty, groups emptied, the bottom swollen', () => {
+test('a pyramid out of shape is put back, one Group A of forty, groups emptied, the bottom swollen', () => {
   const world = pyramid([1, 1, 2, 4, 8, 8], (t, g) => (t === 4 ? (g === 0 ? 40 : 1) : t === 5 ? (g === 0 ? 30 : 20) : 12));
   balanceRelegationSlots(world);
   const rng = new Rng(3);

@@ -340,7 +340,7 @@ export const ACADEMY_LOAN_AGE = 16;
 /** Why an academy player can't go out on loan just now — or null when he can. */
 export function academyLoanBlock(world: World, p: number): string | null {
   const store = world.players;
-  if (store.ageOn(p, world.year, 181) < ACADEMY_LOAN_AGE) return `Too young — senior loans from ${ACADEMY_LOAN_AGE}`;
+  if (store.ageOn(p, world.year, 181) < ACADEMY_LOAN_AGE) return `Too young, senior loans from ${ACADEMY_LOAN_AGE}`;
   if (store.injuryDaysLeft[p] > 0) return 'Injured';
   if (transferWindowOn(world.day) === null) return 'Loans only in a transfer window';
   return null;

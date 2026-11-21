@@ -915,7 +915,7 @@ class Game {
       await this.taskStep(1);
       this.beginCareer(world, scale, gender);
     } catch (err) {
-      this.notice = `Could not build the world — ${err instanceof Error ? err.message : String(err)}`;
+      this.notice = `Could not build the world, ${err instanceof Error ? err.message : String(err)}`;
     }
     this.endTask();
     this.emit();
@@ -1170,9 +1170,9 @@ class Game {
       } else {
         this.download(await exportCareer(meta, world, season, written), name);
       }
-      this.notice = 'Career exported — keep the file somewhere safe.';
+      this.notice = 'Career exported, keep the file somewhere safe.';
     } catch (err) {
-      this.notice = `Could not export the career — ${err instanceof Error ? err.message : String(err)}`;
+      this.notice = `Could not export the career, ${err instanceof Error ? err.message : String(err)}`;
     }
     this.endTask();
     this.emit();
@@ -1211,7 +1211,7 @@ class Game {
       await this.taskStep(1, careerLine(meta));
       const id = newSaveId();
       await writeSaveWorld(id, { ...meta, id, updatedAt: Date.now() }, world, season);
-      this.notice = `Imported ${meta.managerName}'s career — ${meta.clubName}, ${meta.inGameDate}.`;
+      this.notice = `Imported ${meta.managerName}'s career, ${meta.clubName}, ${meta.inGameDate}.`;
       await this.refreshSaves();
     } catch (err) {
       this.notice = err instanceof Error ? err.message : 'Could not import that file.';
@@ -1230,7 +1230,7 @@ class Game {
       await writeSaveWorld(meta.id, meta, world, this.ctx);
       // A save lives in this browser only: now and then, a word about keeping a copy outside it.
       this.notice = backupDue(meta.id)
-        ? 'Game saved. It is a week since this career was last exported — keep a copy outside the browser: Export career file, in the menu by your name.'
+        ? 'Game saved. It is a week since this career was last exported, keep a copy outside the browser: Export career file, in the menu by your name.'
         : 'Game saved.';
       return true;
     } catch (err) {
@@ -1312,7 +1312,7 @@ class Game {
     startOutOfWorkCareer(world);
     this.screen = 'jobs';
     this.resetHistory();
-    this.notice = 'You are out of work. Apply for the vacancies here — or wait for a club to call.';
+    this.notice = 'You are out of work. Apply for the vacancies here, or wait for a club to call.';
     this.emit();
   }
 
@@ -1492,8 +1492,8 @@ class Game {
     this.notice = app === null
       ? problem ?? 'You cannot apply for that job.'
       : app.speculative === true
-        ? `Your interest has been passed to the ${name} board — expect an answer by ${this.dateLabelForDay(app.answerOn)}.`
-        : `Application sent to ${name} — expect an answer by ${this.dateLabelForDay(app.answerOn)}.`;
+        ? `Your interest has been passed to the ${name} board, expect an answer by ${this.dateLabelForDay(app.answerOn)}.`
+        : `Application sent to ${name}, expect an answer by ${this.dateLabelForDay(app.answerOn)}.`;
     this.emit();
   }
 
@@ -2037,7 +2037,7 @@ class Game {
       const msg = interviewMessage(world, s);
       return {
         kind: 'interview', label: 'Press conference', interviewId: s.id, offerId: null, messageId: msg?.id ?? null,
-        reason: 'The press are waiting — attend the press conference or decline it before you go on.',
+        reason: 'The press are waiting, attend the press conference or decline it before you go on.',
       };
     }
     for (const o of world.incomingOffers) {
@@ -2046,14 +2046,14 @@ class Game {
       const club = world.clubs[o.buyingClubId]?.name ?? 'A club';
       return {
         kind: 'offer', label: 'Respond to offer', interviewId: null, offerId: o.id, messageId: msg?.id ?? null,
-        reason: `${club} want an answer about ${world.players.fullName(o.playerIdx)} — accept, counter or reject the offer before you go on.`,
+        reason: `${club} want an answer about ${world.players.fullName(o.playerIdx)}, accept, counter or reject the offer before you go on.`,
       };
     }
     const due = squadDue(world);
     if (due !== undefined) {
       return {
         kind: 'squad', label: 'Name your squad', interviewId: null, offerId: null, messageId: null,
-        reason: `${nationName(userNation(world))} need your fourteen for the ${due.name} — name the squad before you go on.`,
+        reason: `${nationName(userNation(world))} need your fourteen for the ${due.name}, name the squad before you go on.`,
       };
     }
     return null;
@@ -2154,7 +2154,7 @@ class Game {
     const problem = hostBlock(world, size, startDay, invitees);
     const cup = problem === null ? hostCup(world, size, startDay, invitees) : null;
     this.notice = cup !== null
-      ? `Invitations sent for the ${cup.name} — the clubs answer within a few days.`
+      ? `Invitations sent for the ${cup.name}, the clubs answer within a few days.`
       : problem ?? 'That tournament cannot be arranged.';
     this.emit();
     return cup !== null;
@@ -2211,7 +2211,7 @@ class Game {
         (world.userClubId < 0
           ? `You take ${side?.name ?? 'a side'} for the day. `
           : '') +
-        'Pick the team, toss the coin, kick off and coach it live. It counts for nothing: no table, no statistics, no records — and nobody gets tired.',
+        'Pick the team, toss the coin, kick off and coach it live. It counts for nothing: no table, no statistics, no records, and nobody gets tired.',
       from: 'Assistant',
       category: 'matchday',
       clubId: f.home,
@@ -2227,7 +2227,7 @@ class Game {
     const req = problem === null ? requestFriendly(world, clubId, day, home) : null;
     const name = world.clubs[clubId]?.name ?? 'The club';
     this.notice = req !== null
-      ? `Invitation sent — ${name} will answer by ${this.dateLabelForDay(req.answerOn)}.`
+      ? `Invitation sent, ${name} will answer by ${this.dateLabelForDay(req.answerOn)}.`
       : problem ?? 'That friendly cannot be arranged.';
     if (req !== null) this.friendlyDialog = false;
     this.emit();
@@ -2332,7 +2332,7 @@ class Game {
     this.processingView = null;
     this.processing = false;
     const news = world.messages.length - before;
-    this.notice = `Back from holiday after ${away} day${away === 1 ? '' : 's'}${why !== null ? ` — ${why}` : ''}.` +
+    this.notice = `Back from holiday after ${away} day${away === 1 ? '' : 's'}${why !== null ? `, ${why}` : ''}.` +
       (news > 0 ? ` ${news} new message${news === 1 ? '' : 's'} in the inbox.` : '');
     // The season's review keeps the screen; otherwise, back to the desk.
     if (this.selectedReview === null && news > 0) this.go('inbox');
@@ -2669,7 +2669,7 @@ class Game {
     const plan = this.gamePlanAgainst(oppId);
     if (world === null || club === null || plan === null) return;
     applyPlan(world, club, plan, fixtureId);
-    this.notice = `The plan for ${world.clubs[oppId]?.name ?? 'the match'} is in — every rotation.`;
+    this.notice = `The plan for ${world.clubs[oppId]?.name ?? 'the match'} is in, every rotation.`;
     this.emit();
   }
 
@@ -2704,7 +2704,7 @@ class Game {
     const plan = this.nationalGamePlan(oppNation, fixtureId);
     if (world === null || sheet === null || plan === null) return;
     applyPlan(world, { id: -1 - userNation(world), tactics: sheet.tactics }, plan, fixtureId);
-    this.notice = `The plan for ${nationName(oppNation)} is in — every rotation of the national team.`;
+    this.notice = `The plan for ${nationName(oppNation)} is in, every rotation of the national team.`;
     this.emit();
   }
 
@@ -2965,7 +2965,7 @@ class Game {
     const md = this.matchday;
     if (md === null || md.stage !== 'lineup' || md.homeBench.includes(playerIdx)) return;
     if (this.matchdaySquad().length >= MATCHDAY_SQUAD) {
-      this.notice = `Only ${MATCHDAY_SQUAD} can be named — leave someone out first.`;
+      this.notice = `Only ${MATCHDAY_SQUAD} can be named, leave someone out first.`;
     } else md.homeBench.push(playerIdx);
     this.emit();
   }
@@ -3049,7 +3049,7 @@ class Game {
 
   /** Whether a player may take a libero role: before kickoff anyone, after it only a libero named for the match. */
   private mayPlayLibero(md: MatchdayState, playerIdx: number): boolean {
-    const problem = md.homeLineup.includes(playerIdx) ? 'He is in the six — bring someone else on for him first.'
+    const problem = md.homeLineup.includes(playerIdx) ? 'He is in the six, bring someone else on for him first.'
       : md.homeLiberos !== undefined && !md.homeLiberos.includes(playerIdx) ? 'Only the two liberos named for the match can play libero.'
         : null;
     if (problem === null) return true;
@@ -3095,7 +3095,7 @@ class Game {
     const picked = this.lineup();
     if (club === null || picked === null) return;
     const named = picked.lineup.length + (picked.libero >= 0 ? 1 : 0) + (picked.defensiveLibero >= 0 ? 1 : 0) + picked.bench.length;
-    if (named >= MATCHDAY_SQUAD) this.notice = `Only ${MATCHDAY_SQUAD} can be named — leave someone out first.`;
+    if (named >= MATCHDAY_SQUAD) this.notice = `Only ${MATCHDAY_SQUAD} can be named, leave someone out first.`;
     else club.preferredBench = [...picked.bench, playerIdx];
     this.emit();
   }
@@ -3574,7 +3574,7 @@ class Game {
     const decision = noteDecision(world, { where: 'analysis', finding, change: change.label, changeId: change.id });
     this.analysisUndo = { decision, changeId: change.id, before };
     this.labResults.clear();
-    this.notice = `${change.label} — in the tactic from now on.`;
+    this.notice = `${change.label}, in the tactic from now on.`;
     this.emit();
   }
 
@@ -3738,7 +3738,7 @@ class Game {
       finding: f.title, change: f.change.label, changeId: f.change.id,
     });
     applied[f.change.id] = { decision, before };
-    this.notice = `${f.change.label} — from the next rally, for this match.`;
+    this.notice = `${f.change.label}, from the next rally, for this match.`;
     this.emit();
   }
 
@@ -5114,23 +5114,23 @@ class Game {
     const store = this.world!.players;
     if (kind === 'doubleSwitch') {
       const ds = plan as DoubleSwitchPlan;
-      if (ds.on !== null) return `On — ${store.shortName(ds.on.setter)} and ${store.shortName(ds.on.opposite)} come back as ${store.shortName(ds.setter)} reaches zone 4`;
-      if (sim.subsRemaining(team) < 4) return 'Waiting — it needs 4 substitutions left this set, to switch back';
-      return 'Armed — made as your setter reaches zone 4 with the opposite in zone 1';
+      if (ds.on !== null) return `On, ${store.shortName(ds.on.setter)} and ${store.shortName(ds.on.opposite)} come back as ${store.shortName(ds.setter)} reaches zone 4`;
+      if (sim.subsRemaining(team) < 4) return 'Waiting, it needs 4 substitutions left this set, to switch back';
+      return 'Armed, made as your setter reaches zone 4 with the opposite in zone 1';
     }
     if (kind === 'receiveSub') {
       const rs = plan as ReceiveSubPlan;
-      if (rs.on !== null) return `On — ${store.shortName(rs.hitter)} comes back as ${store.shortName(rs.receiver)} reaches the net`;
-      if (sim.subsRemaining(team) < 2) return 'Waiting — it needs 2 substitutions left this set';
+      if (rs.on !== null) return `On, ${store.shortName(rs.hitter)} comes back as ${store.shortName(rs.receiver)} reaches the net`;
+      if (sim.subsRemaining(team) < 2) return 'Waiting, it needs 2 substitutions left this set';
       // One of the two already swapped with someone else this set: it can't be made until the next.
       const tied = [rs.hitter, rs.receiver].find((p) => { const q = sim.subPartnerOf(team, p); return q !== undefined && q !== rs.hitter && q !== rs.receiver; });
-      if (tied !== undefined) return `Waiting — ${store.shortName(tied)} swapped with someone else this set; made from the next`;
-      return `Armed — made once ${store.shortName(rs.hitter)} is in the back row and you are to receive`;
+      if (tied !== undefined) return `Waiting, ${store.shortName(tied)} swapped with someone else this set; made from the next`;
+      return `Armed, made once ${store.shortName(rs.hitter)} is in the back row and you are to receive`;
     }
     const ss = plan as ServeSubPlan;
-    if (ss.on !== null) return `On — ${store.shortName(ss.on.middle)} comes back once you lose the serve`;
-    if (sim.subsRemaining(team) < 2) return 'Waiting — it needs 2 substitutions left this set';
-    return 'Armed — made as a middle blocker goes back to serve';
+    if (ss.on !== null) return `On, ${store.shortName(ss.on.middle)} comes back once you lose the serve`;
+    if (sim.subsRemaining(team) < 2) return 'Waiting, it needs 2 substitutions left this set';
+    return 'Armed, made as a middle blocker goes back to serve';
   }
 
   /** The planned substitutions whose moment has come, made at the dead ball before the serve. */
@@ -5182,7 +5182,7 @@ class Game {
       if (ss.on !== null) {
         // The serve lost: the middle back on for him.
         if (now.serving !== team && courtNow.includes(ss.server) &&
-          this.planSwaps(team, [[ss.server, ss.on.middle, Position.MiddleBlocker]], 'Serving sub — back on')) {
+          this.planSwaps(team, [[ss.server, ss.on.middle, Position.MiddleBlocker]], 'Serving sub, back on')) {
           ss.on = null;
           if (!ss.armed) plans.serveSub = null;
         }
@@ -5204,7 +5204,7 @@ class Game {
         // Round to the net: the outside back on for him.
         const z = courtNow.indexOf(rs.receiver);
         if (z >= 1 && z <= 3 &&
-          this.planSwaps(team, [[rs.receiver, rs.hitter, Position.OutsideHitter]], 'Reception sub — back on')) {
+          this.planSwaps(team, [[rs.receiver, rs.hitter, Position.OutsideHitter]], 'Reception sub, back on')) {
           rs.on = null;
           if (!rs.armed) plans.receiveSub = null;
         }
@@ -5278,7 +5278,7 @@ class Game {
     store.injuryType[p] = InjuryType.MuscleStrain;
     sim.strain(team, p);
     injuryNotice(world, p, InjuryType.MuscleStrain, days);
-    this.notice = `${store.shortName(p)} came on without warming up and has felt a muscle — he is struggling, ` +
+    this.notice = `${store.shortName(p)} came on without warming up and has felt a muscle, he is struggling, ` +
       `and will be out for about ${Math.max(1, Math.round(days / 7))} week${days >= 11 ? 's' : ''} after the match.`;
   }
 
@@ -5923,7 +5923,7 @@ class Game {
     const world = this.world;
     if (world === null) return false;
     const problem = nameSquad(world, players);
-    this.notice = problem ?? 'Squad named — the players will be told on call-up day.';
+    this.notice = problem ?? 'Squad named, the players will be told on call-up day.';
     this.emit();
     return problem === null;
   }
@@ -5941,7 +5941,7 @@ class Game {
     const problem = nationalApplicationBlock(world, nation);
     const answerOn = problem === null ? applyForNationalJob(world, nation) : null;
     this.notice = answerOn !== null
-      ? `Application sent to the ${nationName(nation)} Volleyball Federation — expect an answer by ${this.dateLabelForDay(answerOn)}.`
+      ? `Application sent to the ${nationName(nation)} Volleyball Federation, expect an answer by ${this.dateLabelForDay(answerOn)}.`
       : problem ?? 'You cannot apply for that job.';
     this.emit();
   }
@@ -5953,7 +5953,7 @@ class Game {
     const problem = nationalInterestBlock(world, nation);
     const answerOn = problem === null ? expressNationalInterest(world, nation) : null;
     this.notice = answerOn !== null
-      ? `You have told the ${nationName(nation)} Volleyball Federation you are interested — expect an answer by ${this.dateLabelForDay(answerOn)}.`
+      ? `You have told the ${nationName(nation)} Volleyball Federation you are interested, expect an answer by ${this.dateLabelForDay(answerOn)}.`
       : problem ?? 'You cannot do that now.';
     this.emit();
   }
@@ -6098,7 +6098,7 @@ class Game {
     const loaded = club.tactics;
     Object.assign(live, loaded, { formation: playing });
     club.tactics = live;
-    this.notice = `${tacticSlots(club)[index].name} loaded — its instructions apply from the next rally.`;
+    this.notice = `${tacticSlots(club)[index].name} loaded, its instructions apply from the next rally.`;
     this.emit();
     return formationOf(loaded);
   }
@@ -6109,8 +6109,8 @@ class Game {
     if (club === null || (this.matchday !== null && this.matchday.stage !== 'lineup')) return;
     const i = newTacticSlot(club);
     this.notice = i === null
-      ? `You can keep ${MAX_TACTICS} tactics — delete one to make room.`
-      : `${tacticSlots(club)[i].name} created from the defaults — make it your own.`;
+      ? `You can keep ${MAX_TACTICS} tactics, delete one to make room.`
+      : `${tacticSlots(club)[i].name} created from the defaults, make it your own.`;
     if (i !== null && this.matchday !== null && this.matchday.national === null) this.repickMatchdaySix();
     this.emit();
   }
@@ -6364,7 +6364,7 @@ class Game {
     const world = this.world;
     if (world === null) return;
     if (world.scoutingQueue.some((t) => t.playerIdx === playerIdx)) {
-      this.notice = 'Already scouting this player — check back in a week.';
+      this.notice = 'Already scouting this player, check back in a week.';
       this.emit();
       return;
     }
@@ -6423,10 +6423,10 @@ class Game {
     const move = pendingMoveOf(world, playerIdx);
     if (move !== undefined) {
       return move.toClubId === club.id
-        ? `${name} has already agreed to join — he arrives on ${this.dateLabelForDay(move.movesOn)}.`
+        ? `${name} has already agreed to join, he arrives on ${this.dateLabelForDay(move.movesOn)}.`
         : `${name} has already agreed a move to ${world.clubs[move.toClubId]?.name ?? 'another club'}.`;
     }
-    if (loanOf(world, playerIdx) !== undefined) return `${name} is on loan — he can't move until he is back at his club.`;
+    if (loanOf(world, playerIdx) !== undefined) return `${name} is on loan, he can't move until he is back at his club.`;
     return null;
   }
 
@@ -6508,7 +6508,7 @@ class Game {
       return;
     }
     if (squadSize(world, club) >= MAX_SQUAD) {
-      this.notice = 'The squad is full — release a player first.';
+      this.notice = 'The squad is full, release a player first.';
       this.emit();
       return;
     }
@@ -6549,7 +6549,7 @@ class Game {
     const existing = this.talksWith(playerIdx, 'transfer');
     if (existing !== null) {
       if (existing.preContract !== true) {
-        this.notice = `You are already in transfer talks with ${world.players.fullName(playerIdx)}'s club — withdraw them first.`;
+        this.notice = `You are already in transfer talks with ${world.players.fullName(playerIdx)}'s club, withdraw them first.`;
         this.emit();
         return;
       }
@@ -6576,13 +6576,13 @@ class Game {
     const ours = loan === undefined ? club.players.includes(playerIdx) : loan.parentClubId === club.id;
     if (!ours) return;
     if (pendingMoveOf(world, playerIdx) !== undefined) {
-      this.notice = `${world.players.fullName(playerIdx)} has agreed to leave — there is nothing to renew.`;
+      this.notice = `${world.players.fullName(playerIdx)} has agreed to leave, there is nothing to renew.`;
       this.emit();
       return;
     }
     // A player stopping at the end of the season has no use for a contract — talking him round comes first.
     if (willRetire(world, playerIdx)) {
-      this.notice = `${world.players.fullName(playerIdx)} is retiring at the end of the season — there is nothing to renew.`;
+      this.notice = `${world.players.fullName(playerIdx)} is retiring at the end of the season, there is nothing to renew.`;
       this.emit();
       return;
     }
@@ -6599,7 +6599,7 @@ class Game {
       return;
     }
     if (refusesToRenew(world, club, playerIdx)) {
-      this.notice = `${name} doesn't want to discuss a new contract — he feels he has outgrown the club.`;
+      this.notice = `${name} doesn't want to discuss a new contract, he feels he has outgrown the club.`;
       this.emit();
       return;
     }
@@ -6669,7 +6669,7 @@ class Game {
     const on = !store.hasFlag(playerIdx, PlayerFlag.Transferable);
     store.setFlag(playerIdx, PlayerFlag.Transferable, on);
     this.notice = on
-      ? `${store.fullName(playerIdx)} is on the transfer list — ${this.listingNote()}`
+      ? `${store.fullName(playerIdx)} is on the transfer list, ${this.listingNote()}`
       : `${store.fullName(playerIdx)} is off the transfer list.`;
     this.emit();
   }
@@ -6682,7 +6682,7 @@ class Game {
     const on = !store.hasFlag(playerIdx, PlayerFlag.LoanListed);
     store.setFlag(playerIdx, PlayerFlag.LoanListed, on);
     this.notice = on
-      ? `${store.fullName(playerIdx)} is available for loan — ${this.listingNote()}`
+      ? `${store.fullName(playerIdx)} is available for loan, ${this.listingNote()}`
       : `${store.fullName(playerIdx)} is no longer available for loan.`;
     this.emit();
   }
@@ -6703,7 +6703,7 @@ class Game {
     let problem: string | null = null;
     if (owner < 0 || owner === club.id) problem = 'Only players under contract at another club can be loaned.';
     else if (this.unavailableReason(playerIdx) !== null) problem = this.unavailableReason(playerIdx);
-    else if (squadSize(world, club) >= MAX_SQUAD) problem = 'The squad is full — release a player first.';
+    else if (squadSize(world, club) >= MAX_SQUAD) problem = 'The squad is full, release a player first.';
     else if (this.talksBlocked(playerIdx)) problem = `${name} is not willing to talk to you right now.`;
     if (problem !== null) {
       this.notice = problem;
@@ -6742,7 +6742,7 @@ class Game {
       return;
     }
     const due = submitOffer(world, t, { ...t.lastOffer, wageShare: n.loanShare, playingTime: n.loanPlayingTime });
-    this.notice = `Loan request sent to ${lender.name} — they will reply by ${this.dateLabelForDay(due)}.`;
+    this.notice = `Loan request sent to ${lender.name}, they will reply by ${this.dateLabelForDay(due)}.`;
     this.negotiation = null;
     this.emit();
   }
@@ -6843,7 +6843,7 @@ class Game {
     const due = submitOffer(world, t, {
       fee: n.feeOffer, wage: n.termsWage, role: n.termsRole, years: n.termsYears,
     });
-    this.notice = `Bid sent to ${seller.name} — they will reply by ${this.dateLabelForDay(due)}.`;
+    this.notice = `Bid sent to ${seller.name}, they will reply by ${this.dateLabelForDay(due)}.`;
     this.negotiation = null;
     this.emit();
   }
@@ -6878,8 +6878,8 @@ class Game {
     });
     const name = store.fullName(p);
     this.notice = t.kind === 'renewal'
-      ? `Offer made to ${name} — he will give his answer by ${this.dateLabelForDay(due)}.`
-      : `Terms sent to ${name}'s agent — expect a reply by ${this.dateLabelForDay(due)}.`;
+      ? `Offer made to ${name}, he will give his answer by ${this.dateLabelForDay(due)}.`
+      : `Terms sent to ${name}'s agent, expect a reply by ${this.dateLabelForDay(due)}.`;
     this.negotiation = null;
     this.emit();
   }
@@ -6964,13 +6964,13 @@ class Game {
     if (n === null || world === null || offer === null || offer.loan === undefined || (offer.status ?? 'open') !== 'open') return;
     const same = n.counterShare === offer.loan.wageShare && n.counterPlayingTime === (offer.loan.playingTime ?? 'rotation');
     if (same) {
-      n.message = 'Those are the terms they have offered — ask for more, or simply accept.';
+      n.message = 'Those are the terms they have offered, ask for more, or simply accept.';
       this.emit();
       return;
     }
     const due = counterLoanOffer(world, offer, { wageShare: n.counterShare, playingTime: n.counterPlayingTime });
     const buyer = world.clubs[offer.buyingClubId];
-    this.notice = `Your terms have gone to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
+    this.notice = `Your terms have gone to ${buyer?.name ?? 'the club'}, they will answer by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.playerTalk = null;
@@ -7042,7 +7042,7 @@ class Game {
     const name = world.players.fullName(playerIdx);
     this.notice = recallPlayer(world, playerIdx)
       ? `${name} is back from his loan.`
-      : `${name} can't be recalled — his loan club is giving him the games it promised.`;
+      : `${name} can't be recalled, his loan club is giving him the games it promised.`;
     this.emit();
   }
 
@@ -7076,8 +7076,8 @@ class Game {
     const buyer = world.clubs[offer.buyingClubId];
     const name = world.players.fullName(offer.playerIdx);
     this.notice = offer.loan !== undefined
-      ? `Loan agreed with ${buyer?.name ?? 'them'} — ${name} will decide by ${this.dateLabelForDay(due)}.`
-      : `${name} is talking terms with ${buyer?.name ?? 'them'} — he will decide by ${this.dateLabelForDay(due)}.`;
+      ? `Loan agreed with ${buyer?.name ?? 'them'}, ${name} will decide by ${this.dateLabelForDay(due)}.`
+      : `${name} is talking terms with ${buyer?.name ?? 'them'}, he will decide by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.playerTalk = null;
@@ -7092,13 +7092,13 @@ class Game {
     if (n === null || world === null || offer === null || (offer.status ?? 'open') !== 'open') return;
     if (offer.loan !== undefined) return; // a loan's terms go through counterLoanOffer
     if (n.counterFee <= offer.fee) {
-      n.message = 'Ask for more than they have offered — or simply accept.';
+      n.message = 'Ask for more than they have offered, or simply accept.';
       this.emit();
       return;
     }
     const due = counterIncomingOffer(world, offer, n.counterFee);
     const buyer = world.clubs[offer.buyingClubId];
-    this.notice = `Asking price sent to ${buyer?.name ?? 'the club'} — they will answer by ${this.dateLabelForDay(due)}.`;
+    this.notice = `Asking price sent to ${buyer?.name ?? 'the club'}, they will answer by ${this.dateLabelForDay(due)}.`;
     this.incomingOffer = null;
     this.coachTalk = null;
     this.playerTalk = null;
@@ -7157,12 +7157,12 @@ class Game {
     const club = this.club;
     if (world === null || club === null || !club.players.includes(playerIdx)) return;
     if (loanOf(world, playerIdx) !== undefined) {
-      this.notice = `${world.players.fullName(playerIdx)} is here on loan — he goes back at the end of the season.`;
+      this.notice = `${world.players.fullName(playerIdx)} is here on loan, he goes back at the end of the season.`;
       this.emit();
       return;
     }
     if (pendingMoveOf(world, playerIdx) !== undefined) {
-      this.notice = `${world.players.fullName(playerIdx)} has agreed a move — he leaves when the window opens.`;
+      this.notice = `${world.players.fullName(playerIdx)} has agreed a move, he leaves when the window opens.`;
       this.emit();
       return;
     }
@@ -7229,7 +7229,7 @@ class Game {
     const s = world?.staff[staffId];
     if (world === null || club === null || s === undefined) return;
     const cost = releaseStaff(world, club, s);
-    this.notice = `${staffName(s)} has left the club${cost > 0 ? ` — ${euros(cost)} paid up on his contract` : ''}.`;
+    this.notice = `${staffName(s)} has left the club${cost > 0 ? `, ${euros(cost)} paid up on his contract` : ''}.`;
     this.emit();
   }
 
@@ -7346,7 +7346,7 @@ class Game {
       return;
     }
     const due = submitStaffOffer(world, t, { fee: n.fee, wage: n.wage, years: n.years });
-    this.notice = `Approach made to ${world.clubs[t.fromClubId]?.name ?? 'his club'} — they will reply by ${this.dateLabelForDay(due)}.`;
+    this.notice = `Approach made to ${world.clubs[t.fromClubId]?.name ?? 'his club'}, they will reply by ${this.dateLabelForDay(due)}.`;
     this.staffNegotiation = null;
     this.emit();
   }
@@ -7361,7 +7361,7 @@ class Game {
     if (n === null || t === null || world === null || club === null || s === undefined || t.stage !== 'terms' || t.pending !== null) return;
     const renewal = t.kind === 'renewal';
     if (!renewal && roleCount(world, club, s.role).have >= STAFF_SLOTS[s.role]) {
-      n.message = 'Every place in his role is taken — release someone first.';
+      n.message = 'Every place in his role is taken, release someone first.';
       this.emit();
       return;
     }
@@ -7371,7 +7371,7 @@ class Game {
       return;
     }
     const due = submitStaffOffer(world, t, { fee: t.agreedFee, wage: n.wage, years: n.years });
-    this.notice = `Offer made to ${staffName(s)} — he will give his answer by ${this.dateLabelForDay(due)}.`;
+    this.notice = `Offer made to ${staffName(s)}, he will give his answer by ${this.dateLabelForDay(due)}.`;
     this.staffNegotiation = null;
     this.emit();
   }
@@ -7403,7 +7403,7 @@ class Game {
     if (world === null || club === null || s === undefined || s.clubId !== club.id) return;
     setStaffListed(club, s, s.listed !== true);
     this.notice = s.listed === true
-      ? `${staffName(s)} is available — other clubs will be told, and can come in for him.`
+      ? `${staffName(s)} is available, other clubs will be told, and can come in for him.`
       : `${staffName(s)} is no longer available.`;
     this.emit();
   }

@@ -115,7 +115,7 @@ function DeadlineLive(): JSX.Element {
       <div className="dl-grid">
         <Card title="Live" icon="news" flush className="dl-card">
           <div className="dl-feed">
-            {feed.length === 0 && <Empty>The phones are quiet — for now.</Empty>}
+            {feed.length === 0 && <Empty>The phones are quiet, for now.</Empty>}
             {feed.map(({ e, i }) => (
               <div key={i} className={`dl-item k-${e.kind}${e.kind === 'deal' && (e.fee ?? 0) >= 300_000 ? ' big' : ''}`}>
                 <span className="dl-time">{clockLabel(e.at)}</span>

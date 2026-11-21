@@ -10,7 +10,7 @@ import { toTeamSetup } from '../season/seasonEngine.ts';
 const world = generateWorld({ seed: 11, startYear: 2026, scale: 'small', manager: stubManager() });
 const clubs = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
 
-test("the MVP is the winning side's best rating — not always its top scorer", () => {
+test("the MVP is the winning side's best rating, not always its top scorer", () => {
   let notTopScorer = 0;
   let n = 0;
   for (let i = 0; i < 24; i++) {

@@ -76,7 +76,7 @@ test('hiring staff is talks, as signing a player is: his demands, an answer days
   assert.match(staffTalksBlock(world, club, third.s) ?? '', /release one first/);
 });
 
-test('one in work at another club: his compensation agreed with it first, then his terms — and the fee goes to his club', () => {
+test('one in work at another club: his compensation agreed with it first, then his terms, and the fee goes to his club', () => {
   const { world, club } = managed(303);
   const role = StaffRole.Physiotherapist;
   for (const s of backroomOf(world, club).filter((x) => x.role === role)) releaseStaff(world, club, s);

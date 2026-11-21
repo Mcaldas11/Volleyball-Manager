@@ -159,7 +159,7 @@ function NowManaging(): JSX.Element {
             <ClubCrest club={club} size={54} />
             <span className="hm-team-name">{club.name}</span>
           </div>
-          <div className="hm-sub">No fixture scheduled — the new season's calendar is drawn up over the summer.</div>
+          <div className="hm-sub">No fixture scheduled, the new season's calendar is drawn up over the summer.</div>
         </div>
         <div className="hm-banner-side">
           <button className="hm-link" onClick={() => g.go('calendar')}>Calendar <Icon name="arrowRight" size={14} /></button>
@@ -371,7 +371,7 @@ function ForToday(): JSX.Element {
   }
 
   const project = club.facilityProject;
-  if (project !== undefined) items.push({ key: 'facility', icon: 'club', urgency: 1, go: 'facilities', text: project.stage === 'asked' ? `The board is weighing up your facilities request — answer by ${g.dateLabelForDay(project.until)}` : `Building work under way — done ${g.dateLabelForDay(project.until)}` });
+  if (project !== undefined) items.push({ key: 'facility', icon: 'club', urgency: 1, go: 'facilities', text: project.stage === 'asked' ? `The board is weighing up your facilities request, answer by ${g.dateLabelForDay(project.until)}` : `Building work under way, done ${g.dateLabelForDay(project.until)}` });
 
   // No match of his own today: one of the others, live from the stands.
   if (g.ownFixtureToday() === null && g.nationalMatchToday() === null) {
@@ -390,7 +390,7 @@ function ForToday(): JSX.Element {
   return (
     <section className="hm-card hm-today">
       <header className="hm-card-head"><h3 className="gold">For today</h3><span className="faint">{items.length === 0 ? 'nothing waiting' : `${items.length} thing${items.length === 1 ? '' : 's'}`}</span></header>
-      {items.length === 0 ? <p className="hm-empty">Nothing needs you today. A good day to look at the tactics — or the academy.</p> : (
+      {items.length === 0 ? <p className="hm-empty">Nothing needs you today. A good day to look at the tactics, or the academy.</p> : (
         <Paged className="hm-today-list" items="li">
           {items.map((i) => (
             <li key={i.key}>
@@ -434,7 +434,7 @@ function TopScorer(): JSX.Element {
     return (
       <section className="hm-card">
         <header className="hm-card-head"><h3>Top scorer (my team)</h3></header>
-        <p className="hm-empty">Nobody has scored yet — the season is still to start.</p>
+        <p className="hm-empty">Nobody has scored yet, the season is still to start.</p>
       </section>
     );
   }

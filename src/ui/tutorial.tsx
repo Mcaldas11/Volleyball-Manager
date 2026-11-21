@@ -60,27 +60,27 @@ export const TUTORIAL: readonly TutorialStep[] = [
   // ---- Welcome ----
   {
     id: 'welcome', chapter: 'Welcome', title: 'Welcome, coach',
-    body: 'This tutorial takes you through your first week in charge — and you do every part of it yourself. The lit-up part of the screen is what to use; the card tells you what it does and what to do. You can leave it at any point, and start it again from the Help (?).',
+    body: 'This tutorial takes you through your first week in charge, and you do every part of it yourself. The lit-up part of the screen is what to use; the card tells you what it does and what to do. You can leave it at any point, and start it again from the Help (?).',
   },
   {
     id: 'home', chapter: 'Welcome', title: 'Home',
-    target: '.home-page',
+    target: ['.portal-page', '.home-page'],
     body: 'Your club at a glance: the next match, the league table, the player to watch, your form, the board\'s mood and the money. Come back here whenever you want the big picture.',
     needs: (g) => plainScreen(g, 'home'),
   },
   // ---- The inbox ----
   {
     id: 'inbox', chapter: 'The inbox', title: 'Everything arrives in the inbox',
-    body: 'Offers for your players, injuries, the board, the press, your scouts — it all comes in as a message.',
-    todo: 'Open the Inbox.',
-    target: '[data-tour="nav-inbox"]',
+    body: 'Offers for your players, injuries, the board, the press, your scouts, it all comes in as a message.',
+    todo: 'Open the Inbox tab (or the envelope at the top).',
+    target: ['[data-tour="tab-inbox"]', '[data-tour="tool-inbox"]'],
     done: (g) => plainScreen(g, 'inbox'),
   },
   {
     id: 'message', chapter: 'The inbox', title: 'Read a message',
-    body: 'Unread ones are in bold. A red dot means Action needed: an offer, a contract, a player who wants a word or asks to leave — something that waits for your answer. Before every match, the preview is here too: the odds, the form and what the fans think.',
+    body: 'Unread ones are in bold. A red dot means Action needed: an offer, a contract, a player who wants a word or asks to leave, something that waits for your answer. Before every match, the preview is here too: the odds, the form and what the fans think.',
     todo: 'Click any message to read it.',
-    target: '.mail-list',
+    target: ['.mail-list-scroll', '.mail-list'],
     needs: (g) => g.screen === 'inbox',
     backTo: 'inbox',
     done: (g) => g.inboxSelected !== null,
@@ -95,16 +95,16 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'squad-table', chapter: 'Your players', title: 'Reading the squad',
-    target: '.squad-players',
+    target: ['.athlete-roster', '.squad-players'],
     body: 'Position, age, height, the stars for how good he is now and could become, his condition (tired players play worse and get hurt), his morale and his form. Click a column to sort by it.',
     needs: (g) => plainScreen(g, 'squad'),
     backTo: 'squad',
   },
   {
     id: 'player', chapter: 'Your players', title: 'A player\'s profile',
-    body: 'Everything about one player is in his profile.',
-    todo: 'Click a player\'s name.',
-    target: '.squad-players',
+    body: 'Click a player in the list to see him on the right; everything about him is in his full profile.',
+    todo: 'Press Open full profile.',
+    target: ['[data-tour="open-profile"]', '.squad-players'],
     needs: (g) => g.screen === 'squad' && g.playerTalk === null,
     backTo: 'squad',
     done: (g) => g.selectedPlayer !== null,
@@ -112,7 +112,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'attributes', chapter: 'Your players', title: 'Attributes',
     target: '.profile-attrs',
-    body: 'Each attribute runs from 1 to 20 — technical (serving, attacking, blocking, passing), mental and physical. They are what the match engine plays with: a 17 in Reception passes better than a 9, every rally. Traits like Quick-attack specialist show under his name.',
+    body: 'Each attribute runs from 1 to 20, technical (serving, attacking, blocking, passing), mental and physical. They are what the match engine plays with: a 17 in Reception passes better than a 9, every rally. Traits like Quick-attack specialist show under his name.',
     needs: (g) => g.selectedPlayer !== null,
     backTo: 'player',
   },
@@ -127,7 +127,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'say', chapter: 'Your players', title: 'Say something',
-    body: 'Praise works on a player in form; criticism can lift a professional having a bad spell — or upset him; a promise of games buys goodwill now, and he will hold you to it. Watch what it does to his morale.',
+    body: 'Praise works on a player in form; criticism can lift a professional having a bad spell, or upset him; a promise of games buys goodwill now, and he will hold you to it. Watch what it does to his morale.',
     todo: 'Pick something to say.',
     target: '.ptalk-options',
     needs: (g) => g.playerTalk !== null,
@@ -146,7 +146,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'dressing', chapter: 'Your players', title: 'The dressing room',
     body: 'Some players count for more than others in a dressing room.',
-    todo: 'Open the Dressing Room tab — from Squad, if the tab is not showing.',
+    todo: 'Open the Dressing Room tab, from Squad, if the tab is not showing.',
     target: ['[data-tour="tab-dressing"]', '[data-tour="nav-squad"]'],
     needs: (g) => g.screen === 'squad' || g.screen === 'dressing' || g.selectedPlayer !== null,
     backTo: 'squad',
@@ -155,14 +155,14 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'room', chapter: 'Your players', title: 'Leaders and cohesion',
     target: '.room-grid',
-    body: 'The leaders\' mood spreads through the squad, and a side that has been together for years holds together — that cohesion is worth a little on court. Sell a leader and the room is shaken for a while. Make your captain one of them.',
+    body: 'The leaders\' mood spreads through the squad, and a side that has been together for years holds together, that cohesion is worth a little on court. Sell a leader and the room is shaken for a while. Make your captain one of them.',
     needs: (g) => plainScreen(g, 'dressing'),
     backTo: 'dressing',
   },
   {
     id: 'planner', chapter: 'Your players', title: 'Planning ahead',
-    body: 'The Squad Planner looks two seasons ahead: who is still under contract, whose deal runs out, who may retire, the academy players coming through — and where that leaves you short.',
-    todo: 'Open the Squad Planner tab — from Squad, if the tab is not showing.',
+    body: 'The Squad Planner looks two seasons ahead: who is still under contract, whose deal runs out, who may retire, the academy players coming through, and where that leaves you short.',
+    todo: 'Open the Squad Planner tab, from Squad, if the tab is not showing.',
     target: ['[data-tour="tab-planner"]', '[data-tour="nav-squad"]'],
     needs: (g) => g.screen === 'squad' || g.screen === 'dressing' || g.screen === 'planner' || g.selectedPlayer !== null,
     backTo: 'squad',
@@ -171,28 +171,28 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'plan', chapter: 'Your players', title: 'Gaps and targets',
     target: '.plan-grid',
-    body: 'Each season, position by position, against the depth a side needs — a gap shows in red. Mark a transfer target against a gap, from a player\'s profile or from the scouts\' list, and the wage bill for each season stays in view.',
+    body: 'Each season, position by position, against the depth a side needs, a gap shows in red. Mark a transfer target against a gap, from a player\'s profile or from the scouts\' list, and the wage bill for each season stays in view.',
     needs: (g) => plainScreen(g, 'planner'),
     backTo: 'planner',
   },
   // ---- Picking the team ----
   {
     id: 'lineup', chapter: 'Picking the team', title: 'The team sheet',
-    body: 'Lineup is where you pick who plays.',
-    todo: 'Open Lineup.',
+    body: 'The Team Sheet, the first tab of Tactics, is where you pick who plays.',
+    todo: 'Open Tactics.',
     target: '[data-tour="nav-lineup"]',
     done: (g) => plainScreen(g, 'lineup'),
   },
   {
     id: 'sheet', chapter: 'Picking the team', title: 'Six, a libero and the bench',
     target: '.lineup-page',
-    body: 'The six on the court start in these zones and rotate every time you win the serve back. The libero comes on for a middle blocker in the back row. Drag a player onto another to swap them; the bench is who you can bring on — six substitutions a set.',
+    body: 'The six on the court start in these zones and rotate every time you win the serve back. The libero comes on for a middle blocker in the back row. Drag a player onto another to swap them; the bench is who you can bring on, six substitutions a set.',
     needs: (g) => plainScreen(g, 'lineup'),
     backTo: 'lineup',
   },
   {
     id: 'instructions', chapter: 'Picking the team', title: 'How you play',
-    body: 'Instructions tell the team how to play: the system, who the setter looks for, the tempo, the combinations — and, out of possession, where the defence stands and how you serve.',
+    body: 'Instructions tell the team how to play: the system, who the setter looks for, the tempo, the combinations, and, out of possession, where the defence stands and how you serve.',
     todo: 'Open the Instructions tab.',
     target: '[data-tour="tab-tactics"]',
     needs: (g) => g.screen === 'lineup' || g.screen === 'tactics',
@@ -212,7 +212,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'rotations', chapter: 'Picking the team', title: 'Rotation by rotation',
-    body: 'Each of the six rotations can have its own combination play — the between, the up and down, the scissors, the pipe — and its own preferred attacker, serve target and block. The setter at the net leaves only two attackers up front.',
+    body: 'Each of the six rotations can have its own combination play, the between, the up and down, the scissors, the pipe, and its own preferred attacker, serve target and block. The setter at the net leaves only two attackers up front.',
     todo: 'Open the Rotations tab.',
     target: '[data-tour="tab-rotations"]',
     needs: (g) => g.screen === 'tactics' || g.screen === 'rotations' || g.screen === 'lineup',
@@ -222,14 +222,14 @@ export const TUTORIAL: readonly TutorialStep[] = [
   // ---- Training ----
   {
     id: 'training', chapter: 'Training', title: 'The week\'s training',
-    body: 'Training is where players get better — and where they get tired.',
+    body: 'Training is where players get better, and where they get tired.',
     todo: 'Open Training.',
     target: '[data-tour="nav-training"]',
     done: (g) => plainScreen(g, 'training'),
   },
   {
     id: 'focus', chapter: 'Training', title: 'Set the focus',
-    body: 'The weekly focus decides what the sessions work on; the intensity, how hard. Harder develops more and tires more — before a match, keep it light. The card on the right shows how ready the squad is.',
+    body: 'The weekly focus decides what the sessions work on; the intensity, how hard. Harder develops more and tires more, before a match, keep it light. The card on the right shows how ready the squad is.',
     todo: 'Change the Weekly focus.',
     target: '[data-tour="train-focus"]',
     needs: (g) => plainScreen(g, 'training'),
@@ -241,13 +241,13 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'scouting', chapter: 'Recruitment', title: 'Finding players',
     body: 'Scouting searches every player your scouts know about, by position, age, height, potential and price. A player\'s profile has the buttons to make an offer or put him on your shortlist.',
-    todo: 'Open Scouting.',
+    todo: 'Open Recruitment.',
     target: '[data-tour="nav-scouting"]',
     done: (g) => plainScreen(g, 'scouting'),
   },
   {
     id: 'missions', chapter: 'Recruitment', title: 'Send the scouts out',
-    body: 'Or give the scouts a brief — "an opposite aged 24 or under, up to €200k" — and they go looking. Every week each mission brings back new names, onto your Shortlist and into the inbox.',
+    body: 'Or give the scouts a brief, "an opposite aged 24 or under, up to €200k", and they go looking. Every week each mission brings back new names, onto your Shortlist and into the inbox.',
     todo: 'Open the Scout Missions tab.',
     target: ['[data-tour="tab-missions"]', '[data-tour="nav-scouting"]'],
     needs: (g) => g.screen === 'scouting' || g.screen === 'shortlist' || g.screen === 'missions',
@@ -257,21 +257,23 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'brief', chapter: 'Recruitment', title: 'A brief',
     target: '.rc-missions',
-    body: 'Pick a position, an age, a price, a level and a region — or free agents only — and send them. Up to four missions at once; call one off once you have your man. The Shortlist tab keeps everyone they name, and anyone you add yourself.',
+    body: 'Pick a position, an age, a price, a level and a region, or free agents only, and send them. Up to four missions at once; call one off once you have your man. The Shortlist tab keeps everyone they name, and anyone you add yourself.',
     needs: (g) => plainScreen(g, 'missions'),
     backTo: 'missions',
   },
   {
     id: 'transfers', chapter: 'Recruitment', title: 'Transfers',
     body: 'Your budgets, the bids for your players and your own deals. A player with years left on his contract costs more; one whose deal is running out goes cheaply. Turn down a move one of your players wanted, and he will come and ask you why.',
-    todo: 'Open Transfers.',
-    target: '[data-tour="nav-transfers"]',
+    todo: 'Open the Transfer Centre tab.',
+    target: ['[data-tour="tab-transfers"]', '[data-tour="nav-scouting"]'],
+    needs: (g) => ['scouting', 'shortlist', 'missions', 'transfers', 'deadline', 'director'].includes(g.screen),
+    backTo: 'scouting',
     done: (g) => plainScreen(g, 'transfers'),
   },
   {
     id: 'deadline', chapter: 'Recruitment', title: 'Deadline day',
     target: '[data-tour="tab-deadline"]',
-    body: 'The last day of every window has a screen of its own: a clock running down to midnight, the late deals and rumours as they break, last-minute bids for your players — and whatever you still have open.',
+    body: 'The last day of every window has a screen of its own: a clock running down to midnight, the late deals and rumours as they break, last-minute bids for your players, and whatever you still have open.',
     needs: (g) => g.screen === 'transfers' || g.screen === 'deadline' || g.screen === 'director',
     backTo: 'transfers',
   },
@@ -287,7 +289,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'delegate', chapter: 'Recruitment', title: 'The director, and who does what',
     target: '.rc-director',
-    body: 'Hire a Director of Football (from Staff) and he does deals for you: hand him a signing or a renewal from a player\'s profile, with the most he may pay, and he reports back. Below, choose who handles renewals, friendlies, training and the press — you, your assistant or the director.',
+    body: 'Hire a Director of Football (from Staff) and he does deals for you: hand him a signing or a renewal from a player\'s profile, with the most he may pay, and he reports back. Below, choose who handles renewals, friendlies, training and the press, you, your assistant or the director.',
     needs: (g) => plainScreen(g, 'director'),
     backTo: 'director',
   },
@@ -295,21 +297,21 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'meeting', chapter: 'The club', title: 'The staff meeting',
     body: 'On the 3rd of every month your staff bring their suggestions: a key contract to renew, a position short for next season, a player heading for an injury, a youngster ready for the first team. Take each one, or leave it.',
-    todo: 'Open Staff, then the Staff Meeting tab.',
-    target: ['[data-tour="tab-meeting"]', '[data-tour="nav-staff"]'],
+    todo: 'Open Club, then the Staff Meeting tab.',
+    target: ['[data-tour="tab-meeting"]', '[data-tour="nav-finances"]'],
     done: (g) => plainScreen(g, 'meeting'),
   },
   {
     id: 'finances', chapter: 'The club', title: 'The money',
-    body: 'The board gives you a wage budget and a transfer budget. Go over them and its confidence in you drops — and so does your job security. Tickets, sponsors and facilities are in the tabs here too.',
-    todo: 'Open Finances.',
+    body: 'The board gives you a wage budget and a transfer budget. Go over them and its confidence in you drops, and so does your job security. Tickets, sponsors and facilities are in the tabs here too.',
+    todo: 'Open Club.',
     target: '[data-tour="nav-finances"]',
     done: (g) => plainScreen(g, 'finances'),
   },
   // ---- Matchday ----
   {
     id: 'continue', chapter: 'Matchday', title: 'Moving time on',
-    body: 'Nothing happens until you move the calendar on. Continue goes a day at a time, and stops whenever something needs you — a message to answer, a press conference, a match.',
+    body: 'Nothing happens until you move the calendar on. Continue goes a day at a time, and stops whenever something needs you, a message to answer, a press conference, a match.',
     todo: 'Press Continue.',
     target: '[data-tour="continue"]',
     free: true,
@@ -317,7 +319,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'to-match', chapter: 'Matchday', title: 'Your first match',
-    body: `No need to wait for the fixtures: a practice match against the ${TEST_SIDE_NAME} is on today. It counts for nothing — no table, no statistics, no records — it is there to learn the bench. When there is a match today, the button says Play match; on other days the arrow beside it can take you straight to the next one.`,
+    body: `No need to wait for the fixtures: a practice match against the ${TEST_SIDE_NAME} is on today. It counts for nothing, no table, no statistics, no records, it is there to learn the bench. When there is a match today, the button says Play match; on other days the arrow beside it can take you straight to the next one.`,
     todo: 'Press Play match. Answer anything that comes up on the way.',
     target: '[data-tour="continue"]',
     free: true,
@@ -325,12 +327,22 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'team-talk', chapter: 'Matchday', title: 'The team talk',
-    body: 'Before the match, and at every set break, you can talk to the team. What works depends on the moment — favourites or underdogs, winning or losing — and on who is listening.',
-    todo: 'Give your team talk.',
+    body: 'Before the match, and at every set break, you can talk to the team. What works depends on the moment, favourites or underdogs, winning or losing, and on who is listening.',
+    todo: 'Give your team talk, see how they take it, then press Done.',
     target: '[data-tour="team-talk"]',
     needs: (g) => g.matchday !== null,
     backTo: 'to-match',
-    done: (g) => g.matchday?.talks?.prematch !== undefined || g.matchday?.stage === 'live',
+    // Done once the talk is given and its reactions are closed: the next steps are under that dialog.
+    done: (g) => g.matchday?.stage === 'live' || (g.matchday?.talks?.prematch !== undefined && document.querySelector('.talk-card') === null),
+  },
+  {
+    id: 'toss', chapter: 'Matchday', title: 'The coin toss',
+    body: 'Before every match the referee tosses a coin. Win it and you choose: serve first, or receive. Either way the card tells you which rotation to start in, and the serve changes hands every set.',
+    todo: 'If you won the toss, choose Serve or Receive.',
+    target: '.coin-toss',
+    needs: (g) => g.matchday !== null,
+    backTo: 'to-match',
+    done: (g) => g.matchday?.stage === 'live' || (g.matchday?.toss !== undefined && (!g.matchday.toss.userWon || g.matchday.toss.userServes !== null)),
   },
   {
     id: 'kickoff', chapter: 'Matchday', title: 'Kick off',
@@ -344,15 +356,15 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'live', chapter: 'Matchday', title: 'The match',
     target: '.lv-court',
-    body: 'Every rally is played out by the engine: serve, pass, set, attack, block, dig. Beside the court, each player\'s live rating; below, the point by point. 3D or 2D, names or ratings, the camera — the buttons on the court.',
+    body: 'Every rally is played out by the engine: serve, pass, set, attack, block, dig. Beside the court, each player\'s live rating; on the right, the match stats and every player\'s numbers under Players; on the left, the point by point. 3D or 2D, names or ratings, the camera, the buttons on the court.',
     needs: (g) => g.matchday?.stage === 'live',
     backTo: 'to-match',
   },
   {
     id: 'camera', chapter: 'Matchday', title: 'Pick your camera',
     body: 'Broadcast is the main TV camera. Dynamic follows the ball up close; Professional cuts between shots like a TV director; Sky looks straight down; Behind sits behind your end line; Courtside is down by the court. The menu shows in 3D.',
-    todo: 'Choose a different camera.',
-    target: '.lv-court-tools',
+    todo: 'Choose a different camera (in 3D).',
+    target: ['.lv-camera', '.lv-court-tools'],
     needs: (g) => g.matchday?.stage === 'live',
     backTo: 'to-match',
     snapshot: (g) => g.courtCamera,
@@ -360,7 +372,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'timeout', chapter: 'Matchday', title: 'Timeout',
-    body: 'Two a set. Use one to stop the other side\'s run of points — or to make changes in peace.',
+    body: 'Two a set. Use one to stop the other side\'s run of points, or to make changes in peace.',
     todo: 'Call a timeout.',
     target: '[data-tour="timeout"]',
     needs: (g) => g.matchday !== null,
@@ -369,7 +381,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   },
   {
     id: 'resume', chapter: 'Matchday', title: 'Back to it',
-    body: 'During a timeout you can bring players on and change the instructions. When you are ready, play on — or wait for the 30 seconds to run out.',
+    body: 'During a timeout you can bring players on and change the instructions. When you are ready, play on, or wait for the 30 seconds to run out.',
     todo: 'Resume play.',
     target: '[data-tour="resume-timeout"]',
     free: true,
@@ -378,21 +390,21 @@ export const TUTORIAL: readonly TutorialStep[] = [
   {
     id: 'subs', chapter: 'Matchday', title: 'Substitutions',
     target: '[data-tour="subs"]',
-    body: 'Six a set. A tired or struggling player plays worse — bring someone fresh on. Clicking one of your players beside the court shows who could replace him.',
+    body: 'Six a set. A tired or struggling player plays worse, bring someone fresh on. Clicking one of your players beside the court shows who could replace him.',
     needs: (g) => g.matchday !== null,
     backTo: 'to-match',
   },
   {
     id: 'challenge', chapter: 'Matchday', title: 'The video challenge',
     target: '[data-tour="challenge"]',
-    body: 'When a close call goes against you, ask for the video — and say what it should look at: the line, a touch off the block, the net. Right, and the point is yours and you keep the challenge; wrong, and you lose it. Two a set.',
+    body: 'When a close call goes against you, ask for the video, and say what it should look at: the line, a touch off the block, the net. Right, and the point is yours and you keep the challenge; wrong, and you lose it. Two a set.',
     needs: (g) => g.matchday !== null,
     backTo: 'to-match',
   },
   {
     id: 'finish-match', chapter: 'Matchday', title: 'Play it out',
-    body: 'Watch at 1×, 1.5× or 2× — or skip to the result. At the set breaks you get the team sheet and another team talk.',
-    todo: 'Finish the match — play it out, or press Skip to result.',
+    body: 'Watch at 1×, 1.5× or 2×, or skip to the result. At the set breaks you get the team sheet and another team talk.',
+    todo: 'Finish the match, play it out, or press Skip to result.',
     // A final has its trophy lifted first, and its own Continue to the report.
     target: ['.trophy-banner .primary', '[data-tour="skip-result"]'],
     free: true,
@@ -401,11 +413,11 @@ export const TUTORIAL: readonly TutorialStep[] = [
   // ---- Done ----
   {
     id: 'after', chapter: 'After the match', title: 'The report',
-    body: 'Every match has its report: the box score, every player\'s rating, how each rotation did. Fixtures & Results keeps them all, season by season — click a match to open it.',
+    body: 'Every match has its report: the box score, every player\'s rating, how each rotation did. Fixtures & Results keeps them all, season by season, click a match to open it.',
   },
   {
     id: 'done', chapter: 'All set', title: 'Over to you',
-    body: 'That is the job: keep the players happy, pick the team, set the training, plan the squad, win matches — and keep the board on your side. The ? at the top opens the help any time, and this tutorial again.',
+    body: 'That is the job: keep the players happy, pick the team, set the training, plan the squad, win matches, and keep the board on your side. The ? at the top opens the help any time, and this tutorial again.',
   },
 ];
 
@@ -427,13 +439,13 @@ const NATIONAL_CHAPTER: readonly TutorialStep[] = [
   {
     id: 'nat-pool', chapter: 'Your national team', title: 'Who goes',
     target: '.nat-squad-grid',
-    body: 'On the left, the fourteen your assistant would take now — the squad itself, once you have named it. On the right, everyone in contention for a place: his club, his ability, his form and his caps.',
+    body: 'On the left, the fourteen your assistant would take now, the squad itself, once you have named it. On the right, everyone in contention for a place: his club, his ability, his form and his caps.',
     needs: (g) => nationalScreen(g, 'squad'),
     backTo: 'nat-squad',
   },
   {
     id: 'nat-frame', chapter: 'Your national team', title: 'The provisional squad',
-    body: 'Up to 25 names you are keeping an eye on — your assistant picks from them first. The button beside the star sends you to watch his club\'s matches, so you know his form.',
+    body: 'Up to 25 names you are keeping an eye on, your assistant picks from them first. The button beside the star sends you to watch his club\'s matches, so you know his form.',
     todo: 'Click a star to put a player in your provisional squad.',
     target: '.nat-squad-grid',
     needs: (g) => nationalScreen(g, 'squad'),
@@ -453,23 +465,23 @@ const NATIONAL_TOURNAMENTS: readonly TutorialStep[] = [
   },
   {
     id: 'nat-calendar', chapter: 'Your national team', title: 'Groups, knockouts and the ranking',
-    body: 'Every tournament on the calendar, the draw, the groups and the knockout rounds — click one for all of it. Every result moves your nation up or down the world ranking, and the ranking decides who qualifies.',
+    body: 'Every tournament on the calendar, the draw, the groups and the knockout rounds, click one for all of it. Every result moves your nation up or down the world ranking, and the ranking decides who qualifies.',
     needs: (g) => plainScreen(g, 'internationals'),
     backTo: 'nat-tournaments',
   },
 ];
 
-const squadNamedText = "A week before each tournament the federation asks for your squad, and Continue stops on the day — the arrow beside it can take you there on holiday. Name your fourteen in the federation's message, your own or the Assistant's pick, then Confirm squad. Leave it to the holiday and your assistant names it.";
+const squadNamedText = "A week before each tournament the federation asks for your squad, and Continue stops on the day, the arrow beside it can take you there on holiday. Name your fourteen in the federation's message, your own or the Assistant's pick, then Confirm squad. Leave it to the holiday and your assistant names it.";
 
 /** A national team only: its squad and team sheet, its tournaments, its first match — a practice one — and the call-up. */
 const NATIONAL_TOUR: readonly TutorialStep[] = [
   {
     id: 'welcome', chapter: 'Welcome', title: 'Welcome, coach',
-    body: 'This tutorial takes you through your first weeks with the national team — and you do every part of it yourself. The lit-up part of the screen is what to use; the card tells you what it does and what to do. You can leave it at any point, and start it again from the Help (?).',
+    body: 'This tutorial takes you through your first weeks with the national team, and you do every part of it yourself. The lit-up part of the screen is what to use; the card tells you what it does and what to do. You can leave it at any point, and start it again from the Help (?).',
   },
   {
     id: 'home', chapter: 'Welcome', title: 'Home',
-    target: '.home-page',
+    target: ['.portal-page', '.home-page'],
     body: 'Your national team at a glance: the next tournament, when the squad is due, the world ranking and the federation\'s mood. Come back here whenever you want the big picture.',
     needs: (g) => plainScreen(g, 'home'),
   },
@@ -488,11 +500,11 @@ const NATIONAL_TOUR: readonly TutorialStep[] = [
   {
     id: 'nat-attributes', chapter: 'Your national team', title: 'Attributes',
     target: '.profile-attrs',
-    body: 'Each attribute runs from 1 to 20 — technical, mental and physical — and they are what the match engine plays with. He belongs to his club: you can\'t talk him round or sign him. What you can do is pick him, or leave him out.',
+    body: 'Each attribute runs from 1 to 20, technical, mental and physical, and they are what the match engine plays with. He belongs to his club: you can\'t talk him round or sign him. What you can do is pick him, or leave him out.',
     needs: (g) => g.selectedPlayer !== null,
     backTo: 'nat-player',
   },
-  { ...clubStep('lineup'), body: 'The national team has a team sheet of its own — the starting point for every national match, from the fourteen named for the tournament.' },
+  { ...clubStep('lineup'), body: 'The national team has a team sheet of its own, the starting point for every national match, from the fourteen named for the tournament.' },
   clubStep('sheet'),
   clubStep('instructions'),
   clubStep('instruction'),
@@ -501,7 +513,7 @@ const NATIONAL_TOUR: readonly TutorialStep[] = [
   clubStep('continue'),
   {
     ...clubStep('to-match'),
-    body: `No need to wait for a tournament: your fourteen have a practice match against the ${TEST_SIDE_NAME} today. It counts for nothing — no caps, no ranking, no statistics — it is there to learn the bench. On a match day the button says Play match; the arrow beside it can take you straight to the next one.`,
+    body: `No need to wait for a tournament: your fourteen have a practice match against the ${TEST_SIDE_NAME} today. It counts for nothing, no caps, no ranking, no statistics, it is there to learn the bench. On a match day the button says Play match; the arrow beside it can take you straight to the next one.`,
   },
   ...TUTORIAL.slice(TUTORIAL.findIndex((s) => s.id === 'team-talk'), TUTORIAL.findIndex((s) => s.id === 'done')),
   {
@@ -511,7 +523,7 @@ const NATIONAL_TOUR: readonly TutorialStep[] = [
   },
   {
     id: 'done', chapter: 'All set', title: 'Over to you',
-    body: 'That is the job: watch the players, name the right fourteen, pick the team, win matches — and climb the world ranking. The ? at the top opens the help any time, and this tutorial again.',
+    body: 'That is the job: watch the players, name the right fourteen, pick the team, win matches, and climb the world ranking. The ? at the top opens the help any time, and this tutorial again.',
   },
 ];
 
@@ -520,7 +532,7 @@ const BOTH_TOUR: readonly TutorialStep[] = [
   ...TUTORIAL.slice(0, TUTORIAL.findIndex((s) => s.id === 'continue')),
   {
     id: 'nat-switch', chapter: 'Your national team', title: 'Club and country',
-    body: 'You run a club and a national team. This switch says which of the two the team screens — Squad and Lineup — are about. A club match always shows the club, a national one the country.',
+    body: 'You run a club and a national team. This switch says which of the two the team screens, Squad and Lineup, are about. A club match always shows the club, a national one the country.',
     todo: 'Switch to the national team.',
     target: '.side-team-switch',
     done: (g) => g.nationalView(),
@@ -528,8 +540,8 @@ const BOTH_TOUR: readonly TutorialStep[] = [
   ...NATIONAL_CHAPTER.map((s) => ({ ...s, needs: s.needs === undefined ? undefined : (g: Game) => g.nationalView() && s.needs!(g) })),
   {
     id: 'nat-lineup', chapter: 'Your national team', title: 'Its own team sheet',
-    body: 'The national team has its own team sheet and instructions, kept apart from the club\'s — the starting point for every national match.',
-    todo: 'Open Lineup.',
+    body: 'The national team has its own team sheet and instructions, kept apart from the club\'s, the starting point for every national match.',
+    todo: 'Open Tactics.',
     target: '[data-tour="nav-lineup"]',
     needs: (g) => g.nationalView(),
     backTo: 'nat-switch',
@@ -538,7 +550,7 @@ const BOTH_TOUR: readonly TutorialStep[] = [
   ...NATIONAL_TOURNAMENTS,
   {
     id: 'nat-back', chapter: 'Your national team', title: 'Back to the club',
-    body: 'Squads are named a week before each tournament — the federation asks in the inbox, and Continue stops for it. Until then the club comes first.',
+    body: 'Squads are named a week before each tournament, the federation asks in the inbox, and Continue stops for it. Until then the club comes first.',
     todo: 'Switch back to the club.',
     target: '.side-team-switch',
     done: (g) => !g.nationalView(),
@@ -550,16 +562,16 @@ const BOTH_TOUR: readonly TutorialStep[] = [
 const OUT_OF_WORK_TOUR: readonly TutorialStep[] = [
   {
     id: 'welcome', chapter: 'Welcome', title: 'Welcome, coach',
-    body: 'You start out of work: no club and no national team yet. This short tutorial shows you how to find a job — and gives you a practice match, so you know the bench by the time you have one. You can leave it at any point, and start it again from the Help (?).',
+    body: 'You start out of work: no club and no national team yet. This short tutorial shows you how to find a job, and gives you a practice match, so you know the bench by the time you have one. You can leave it at any point, and start it again from the Help (?).',
   },
   {
     id: 'jobs', chapter: 'Finding a job', title: 'The Job Centre',
-    target: '[data-tour="nav-jobs"]',
-    body: 'Every vacancy is in the Job Centre: clubs looking for a coach, and the national teams. Apply, and the answer comes to the inbox — the smaller clubs are the likeliest to take a chance on a new name. Until then you can go and watch other clubs\' matches from the stands.',
+    target: ['[data-tour="tab-jobs"]', '[data-tour="nav-home"]'],
+    body: 'Every vacancy is in the Job Centre: clubs looking for a coach, and the national teams. Apply, and the answer comes to the inbox, the smaller clubs are the likeliest to take a chance on a new name. Until then you can go and watch other clubs\' matches from the stands.',
   },
   {
     ...clubStep('to-match'),
-    body: `Before that, a practice match: the ${SCRATCH_SIDE_NAME} need a coach for the day, against the ${TEST_SIDE_NAME}. It counts for nothing — no table, no statistics, no records — it is there to learn the bench.`,
+    body: `Before that, a practice match: the ${SCRATCH_SIDE_NAME} need a coach for the day, against the ${TEST_SIDE_NAME}. It counts for nothing, no table, no statistics, no records, it is there to learn the bench.`,
   },
   ...TUTORIAL.slice(TUTORIAL.findIndex((s) => s.id === 'team-talk'), TUTORIAL.findIndex((s) => s.id === 'after')),
   {
@@ -694,6 +706,13 @@ export function TutorialOverlay(): JSX.Element | null {
     // processing then (the Continue of the step before), and a match passed by is booked again.
     if (step?.id === 'to-match') g.ensureTutorialMatch();
   });
+
+  // While a step is up, whatever the game opens on the way (a dialog, a menu, the walk-out) sits above the shade.
+  const on = step !== undefined;
+  useEffect(() => {
+    document.documentElement.classList.toggle('tut-on', on);
+    return () => document.documentElement.classList.remove('tut-on');
+  }, [on]);
 
   // Keep the spotlight on the target as the screen moves under it.
   useEffect(() => {

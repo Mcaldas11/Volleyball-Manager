@@ -62,7 +62,7 @@ function AttackGrid({ map, what }: { map: AttackMap; what: 'ours' | 'theirs' }):
       <div className="an-grid-axis an-bottom" style={{ width: side }}><b>End line</b></div>
       <div className="an-grid-note">
         {cell !== null
-          ? <>{metres(cell.deep)} from the net · {cell.across < 2 ? 'line side' : cell.across > 3 ? 'cross side' : 'middle'} — {cell.a} attack{cell.a === 1 ? '' : 's'}, {cell.k} {what === 'ours' ? 'kills' : 'conceded'}{cell.a > 0 ? ` (${pct(cell.k / cell.a)})` : ''}</>
+          ? <>{metres(cell.deep)} from the net · {cell.across < 2 ? 'line side' : cell.across > 3 ? 'cross side' : 'middle'}, {cell.a} attack{cell.a === 1 ? '' : 's'}, {cell.k} {what === 'ours' ? 'kills' : 'conceded'}{cell.a > 0 ? ` (${pct(cell.k / cell.a)})` : ''}</>
           : <>{total} attacks · hit long {map.long} · wide {map.wide} · off the block and out {map.blockout}</>}
       </div>
     </div>
@@ -126,7 +126,7 @@ function MatchChart({ matches }: { matches: MatchLine[] }): JSX.Element {
       </div>
       <div className="an-chart-note">
         {h !== null
-          ? <>{g.dateLabelForDay(h.fixture.day)} · {h.won ? 'W' : 'L'} {h.fixture.home === h.opponent ? `${h.fixture.awaySets}-${h.fixture.homeSets}` : `${h.fixture.homeSets}-${h.fixture.awaySets}`} vs {h.fixture.home <= -1000 ? sideCode(h.opponent) : world.clubs[h.opponent]?.shortName ?? '?'} — kill rate {pct(h.killRate)}, side-out {pct(h.sideOut)}, break point {pct(h.breakPoint)}</>
+          ? <>{g.dateLabelForDay(h.fixture.day)} · {h.won ? 'W' : 'L'} {h.fixture.home === h.opponent ? `${h.fixture.awaySets}-${h.fixture.homeSets}` : `${h.fixture.homeSets}-${h.fixture.awaySets}`} vs {h.fixture.home <= -1000 ? sideCode(h.opponent) : world.clubs[h.opponent]?.shortName ?? '?'}, kill rate {pct(h.killRate)}, side-out {pct(h.sideOut)}, break point {pct(h.breakPoint)}</>
           : <>{matches.length} matches · hover a match for its numbers</>}
       </div>
     </div>
@@ -164,7 +164,7 @@ export function AnalysisScreen(): JSX.Element {
   return (
     <div className="an">
       <div className="an-bar">
-        <span className="faint an-intro">{national ? `${sideName(nation)}: every match this season — ${r.matches.length} so far` : `Every competitive match played in full this season${a !== undefined ? ` — ${a.matches} so far` : ''}`}.</span>
+        <span className="faint an-intro">{national ? `${sideName(nation)}: every match this season, ${r.matches.length} so far` : `Every competitive match played in full this season${a !== undefined ? `, ${a.matches} so far` : ''}`}.</span>
         <Dropdown<number> size="sm" value={season} onChange={setSeason} title="Season"
           options={seasons.map((s) => ({ value: s, label: s === world.season ? `${seasonLabel(world, s)} · this season` : seasonLabel(world, s) }))} />
       </div>
@@ -236,7 +236,7 @@ export function AnalysisScreen(): JSX.Element {
           {r.matches.length > 0 ? <MatchChart matches={r.matches} /> : <Empty>No matches yet this season.</Empty>}
         </Card>
       </div>
-      <p className="footnote an-foot">Grids are drawn from the hitter's side: his own sideline — the line — on the left, the far one on the right. {national ? `${sideName(nation)} only.` : <><ClubLink id={club!.id} short /> only.</>}</p>
+      <p className="footnote an-foot">Grids are drawn from the hitter's side: his own sideline, the line, on the left, the far one on the right. {national ? `${sideName(nation)} only.` : <><ClubLink id={club!.id} short /> only.</>}</p>
     </div>
   );
 }

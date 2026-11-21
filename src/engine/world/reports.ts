@@ -128,7 +128,7 @@ export function nationalFormReport(world: World): void {
   const lines = [
     `How ${name}'s players are getting on at their clubs.`,
     inForm.length > 0 ? `In form: ${inForm.slice(0, 3).join(', ')}.` : 'Nobody is setting the world alight just now.',
-    hurt.length > 0 ? `Injured: ${hurt.join(', ')} — keep an eye on their recovery.` : 'No injuries in the squad.',
+    hurt.length > 0 ? `Injured: ${hurt.join(', ')}, keep an eye on their recovery.` : 'No injuries in the squad.',
     door.length > 0 ? `Pushing for a place: ${door.map((p) => store.shortName(p)).join(', ')}.` : '',
   ].filter((l) => l !== '');
   postMessage(world, {
@@ -203,7 +203,7 @@ export function rankingReport(world: World): void {
   postMessage(world, {
     category: 'international', from: 'FIVB',
     subject: `World ranking: ${name} ${rank}${rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'}`,
-    body: `${name} are ${rank}${rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'} in the world ranking — ${move} on last month.`,
+    body: `${name} are ${rank}${rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'} in the world ranking, ${move} on last month.`,
     tables: [{
       label: 'World ranking', columns: ['#', 'Nation', 'Points'],
       rows: order.map((n, i) => ({ n, i })).filter(({ n }) => show.has(n)).map(({ n, i }) => ({
@@ -253,7 +253,7 @@ export function assistantReport(world: World): void {
     : '';
   const lines = [
     busy,
-    hot.length > 0 ? `${store.shortName(hot[0])} is flying — ${fixed1(avg(recent(world, hot[0], 3)))} on average in his last games.` : 'Nobody has really stood out this week.',
+    hot.length > 0 ? `${store.shortName(hot[0])} is flying, ${fixed1(avg(recent(world, hot[0], 3)))} on average in his last games.` : 'Nobody has really stood out this week.',
     cold.length > 0 ? `${store.shortName(cold[0])} is struggling; a rest or a word might help.` : '',
     tired.length > 0 && next !== undefined && next.day - world.day <= 3
       ? `With ${opp?.name ?? 'the next match'} in ${next.day - world.day} day${next.day - world.day === 1 ? '' : 's'}, I'd think about resting ${tired.slice(0, 2).map((p) => store.shortName(p)).join(' and ')}.`
@@ -287,7 +287,7 @@ const TEMPO_WORDS: Readonly<Record<Tempo, string>> = {
   [Tempo.VeryFast]: 'at a very fast tempo', [Tempo.Fast]: 'at a fast tempo', [Tempo.Balanced]: 'at a normal tempo', [Tempo.Slow]: 'with slow, high sets',
 };
 const SERVE_WORDS: Readonly<Record<ServeStrategy, string>> = {
-  [ServeStrategy.Risky]: 'They serve aggressively — expect aces, and errors.',
+  [ServeStrategy.Risky]: 'They serve aggressively, expect aces, and errors.',
   [ServeStrategy.Balanced]: 'They mix their serves.',
   [ServeStrategy.Conservative]: 'They play it safe from the line: few errors, few aces.',
 };
@@ -326,11 +326,11 @@ export function scoutingReport(world: World): void {
   const t = opp.tactics;
   const body = [
     `${opp.name}${place > 0 && league !== undefined ? `, ${place}${place === 1 ? 'st' : place === 2 ? 'nd' : place === 3 ? 'rd' : 'th'} in the ${league.name}` : ''}` +
-      `${form !== '' ? ` — ${form} in their last ${form.split('-').length}` : ''}.`,
+      `${form !== '' ? `, ${form} in their last ${form.split('-').length}` : ''}.`,
     `They play ${OFFENCE_WORDS[t.offense] ?? 'a balanced offence'}, ${TEMPO_WORDS[t.tempo] ?? 'at a normal tempo'}. ${SERVE_WORDS[t.serve] ?? ''}`,
     danger !== undefined ? `The danger man is ${store.fullName(danger.p)} (${pos(world, danger.p)}): ${(danger.points / danger.apps).toFixed(1)} points a match.` : '',
     `The match is ${f.home === club.id ? 'at home' : 'away'}, in two days.` + (
-      tripTo(world, f, club.id) === 'abroad' ? ' We fly out the day before — expect some heavy legs.'
+      tripTo(world, f, club.id) === 'abroad' ? ' We fly out the day before, expect some heavy legs.'
         : tripTo(world, f, club.id) === 'long' ? ' It is a long trip, the day before.' : ''),
     rivalryName(world, f) !== null
       ? `And it is ${rivalryName(world, f)}: expect a full house, and a board and a city that will remember the result.`
@@ -338,7 +338,7 @@ export function scoutingReport(world: World): void {
   ].filter((l) => l !== '').join(' ');
   postMessage(world, {
     category: 'task', from: staffName(world, club.id, [StaffRole.HeadScout, StaffRole.Scout, StaffRole.PerformanceAnalyst], 'Chief Scout'),
-    subject: `Scouting report: ${opp.name}${fixtureRivalry(world, f) === 'derby' ? ' — derby' : fixtureRivalry(world, f) === 'classic' ? ' — the classic' : ''}`,
+    subject: `Scouting report: ${opp.name}${fixtureRivalry(world, f) === 'derby' ? ', derby' : fixtureRivalry(world, f) === 'classic' ? ', the classic' : ''}`,
     body, clubId: opp.id, fixtureId: f.id, gamePlanFor: opp.id,
     tables: key.length > 0 ? [{
       label: 'Their key players', columns: ['Player', 'Pos', 'Apps', 'Avg', 'Pts/match'],
@@ -391,12 +391,12 @@ function postNationalScouting(world: World, t: Tournament, m: IntlMatch, nation:
   const key = [...lines].sort((a, b) => store.currentAbility[b.p] - store.currentAbility[a.p]).slice(0, 5);
   const danger = [...lines].filter((x) => x.apps > 0).sort((a, b) => b.ppm - a.ppm)[0];
   const tactics = nationalTeamOf(world, opp)?.tactics ?? defaultTactics();
-  const where = t.host === nation ? 'at home — the hall will be ours'
+  const where = t.host === nation ? 'at home, the hall will be ours'
     : t.host === opp ? 'in their own hall, in front of their own crowd' : 'on neutral ground';
   const body = [
     `${oppName}${rank > 0 ? `, ${ordinal(rank)} in the world ranking` : ''}` +
       `${place > 0 && pool !== undefined ? `, ${ordinal(place)} in ${pool.name}` : ''}` +
-      `${form !== '' ? ` — ${form} at the ${t.name} so far` : ''}.`,
+      `${form !== '' ? `, ${form} at the ${t.name} so far` : ''}.`,
     `They play ${OFFENCE_WORDS[tactics.offense] ?? 'a balanced offence'}, ${TEMPO_WORDS[tactics.tempo] ?? 'at a normal tempo'}. ${SERVE_WORDS[tactics.serve] ?? ''}`,
     danger !== undefined
       ? `The danger man is ${store.fullName(danger.p)} (${pos(world, danger.p)}): ${danger.ppm.toFixed(1)} points a match ${danger.here ? 'at this tournament' : 'for his club this season'}.`
@@ -406,7 +406,7 @@ function postNationalScouting(world: World, t: Tournament, m: IntlMatch, nation:
   ].filter((l) => l !== '').join(' ');
   postMessage(world, {
     category: 'task', from: `${nationName(nation)} national team scouts`,
-    subject: `Scouting report: ${oppName}${m.stage === 'Final' ? ' — the final' : ''}`,
+    subject: `Scouting report: ${oppName}${m.stage === 'Final' ? ', the final' : ''}`,
     body, fixtureId: -1 - m.id, gamePlanFor: opp, aboutNation: opp,
     tables: key.length > 0 ? [{
       label: 'Their key players', columns: ['Player', 'Pos', 'Club', 'Age', 'Caps', 'Pts/match'],

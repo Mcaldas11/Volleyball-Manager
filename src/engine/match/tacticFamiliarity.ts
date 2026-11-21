@@ -126,13 +126,40 @@ export function currentFamiliarity(t: TeamTactics): Record<FamiliarityArea, numb
  * learnt it is partly forgotten — in that part, by as much as was changed —
  * and then `gain` points are learnt in every part.
  */
-export function learnTactic(t: TeamTactics, gain: number): void {
+export function learnTactic(t: TeamTactics, gain: number, editable = true): void {
   const f = familiarityOf(t);
+  // Unchanged since the last day it was learnt (most sides, most days): nothing to forget, so the
+  // day's gain is all there is, without weighing each instruction again. A side only the game
+  // coaches gets a new tactic object whenever its tactic changes, so the same object is the same
+  // tactic; one the manager edits (in place, from the screens) is compared in full.
+  const print = editable ? fingerprint(t) : '';
+  if (LEARNT.get(t) === print && LEARNT_FROM.get(t) === f) {
+    for (const area of FAMILIARITY_AREAS) f[area] = Math.min(100, f[area] + gain);
+    return;
+  }
   const items = itemsOf(t);
   for (const area of FAMILIARITY_AREAS) {
     const kept = keptOf(f[area], f.learned[area], items[area]);
     f.learned[area] = items[area].map(([v]) => v);
     f[area] = Math.min(100, kept + gain);
+  }
+  LEARNT.set(t, print);
+  LEARNT_FROM.set(t, f);
+}
+
+/** Each tactic as it was the last time it was learnt in full — and the familiarity that learnt it. */
+const LEARNT = new WeakMap<TeamTactics, string>();
+const LEARNT_FROM = new WeakMap<TeamTactics, TacticFamiliarity>();
+
+/** The whole tactic but its familiarity, as one string: equal means no instruction has changed. */
+function fingerprint(t: TeamTactics): string {
+  // Set aside for the moment, so the plain (fast) stringify leaves it out.
+  const f = t.familiarity;
+  t.familiarity = undefined;
+  try {
+    return JSON.stringify(t);
+  } finally {
+    t.familiarity = f;
   }
 }
 

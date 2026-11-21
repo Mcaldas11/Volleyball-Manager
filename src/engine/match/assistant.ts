@@ -280,7 +280,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
   // How much is enough to go on: in a match, a set's worth; over matches, more.
   const k = ctx.live ? 1 : 2.5;
   if (s.rallies < 18 * (ctx.live ? 1 : 2)) {
-    return { verdict: 'early', summary: 'Too early to read anything — give it a few more points.', findings: [], numbers };
+    return { verdict: 'early', summary: 'Too early to read anything, give it a few more points.', findings: [], numbers };
   }
   const found: Finding[] = [];
   const overallSO = numbers.sideOut ?? 0.6;
@@ -315,7 +315,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
       id: `rot${i}`, area: 'rotation', severity: so < 0.38 ? 3 : 2,
       title: `P${i + 1} is not siding out`,
       detail: `${pct(so)} of points won receiving in P${i + 1}, against ${pct(overallSO)} overall` +
-        (passing ? ` — the pass is the problem there (quality ${Math.round(q * 100)}).` : ' — the pass is fine; the attack after it is not.'),
+        (passing ? `, the pass is the problem there (quality ${Math.round(q * 100)}).` : ', the pass is fine; the attack after it is not.'),
       change,
     });
   });
@@ -331,7 +331,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
       id: `pass-${p}`, area: 'reception', severity: l.errors >= 3 * k ? 2 : 1, playerIdx: p,
       title: `${ctx.nameOf(p)} is being served`,
       detail: `${l.n} passes, quality ${Math.round(q * 100)}, ${l.errors} aced or shanked.` +
-        (pos === Position.Libero ? ' He is the libero: the pass has to come from him — or the other libero.'
+        (pos === Position.Libero ? ' He is the libero: the pass has to come from him, or the other libero.'
           : ' A fresh passer from the bench may steady it.'),
     });
   }
@@ -345,7 +345,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
       found.push({
         id: 'serve-down', area: 'serve', severity: errRate >= 0.34 ? 3 : 2,
         title: 'Too many serves missed',
-        detail: `${s.serveErrors} of ${s.serves} serves missed (${pct(errRate)}) — points given away for ${s.aces} aces.`,
+        detail: `${s.serveErrors} of ${s.serves} serves missed (${pct(errRate)}), points given away for ${s.aces} aces.`,
         change: {
           id: `serve-${next}`, label: next === ServeStrategy.Balanced ? 'Serve with less risk (balanced)' : 'Serve safe (conservative)',
           apply: (t) => { t.serve = next; },
@@ -356,7 +356,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
       found.push({
         id: 'serve-up', area: 'serve', severity: 2,
         title: 'The serve is no threat',
-        detail: `They side out ${pct(theirSO)} of the time and we miss only ${pct(errRate)} — there is room to serve harder.`,
+        detail: `They side out ${pct(theirSO)} of the time and we miss only ${pct(errRate)}, there is room to serve harder.`,
         change: {
           id: `serve-${next}`, label: next === ServeStrategy.Risky ? 'Serve aggressively (risky)' : 'Serve with more intent (balanced)',
           apply: (t) => { t.serve = next; },
@@ -436,7 +436,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
     found.push({
       id: `player-${p}`, area: 'player', severity: 1, playerIdx: p,
       title: `${ctx.nameOf(p)} is struggling`,
-      detail: `${l.kills} kills, ${l.errors} errors or blocked from ${l.att} attacks (${eff(l).toFixed(3)}). A change may help him — or the side.`,
+      detail: `${l.kills} kills, ${l.errors} errors or blocked from ${l.att} attacks (${eff(l).toFixed(3)}). A change may help him, or the side.`,
     });
   }
 
@@ -452,7 +452,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
     return {
       verdict: 'hold',
       summary: winning
-        ? 'We are on top. Nothing worth changing — the side is playing to its level. Hold your nerve.'
+        ? 'We are on top. Nothing worth changing, the side is playing to its level. Hold your nerve.'
         : 'Nothing stands out that a change would fix. Hold your nerve and let them play.',
       findings,
       numbers,
@@ -463,7 +463,7 @@ export function diagnose(s: PlayStats, tactics: TeamTactics, ctx: DiagnosisConte
     summary: ((): string => {
       const costing = acting.filter((f) => f.severity === 3).length;
       if (costing === acting.length) return costing === 1 ? 'One thing is costing us points.' : `${costing} things are costing us points.`;
-      if (costing > 0) return `${acting.length} things worth acting on — ${costing === 1 ? 'one is' : `${costing} are`} costing us points now.`;
+      if (costing > 0) return `${acting.length} things worth acting on, ${costing === 1 ? 'one is' : `${costing} are`} costing us points now.`;
       return acting.length === 1 ? 'One thing worth acting on.' : `${acting.length} things worth acting on.`;
     })(),
     findings,

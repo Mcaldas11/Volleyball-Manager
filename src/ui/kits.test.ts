@@ -11,7 +11,7 @@ test('colours read from hex and hsl alike', () => {
   assert.ok(colourDistance('#000000', '#ffffff') > 200);
 });
 
-test("a club wears its designed kit, or one made from its colour — and the away side changes on a clash", () => {
+test("a club wears its designed kit, or one made from its colour, and the away side changes on a clash", () => {
   const plain = { id: 7 } as Club;
   assert.equal(hueOf(plain), (7 * 137.508) % 360);
   assert.deepEqual(clubKit(plain), kitFromHue(hueOf(plain)));

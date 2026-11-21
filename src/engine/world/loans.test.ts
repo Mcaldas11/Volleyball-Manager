@@ -166,7 +166,7 @@ test('the season rollover sends every loan home', () => {
   startLoan(world, lender, club, p, 0.5);
   endSeason(world, ctx);
   assert.equal(world.loans.length, 0);
-  assert.notEqual(world.players.clubId[p], club.id, 'he has gone back — or moved on, if his contract ran out');
+  assert.notEqual(world.players.clubId[p], club.id, 'he has gone back, or moved on, if his contract ran out');
   assert.ok(!club.players.includes(p));
 });
 
@@ -342,19 +342,19 @@ test('each month brings an update on every loanee whose club has played', () => 
   loan.stats = { ...loan.stats!, clubMatches: 4, clubRallies: 700, fitMatches: 4, fitRallies: 700, apps: 4, rallies: 690, ratingSum: 27.2 };
   world.day = 92; // 1 October: September's update
   monthlyLoanReports(world);
-  const update = world.messages.find((m) => m.subject === `Loan update: ${name} — September 2026`);
+  const update = world.messages.find((m) => m.subject === `Loan update: ${name}, September 2026`);
   assert.ok(update?.loanReport?.month !== undefined, 'the month on its own');
   assert.equal(update.loanReport.month.stats.clubMatches, 4);
   assert.equal(update.loanOut, true);
 
   world.day = 123; // 1 November, and no matches since
   monthlyLoanReports(world);
-  assert.ok(!world.messages.some((m) => m.subject === `Loan update: ${name} — October 2026`), 'nothing to report');
+  assert.ok(!world.messages.some((m) => m.subject === `Loan update: ${name}, October 2026`), 'nothing to report');
 
   loan.stats = { ...loan.stats, clubMatches: 7, clubRallies: 1200, apps: 6 };
   world.day = 153; // 1 December
   monthlyLoanReports(world);
-  const november = world.messages.find((m) => m.subject === `Loan update: ${name} — November 2026`);
+  const november = world.messages.find((m) => m.subject === `Loan update: ${name}, November 2026`);
   assert.equal(november?.loanReport?.month?.stats.clubMatches, 3, 'only the month just gone');
 });
 
@@ -376,7 +376,7 @@ test('the user hears when a loanee is injured, and when he is fit again', () => 
   assert.ok(world.messages.some((m) => m.subject === `${name} fit again at ${borrower.name}`));
 });
 
-test('a standout match by a loanee makes the inbox — though not every week', () => {
+test('a standout match by a loanee makes the inbox, though not every week', () => {
   const { world, borrower, p } = loanedOut(63);
   const name = world.players.fullName(p);
   const line = bigNight(p);
@@ -445,7 +445,7 @@ function benched(loan: Loan): void {
   loan.stats = { ...loan.stats!, clubMatches: 8, clubRallies: 1400, fitMatches: 8, fitRallies: 1400, apps: 3, rallies: 280, ratingSum: 19 };
 }
 
-test('a loanee\'s coach can be spoken to once he is playing too little — and not every week', () => {
+test('a loanee\'s coach can be spoken to once he is playing too little, and not every week', () => {
   const { world, p, loan } = loanedForRotation(71, 'starter');
   assert.match(coachTalkBlock(world, p) ?? '', /few matches/);
   loan.stats = { ...loan.stats!, clubMatches: 8, clubRallies: 1400, fitMatches: 8, fitRallies: 1400, apps: 8, rallies: 1350 };

@@ -393,10 +393,10 @@ function TeamSwitch({ disabled }: { disabled: boolean }): JSX.Element | null {
   const national = g.nationalView();
   return (
     <div className="side-team-switch">
-      <button className={national ? '' : 'on'} disabled={disabled} onClick={() => g.setTeamView('club')} title={`${club.name} — squad, team sheet and instructions`}>
+      <button className={national ? '' : 'on'} disabled={disabled} onClick={() => g.setTeamView('club')} title={`${club.name}, squad, team sheet and instructions`}>
         <ClubCrest club={club} size={16} /><span>{club.shortName}</span>
       </button>
-      <button className={national ? 'on' : ''} disabled={disabled} onClick={() => g.setTeamView('national')} title={`${sideName(nation)} national team — its own squad, team sheet and instructions`}>
+      <button className={national ? 'on' : ''} disabled={disabled} onClick={() => g.setTeamView('national')} title={`${sideName(nation)} national team, its own squad, team sheet and instructions`}>
         <Flag nation={nation} /><span>{sideCode(nation)}</span>
       </button>
     </div>
@@ -427,7 +427,7 @@ function ManagerMenu({ name, photo, offers = 0 }: { name: string; photo: string;
             <Icon name="save" size={16} /> {g.busy ? 'Saving…' : 'Save game'}
           </button>
           <button disabled={g.busy} onClick={() => { void g.exportCurrentCareer(); setOpen(false); }}
-            title="Download the career as a file — a copy outside the browser">
+            title="Download the career as a file, a copy outside the browser">
             <Icon name="download" size={16} /> Export career file
           </button>
           <button onClick={() => { setOpen(false); g.openSettings(); }}>
@@ -489,17 +489,40 @@ function useFitTopBar(): RefObject<HTMLDivElement> {
     const bar = ref.current;
     if (bar === null) return;
     const de = document.documentElement;
-    const key = `${window.innerWidth}|${de.className}|${de.style.cssText}|${bar.textContent}`;
+    // The words in the bar with their figures as noughts: the date moves on every day, its width barely.
+    const key = `${window.innerWidth}|${de.className}|${de.style.cssText}|${(bar.textContent ?? '').replace(/[0-9]/g, '0')}`;
     if (!force && key === fitted.current) return;
     fitted.current = key;
     const nav = bar.querySelector<HTMLElement>('.vm-primary-nav');
     const fits = (): boolean => bar.scrollWidth <= bar.clientWidth + 1 && (nav === null || nav.scrollWidth <= nav.clientWidth + 1);
-    for (let level = 0; level <= TOPBAR_SQUEEZE_MAX; level++) {
-      bar.dataset.squeeze = String(level);
+    const set = (level: number): void => { bar.dataset.squeeze = String(level); };
+    // From where it stands: each try lays the page out, so as few as will do.
+    let level = Math.max(0, Math.min(TOPBAR_SQUEEZE_MAX, Number(bar.dataset.squeeze ?? 0) || 0));
+    set(level);
+    if (fits()) {
+      // Room to spare, perhaps: loosen while it still fits.
+      while (level > 0) {
+        set(level - 1);
+        if (!fits()) { set(level); return; }
+        level--;
+      }
+      return;
+    }
+    while (level < TOPBAR_SQUEEZE_MAX) {
+      level++;
+      set(level);
       if (fits()) return;
     }
   };
-  useLayoutEffect(() => fit());
+  // Measured in the next frame, not in the render's own: by then the page is laid out already and
+  // reading the bar's width costs nothing, where measuring now would make the browser lay the whole
+  // page out early (a heavy screen, every day of a holiday). At worst the bar is one frame late.
+  const pending = useRef(0);
+  useLayoutEffect(() => {
+    if (pending.current !== 0) return;
+    pending.current = requestAnimationFrame(() => { pending.current = 0; fit(); });
+  });
+  useEffect(() => () => cancelAnimationFrame(pending.current), []);
   useEffect(() => {
     const bar = ref.current;
     if (bar === null) return;
@@ -537,7 +560,7 @@ function PrimaryNav({ disabled }: { disabled: boolean }): JSX.Element {
               {s.label}
             </button>
             {tabs.length > 1 && (
-              <button className="vm-primary-more" title={`${s.label} — more sections`} aria-label={`${s.label} — more sections`}
+              <button className="vm-primary-more" title={`${s.label}, more sections`} aria-label={`${s.label}, more sections`}
                 aria-haspopup="menu" aria-expanded={open === s.id} disabled={disabled}
                 onClick={() => setOpen(open === s.id ? null : s.id)}>
                 <Icon name="chevronDown" size={11} />
@@ -624,7 +647,7 @@ function Header(): JSX.Element {
             </button>
             {searching && <div className="vm-search-pop"><GlobalSearch disabled={takeover} /></div>}
           </div>
-          <button className="vm-tool" title="Inbox" aria-label="Inbox" disabled={takeover} onClick={() => g.go('inbox')}>
+          <button className="vm-tool" data-tour="tool-inbox" title="Inbox" aria-label="Inbox" disabled={takeover} onClick={() => g.go('inbox')}>
             <Icon name="inbox" size={18} />
             {unread > 0 && <span className="vm-count">{unread > 99 ? '99+' : unread}</span>}
           </button>

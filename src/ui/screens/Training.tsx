@@ -91,17 +91,17 @@ function CampPlanner(): JSX.Element {
   return (
     <div className="camp">
       <p className="tr-note">
-        A week away together before the season. The kind of camp decides what the squad brings back — the dressing room
-        closer, morale up, more in the young players' legs — and what it costs.
+        A week away together before the season. The kind of camp decides what the squad brings back, the dressing room
+        closer, morale up, more in the young players' legs, and what it costs.
       </p>
       {booked !== undefined ? (
         <section className="card camp-booked">
-          <h3 className="card-title"><Icon name="check" size={14} /> {CAMPS[booked.kind].name} — {label(booked.start)} to {label(booked.end)}</h3>
+          <h3 className="card-title"><Icon name="check" size={14} /> {CAMPS[booked.kind].name}, {label(booked.start)} to {label(booked.end)}</h3>
           <p>{CAMPS[booked.kind].blurb}</p>
           <p className="faint">{booked.done === true ? 'Done: the squad is back.' : world.day >= booked.start ? 'Under way.' : 'Booked and paid for.'} Cost {money(booked.cost)}.</p>
         </section>
       ) : window === null ? (
-        <Empty>The pre-season is too far gone for a camp — there will be another chance next summer.</Empty>
+        <Empty>The pre-season is too far gone for a camp, there will be another chance next summer.</Empty>
       ) : (
         <>
           <div className="camp-kinds">
@@ -356,7 +356,7 @@ function NextMatchCard(): JSX.Element {
             </div>
           );
         })}
-        <p className="tr-hint">The day before a match prepares for it — set what it works on in the plan.</p>
+        <p className="tr-hint">The day before a match prepares for it, set what it works on in the plan.</p>
       </section>
     </>
   );
@@ -400,7 +400,7 @@ function PositionLearning({ p }: { p: number }): JSX.Element {
         ]}
       />
       {target !== null && (
-        <span className="tr-learn-bar" title={`${known}/100 — ${familiarityLabel(known, false).label}`}>
+        <span className="tr-learn-bar" title={`${known}/100, ${familiarityLabel(known, false).label}`}>
           <i style={{ width: `${known}%` }} />
         </span>
       )}
@@ -496,7 +496,7 @@ function IndividualTraining(): JSX.Element {
               <th>Condition</th>
               <th>Focus</th>
               <th>Load</th>
-              <th title="A position he is learning in training — playing there teaches it too">New position</th>
+              <th title="A position he is learning in training, playing there teaches it too">New position</th>
               <th title={`A veteran (${MENTOR_MIN_AGE}+) taking a young player (${MENTEE_MAX_AGE} and under) under his wing`}>Mentor</th>
               <th>Ability</th>
               <th className="num" title="Ability gained this season">Season</th>

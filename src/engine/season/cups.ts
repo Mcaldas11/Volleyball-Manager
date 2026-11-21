@@ -835,7 +835,7 @@ function drawNotice(world: World, comp: Competition, roundIdx: number): void {
   const opp = world.clubs[opponentOf(f, me)];
   postMessage(world, {
     subject: round === 'Final' ? `${comp.name}: into the final` : `${comp.name}: ${round.toLowerCase()} draw`,
-    body: `${world.clubs[me].name} will play ${opp.name} in the ${round.toLowerCase()} — ${venue(f, me)}, on ${formatDay(world, f.day)}.`,
+    body: `${world.clubs[me].name} will play ${opp.name} in the ${round.toLowerCase()}, ${venue(f, me)}, on ${formatDay(world, f.day)}.`,
     from: comp.organizer,
     competitionId: comp.id,
     clubId: opp.id,
@@ -859,7 +859,7 @@ function groupStageNotice(world: World, comp: Competition, cup: CupState, tables
           ? ` Next, the ${stageLabel(world, next).toLowerCase()}: ${world.clubs[opponentOf(next, me)].name}, ` +
             `${venue(next, me)}, on ${formatDay(world, next.day)}.`
           : '')
-      : `${club.name} finished ${ordinal(pos)} in Group ${cup.groups[gi].name} — not enough to go through. ` +
+      : `${club.name} finished ${ordinal(pos)} in Group ${cup.groups[gi].name}, not enough to go through. ` +
         `The ${comp.name} is over for this season.`,
     from: comp.organizer,
     competitionId: comp.id,
@@ -905,7 +905,7 @@ function winnerNotice(world: World, comp: Competition, bracket: PlayoffGroup): v
     postMessage(world, {
       subject: won ? `${comp.name} winners!` : `${comp.name}: beaten in the final`,
       body: won
-        ? `${world.clubs[me].name} beat ${world.clubs[runnerUp].name} ${score} in the final — the ${comp.name} is ours. ` +
+        ? `${world.clubs[me].name} beat ${world.clubs[runnerUp].name} ${score} in the final, the ${comp.name} is ours. ` +
           `${euros(format.prizePool)} in prize money comes with it.`
         : `${world.clubs[winner].name} beat ${world.clubs[me].name} ${score} in the final. So close.`,
       from: comp.organizer,

@@ -124,7 +124,7 @@ export function recordClubMatch(
           category: 'news', from: 'Club Media', playerIdx: p,
           subject: `${name}: ${games} games for ${world.clubs[club]?.name ?? 'the club'}`,
           body: `${name} has played his ${games}th game for the club${milestoneNumbers(world, p, club, flat[at + POINTS])} ` +
-            (games >= 200 ? 'A club great — the supporters gave him a standing ovation.' : 'The supporters gave him a warm round of applause.'),
+            (games >= 200 ? 'A club great, the supporters gave him a standing ovation.' : 'The supporters gave him a warm round of applause.'),
         });
       }
     }

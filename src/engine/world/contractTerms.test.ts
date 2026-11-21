@@ -28,7 +28,7 @@ function runDays(world: World, max: number, done: () => boolean = () => false): 
   }
 }
 
-test('every player has an agent of his country, the same one every time — and some agents drive a harder bargain', () => {
+test('every player has an agent of his country, the same one every time, and some agents drive a harder bargain', () => {
   const { world } = setup(61);
   const store = world.players;
   const styles = new Set<string>();
@@ -43,7 +43,7 @@ test('every player has an agent of his country, the same one every time — and 
   assert.ok(agentPatience('hardball') < agentPatience('fair') && agentPatience('fair') < agentPatience('easy'));
 });
 
-test('the agent asks for his fee, an ambitious player for a way out — and the small print is weighed like money', () => {
+test('the agent asks for his fee, an ambitious player for a way out, and the small print is weighed like money', () => {
   const { world, club } = setup(62);
   const store = world.players;
   const others = world.clubs.filter((c) => c.id !== club.id).flatMap((c) => c.players);

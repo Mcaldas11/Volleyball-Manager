@@ -353,7 +353,7 @@ function MatchdayStartRotation(): JSX.Element {
   const g = useGame();
   const md = g.matchday!;
   return (
-    <div className="md-formation" title="The rotation your side starts the set in — named, as ever, for the zone the setter stands in.">
+    <div className="md-formation" title="The rotation your side starts the set in, named, as ever, for the zone the setter stands in.">
       <span className="faint">Start in</span>
       <Dropdown size="sm" value={md.startRotation ?? 0} onChange={(r) => g.setStartRotation(r)}
         options={[0, 1, 2, 3, 4, 5].map((r) => ({ value: r, label: `P${r + 1}`, hint: r >= 1 && r <= 3 ? 'Setter front' : 'Setter back' }))} />
@@ -364,7 +364,7 @@ function MatchdayStartRotation(): JSX.Element {
 function MatchdayFormation(): JSX.Element {
   const g = useGame();
   return (
-    <div className="md-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal — the one in the back row sets, the one at the net attacks.">
+    <div className="md-formation" title="5-1: one setter and an opposite. 4-2: two setters, diagonal, the one in the back row sets, the one at the net attacks.">
       <span className="faint">Formation</span>
       <Segmented<Formation>
         size="sm"
@@ -539,7 +539,7 @@ function TeamTalkDialog({ moment, onClose }: { moment: TalkMoment | null; onClos
         <h2 className="hol-title">Team Talk</h2>
         {given === null && moment !== null ? (
           <>
-            <p className="hol-sub">What do you tell them? It depends on the moment — and on who is listening.</p>
+            <p className="hol-sub">What do you tell them? It depends on the moment, and on who is listening.</p>
             <div className="talk-options">
               {TALK_OPTIONS[moment].map((tone) => (
                 <button key={tone} className="talk-option" onClick={() => g.giveTeamTalk(tone)}>
@@ -550,7 +550,7 @@ function TeamTalkDialog({ moment, onClose }: { moment: TalkMoment | null; onClos
           </>
         ) : given !== null ? (
           <>
-            <p className="hol-sub">“{TALK_LINES[given.tone]}” — <b>{given.result.summary}</b></p>
+            <p className="hol-sub">“{TALK_LINES[given.tone]}”, <b>{given.result.summary}</b></p>
             <div className="talk-reactions">
               {given.result.reactions.map((r) => (
                 <div key={r.p} className="talk-reaction">
@@ -595,9 +595,9 @@ function InjuryPanel(): JSX.Element | null {
   const line = live.phase === 'down' ? 'He is down. The physio is on his way.'
     : live.phase === 'treat' ? 'The physio is with him.'
       : live.phase === 'decide'
-        ? knock ? 'He can carry on — below his best, and every rally he plays on with it, it may get worse.'
-          : inj.aggravated === true ? 'Playing on has made it worse — he has to come off.' : 'He cannot carry on. Who comes on?'
-        : live.phase === 'up' ? 'Back on his feet — he plays on.' : 'Helped off.';
+        ? knock ? 'He can carry on, below his best, and every rally he plays on with it, it may get worse.'
+          : inj.aggravated === true ? 'Playing on has made it worse, he has to come off.' : 'He cannot carry on. Who comes on?'
+        : live.phase === 'up' ? 'Back on his feet, he plays on.' : 'Helped off.';
   return (
     <div className={`injury-panel${deciding ? ' deciding' : ''}`}>
       <div className="injury-head">
@@ -639,7 +639,7 @@ function InjuryPanel(): JSX.Element | null {
               </button>
             ))}
             {options.length === 0 && !isLibero && !knock && (
-              <button className="injury-option" onClick={() => g.injuryCarryOn()}>Nobody left — he carries on as best he can</button>
+              <button className="injury-option" onClick={() => g.injuryCarryOn()}>Nobody left, he carries on as best he can</button>
             )}
           </div>
         </div>
@@ -662,8 +662,8 @@ function TimeoutPanel({
       <div className="timeout-head">
         <span className="timeout-icon"><Icon name="whistle" size={22} /></span>
         <div className="timeout-title">
-          <strong>Timeout{calledBy !== undefined ? ` — ${calledBy}` : ''}</strong>
-          <span className="faint">Adjust the instructions here, or open Tactics for the system and each rotation — changes apply from the next rally.</span>
+          <strong>Timeout{calledBy !== undefined ? `, ${calledBy}` : ''}</strong>
+          <span className="faint">Adjust the instructions here, or open Tactics for the system and each rotation, changes apply from the next rally.</span>
         </div>
         <span className="timeout-countdown">0:{secondsLeft.toString().padStart(2, '0')}</span>
         <button className="primary" onClick={() => g.resumeFromTimeout()} data-tour="resume-timeout">
@@ -826,9 +826,9 @@ const ROLE_ORDER: Readonly<Record<Position, number>> = {
 
 /** What a shout sounded like from the touchline, and how it landed. */
 const SHOUT_LINES: Readonly<Record<ShoutKind, { label: string; hint: string; line: string }>> = {
-  encourage: { label: 'Encourage', hint: 'Lift the side', line: 'Come on — keep going!' },
+  encourage: { label: 'Encourage', hint: 'Lift the side', line: 'Come on, keep going!' },
   demand: { label: 'Demand more', hint: 'Best when behind', line: 'Is that all you have got?!' },
-  calm: { label: 'Calm down', hint: 'Settle a side in a slump', line: 'Breathe — one point at a time.' },
+  calm: { label: 'Calm down', hint: 'Settle a side in a slump', line: 'Breathe, one point at a time.' },
 };
 const SHOUT_EFFECT: Readonly<Record<'lifted' | 'flat' | 'tense', string>> = {
   lifted: 'the side responds',
@@ -840,7 +840,7 @@ const SHOUT_EFFECT: Readonly<Record<'lifted' | 'flat' | 'tense', string>> = {
 function SoundToggle(): JSX.Element {
   const [on, setOn] = useState(soundOn);
   return (
-    <button className={on ? '' : 'muted'} title={on ? 'Sound on — click to mute' : 'Sound off — click to hear the match'}
+    <button className={on ? '' : 'muted'} title={on ? 'Sound on, click to mute' : 'Sound off, click to hear the match'}
       onClick={() => { setSoundOn(!on); setOn(!on); }}>
       <Icon name={on ? 'sound' : 'mute'} size={15} />
     </button>
@@ -958,7 +958,7 @@ function ChallengeButton({ shown, onOpen }: { shown: boolean; onOpen: (open: boo
   return (
     <div className="lv-shout" ref={ref} data-tour="challenge">
       <button className={`${close ? 'hot' : ''}${open ? ' on' : ''}`} disabled={why !== null} onClick={() => setOpen((o) => !o)}
-        title={why ?? (close && call?.doubt != null ? `That looked close — ${DOUBT_WORDS[call.doubt]}` : 'Ask the video to look at one thing')}>
+        title={why ?? (close && call?.doubt != null ? `That looked close, ${DOUBT_WORDS[call.doubt]}` : 'Ask the video to look at one thing')}>
         <Icon name="search" size={15} /> Challenge <span className="lv-badge">{g.challengesLeft()}</span>
       </button>
       {open && why === null && call !== null && (
@@ -1014,12 +1014,12 @@ function LiveTeamCard({ team, serving, ratings, onPick }: {
               key={p}
               className={`lv-team-row${onPick !== undefined ? ' pickable' : ''}`}
               onClick={(e) => (onPick !== undefined ? onPick(p, pageRect(e.currentTarget)) : g.select(p))}
-              title={onPick !== undefined ? `${store.fullName(p)} — click to change him` : store.fullName(p)}
+              title={onPick !== undefined ? `${store.fullName(p)}, click to change him` : store.fullName(p)}
             >
               <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={22} />
               <span className="lv-team-name">
                 {store.shortName(p).split(' ').pop()}
-                {knocks.has(p) && <span className="lv-knock" title="Playing on with a knock — below his best, and it may get worse">+</span>}
+                {knocks.has(p) && <span className="lv-knock" title="Playing on with a knock, below his best, and it may get worse">+</span>}
               </span>
               <Pos pos={roles[p] as Position} />
               {r !== undefined ? <RatingBadge value={r} size="sm" /> : <span className="lv-rating-none">—</span>}
@@ -1058,7 +1058,7 @@ function QuickSub({ at, onClose }: {
         <div>
           <b>{store.fullName(p)}</b>
           <span className="faint">
-            {isLibero ? 'Libero — changes are free and unlimited' : `Bring on for him · ${g.subsRemaining()} left this set`}
+            {isLibero ? 'Libero, changes are free and unlimited' : `Bring on for him · ${g.subsRemaining()} left this set`}
           </span>
         </div>
         <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" size={14} /></button>
@@ -1072,7 +1072,7 @@ function QuickSub({ at, onClose }: {
               key={o.p}
               className="lv-quicksub-opt"
               disabled={o.why !== null}
-              title={o.why ?? (cold ? 'Not warmed up — he risks a strain' : undefined)}
+              title={o.why ?? (cold ? 'Not warmed up, he risks a strain' : undefined)}
               onClick={() => {
                 if (isLibero) g.changeLibero(p === liberos.reception ? 'reception' : 'defence', o.p);
                 else g.substitute(p, o.p);
@@ -1319,7 +1319,7 @@ function TacticsOverlay({ onClose }: { onClose: () => void }): JSX.Element | nul
         <strong><Icon name="tactics" size={16} /> Tactics</strong>
         <Segmented<'team' | 'rotations'> size="sm" options={[['team', 'Team'], ['rotations', 'Rotations']]} value={tab} onChange={setTab} />
         <span className="faint" title="Once the match is over the tactic goes back to how it was at kickoff.">
-          Changes apply from the next rally — for this match only.
+          Changes apply from the next rally, for this match only.
         </span>
         {saved !== null && saved.slots.length >= 2 && (
           <Dropdown
@@ -1566,7 +1566,7 @@ function LiveMatchView(): JSX.Element {
     const s = md.lastShout;
     if (s == null) return;
     const team: 0 | 1 = md.userIsHome ? 0 : 1;
-    setSubAnnouncement({ text: `“${SHOUT_LINES[s.kind].line}” — ${SHOUT_EFFECT[s.effect]}`, team, key: s.seq });
+    setSubAnnouncement({ text: `“${SHOUT_LINES[s.kind].line}”, ${SHOUT_EFFECT[s.effect]}`, team, key: s.seq });
     if (subAnnounceTimer.current !== undefined) clearTimeout(subAnnounceTimer.current);
     subAnnounceTimer.current = setTimeout(() => setSubAnnouncement(null), 3000);
   }, [lastShoutSeq]);
@@ -1588,7 +1588,7 @@ function LiveMatchView(): JSX.Element {
     const who = store.shortName(live.inj.p);
     const side = live.inj.team;
     const sideName = g.matchday?.sides[side].shortName ?? '';
-    announce(`${sideName}: ${who} is down — ${(INJURY_NAMES[live.inj.type] ?? 'hurt').toLowerCase()}`, side);
+    announce(`${sideName}: ${who} is down, ${(INJURY_NAMES[live.inj.type] ?? 'hurt').toLowerCase()}`, side);
     await sleep(1500 / speed);
     if (cancelled.current) return;
     g.setInjuryPhase('treat');
@@ -1603,7 +1603,7 @@ function LiveMatchView(): JSX.Element {
     if (cancelled.current) return;
     const off = g.matchday?.injury?.phase === 'off';
     const by = live.inj.replacedBy ?? -1;
-    announce(off ? `${sideName}: ${who} helped off${by >= 0 ? ` — ${store.shortName(by)} on` : ''}` : `${sideName}: ${who} plays on`, side);
+    announce(off ? `${sideName}: ${who} helped off${by >= 0 ? `, ${store.shortName(by)} on` : ''}` : `${sideName}: ${who} plays on`, side);
     await sleep((off ? 3400 : 1700) / speed);
     g.endInjuryStoppage();
   };
@@ -2043,7 +2043,7 @@ function LiveMatchView(): JSX.Element {
         {watching ? (
           <>
             <span className="lv-coach-label">In the stands</span>
-            <span className="faint lv-stands-note">Watching {homeClub.name} v {awayClub.name} — the benches are theirs.</span>
+            <span className="faint lv-stands-note">Watching {homeClub.name} v {awayClub.name}, the benches are theirs.</span>
             <button onClick={() => g.leaveWatching()} title="Leave before the end: the match is played later in the day as usual">
               <Icon name="back" size={14} /> Leave
             </button>
@@ -2056,7 +2056,7 @@ function LiveMatchView(): JSX.Element {
           disabled={md.timeoutActive !== null || md.timeoutsUsed[userTeamIdx] >= 2 || md.setEnding === true || view.matchOver}
           onClick={() => g.callTimeout()}
           title={md.timeoutRequest === userTeamIdx
-            ? 'Asked for — the referee gives it at the next dead ball. Click to withdraw it.'
+            ? 'Asked for, the referee gives it at the next dead ball. Click to withdraw it.'
             : md.ballInPlay === true ? 'The ball is in play: the timeout is given at the next dead ball' : 'Call a timeout'}
         >
           <Icon name="whistle" size={15} /> {md.timeoutRequest === userTeamIdx ? 'Timeout asked' : 'Timeout'}
@@ -2178,7 +2178,7 @@ function SubCard({
             <button
               className="sm ghost sub-warm-btn"
               onClick={(e) => { e.stopPropagation(); warm.onToggle(); }}
-              title={warm.warming ? 'Back to stand in the warm-up area' : 'Send him to warm up — on cold, he risks a strain'}
+              title={warm.warming ? 'Back to stand in the warm-up area' : 'Send him to warm up, on cold, he risks a strain'}
             >
               {warm.warming ? 'Stop' : 'Warm up'}
             </button>
@@ -2317,7 +2317,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
           )}
           <p className="field-hint">
             {mode === 'planned'
-              ? 'Set a change up once — it is made by itself the moment its rotation comes round. For this set only: the next starts with nothing planned.'
+              ? 'Set a change up once, it is made by itself the moment its rotation comes round. For this set only: the next starts with nothing planned.'
               : 'Drag a bench player onto someone on court, or pick both and confirm. A player who comes off can only return for whoever replaced them.'}
           </p>
         </div>
@@ -2325,7 +2325,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
         {mode === 'planned' && userSide ? <PlannedSubs bench={bench} roles={roles} onCourt={onCourt} /> : (<>
         <div className="sub-cols">
           <div className="sub-col">
-            <div className="section-label">On court — pick who comes off</div>
+            <div className="section-label">On court, pick who comes off</div>
             <div className="sub-list">
               {onCourt.map((p) => (
                 <SubCard
@@ -2342,7 +2342,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
             </div>
           </div>
           <div className="sub-col">
-            <div className="section-label">Bench — pick who comes on</div>
+            <div className="section-label">Bench, pick who comes on</div>
             <div className="sub-list">
               {bench.length === 0 && <p className="empty">No fit players available.</p>}
               {bench.map((p) => (
@@ -2363,7 +2363,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
         </div>
 
         <div className="libero-panel">
-          <div className="section-label">Liberos — changes are unlimited and never use a substitution</div>
+          <div className="section-label">Liberos, changes are unlimited and never use a substitution</div>
           <div className="libero-slots">
             <LiberoSlot
               label={liberos.defence >= 0 ? 'Reception libero' : 'Libero'}
@@ -2433,7 +2433,7 @@ function Substitutions({ teamIdx }: { teamIdx: 0 | 1 }): JSX.Element {
           {inPlayer !== null
             ? <><span className="good">▲ {store.shortName(inPlayer)}</span> on</>
             : <span className="faint">Pick who comes on</span>}
-          {coldIn && <span className="sub-cold-warning"><Icon name="alert" size={13} /> Not warmed up — he risks a strain</span>}
+          {coldIn && <span className="sub-cold-warning"><Icon name="alert" size={13} /> Not warmed up, he risks a strain</span>}
         </span>
         <button
           className="primary"
@@ -2517,7 +2517,7 @@ function PlannedSubs({ bench: allBench, roles, onCourt }: { bench: number[]; rol
   );
   return (
     <div className="subplans">
-      <section className="subplan-card" title="Setter in zone 4, opposite in zone 1: someone from the bench on to set for the opposite, someone on to hit at opposite for the setter — back three rotations later.">
+      <section className="subplan-card" title="Setter in zone 4, opposite in zone 1: someone from the bench on to set for the opposite, someone on to hit at opposite for the setter, back three rotations later.">
         <header className="subplan-head">
           <Icon name="swap" size={15} /> <b>Double switch</b>{state(ds)}
           {ds?.armed === true
@@ -2526,9 +2526,9 @@ function PlannedSubs({ bench: allBench, roles, onCourt }: { bench: number[]; rol
               <Icon name="check" size={13} /> Plan it
             </button>}
         </header>
-        <p className="field-hint" title="Three hitters at the net, the new setter setting from the back row; three rotations later the two who went off come back. Anyone may come on to set or to hit at opposite — one out of his position plays it less well.">
+        <p className="field-hint" title="Three hitters at the net, the new setter setting from the back row; three rotations later the two who went off come back. Anyone may come on to set or to hit at opposite, one out of his position plays it less well.">
           Setter in zone 4, opposite in zone 1: anyone from the bench on to set for the opposite, anyone on to hit at
-          opposite for the setter — back three rotations later. Four substitutions.
+          opposite for the setter, back three rotations later. Four substitutions.
         </p>
         <div className="subplan-picks">
           <label className="subplan-pick">
@@ -2574,7 +2574,7 @@ function PlannedSubs({ bench: allBench, roles, onCourt }: { bench: number[]; rol
         <footer className="subplan-foot faint">{g.subPlanStatus('serveSub')}</footer>
       </section>
 
-      <section className="subplan-card" title="An outside in the back row, the side to receive: a passer on for him — off again as soon as he reaches the net.">
+      <section className="subplan-card" title="An outside in the back row, the side to receive: a passer on for him, off again as soon as he reaches the net.">
         <header className="subplan-head">
           <Icon name="user" size={15} /> <b>Reception sub for an outside</b>{state(rs)}
           {rs?.armed === true
@@ -2584,7 +2584,7 @@ function PlannedSubs({ bench: allBench, roles, onCourt }: { bench: number[]; rol
             </button>}
         </header>
         <p className="field-hint" title="Two substitutions each time: on as the outside goes back to receive, off as the passer reaches the net.">
-          Your outside in the back row, the side to receive: a passer on for him, only to take the serve — off for him
+          Your outside in the back row, the side to receive: a passer on for him, only to take the serve, off for him
           again as soon as he reaches the net. Two substitutions each time.
         </p>
         <div className="subplan-picks">
@@ -2608,7 +2608,7 @@ function PlannedSubs({ bench: allBench, roles, onCourt }: { bench: number[]; rol
 
       {cameOff.length > 0 && (
         <p className="field-hint subplan-off">
-          Not offered: {cameOff.map((p) => store.shortName(p)).join(', ')} — off this set, each can only come back
+          Not offered: {cameOff.map((p) => store.shortName(p)).join(', ')}, off this set, each can only come back
           for whoever replaced him.
         </p>
       )}

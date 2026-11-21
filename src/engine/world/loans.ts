@@ -355,7 +355,7 @@ export function evaluateLoanRequest(
   }
   const left = samePos.length - 1;
   if (left < needed) {
-    return { accepted: false, final: true, reason: 'They cannot spare him — without him they could not field a team.' };
+    return { accepted: false, final: true, reason: 'They cannot spare him, without him they could not field a team.' };
   }
   const age = store.ageOn(playerIdx, world.year, 181);
   const young = age <= 23;
@@ -426,7 +426,7 @@ export function evaluateLoanCounter(
   if (playingTimeRank(asked.playingTime) > playingTimeRank(most)) {
     return {
       accepted: false,
-      reason: `They can't promise him more than ${PLAYING_TIME_NAMES[most].toLowerCase()} minutes — ` +
+      reason: `They can't promise him more than ${PLAYING_TIME_NAMES[most].toLowerCase()} minutes, ` +
         'there are better players in his position in their squad.',
     };
   }
@@ -622,7 +622,7 @@ function standout(
       ? `${name} helped ${club} beat ${opponent} ${setsFor}-${setsAgainst}`
       : `${name} stood out as ${club} lost ${setsFor}-${setsAgainst} to ${opponent}`) +
       `, with ${points} point${points === 1 ? '' : 's'} and a match rating of ${rating.toFixed(1)}` +
-      `${mvp ? ' — named player of the match' : ''}.`,
+      `${mvp ? ', named player of the match' : ''}.`,
     from: 'Loan Manager',
     playerIdx: loan.playerIdx,
     clubId: loan.loanClubId,
@@ -666,7 +666,7 @@ function loanVerdict(world: World, r: LoanReport): string {
   if (missed >= 2) parts.push(`He has missed ${missed} matches through injury.`);
   if (r.playingTime !== undefined && fitMatches(st) >= 4 &&
     promiseShare(st) < PLAYING_TIME_SHARE[r.playingTime] - 0.15) {
-    parts.push(`That is well short of the playing time agreed — ${PLAYING_TIME_NAMES[r.playingTime].toLowerCase()}.`);
+    parts.push(`That is well short of the playing time agreed, ${PLAYING_TIME_NAMES[r.playingTime].toLowerCase()}.`);
   }
   if (st.apps >= 3) {
     const avg = st.ratingSum / st.apps;
@@ -777,8 +777,8 @@ export function reviewLoanPromises(world: World): void {
       const club = world.clubs[loan.loanClubId];
       say(world, {
         subject: `${name} short of his promised games at ${club?.name ?? 'his loan club'}`,
-        body: `${club?.name ?? 'His loan club'} promised ${name} playing time as a ${promised} — about ${owed}% of ` +
-          `their play — but he has been on court for ${had}% of it in the matches he was fit for. You can recall ` +
+        body: `${club?.name ?? 'His loan club'} promised ${name} playing time as a ${promised}, about ${owed}% of ` +
+          `their play, but he has been on court for ${had}% of it in the matches he was fit for. You can recall ` +
           'him if you are not happy with how he is being used.',
         from: 'Loan Manager',
         playerIdx: loan.playerIdx,
@@ -855,12 +855,12 @@ export function coachTalkBlock(world: World, playerIdx: number): string | null {
   if (loan === undefined || loan.parentClubId !== world.userClubId) return 'He is not out on loan from your club.';
   const fit = fitMatches(loan.stats);
   if (fit < COACH_TALK_MIN_MATCHES) {
-    return `Give it a few matches first — he has only been fit for ${fit} of their matches so far.`;
+    return `Give it a few matches first, he has only been fit for ${fit} of their matches so far.`;
   }
   if (loan.coachTalkOn !== undefined && world.day - loan.coachTalkOn < COACH_TALK_GAP_DAYS) {
-    return `You spoke to ${loanCoachName(world, loan)} only recently — give it a few weeks.`;
+    return `You spoke to ${loanCoachName(world, loan)} only recently, give it a few weeks.`;
   }
-  if (!playingLittle(loan)) return 'He is getting his games — there is nothing to raise.';
+  if (!playingLittle(loan)) return 'He is getting his games, there is nothing to raise.';
   return null;
 }
 
@@ -926,7 +926,7 @@ export function talkToLoanCoach(
   let reply: string;
   if (agreed && keepingToDeal) {
     loan.honour = 1;
-    reply = `You're right — we agreed on it. ${surname} will get his games from the next match.`;
+    reply = `You're right, we agreed on it. ${surname} will get his games from the next match.`;
   } else if (agreed) {
     loan.playingTime = request;
     reply = `He has done enough to earn it. From now on he is a ${PLAYING_TIME_NAMES[request].toLowerCase()} here.`;
@@ -941,7 +941,7 @@ export function talkToLoanCoach(
       .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])
       .slice(0, 2)
       .map((q) => store.surname(q));
-    reply = `Be realistic — ${ahead.join(' and ')} ${ahead.length === 1 ? 'is' : 'are'} ahead of him in his position. ` +
+    reply = `Be realistic, ${ahead.join(' and ')} ${ahead.length === 1 ? 'is' : 'are'} ahead of him in his position. ` +
       'I can\'t give him more than that.';
   } else if (st.apps >= 2 && avg < 6.1) {
     reply = 'His performances haven\'t earned it yet. Let him show me more and we\'ll talk again.';
@@ -956,7 +956,7 @@ export function talkToLoanCoach(
     subject: agreed ? `${coach} agrees to play ${name} more` : `${coach} won't give ${name} more games`,
     body: `You spoke to ${coach}, the ${club.name} coach, about ${name}'s playing time, ` +
       (keepingToDeal
-        ? `asking him to keep to the playing time agreed — ${PLAYING_TIME_NAMES[request].toLowerCase()}.`
+        ? `asking him to keep to the playing time agreed, ${PLAYING_TIME_NAMES[request].toLowerCase()}.`
         : `asking for playing time as a ${PLAYING_TIME_NAMES[request].toLowerCase()}.`) +
       ` "${reply}"`,
     from: coach,

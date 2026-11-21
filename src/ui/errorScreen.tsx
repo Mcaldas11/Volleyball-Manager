@@ -80,7 +80,7 @@ function ErrorPanel({ message, inCareer, copied, onCopy, onRetry }: {
           <button onClick={() => window.location.reload()}><Icon name="playOutline" size={14} /> Reload the game</button>
         </div>
         <button className="ghost sm crash-copy" onClick={onCopy}>
-          <Icon name={copied ? 'check' : 'news'} size={13} /> {copied ? 'Copied — paste it into your bug report' : 'Copy the details for a bug report'}
+          <Icon name={copied ? 'check' : 'news'} size={13} /> {copied ? 'Copied, paste it into your bug report' : 'Copy the details for a bug report'}
         </button>
       </div>
     </div>

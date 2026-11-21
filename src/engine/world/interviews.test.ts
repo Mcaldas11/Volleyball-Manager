@@ -201,7 +201,7 @@ test('a final fills the press room and runs long; a routine league night is a fe
   assert.match(world.messages[1].body, /packed/);
 });
 
-test('after the match the press want a reaction to the result — and praise for the player of the match lifts him', () => {
+test('after the match the press want a reaction to the result, and praise for the player of the match lifts him', () => {
   const { world, opponentId } = managed(8);
   const club = world.clubs[world.userClubId];
   const store = world.players;
@@ -306,7 +306,7 @@ test("a season's conferences don't go round the same few questions", () => {
   }
 });
 
-test('a bold promise before the match is put to him after it — and the boldest line makes the paper', () => {
+test('a bold promise before the match is put to him after it, and the boldest line makes the paper', () => {
   const { world, opponentId } = managed(12);
   const club = world.clubs[world.userClubId];
   let quoted = false;
@@ -337,7 +337,7 @@ test('a bold promise before the match is put to him after it — and the boldest
   assert.ok(followed, 'a bold answer draws a follow-up');
 });
 
-test('a journalist told what they want to hear, conference after conference, becomes an ally — and one stood up remembers', () => {
+test('a journalist told what they want to hear, conference after conference, becomes an ally, and one stood up remembers', () => {
   const { world, opponentId } = managed(13);
   let name = '';
   for (let k = 0; k < 50; k++) {

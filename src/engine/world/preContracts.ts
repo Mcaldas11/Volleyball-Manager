@@ -61,18 +61,18 @@ export function preContractBlock(world: World, p: number): string | null {
   const name = store.fullName(p);
   const owner = store.clubId[p];
   if (!store.isActive(p)) return `${name} has retired.`;
-  if (owner < 0) return `${name} is a free agent — sign him outright.`;
+  if (owner < 0) return `${name} is a free agent, sign him outright.`;
   if (owner === club.id) return `${name} is your own player.`;
   if (store.hasFlag(p, PlayerFlag.Youth)) return `${name} is an academy player.`;
   const move = pendingMoveOf(world, p);
   if (move !== undefined) {
     return move.toClubId === club.id ? `${name} has already agreed to join you.` : `${name} has already agreed a move to ${world.clubs[move.toClubId]?.name ?? 'another club'}.`;
   }
-  if (loanOf(world, p) !== undefined) return `${name} is on loan — his parent club holds his contract.`;
+  if (loanOf(world, p) !== undefined) return `${name} is on loan, his parent club holds his contract.`;
   const ends = contractEndSeason(store.contractUntil[p]);
-  if (ends > world.season) return `His contract runs to 30 June ${seasonEndYear(world, ends)} — only the last six months are open to approaches.`;
+  if (ends > world.season) return `His contract runs to 30 June ${seasonEndYear(world, ends)}, only the last six months are open to approaches.`;
   if (world.day % DAYS_PER_SEASON < PRE_CONTRACT_FROM) {
-    return `His contract ends on 30 June ${seasonEndYear(world, world.season)} — you can approach him from 1 January.`;
+    return `His contract ends on 30 June ${seasonEndYear(world, world.season)}, you can approach him from 1 January.`;
   }
   if (willRetire(world, p)) return `${name} is retiring at the end of the season.`;
   const until = world.talksBlockedUntil.get(p);

@@ -104,7 +104,7 @@ test('a save from before seasons were kept loads with fresh leaderboards and a b
   assert.equal(revived.seasonStartAbility.get(p), world.players.currentAbility[p]);
 });
 
-test('a women\'s world comes back from a save as the women\'s game — and a men\'s as the men\'s', async () => {
+test('a women\'s world comes back from a save as the women\'s game, and a men\'s as the men\'s', async () => {
   const { NATIONS, nationStrength } = await import('../engine/world/nations.ts');
   const iran = NATIONS.findIndex((n) => n.code === 'IRI');
   const women = generateWorld({ seed: 2, startYear: 2026, scale: 'small', manager: stubManager(3), gender: 'women' });
@@ -119,7 +119,7 @@ test('a women\'s world comes back from a save as the women\'s game — and a men
   assert.equal(nationStrength(iran), menIran);
 });
 
-test('a save from before the gate was booked once has its gates brought up — once', () => {
+test('a save from before the gate was booked once has its gates brought up, once', () => {
   const world = generateWorld({ seed: 3, startYear: 2026, scale: 'small', manager: stubManager() });
   assert.equal(world.gateBooked, true, 'a new world is born with them');
   const old = structuredClone(world);

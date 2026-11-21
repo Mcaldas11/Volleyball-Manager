@@ -21,7 +21,7 @@ export function watchReasonText(angle: WatchAngle | null): string {
     case 'former': return 'Your former club';
     case 'national': return `${angle.players.length} ${nationName(angle.nation)} player${angle.players.length === 1 ? '' : 's'}`;
     case 'shortlist': return `${angle.players.length} on your shortlist`;
-    case 'job': return angle.open ? 'No head coach there — be seen' : '';
+    case 'job': return angle.open ? 'No head coach there, be seen' : '';
     default: return '';
   }
 }
@@ -32,7 +32,7 @@ export function WatchLiveButton({ fixture, compact = false }: { fixture: Fixture
   if (!g.canWatchMatch(fixture)) return null;
   const reason = watchReasonText(g.watchReason(fixture));
   return (
-    <button className="sm watch-live-btn" title={`Watch it live from the stands${reason !== '' ? ` — ${reason.toLowerCase()}` : ''}`}
+    <button className="sm watch-live-btn" title={`Watch it live from the stands${reason !== '' ? `, ${reason.toLowerCase()}` : ''}`}
       onClick={(e) => { e.stopPropagation(); g.watchMatch(fixture.id); }}>
       <Icon name="play" size={12} />{!compact && ' Watch live'}
     </button>
@@ -171,7 +171,7 @@ export function WatchLiveMenu({ align = 'right', label = 'Watch live' }: { align
               </div>
             ))}
             {found.length > shown.length && (
-              <p className="watch-live-more faint">{found.length - shown.length} more — search to narrow it down.</p>
+              <p className="watch-live-more faint">{found.length - shown.length} more, search to narrow it down.</p>
             )}
           </div>
         </div>,

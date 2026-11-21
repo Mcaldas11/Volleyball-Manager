@@ -4,7 +4,7 @@ import type { Beat, Scene } from './matchCourt.ts';
 import { PlayClock } from './playClock.ts';
 import { playBeats, sleep } from './rallyPlayer.ts';
 
-test('stopped, the clock holds where it is — and runs on from there, the stop taken out', async () => {
+test('stopped, the clock holds where it is, and runs on from there, the stop taken out', async () => {
   const clock = new PlayClock();
   await sleep(30);
   clock.stop(true);
@@ -27,7 +27,7 @@ test('a wait on the clock lasts as much longer as the clock is stopped meanwhile
   assert.ok(took >= 210, `waited ${took.toFixed(0)} ms: 100 of play and the 120 stopped`);
 });
 
-test('paused mid-rally, the rally holds on the beat it is at — no next beat, no contact — until play goes on', async () => {
+test('paused mid-rally, the rally holds on the beat it is at, no next beat, no contact, until play goes on', async () => {
   const clock = new PlayClock();
   const beat = (ms: number): Beat => ({
     positions: new Map(), poses: new Map(), ball: null, arc: 0, actor: null, ms, callout: null,

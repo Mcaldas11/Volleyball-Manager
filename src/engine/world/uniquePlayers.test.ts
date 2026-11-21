@@ -43,7 +43,7 @@ test('a saved world gets him once, and only once', () => {
   assert.equal(world.players.fullName(uniquePlayerIndex(world, 'matthew-lienert')!), 'Matthew Lienert');
 });
 
-test('Matthew Lienert: an Australian opposite of twelve, as good with either hand, still growing — and no club signs him yet', () => {
+test('Matthew Lienert: an Australian opposite of twelve, as good with either hand, still growing, and no club signs him yet', () => {
   const world = generateWorld({ seed: 34, startYear: 2026, scale: 'small', manager: stubManager() });
   const store = world.players;
   const p = uniquePlayerIndex(world, 'matthew-lienert')!;

@@ -143,9 +143,9 @@ export function friendlyBlock(world: World, clubId: number, day: number): string
   const club = userClub(world);
   const them = world.clubs[clubId];
   if (club === undefined) return 'You have no club.';
-  if (dayOfSeason(world) > friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS) return 'The pre-season is over — friendlies wait for the next.';
+  if (dayOfSeason(world) > friendlyWindow(world).last - FRIENDLY_NOTICE_DAYS) return 'The pre-season is over, friendlies wait for the next.';
   if (arranged(world, club.id) >= MAX_FRIENDLIES) {
-    return `You have ${MAX_FRIENDLIES} friendlies arranged — as many as the pre-season has room for.`;
+    return `You have ${MAX_FRIENDLIES} friendlies arranged, as many as the pre-season has room for.`;
   }
   if (them === undefined || clubId === club.id) return 'Choose another club to play.';
   if (them.players.length < MIN_SQUAD) return `${them.name} have no squad to bring.`;

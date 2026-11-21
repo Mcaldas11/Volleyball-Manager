@@ -4,7 +4,7 @@ import { setLanguage, translate } from './language.ts';
 import { PHRASES } from './translations.ts';
 import { TEXT_PHRASES } from './translationsText.ts';
 
-test('the game in Portuguese and Spanish: whole pieces of text, their spacing kept — and the rest left in English', () => {
+test('the game in Portuguese and Spanish: whole pieces of text, their spacing kept, and the rest left in English', () => {
   setLanguage('pt');
   assert.equal(translate('Continue'), 'Continuar');
   assert.equal(translate(' Quick Start '), ' Início rápido ');
@@ -49,13 +49,13 @@ test('the game own written text: a sentence with names in it, and a paragraph th
   setLanguage('en');
 });
 
-test('an academy training report, line by line — the attributes that went up by their own names', () => {
+test('an academy training report, line by line, the attributes that went up by their own names', () => {
   const report = 'Paweł Wójcik, 4 weeks into his attacking programme (intensive).\nAbility: 1092 → 1105 (+13).\n' +
-    'Improved: Spike Technique +2, Quick Attack +1.\nSteady progress — it is going in the right direction.';
+    'Improved: Spike Technique +2, Quick Attack +1.\nSteady progress, it is going in the right direction.';
   setLanguage('pt');
   assert.equal(translate(report),
     'Paweł Wójcik, 4 semanas no programa de ataque (intensivo).\nHabilidade: 1092 → 1105 (+13).\n' +
-    `Melhorou: ${translate('Spike Technique')} +2, ${translate('Quick Attack')} +1.\nProgresso constante — vai no bom caminho.`);
+    `Melhorou: ${translate('Spike Technique')} +2, ${translate('Quick Attack')} +1.\nProgresso constante, vai no bom caminho.`);
   assert.notEqual(translate('Spike Technique'), 'Spike Technique');
   setLanguage('en');
 });

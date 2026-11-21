@@ -38,7 +38,7 @@ export function DirectorDialog({ p, kind, onClose }: { p: number; kind: Director
         </header>
         <p className="dir-dialog-lead">
           {director !== undefined
-            ? `${director.firstName} ${director.lastName} runs the talks for you and reports back. He never goes past the limits you set — a good negotiator often comes in under them.`
+            ? `${director.firstName} ${director.lastName} runs the talks for you and reports back. He never goes past the limits you set, a good negotiator often comes in under them.`
             : 'The club has no Director of Football. Hire one on the Staff screen to hand him deals.'}
         </p>
         {kind === 'transfer' && !free && (
@@ -76,7 +76,7 @@ export function ShortlistScreen(): JSX.Element {
       <Card title={`Shortlist · ${list.length}`} icon="star" flush className="rc-card"
         actions={<button className="sm" onClick={() => g.go('missions')}><Icon name="scouting" size={13} /> Scout missions</button>}>
         {list.length === 0 ? (
-          <Empty>Nobody on your shortlist yet. Add players from their profile (☆ Shortlist), or send the scouts on a mission — what they find comes straight here.</Empty>
+          <Empty>Nobody on your shortlist yet. Add players from their profile (☆ Shortlist), or send the scouts on a mission, what they find comes straight here.</Empty>
         ) : (
           <div className="table-wrap rc-scroll">
             <table className="data-table">
@@ -152,7 +152,7 @@ export function MissionsScreen(): JSX.Element {
   return (
     <div className="rc-missions">
       <Card title="A new mission" icon="scouting">
-        <p className="rc-lead">Tell the scouts what you are looking for. Every week they report the best new names that fit — straight onto your shortlist and into your inbox.</p>
+        <p className="rc-lead">Tell the scouts what you are looking for. Every week they report the best new names that fit, straight onto your shortlist and into your inbox.</p>
         <div className="rc-form">
           <label><span>Position</span>
             <Dropdown value={position} onChange={setPosition}
@@ -171,7 +171,7 @@ export function MissionsScreen(): JSX.Element {
         <button className="primary" disabled={missions.length >= MAX_MISSIONS} onClick={() => g.addScoutMission(spec)}>
           <Icon name="scouting" size={14} /> Send the scouts
         </button>
-        {missions.length >= MAX_MISSIONS && <p className="faint rc-note">The scouts are running {MAX_MISSIONS} missions — call one off to start another.</p>}
+        {missions.length >= MAX_MISSIONS && <p className="faint rc-note">The scouts are running {MAX_MISSIONS} missions, call one off to start another.</p>}
       </Card>
       <Card title={`Missions under way · ${missions.length}/${MAX_MISSIONS}`} icon="task" flush className="rc-card">
         {missions.length === 0 ? <Empty>No missions out. Set one up on the left.</Empty> : (
@@ -198,7 +198,7 @@ export function MissionsScreen(): JSX.Element {
 const TASK_HINT: Readonly<Record<DelegableTask, string>> = {
   renewals: 'The director goes through the contracts running out each winter: keeps whoever is worth it, within the wage budget, and tells you who he lets go.',
   friendlies: 'Books three pre-season friendlies at the right level.',
-  training: 'The assistant runs the whole programme — weekly focus, intensity, everyone\'s individual work. Your own settings stop counting.',
+  training: 'The assistant runs the whole programme, weekly focus, intensity, everyone\'s individual work. Your own settings stop counting.',
   press: 'The assistant fronts the press conferences: calm, nothing to win or lose. No journalist feels stood up.',
 };
 
@@ -219,7 +219,7 @@ export function DirectorScreen(): JSX.Element {
           {director !== undefined ? (
             <div className="rc-dof">
               <div className="rc-dof-name"><b>{director.firstName} {director.lastName}</b><StarMeter value={staffRating(director)} max={20} size={13} /></div>
-              <p className="faint">Does your deals for you: hand him a signing from a player's profile or your shortlist, or one of your own to renew — with the most he may spend. He reports to the inbox.</p>
+              <p className="faint">Does your deals for you: hand him a signing from a player's profile or your shortlist, or one of your own to renew, with the most he may spend. He reports to the inbox.</p>
             </div>
           ) : (
             <div className="rc-dof">

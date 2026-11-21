@@ -47,7 +47,7 @@ interface CareerFile {
 class CareerFileError extends Error {}
 
 const NOT_A_CAREER = 'That file is not a career from this game.';
-const DAMAGED = 'That career file is damaged or incomplete — export it again.';
+const DAMAGED = 'That career file is damaged or incomplete, export it again.';
 
 /** A container with more parts than this is written part by part. */
 const SPLIT_ABOVE = 512;

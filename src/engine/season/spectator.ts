@@ -219,7 +219,7 @@ export function spectatorStory(world: World, f: Fixture, result: MatchResult): N
       otherClubId = other.id;
       story = 'homecoming';
       headline = `${name} back in the stands at ${club.name}`;
-      body = `${who} was in the stands for ${club.name}'s match against ${other.name} — ${his} former club. ${outcome}` +
+      body = `${who} was in the stands for ${club.name}'s match against ${other.name}, ${his} former club. ${outcome}` +
         (world.userClubId < 0 ? ' With the job market quiet, talk of a return is already doing the rounds.' : '');
       break;
     }
@@ -228,7 +228,7 @@ export function spectatorStory(world: World, f: Fixture, result: MatchResult): N
       playerIdx = best?.p ?? angle.players[0];
       const count = angle.players.length;
       headline = `${nationName(angle.nation)} coach runs the rule over ${count === 1 ? store.fullName(angle.players[0]) : `${count} internationals`}`;
-      body = `${who} was at ${fixture} to watch ${names(world, angle.players)} — ${count === 1 ? 'one' : 'some'} of ${his} players. ${outcome}` +
+      body = `${who} was at ${fixture} to watch ${names(world, angle.players)}, ${count === 1 ? 'one' : 'some'} of ${his} players. ${outcome}` +
         (best !== null && best.points > 0 ? ` ${store.fullName(best.p)} made the most of the audience with ${best.points} point${best.points === 1 ? '' : 's'}.` : '');
       break;
     }
@@ -241,7 +241,7 @@ export function spectatorStory(world: World, f: Fixture, result: MatchResult): N
         otherClubId = target.id === home.id ? away.id : home.id;
       }
       headline = `${name} spotted watching ${store.fullName(playerIdx)}`;
-      body = `${who} was spotted in the stands at ${fixture}, where ${names(world, angle.players)} ${angle.players.length === 1 ? 'was' : 'were'} on court — ` +
+      body = `${who} was spotted in the stands at ${fixture}, where ${names(world, angle.players)} ${angle.players.length === 1 ? 'was' : 'were'} on court, ` +
         `players said to be on ${his} shortlist. ${outcome}`;
       break;
     }

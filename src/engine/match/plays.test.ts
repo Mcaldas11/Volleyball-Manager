@@ -49,7 +49,7 @@ function attacks(tactics: Partial<TeamTactics>, seeds: number[]): RallyContact[]
   return out;
 }
 
-test("the middle hits the quick, the back quick and the slide — or just the one he's told to", () => {
+test("the middle hits the quick, the back quick and the slide, or just the one he's told to", () => {
   const mixed = attacks({}, [1, 2, 3]).filter((c) => c.detail === 'Quick (middle)');
   for (const play of ['quick', 'backQuick', 'slide'] as const) assert.ok(mixed.some((c) => c.play === play), `some ${play}`);
   // Told to slide with the setter at the net and to hit the quick with him at the back.
@@ -59,12 +59,12 @@ test("the middle hits the quick, the back quick and the slide — or just the on
   const front = told.filter(({ rot }) => setterAtNet(rot));
   const back = told.filter(({ rot }) => !setterAtNet(rot));
   assert.ok(front.length > 5 && back.length > 5);
-  assert.ok(front.every(({ c }) => c.play === 'slide' || c.play === 'quick'), 'the slide — or a quick when the libero sets');
+  assert.ok(front.every(({ c }) => c.play === 'slide' || c.play === 'quick'), 'the slide, or a quick when the libero sets');
   assert.ok(front.some(({ c }) => c.play === 'slide'));
   assert.ok(back.every(({ c }) => c.play === 'quick'));
 });
 
-test('the slide is run only with the setter at the net — P2, P3, P4', () => {
+test('the slide is run only with the setter at the net, P2, P3, P4', () => {
   const zones = defaultZonePlans();
   for (const z of ['A', 'B', 'C'] as const) zones[z] = { ...zones[z], middle: MiddleOption.Slide, middleBack: MiddleOption.Slide };
   const slides = attacksIn({ zones }, [4, 5, 6]).filter(({ c }) => c.play === 'slide');
@@ -185,7 +185,7 @@ test("a zone's plan is the coach's: the middle off a deep pass, or the opposite 
   assert.ok(share({ zones: toOpp }) > share({}) + 0.03, 'the opposite gets more of the ball');
 });
 
-test('a combination picked for each rotation is run there — by the hitter it is drawn for, the middle the decoy', () => {
+test('a combination picked for each rotation is run there, by the hitter it is drawn for, the middle the decoy', () => {
   const picked = (play: 'between' | 'upDown' | 'scissors' | 'pipe', pipeBall?: 'left' | 'middle' | 'back'): Partial<TeamTactics> => {
     const t = defaultTactics();
     for (const r of t.rotations) { r.play = play; r.pipeBall = pipeBall; }
@@ -223,7 +223,7 @@ test('a picked combination is run even by a side that runs no others', () => {
   assert.equal(runs.filter((c) => c.play === 'x' || c.play === 'tandem' || c.play === 'shoot').length, 0, 'and none of the setter’s own');
 });
 
-test('the picked pipe is hit by an outside from anywhere in the back row — zone 5, 6 or 1', () => {
+test('the picked pipe is hit by an outside from anywhere in the back row, zone 5, 6 or 1', () => {
   const t = defaultTactics();
   for (const r of t.rotations) r.play = 'pipe';
   const zones = new Set<number>();
@@ -248,7 +248,7 @@ test('the scissors is run by the hitter on the right: the opposite with the sett
   assert.ok(runs.some(({ c }) => roleOf(c.player) === Position.Opposite), 'the opposite runs it too');
 });
 
-test('told to hit the 31, the middle hits the 31 — the same fast ball, further out in front', () => {
+test('told to hit the 31, the middle hits the 31, the same fast ball, further out in front', () => {
   const zones = defaultZonePlans();
   zones.A = { ...zones.A, middle: MiddleOption.Gap, middleBack: MiddleOption.Gap };
   const quick = attacks({ zones }, [1, 2]).filter((c) => c.detail === 'Quick (middle)');

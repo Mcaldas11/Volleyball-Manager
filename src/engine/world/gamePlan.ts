@@ -67,7 +67,7 @@ export function suggestPlan(world: World, club: PlanSide, opp: PlanSide): GamePl
     const weakest = sorted[0];
     const gap = mean(rx.map(pass)) - pass(weakest);
     if (gap >= 4) {
-      parts.push({ what: 'serveTarget', value: ServeTarget.WeakestPasser, why: `${store.fullName(weakest)} is their weakest passer — make him take the serve.` });
+      parts.push({ what: 'serveTarget', value: ServeTarget.WeakestPasser, why: `${store.fullName(weakest)} is their weakest passer, make him take the serve.` });
     } else {
       parts.push({ what: 'serveTarget', value: ServeTarget.DeepCorner, why: 'Their passers are much of a muchness: serve them deep, into the corners.' });
     }
@@ -98,7 +98,7 @@ export function suggestPlan(world: World, club: PlanSide, opp: PlanSide): GamePl
     return r.attackControl - r.attackPower;
   }));
   if (style >= 3) {
-    parts.push({ what: 'shape', value: DefensiveShape.RotationDefense, why: 'Their hitters place it — tips and rolls: rotate up to cover the short court.' });
+    parts.push({ what: 'shape', value: DefensiveShape.RotationDefense, why: 'Their hitters place it, tips and rolls: rotate up to cover the short court.' });
   } else if (style <= -3) {
     parts.push({ what: 'shape', value: DefensiveShape.PerimeterDefense, why: 'Their hitters hit hard: stay deep on the perimeter.' });
   } else {

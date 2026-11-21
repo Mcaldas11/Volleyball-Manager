@@ -253,13 +253,13 @@ function coachVerdict(world: World, prog: AcademyProgramme, weeks: number): stri
   const gain = store.currentAbility[p] - prog.startAbility;
   const perWeek = gain / Math.max(1, weeks);
   const lines: string[] = [];
-  if (store.currentAbility[p] >= store.potentialAbility[p] - 20) lines.push('He is close to as good as he is ever likely to be — there is little left for a programme to find.');
+  if (store.currentAbility[p] >= store.potentialAbility[p] - 20) lines.push('He is close to as good as he is ever likely to be, there is little left for a programme to find.');
   else if (perWeek >= 2.5) lines.push('He is flying. Whatever we are doing, it is working.');
-  else if (perWeek >= 1) lines.push('Steady progress — it is going in the right direction.');
+  else if (perWeek >= 1) lines.push('Steady progress, it is going in the right direction.');
   else if (perWeek > 0) lines.push('Slow going so far. These things often take a while to show.');
   else lines.push('Nothing to show for it yet. Not every lad takes to it.');
-  if (store.playingTime[p] < 40) lines.push('He needs more minutes for the U19s — the work sticks far better when he plays.');
-  if ((prog.knocks ?? 0) > 0) lines.push(`The intensive work has cost him ${prog.knocks === 1 ? 'a knock' : `${prog.knocks} knocks`} — it is the price of pushing him.`);
+  if (store.playingTime[p] < 40) lines.push('He needs more minutes for the U19s, the work sticks far better when he plays.');
+  if ((prog.knocks ?? 0) > 0) lines.push(`The intensive work has cost him ${prog.knocks === 1 ? 'a knock' : `${prog.knocks} knocks`}, it is the price of pushing him.`);
   else if ((prog.weeksLost ?? 0) > 0) lines.push(`He has missed ${prog.weeksLost} week${prog.weeksLost === 1 ? '' : 's'} of it injured.`);
   return lines.join(' ');
 }
@@ -277,7 +277,7 @@ function programmeReport(world: World, prog: AcademyProgramme, week: number, fin
   const improved = gains.length > 0 ? `Improved: ${gains.join(', ')}.` : 'No attribute has moved yet.';
   postMessage(world, {
     category: 'staff', from: 'Youth development',
-    subject: final ? `Programme over: ${name}` : `Training report: ${name} — week ${week} of 12`,
+    subject: final ? `Programme over: ${name}` : `Training report: ${name}, week ${week} of 12`,
     body: (final
       ? `${name}'s twelve-week ${area} programme (${INTENSITY_NAMES[prog.intensity].toLowerCase()}) is over.`
       : `${name}, ${week} weeks into his ${area} programme (${INTENSITY_NAMES[prog.intensity].toLowerCase()}).`) +
@@ -378,7 +378,7 @@ function finishSearch(world: World, club: Club, a: AcademyState, search: Academy
       : Math.round(rng.range(2_000, 6_000) / 500) * 500;
     a.candidates.push({ playerIdx: p, fromClubId: from, low, high, fee, expiresOn: world.day + CANDIDATE_DAYS });
     const where = from >= 0 ? world.clubs[from]?.name ?? '?' : 'no club';
-    lines.push(`${store.fullName(p)} (${POSITION_NAMES[store.position[p] as Position]}, ${store.ageOn(p, world.year, 181)}, ${where}) — potential ${low}–${high}, ${euros(fee)}`);
+    lines.push(`${store.fullName(p)} (${POSITION_NAMES[store.position[p] as Position]}, ${store.ageOn(p, world.year, 181)}, ${where}), potential ${low}–${high}, ${euros(fee)}`);
   }
   a.search = undefined;
   const what = search.position >= 0 ? `${POSITION_NAMES[search.position as Position].toLowerCase()}s` : 'prospects';

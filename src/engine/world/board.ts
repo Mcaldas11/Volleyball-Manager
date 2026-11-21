@@ -155,7 +155,7 @@ export function judgePhilosophy(world: World): void {
 export function meetingBlock(world: World, club: Club): string | null {
   const last = club.boardMeeting?.last;
   if (last !== undefined && world.day - last < MEETING_GAP) {
-    return `The board met you only recently — they will see you again in ${MEETING_GAP - (world.day - last)} days.`;
+    return `The board met you only recently, they will see you again in ${MEETING_GAP - (world.day - last)} days.`;
   }
   return null;
 }

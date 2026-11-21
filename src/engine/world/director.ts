@@ -55,7 +55,7 @@ export function directorTaskFor(world: World, p: number): DirectorTask | undefin
 /** Why the director can't take this deal on, or null if he can. */
 export function directorBlock(world: World, club: Club, p: number, kind: DirectorTask['kind']): string | null {
   const store = world.players;
-  if (directorOf(world, club) === undefined) return 'The club has no Director of Football — hire one on the Staff screen.';
+  if (directorOf(world, club) === undefined) return 'The club has no Director of Football, hire one on the Staff screen.';
   if (directorTaskFor(world, p) !== undefined) return 'He is already handling this one.';
   if (!store.isActive(p)) return 'He is no longer playing.';
   if ((world.talksBlockedUntil.get(p) ?? -1) > world.day) return 'He walked out of talks recently and won\'t talk yet.';
@@ -135,7 +135,7 @@ function nextMove(world: World, club: Club, director: Staff, task: DirectorTask,
     if (fee > task.maxFee) {
       if (last.fee >= task.maxFee || task.maxFee < (t.valuation ?? 0) * 0.9) {
         finish(world, director, task, t, 'failed',
-          `${t.sellingClubId >= 0 ? world.clubs[t.sellingClubId]?.name ?? 'His club' : 'They'} want around ${euros(Math.max(t.valuation ?? 0, t.rivalBid?.fee ?? 0, fee))} — more than the ${euros(task.maxFee)} you gave me. I have walked away.`);
+          `${t.sellingClubId >= 0 ? world.clubs[t.sellingClubId]?.name ?? 'His club' : 'They'} want around ${euros(Math.max(t.valuation ?? 0, t.rivalBid?.fee ?? 0, fee))}, more than the ${euros(task.maxFee)} you gave me. I have walked away.`);
         return;
       }
       fee = task.maxFee;
@@ -148,7 +148,7 @@ function nextMove(world: World, club: Club, director: Staff, task: DirectorTask,
   const d = t.demands;
   if (d.floorWage > task.maxWage) {
     finish(world, director, task, t, 'failed',
-      `${store.fullName(t.playerIdx)} will not go below ${euros(d.floorWage)} a season — more than the ${euros(task.maxWage)} you allowed. I have left it there.`);
+      `${store.fullName(t.playerIdx)} will not go below ${euros(d.floorWage)} a season, more than the ${euros(task.maxWage)} you allowed. I have left it there.`);
     return;
   }
   const room = wageRoom(world, club) + (t.kind === 'renewal' ? store.wage[t.playerIdx] : 0);
@@ -206,7 +206,7 @@ export function directorDay(world: World): void {
           ? `${store.fullName(task.p)} has agreed: ${euros(store.wage[task.p])} a season, until the end of ${world.startYear + contractEndSeason(store.contractUntil[task.p]) + 1}.`
           : `${store.fullName(task.p)} has agreed terms: ${euros(store.wage[task.p])} a season. It went through within the limits you gave me.`);
       } else {
-        finish(world, who, task, undefined, 'failed', `The talks for ${store.fullName(task.p)} came to nothing — he went elsewhere, or broke them off.`);
+        finish(world, who, task, undefined, 'failed', `The talks for ${store.fullName(task.p)} came to nothing, he went elsewhere, or broke them off.`);
       }
       continue;
     }

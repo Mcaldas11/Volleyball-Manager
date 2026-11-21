@@ -102,7 +102,7 @@ export function MainMenu(): JSX.Element {
       <section className="mm-tiles">
         <button className="mm-tile mm-tile-hero" onClick={() => g.goToMenu('createManager')}>
           <span className="mm-tile-title">Start New Career</span>
-          <span className="mm-tile-text">Take charge of a club, a national team, or both — your way, rally by rally.</span>
+          <span className="mm-tile-text">Take charge of a club, a national team, or both, your way, rally by rally.</span>
           <img className="mm-tile-art" src={arena} alt="" />
         </button>
 
@@ -163,7 +163,7 @@ export function MainMenu(): JSX.Element {
           ) : (
             <>
               <span className="mm-who-name">Your manager</span>
-              <span className="mm-who-sub">Make a profile once — every new career starts from it</span>
+              <span className="mm-who-sub">Make a profile once, every new career starts from it</span>
             </>
           )}
           <button className="mm-profile-btn" onClick={() => setEditing(true)}>
@@ -222,7 +222,7 @@ function ManagerProfileDialog({ onClose }: { onClose: () => void }): JSX.Element
         </header>
         <div className="mm-profile-tabs">
           <Segmented size="sm" value={tab} onChange={setTab} options={[['details', 'Details'], ['look', 'Look']]} />
-          <span className="faint">Every new career starts from your profile — a Quick Start takes it as it is.</span>
+          <span className="faint">Every new career starts from your profile, a Quick Start takes it as it is.</span>
         </div>
         <div className="mm-profile-details" hidden={tab !== 'details'}>
           <Card title="Who you are" icon="user">
@@ -420,7 +420,7 @@ export function CreateManager(): JSX.Element {
     <Wizard
       step={0}
       title="Create your manager"
-      subtitle="Every career starts with you — this appears on your profile and in the record books."
+      subtitle="Every career starts with you, this appears on your profile and in the record books."
     >
       <Card title="Manager Profile" icon="user">
         <div className="form-grid">
@@ -483,7 +483,7 @@ export function CreateLook(): JSX.Element {
       step={1}
       wide
       title="Your look"
-      subtitle={`How ${manager?.firstName ?? 'you'} will look on the touchline — at the bench in every match, and in ${women ? 'her' : 'his'} portrait. It can be changed later from the profile.`}
+      subtitle={`How ${manager?.firstName ?? 'you'} will look on the touchline, at the bench in every match, and in ${women ? 'her' : 'his'} portrait. It can be changed later from the profile.`}
     >
       <LookEditor look={look} onChange={setLook} women={women} previewRef={preview} />
       <div className="wizard-actions">
@@ -508,7 +508,7 @@ const GAMES: ReadonlyArray<{ id: 'men' | 'women'; title: string; text: string }>
 ];
 
 const WORLD_SCALES: ReadonlyArray<{ id: 'small' | 'standard' | 'large'; title: string; text: string }> = [
-  { id: 'small', title: 'Small', text: 'Top divisions only — the fastest to simulate.' },
+  { id: 'small', title: 'Small', text: 'Top divisions only, the fastest to simulate.' },
   { id: 'standard', title: 'Standard', text: 'Full pyramids in the major nations.' },
   { id: 'large', title: 'Large', text: 'Every division worldwide (~117,000 players).' },
 ];
@@ -571,7 +571,7 @@ export function WorldSetup(): JSX.Element {
         </label>
         <p className="footnote">
           The same seed always produces the same world. Every player here is fictional and
-          procedurally generated — see the README for importing real FIVB data with your own VIS
+          procedurally generated, see the README for importing real FIVB data with your own VIS
           credentials.
         </p>
       </Card>
@@ -680,8 +680,8 @@ export function ClubSelect(): JSX.Element {
       wide
       title="Choose a club"
       subtitle={g.careerMode === 'both'
-        ? 'First the club — the national team comes next. Pick a continent, a country and a division — starting at a smaller club is harder and more interesting.'
-        : 'You are the head coach, general manager and sporting director. Pick a continent, a country and a division — starting at a smaller club is harder and more interesting.'}
+        ? 'First the club, the national team comes next. Pick a continent, a country and a division, starting at a smaller club is harder and more interesting.'
+        : 'You are the head coach, general manager and sporting director. Pick a continent, a country and a division, starting at a smaller club is harder and more interesting.'}
     >
       <div className="club-select">
         <section className="card club-browser">
@@ -828,7 +828,7 @@ function expectationOf(rank: number): { label: string; text: string } {
   if (rank <= 4) return { label: 'Favourites', text: 'Expected to win medals at every major.' };
   if (rank <= 10) return { label: 'Contenders', text: 'Expected to reach the knockout rounds and push for the podium.' };
   if (rank <= 20) return { label: 'Outsiders', text: 'Expected to qualify for the majors and make life hard for the big names.' };
-  return { label: 'Building', text: 'A nation to build — qualifying for a major would be a success.' };
+  return { label: 'Building', text: 'A nation to build, qualifying for a major would be a success.' };
 }
 
 interface NationRow {
@@ -896,8 +896,8 @@ export function NationSelect(): JSX.Element {
       wide
       title="Choose a national team"
       subtitle={both
-        ? 'Your club is set — now the country. You name the squad for every tournament and coach its matches yourself, in the summer and the spring.'
-        : 'You name the squad for every tournament — the Nations Cup, the continental championships, the World Championship and the Summer Games — and coach its matches yourself.'}
+        ? 'Your club is set, now the country. You name the squad for every tournament and coach its matches yourself, in the summer and the spring.'
+        : 'You name the squad for every tournament, the Nations Cup, the continental championships, the World Championship and the Summer Games, and coach its matches yourself.'}
     >
       <div className="club-select">
         <section className="card club-browser">
@@ -984,7 +984,7 @@ export function NationSelect(): JSX.Element {
               )}
             <span className="nation-foot-actions">
               {both && (
-                <button className="ghost" onClick={() => g.skipNationStep()} title="Start with the club alone — national teams can still offer you their job later, in your inbox">
+                <button className="ghost" onClick={() => g.skipNationStep()} title="Start with the club alone, national teams can still offer you their job later, in your inbox">
                   Club only
                 </button>
               )}

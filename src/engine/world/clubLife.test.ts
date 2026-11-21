@@ -57,7 +57,7 @@ test('traits: earned by the attributes behind them, kept, and a few per cent on 
   assert.ok(withIt > without);
 });
 
-test('the dressing room: its leaders, its cohesion — and a leader leaving shakes it', () => {
+test('the dressing room: its leaders, its cohesion, and a leader leaving shakes it', () => {
   const { world, club } = managed(62);
   const room = dressingRoom(world, club);
   assert.equal(room.members.filter((m) => m.tier === 'leader').length, 3);
@@ -124,7 +124,7 @@ test('one-to-one: praise in form lifts him; a promise kept or broken; a player k
   assert.equal(world.transferRequests?.[c]?.status, 'listed');
 });
 
-test('facilities: the board answers in days — yes with the money and the trust, then the builders; no, and not again for a while', () => {
+test('facilities: the board answers in days, yes with the money and the trust, then the builders; no, and not again for a while', () => {
   const { world, club } = managed(65);
   const level = facilityLevel(club, 'medical');
   club.finances.balance = 50_000_000;

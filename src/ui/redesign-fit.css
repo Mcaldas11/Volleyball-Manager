@@ -3679,3 +3679,9 @@ html.short-window .portal-people > .hm-card {
 /* The player editor's own actions: his page, and wiping his record (asked twice). */
 .ed-player-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px; }
 .ed-player-actions .faint { font-size: 12.5px; }
+
+/* The tutorial: what a step opens (a dialog, a menu, a list, the walk onto court) is drawn above its
+   shade, lit and usable; only the card sits higher still. */
+html.tut-on :is(.hol-overlay, .menu-pop, .vm-nav-pop, .watch-live-pop, .lv-quicksub, .walk-out, .md-overlay, .modal-overlay) {
+  z-index: 950;
+}

@@ -41,7 +41,7 @@ test('a player has his say on a bid: a bigger club and no games make him keen; s
   assert.equal(stanceOf(world, bid(world, p, small.id, 2)), 'staying');
 });
 
-test('turn down a move he wanted and he takes it badly — he wants a word, and left waiting often asks to leave; turn down one he didn\'t, and he is glad', () => {
+test('turn down a move he wanted and he takes it badly, he wants a word, and left waiting often asks to leave; turn down one he didn\'t, and he is glad', () => {
   const { world, club } = managed(82);
   const store = world.players;
   const big = world.clubs.reduce((a, b) => (b.reputation > a.reputation && b.id !== club.id ? b : a));

@@ -83,8 +83,8 @@ export const SERVE_TARGET_OPTIONS: Array<[ServeTarget, string]> = [
 
 export const RECEPTION_OPTIONS: Array<[ReceptionFormation, string]> = [
   [3, 'Three passers'],
-  [2, 'Two — hide an outside'],
-  [4, 'Four — the opposite too'],
+  [2, 'Two, hide an outside'],
+  [4, 'Four, the opposite too'],
 ];
 
 export const BLOCK_OPTIONS: Array<[BlockAssignment, string]> = [
@@ -113,7 +113,7 @@ export function TacticsScreen(): JSX.Element {
         <div><span>Defence</span><strong>{DEFENSE_OPTIONS.find(([o]) => o === tactics.defense)?.[1]}</strong></div>
         <button onClick={() => g.go('preplab')}><Icon name="stats" size={16} /> Compare tactical plans</button>
       </div>
-      {g.nationalView() && <p className="nat-only">National team only — your club keeps its own.</p>}
+      {g.nationalView() && <p className="nat-only">National team only, your club keeps its own.</p>}
       <TacticsBoard tactics={tactics} onChange={() => g.touch()} onFormation={(f) => g.setFormation(f)} />
     </div>
   );
@@ -190,9 +190,9 @@ export function RotationsScreen(): JSX.Element {
       <details className="tactical-rotation-help">
         <summary>Understanding the rotations</summary>
         <p>
-          {g.nationalView() && <b className="nat-only">National team only — your club keeps its own. </b>}
+          {g.nationalView() && <b className="nat-only">National team only, your club keeps its own. </b>}
           Rotations are named for the zone the setter stands in. When the setter is front row only two
-          attackers are available — those rotations score less and need different instructions.
+          attackers are available, those rotations score less and need different instructions.
         </p>
       </details>
 
@@ -233,7 +233,7 @@ export function RotationsScreen(): JSX.Element {
           </div>
           <p className="footnote">
             Libero replaces the middle blocker in the back row. The middle serves from zone 1, since a
-            libero may not serve — and the moment the serve is lost the libero comes on for him.
+            libero may not serve, and the moment the serve is lost the libero comes on for him.
           </p>
         </Card>
 
@@ -312,7 +312,7 @@ export function PlayCard({ rotation, cast, rot, onChange }: {
     onChange();
   };
   return (
-    <Card title={`Combination play — P${rot + 1}`} icon="tactics" className="rot-plays">
+    <Card title={`Combination play, P${rot + 1}`} icon="tactics" className="rot-plays">
       <div className="play-picks" role="radiogroup" aria-label="Combination play">
         {ROTATION_PLAYS.map((p) => {
           const off = playUnavailable(p, cast);
@@ -342,7 +342,7 @@ export function PlayCard({ rotation, cast, rot, onChange }: {
             <p className="play-warn"><Icon name="alert" size={13} /> <span>{why}</span> <span>{`Not run in P${rot + 1}: the setter's choice instead.`}</span></p>
           )}
           {play !== 'auto' && why === null && (
-            <p className="faint play-note">Run off a good pass, a little more often than the side's other combinations — even with them off.</p>
+            <p className="faint play-note">Run off a good pass, a little more often than the side's other combinations, even with them off.</p>
           )}
         </div>
       </div>
@@ -490,7 +490,7 @@ export function FinancesScreen(): JSX.Element {
       {f.seasonsInDebt > 0 && (
         <div className="alert alert-bad">
           <Icon name="alert" size={18} />
-          <span>{f.seasonsInDebt} consecutive season(s) in the red — three means dissolution.</span>
+          <span>{f.seasonsInDebt} consecutive season(s) in the red, three means dissolution.</span>
         </div>
       )}
       <section className="finance-headlines" aria-label="Financial overview">
@@ -749,7 +749,7 @@ export function ScoutingScreen(): JSX.Element {
         <summary>How scouting knowledge works</summary>
         <p className="page-intro">
           Reports show ranges, not numbers, and stay blank until your scouts have actually seen the
-          player. Send a scout to watch more matches to narrow the estimate — potential is always harder
+          player. Send a scout to watch more matches to narrow the estimate, potential is always harder
           to judge than current ability.
         </p>
       </details>
@@ -939,7 +939,7 @@ export function ScoutingScreen(): JSX.Element {
                   <button
                     className="primary"
                     title={g.joinDay(target) > world.day
-                      ? `The window is shut — agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(target))}`
+                      ? `The window is shut, agree a deal now and he joins on ${g.dateLabelForDay(g.joinDay(target))}`
                       : undefined}
                     onClick={() => g.startNegotiation(target)}
                   >
@@ -951,7 +951,7 @@ export function ScoutingScreen(): JSX.Element {
                       disabled={!g.canBorrow(target) && g.talksWith(target, 'loan') === null}
                       title={!g.canBorrow(target) ? 'Not available for loan right now'
                         : g.joinDay(target) > world.day
-                          ? `The window is shut — a loan agreed now starts on ${g.dateLabelForDay(g.joinDay(target))}`
+                          ? `The window is shut, a loan agreed now starts on ${g.dateLabelForDay(g.joinDay(target))}`
                           : 'Borrow him until the end of the season'}
                       onClick={() => g.startLoanRequest(target)}
                     >
@@ -963,7 +963,7 @@ export function ScoutingScreen(): JSX.Element {
 
                 {report === null ? (
                   <Empty>
-                    Your scouts have not seen this player yet — send a scout to watch a few matches
+                    Your scouts have not seen this player yet, send a scout to watch a few matches
                     before any assessment is possible.
                   </Empty>
                 ) : (
@@ -1038,12 +1038,15 @@ export function TransfersScreen(): JSX.Element {
     }
   });
 
+  // A page of free agents drawn at a time, as the list scrolls: after a few seasons there are hundreds.
+  const { shown: rowsShown, more: rowsMore } = useListPages(rows, `free-${JSON.stringify(sort)}`, -1, 10);
+
   return (
     <>
       <div className="tiles">
         <StatTile label="Transfer budget" value={money(Math.min(club.finances.transferBudget, club.finances.balance))} sub="available to spend" />
         <StatTile label="Wage room" value={money(wageRoom)} tone={wageRoom < 0 ? 'bad' : 'good'} sub={`of ${money(club.finances.wageBudget)}`} />
-        <StatTile label="Squad" value={`${squadSize}/${MAX_SQUAD}`} tone={squadSize >= MAX_SQUAD ? 'warn' : undefined} sub={squadSize >= MAX_SQUAD ? 'full — release to sign' : 'places available'} />
+        <StatTile label="Squad" value={`${squadSize}/${MAX_SQUAD}`} tone={squadSize >= MAX_SQUAD ? 'warn' : undefined} sub={squadSize >= MAX_SQUAD ? 'full, release to sign' : 'places available'} />
         <StatTile label="Offers received" value={offers.length} tone={offers.length > 0 ? 'gold' : undefined} sub="awaiting a decision" />
         <StatTile
           label="Transfer window"
@@ -1127,7 +1130,7 @@ export function TransfersScreen(): JSX.Element {
       )}
 
       <p className="page-intro">
-        Volleyball moves happen mostly at contract expiry rather than for fees — these are the best
+        Volleyball moves happen mostly at contract expiry rather than for fees, these are the best
         unattached players available now. Use Scouting to approach players under contract elsewhere.
       </p>
 
@@ -1152,7 +1155,7 @@ export function TransfersScreen(): JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((p) => {
+                  {rowsShown.map((p) => {
                     const affordable = store.wage[p] <= wageRoom;
                     return (
                       <tr key={p} className="clickable" onClick={() => g.select(p)}>
@@ -1183,6 +1186,7 @@ export function TransfersScreen(): JSX.Element {
                       </tr>
                     );
                   })}
+                {rowsMore}
                 </tbody>
               </table>
             </div>

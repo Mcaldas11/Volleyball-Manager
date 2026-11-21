@@ -149,7 +149,7 @@ export function retirementDay(world: World): void {
       category: 'contract',
       subject: `${store.fullName(p)} wants to retire`,
       body: `${store.fullName(p)} has come to see you: at the end of the season, at ${store.ageOn(p, world.year, 181)}, he means to stop. ` +
-        'You can try to talk him into one more season — or ask him to stay on another way, on your coaching staff.',
+        'You can try to talk him into one more season, or ask him to stay on another way, on your coaching staff.',
       playerIdx: p,
       retirementOf: p,
     });
@@ -168,7 +168,7 @@ export function persuadeToPlayOn(world: World, p: number): string {
   const store = world.players;
   if (plan === undefined || store.clubId[p] !== world.userClubId) return 'He has no plans to stop.';
   if (plan.talked !== undefined) return 'You have already had that conversation.';
-  if (plan.staffRole !== undefined) return 'He has agreed to join your staff — he is stopping.';
+  if (plan.staffRole !== undefined) return 'He has agreed to join your staff, he is stopping.';
   const age = store.ageOn(p, world.year, 181);
   const ca = store.currentAbility[p];
   const peak = Math.max(1, store.potentialAbility[p]);
@@ -189,7 +189,7 @@ export function persuadeToPlayOn(world: World, p: number): string {
   // One more season: a contract that ends now runs a year longer, on the same terms.
   if (store.contractUntil[p] <= seasonEndDay(world.season)) store.contractUntil[p] = seasonEndDay(world.season + 1);
   store.morale[p] = Math.min(100, store.morale[p] + 8);
-  return `${name} will play on for another season — his contract now runs to 30 June ${seasonEndYear(world, world.season + 1)}.`;
+  return `${name} will play on for another season, his contract now runs to 30 June ${seasonEndYear(world, world.season + 1)}.`;
 }
 
 /** How likely he is to take a role on the staff: a leader, a professional, a club man — and the job has to suit him. */
@@ -213,11 +213,11 @@ export function offerStaffRole(world: World, p: number, role: StaffRole): string
   const club = world.clubs[world.userClubId];
   const name = store.fullName(p);
   if (plan === undefined || club === undefined || store.clubId[p] !== club.id) return 'He has no plans to stop.';
-  if (plan.persuaded === true) return `${name} is playing on — the staff can wait.`;
+  if (plan.persuaded === true) return `${name} is playing on, the staff can wait.`;
   if (plan.staffRole !== undefined) return `${name} has already agreed to join as ${STAFF_ROLE_NAMES[plan.staffRole].toLowerCase()}.`;
   if (plan.declinedRole === true) return `${name} has already said no to a place on the staff.`;
   const { have, max } = roleCount(world, club, role);
-  if (have >= max) return `There is no place for another ${STAFF_ROLE_NAMES[role].toLowerCase()} — release one first.`;
+  if (have >= max) return `There is no place for another ${STAFF_ROLE_NAMES[role].toLowerCase()}, release one first.`;
   if (!world.rng.chance(staffWillingness(world, p, role))) {
     plan.declinedRole = true;
     return `${name} thanks you, but he wants a break from the game when he stops.`;

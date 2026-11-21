@@ -61,7 +61,7 @@ test('an agent offers the manager a client who would fill a gap', () => {
   assert.equal(agentPitch(world) === p, false, 'not the same man twice running');
 });
 
-test('an agent lines up a summer move for an unrenewed player — who goes there at the season\'s end, unless renewed', () => {
+test('an agent lines up a summer move for an unrenewed player, who goes there at the season\'s end, unless renewed', () => {
   const { world, club } = career();
   const store = world.players;
   const ours = club.players.filter((p) => !store.hasFlag(p, PlayerFlag.Youth) && store.ageOn(p, world.year, 181) < 30);

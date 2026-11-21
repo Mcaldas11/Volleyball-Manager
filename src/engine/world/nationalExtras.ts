@@ -101,7 +101,7 @@ export function arrangeFriendly(world: World, opp: number, day: number, home: bo
   if (friendliesThisSeason(world) >= MAX_FRIENDLIES) return { ok: false, text: `${MAX_FRIENDLIES} friendlies a season is the most the federation allows.` };
   if (!friendlyDays(world, opp).includes(day)) return { ok: false, text: 'That date doesn\'t work for one of the two teams.' };
   const t = home ? createFriendly(world, mine, opp, day) : createFriendly(world, opp, mine, day);
-  return { ok: true, text: `Arranged: ${t.name.replace(' — friendly', '')}, a friendly${home ? ' at home' : ' away'}. The squad is called three days before.` };
+  return { ok: true, text: `Arranged: ${t.name.replace(', friendly', '')}, a friendly${home ? ' at home' : ' away'}. The squad is called three days before.` };
 }
 
 // ---- The provisional squad ------------------------------------------------------------------
@@ -203,7 +203,7 @@ export function watchedInMatch(world: World, f: Fixture, home: ReadonlyMap<numbe
     const points = s.attackKills + s.serveAces + s.blockPoints;
     postMessage(world, {
       category: 'international', from: 'Your notebook', playerIdx: w.p,
-      subject: `Watched: ${name} — ${rating.toFixed(1)}`,
+      subject: `Watched: ${name}, ${rating.toFixed(1)}`,
       body: `You were there to see ${name} against ${opp}: ${points} point${points === 1 ? '' : 's'} ` +
         `(${s.attackKills} kills from ${s.attacksTotal}, ${s.serveAces} aces, ${s.blockPoints} blocks), rated ${rating.toFixed(1)}. ` +
         'You know his game better for having seen it.',

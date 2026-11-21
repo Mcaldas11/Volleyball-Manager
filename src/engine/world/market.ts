@@ -60,7 +60,7 @@ export function rumoursAboutUs(world: World): void {
     postMessage(world, {
       category: 'contract', from: 'Assistant Coach', playerIdx: p,
       subject: `${name}'s head turned?`,
-      body: `${name} has seen the stories linking him with ${suitor.name}. He is an ambitious lad — he has been quieter than usual in training. ` +
+      body: `${name} has seen the stories linking him with ${suitor.name}. He is an ambitious lad, he has been quieter than usual in training. ` +
         'A word might help, or a new contract.',
     });
   }

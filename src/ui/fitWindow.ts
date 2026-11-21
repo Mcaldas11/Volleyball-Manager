@@ -23,7 +23,10 @@ export function visibleHeight(): number {
   // How much of the window hangs below the screen's usable bottom — the
   // taskbar, or the edge of the screen itself.
   const s = window.screen as Screen & { availTop?: number };
-  const fullscreen = window.screenY <= 0 && Math.abs(window.outerHeight - s.height) <= 2;
+  // Full screen (the game's own button or F11), or a window covering the whole screen: nothing hides below it.
+  const fullscreen = document.fullscreenElement !== null ||
+    (window.screenY <= 0 && Math.abs(window.outerHeight - s.height) <= 2) ||
+    window.innerHeight >= s.height - 2;
   if (!fullscreen && s.availHeight > 0 && window.outerHeight >= window.innerHeight * 0.5 && window.innerWidth > 0) {
     // Screen coordinates are in device-independent pixels; the page's, zoomed.
     const zoom = Math.max(0.25, Math.min(5, window.outerWidth / window.innerWidth));
@@ -31,7 +34,7 @@ export function visibleHeight(): number {
     // A maximised window's frame hangs a few pixels off every edge — that hides nothing.
     if (below > 12) h -= below / zoom;
   }
-  return Math.max(360, Math.floor(h));
+  return Math.max(360, Math.round(h));
 }
 
 /** Keep `--app-h` on the document to the visible height, from now on. */
@@ -42,7 +45,7 @@ export function watchWindowFit(): void {
     // less height to fill.
     const seen = visibleHeight();
     const z = fittingScale(window.innerWidth, seen);
-    const h = Math.floor(seen / z);
+    const h = Math.round(seen / z);
     const key = `${h}:${z}`;
     if (key === last) return;
     last = key;
@@ -54,6 +57,8 @@ export function watchWindowFit(): void {
   fit();
   window.addEventListener('resize', fit);
   window.visualViewport?.addEventListener('resize', fit);
+  // Into or out of full screen: at once, not when the next resize gets round to it.
+  document.addEventListener('fullscreenchange', () => { fit(); requestAnimationFrame(fit); window.setTimeout(fit, 250); });
   // Moving a window to another screen, or the taskbar coming and going, fires no resize.
   window.setInterval(fit, 1500);
 }

@@ -24,7 +24,7 @@ test('a squad that has trained together knows each other; a pair who never playe
   assert.equal(chemistryOf(w, setter, stranger), CHEM_NEW);
 });
 
-test('every match together brings a pair closer — and the manager hears when one of his clicks', () => {
+test('every match together brings a pair closer, and the manager hears when one of his clicks', () => {
   const w = world();
   const club = w.clubs.find((c) => c.players.length >= 12)!;
   w.userClubId = club.id;

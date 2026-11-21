@@ -101,7 +101,7 @@ export function challengeSeasonEnd(world: World, ended: number): void {
     category: 'career', from: 'Challenge', clubId: ch.clubId,
     subject: ch.status === 'won' ? `Challenge complete: ${def.name}` : `Challenge failed: ${def.name}`,
     body: ch.status === 'won'
-      ? `You did it — ${def.goal.charAt(0).toLowerCase()}${def.goal.slice(1)}, with ${club?.name}. The career goes on, if you want it to.`
+      ? `You did it, ${def.goal.charAt(0).toLowerCase()}${def.goal.slice(1)}, with ${club?.name}. The career goes on, if you want it to.`
       : world.userClubId !== ch.clubId
         ? `You left ${club?.name ?? 'the club'} before the job was done. The career goes on.`
         : `Time is up: ${def.goal.charAt(0).toLowerCase()}${def.goal.slice(1)} was a step too far this time. The career goes on.`,

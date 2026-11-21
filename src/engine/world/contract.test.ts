@@ -57,7 +57,7 @@ test('a job taken comes on the terms the club offered', () => {
   assert.deepEqual(currentJob(world)!.contract, terms);
 });
 
-test('a happy board offers a new contract in his last season — longer, and better paid', () => {
+test('a happy board offers a new contract in his last season, longer, and better paid', () => {
   const world = hired(403);
   const job = currentJob(world)!;
   const club = world.clubs[world.userClubId];
@@ -100,7 +100,7 @@ test('a board that would rather not keep him says so by the spring, and the cont
   assert.ok(world.messages.some((m) => /contract with .* has ended/.test(m.subject)));
 });
 
-test('he can ask: two seasons left and the board waits, unless it is delighted — and he waits to ask again', () => {
+test('he can ask: two seasons left and the board waits, unless it is delighted, and he waits to ask again', () => {
   const world = hired(405);
   const job = currentJob(world)!;
   const club = world.clubs[world.userClubId];

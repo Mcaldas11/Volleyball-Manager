@@ -107,7 +107,7 @@ export function LineupCard({
       {link !== undefined && (
         <span
           className={`lineup-card-link chem-${chemistryLabel(link.c).toLowerCase()}`}
-          title={`Understanding with ${link.setter}: ${chemistryLabel(link.c)} — the better they know each other, the more sets arrive on time`}
+          title={`Understanding with ${link.setter}: ${chemistryLabel(link.c)}, the better they know each other, the more sets arrive on time`}
         >
           {[0.25, 0.4, 0.6, 0.8, 0.95].map((t) => <i key={t} className={link.c >= t - 0.1 ? 'on' : ''} />)}
         </span>
@@ -120,7 +120,7 @@ export function LineupCard({
             size="sm"
             className="lineup-card-select"
             value={playerIdx}
-            title={`${label} — change`}
+            title={`${label}, change`}
             menuWidth={190}
             searchable={false}
             onChange={(v) => { if (v !== playerIdx) onSelectChange(v); }}
@@ -311,7 +311,7 @@ export function TeamSheet({
     if (namedLiberos.includes(p)) {
       return {
         tag: 'Spare',
-        tagTitle: `Named as the second libero for the match: plays libero, and nothing else${canSwitch ? ' — click to play him in the six instead' : ''}`,
+        tagTitle: `Named as the second libero for the match: plays libero, and nothing else${canSwitch ? ', click to play him in the six instead' : ''}`,
         onTag: toggle,
       };
     }
@@ -320,8 +320,8 @@ export function TeamSheet({
       return {
         tag: 'Outfield',
         tagTitle: chosen
-          ? `Down to play in the six: an outfield player, who can never take a libero's place${canSwitch ? ' — click to name him the spare libero' : ''}`
-          : `Only ${namedLiberos.length} liberos can be named — he is down to play in the six`,
+          ? `Down to play in the six: an outfield player, who can never take a libero's place${canSwitch ? ', click to name him the spare libero' : ''}`
+          : `Only ${namedLiberos.length} liberos can be named, he is down to play in the six`,
         onTag: chosen ? toggle : undefined,
       };
     }
@@ -414,7 +414,7 @@ export function TeamSheet({
                 </div>
               )}
               <span className="ts-libero-note">
-                {defensiveLibero >= 0 ? 'On court while you serve' : 'Optional — digs while you serve'}
+                {defensiveLibero >= 0 ? 'On court while you serve' : 'Optional, digs while you serve'}
               </span>
             </div>
           </div>
@@ -460,7 +460,7 @@ export function TeamSheet({
                     <button
                       className="ts-squad-btn add"
                       disabled={full}
-                      title={full ? `The squad is full — leave someone out first` : 'Name in the squad'}
+                      title={full ? `The squad is full, leave someone out first` : 'Name in the squad'}
                       onClick={() => onAddToSquad(p)}
                     >+</button>
                   ) : undefined}

@@ -101,9 +101,9 @@ export function AssistantReport(): JSX.Element {
       )}
       <label className="as-mode" title="The assistant stops play after a run of points against, and as a set goes tight, so you can look at it">
         <input type="checkbox" checked={g.coachingMode} onChange={(e) => g.setCoachingMode(e.target.checked)} />
-        <span>Coaching mode — stop play at the key moments</span>
+        <span>Coaching mode, stop play at the key moments</span>
       </label>
-      <p className="faint as-foot">Changes are for this match only, from the next rally — the tactic goes back to how it was at kickoff afterwards.</p>
+      <p className="faint as-foot">Changes are for this match only, from the next rally, the tactic goes back to how it was at kickoff afterwards.</p>
     </div>
   );
 }

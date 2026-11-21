@@ -157,7 +157,7 @@ function createLeague(
   const def = NATIONS[nation];
   const tierName =
     tier === 1 ? 'Superliga' : tier === 2 ? 'Serie A2' : `Division ${tier}`;
-  const groupSuffix = groupCount > 1 ? ` — Group ${String.fromCharCode(65 + group)}` : '';
+  const groupSuffix = groupCount > 1 ? `, Group ${String.fromCharCode(65 + group)}` : '';
 
   const reputation = Math.round(
     nationStrength(nation) * 95 * (1 / (1 + (tier - 1) * 0.62)),

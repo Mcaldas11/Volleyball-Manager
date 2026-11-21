@@ -1,5 +1,5 @@
 import { InterestButton } from '../nationCoach.tsx';
-import { useListPages } from '../components.tsx';
+import { listPage, useListPages } from '../components.tsx';
 import { nationalCoachName, nationName, rankingFor } from '../../engine/world/internationals.ts';
 import { baseNation, sideAge, type YouthAge } from '../../engine/world/sides.ts';
 import { useMemo, useState, type JSX } from 'react';
@@ -390,7 +390,7 @@ export function CareerScreen(): JSX.Element {
             <>
               <span className="cp-kicker">National team</span>
               <b><Flag nation={nationalTeam} /> {nationName(nationalTeam) ?? '—'}</b>
-              <span>Head coach — no club job alongside it</span>
+              <span>Head coach, no club job alongside it</span>
             </>
           ) : (
             <>
@@ -479,7 +479,7 @@ function CurrentJobCard(): JSX.Element {
     return (
       <Card title="Current Job" icon="world">
         <NationalJobBlock nation={nationalTeam} />
-        <p className="career-note">No club job alongside it. Clubs looking for a head coach are listed in the Job Centre — apply, or wait for one to call.</p>
+        <p className="career-note">No club job alongside it. Clubs looking for a head coach are listed in the Job Centre, apply, or wait for one to call.</p>
         <button className="primary block" onClick={() => g.go('jobs')}><Icon name="search" size={14} /> Job Centre</button>
       </Card>
     );
@@ -488,7 +488,7 @@ function CurrentJobCard(): JSX.Element {
   if (club === null) {
     return (
       <Card title="Current Job" icon="club">
-        <p className="career-note">You are out of work. Clubs looking for a head coach are listed in the Job Centre — apply, or wait for one to call.</p>
+        <p className="career-note">You are out of work. Clubs looking for a head coach are listed in the Job Centre, apply, or wait for one to call.</p>
         <button className="primary block" onClick={() => g.go('jobs')}><Icon name="search" size={14} /> Open the Job Centre</button>
       </Card>
     );
@@ -670,7 +670,7 @@ export function JobCentreScreen(): JSX.Element {
       <div className="club-grid">
         {kind === 'national' ? <NationalVacancies /> : scope === 'world' ? <AllClubs conf={conf} query={q} /> : (
         <Card title={`Vacancies (${rows.length})`} icon="career" flush>
-          {rows.length === 0 ? <Empty>No vacancies match — try all vacancies, or another continent.</Empty> : (
+          {rows.length === 0 ? <Empty>No vacancies match, try all vacancies, or another continent.</Empty> : (
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
@@ -717,7 +717,7 @@ export function JobCentreScreen(): JSX.Element {
             <KV k="Reputation"><StarMeter value={rep} max={10000} size={14} /></KV>
             <KV k="Status">{g.club !== null ? `Head coach of ${g.club.name}` : 'Out of work'}</KV>
             <p className="career-note">
-              Clubs answer an application within a week. The bigger the club next to your name, the slimmer your chances —
+              Clubs answer an application within a week. The bigger the club next to your name, the slimmer your chances,
               success and trophies are what make a name. A club with a coach in post can be approached too: its board
               offers you the job only if it is ready to part with him.
             </p>
@@ -775,7 +775,7 @@ function AllClubs({ conf, query }: { conf: Confederation | 'all'; query: string 
     })
     .filter((c) => query === '' || c.name.toLowerCase().includes(query))
     .sort((a, b) => b.reputation - a.reputation);
-  const { shown, more } = useListPages(rows, `world-${conf}-${nationShown}-${tierShown}-${level}-${status}-${query}`, -1, 7);
+  const { shown, more } = useListPages(rows, `world-${conf}-${nationShown}-${tierShown}-${level}-${status}-${query}`, -1, 7, listPage(44));
 
   return (
     <Card title={`All clubs (${rows.length})`} icon="club" flush className="jobs-world">
@@ -813,7 +813,7 @@ function AllClubs({ conf, query }: { conf: Confederation | 'all'; query: string 
           onChange={setStatus}
         />
       </div>
-      {rows.length === 0 ? <Empty>No clubs match — widen the filters.</Empty> : (
+      {rows.length === 0 ? <Empty>No clubs match, widen the filters.</Empty> : (
         <div className="table-wrap">
           <table className="data-table">
             <thead>

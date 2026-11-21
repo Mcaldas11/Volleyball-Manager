@@ -65,7 +65,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
         <ContractRow label="You pay">{money(Math.round(wage * (1 - share)))} <span className="faint">of his {money(wage)}</span></ContractRow>
         {status === 'open' && <ContractRow label="Expires">{g.dateLabelForDay(n.expiresOnDay)}</ContractRow>}
         <p className="contract-hint">
-          He stays your player: he comes back on 30 June, and still counts towards your 16. A loan is for games —
+          He stays your player: he comes back on 30 June, and still counts towards your 16. A loan is for games,
           the more he plays, the more he develops. You can compile his matches there at any time.
         </p>
         {shutNote}
@@ -74,7 +74,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
           <div className="contract-awaiting">
             <Icon name="clock" size={18} />
             <span>
-              <b>Awaiting their answer</b> — due {g.dateLabelForDay(offer.resolvesOn ?? world.day)}. You asked for playing time
+              <b>Awaiting their answer</b>, due {g.dateLabelForDay(offer.resolvesOn ?? world.day)}. You asked for playing time
               as a {PLAYING_TIME_NAMES[asked.playingTime].toLowerCase()} and {Math.round(asked.wageShare * 100)}% of his wage.
             </span>
           </div>
@@ -83,7 +83,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
           <div className="contract-awaiting">
             <Icon name="clock" size={18} />
             <span>
-              <b>Loan agreed</b> — {store.fullName(n.playerIdx)} will decide by {g.dateLabelForDay(offer.resolvesOn ?? world.day)}
+              <b>Loan agreed</b>, {store.fullName(n.playerIdx)} will decide by {g.dateLabelForDay(offer.resolvesOn ?? world.day)}
               {' '}whether to go.
             </span>
           </div>
@@ -172,7 +172,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
         <div className="contract-awaiting">
           <Icon name="clock" size={18} />
           <span>
-            <b>Awaiting their answer</b> — due {g.dateLabelForDay(offer.resolvesOn ?? world.day)}. You asked
+            <b>Awaiting their answer</b>, due {g.dateLabelForDay(offer.resolvesOn ?? world.day)}. You asked
             {' '}{buyingClub.name} for {money(offer.counterFee ?? fee)}.
           </span>
         </div>
@@ -181,7 +181,7 @@ export function IncomingOfferScreen(): JSX.Element | null {
         <div className="contract-awaiting">
           <Icon name="clock" size={18} />
           <span>
-            <b>{offer.clause === true ? 'Release clause met' : 'Fee agreed'}</b> —{' '}
+            <b>{offer.clause === true ? 'Release clause met' : 'Fee agreed'}</b>,{' '}
             {offer.clause === true && <>the club can't refuse it. </>}
             {store.fullName(n.playerIdx)} is talking terms with {buyingClub.name} and will decide
             by {g.dateLabelForDay(offer.resolvesOn ?? world.day)}.

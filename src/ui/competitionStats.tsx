@@ -61,7 +61,7 @@ function TeamsTable({ teams }: { teams: TeamCompStats[] }): JSX.Element {
               {th('w', 'W', 'Wins')}
               {th('sets', 'Sets', 'Sets won–lost')}
               {th('pf', 'Pts/set', 'Points scored a set')}
-              {th('pa', 'Conc/set', 'Points conceded a set — fewest first')}
+              {th('pa', 'Conc/set', 'Points conceded a set, fewest first')}
               {th('kills', 'Kills/set')}
               {th('eff', 'Eff', 'Attack efficiency: kills less errors, over attacks')}
               {th('aces', 'Aces/set')}
@@ -194,8 +194,8 @@ export function CompetitionStatsView({ comp }: { comp: Competition }): JSX.Eleme
         )}
         <span className="faint">
           {empty ? 'No matches played yet this season.'
-            : view === 'teams' ? 'Results and what each side did a set — click a heading to rank on it.'
-              : 'Everyone who has played in it this season — click a heading to rank on it.'}
+            : view === 'teams' ? 'Results and what each side did a set, click a heading to rank on it.'
+              : 'Everyone who has played in it this season, click a heading to rank on it.'}
         </span>
       </div>
       {empty

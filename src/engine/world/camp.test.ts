@@ -34,7 +34,7 @@ test('a camp is booked in the pre-season for a week clear of matches, paid for u
   assert.ok(campCost(club, 'abroad') > campCost(club, 'altitude') && campCost(club, 'altitude') > campCost(club, 'home'));
 });
 
-test('back from abroad the squad is in high spirits and the room tighter — fading over the autumn', () => {
+test('back from abroad the squad is in high spirits and the room tighter, fading over the autumn', () => {
   const { world, club } = preseason();
   const w = campWindow(world)!;
   const before = dressingRoom(world, club).cohesion;
@@ -52,7 +52,7 @@ test('back from abroad the squad is in high spirits and the room tighter — fad
   assert.equal(bondOf(world, club.id), 0);
 });
 
-test('at altitude the young players come back with more in their legs — and everyone tired', () => {
+test('at altitude the young players come back with more in their legs, and everyone tired', () => {
   const { world, club } = preseason();
   const w = campWindow(world)!;
   const store = world.players;

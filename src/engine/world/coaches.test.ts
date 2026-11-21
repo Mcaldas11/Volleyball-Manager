@@ -49,7 +49,7 @@ test('the sack closes a coach\'s spell, and his successor opens one of his own',
   assert.ok(open.from > start + 80, 'from the day he was appointed');
 });
 
-test('a coach who makes way for the user is on record as replaced — with the titles won in his time', () => {
+test('a coach who makes way for the user is on record as replaced, with the titles won in his time', () => {
   const w = world(503);
   const club = w.clubs.find((c) => c.tier === 1 && headCoachOf(w, c) !== undefined)!;
   const coach = headCoachOf(w, club)!;

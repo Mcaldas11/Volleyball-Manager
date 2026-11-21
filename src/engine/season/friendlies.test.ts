@@ -70,7 +70,7 @@ test('bigger clubs are less keen, and keener to host than to travel', () => {
   assert.ok(friendlyInterest(world, small, false) > friendlyInterest(world, small, true), 'asked to travel, less so');
 });
 
-test('an invitation is answered within a few days — and an accepted one is on the calendar', () => {
+test('an invitation is answered within a few days, and an accepted one is on the calendar', () => {
   const { world, ctx } = career(303);
   const clubs = smallClubs(world);
   const sent = clubs.slice(0, 3).map((c, i) => requestFriendly(world, c, friendlyDates(world)[i * 5], true)!);
@@ -84,7 +84,7 @@ test('an invitation is answered within a few days — and an accepted one is on 
   for (const f of booked) assert.equal(f.home, world.userClubId, 'at home, as asked');
 });
 
-test('with nothing arranged, the board books a couple three weeks before the friendlies — and does so whenever asked', () => {
+test('with nothing arranged, the board books a couple three weeks before the friendlies, and does so whenever asked', () => {
   const { world, ctx } = career(304);
   advanceTo(world, ctx, friendlyWindow(world).first - 21 + 2);
   const booked = friendliesOf(world, world.userClubId);

@@ -10,7 +10,7 @@ function world(seed: number) {
   return generateWorld({ seed, startYear: 2026, scale: 'small', manager: stubManager() });
 }
 
-test('a squad is up to twenty, of whom fourteen are named for a match — the six, the liberos and a bench that covers every position', () => {
+test('a squad is up to twenty, of whom fourteen are named for a match, the six, the liberos and a bench that covers every position', () => {
   const w = world(91);
   const store = w.players;
   const target = Object.values(SQUAD_TARGET).reduce((s, n) => s + n, 0);
@@ -90,7 +90,7 @@ test('only two liberos are named: a third in the squad plays in the six, and tho
   assert.deepEqual(new Set(sim.squadFor(0)), new Set([...home.lineup, home.libero, ...bench]));
 });
 
-test('a libero down to play in the six is an outfield player from the first whistle — shirt and all — and a libero named as one never plays in the six', () => {
+test('a libero down to play in the six is an outfield player from the first whistle, shirt and all, and a libero named as one never plays in the six', () => {
   const w = world(94);
   const store = w.players;
   const [a, b] = w.clubs.filter((c) => c.tier === 1 && c.players.length >= 18);

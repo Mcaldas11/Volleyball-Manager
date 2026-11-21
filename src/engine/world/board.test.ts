@@ -13,7 +13,7 @@ function managed(pick = 3) {
   return { world, club };
 }
 
-test('the board say what the club stands for — from who owns it — and judge the season on it', () => {
+test('the board say what the club stands for, from who owns it, and judge the season on it', () => {
   const { world, club } = managed();
   ownerOf(world, club).kind = 'members';
   club.philosophy = undefined;
@@ -34,7 +34,7 @@ test('the board say what the club stands for — from who owns it — and judge 
   assert.equal(club.boardConfidence, Math.max(0, before - 6), 'judged once');
 });
 
-test('a board meeting: more for wages to a manager they trust with money in the bank — not to one they doubt', () => {
+test('a board meeting: more for wages to a manager they trust with money in the bank, not to one they doubt', () => {
   const { world, club } = managed();
   club.boardConfidence = 70;
   club.finances.balance = club.finances.wageBudget;
@@ -51,7 +51,7 @@ test('a board meeting: more for wages to a manager they trust with money in the 
   assert.equal(club.finances.wageBudget, now);
 });
 
-test('a lower target only for a squad that really is not up to it — and it costs their confidence', () => {
+test('a lower target only for a squad that really is not up to it, and it costs their confidence', () => {
   const { world, club } = managed();
   club.boardConfidence = 60;
   const rank = paperRank(world, club);

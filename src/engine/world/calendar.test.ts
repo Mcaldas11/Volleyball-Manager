@@ -17,7 +17,7 @@ test('a date is a day of the season: 1 July is 0, 30 June 364, and the weekdays 
   assert.equal(shown(dateDay(2026, 2027, 5, 16)), 'Sun 16 May 2027');
 });
 
-test("the national teams' summer, as the FIVB has it — the women's and the men's", () => {
+test("the national teams' summer, as the FIVB has it, the women's and the men's", () => {
   // The Nations League: three weeks, then the finals.
   assert.equal(span(intlEventDays(men, 'nationsLeague', null, 2027)), 'Wed 9 Jun 2027 – Sun 1 Aug 2027');
   assert.equal(span(intlEventDays(women, 'nationsLeague', null, 2027)), 'Wed 2 Jun 2027 – Sun 25 Jul 2027');

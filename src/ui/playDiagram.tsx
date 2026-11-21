@@ -55,7 +55,7 @@ function rightHitter(cast: PlayCast): number {
 export function playUnavailable(play: RotationPlay, cast: PlayCast): string | null {
   if (play === 'auto') return null;
   if (zoneOf(cast, Position.MiddleBlocker, true) < 0) return 'Needs a middle at the net to jump as the decoy.';
-  if (play === 'scissors') return rightHitter(cast) < 0 ? 'Needs a hitter on the right at the net — the setter in the back row (P1, P6, P5).' : null;
+  if (play === 'scissors') return rightHitter(cast) < 0 ? 'Needs a hitter on the right at the net, the setter in the back row (P1, P6, P5).' : null;
   if (play === 'pipe') return zoneOf(cast, Position.OutsideHitter, false) < 0 ? 'Needs an outside in the back row, behind the middle at the net.' : null;
   return zoneOf(cast, Position.OutsideHitter, true) < 0 ? 'Needs an outside at the net.' : null;
 }

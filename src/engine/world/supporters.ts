@@ -78,7 +78,7 @@ export function fansSigning(world: World, club: Club, p: number): void {
     postMessage(world, {
       category: 'finance', from: 'Commercial Department', playerIdx: p,
       subject: `${store.fullName(p)} shirts sell out`,
-      body: `The club shop can't keep ${store.fullName(p)}'s shirt on the shelves — a signing like that brings new supporters in.`,
+      body: `The club shop can't keep ${store.fullName(p)}'s shirt on the shelves, a signing like that brings new supporters in.`,
     });
   }
 }
@@ -120,7 +120,7 @@ export function expansionOptions(club: Club): Array<{ seats: number; cost: numbe
 export function expansionBlock(world: World, club: Club): string | null {
   const project = club.arenaProject;
   if (project !== undefined) return project.stage === 'asked' ? 'The board is still considering it.' : 'A new stand is already being built.';
-  if ((club.arenaRefusedUntil ?? -1) > world.day) return `The board turned it down — ask again in ${club.arenaRefusedUntil! - world.day} days.`;
+  if ((club.arenaRefusedUntil ?? -1) > world.day) return `The board turned it down, ask again in ${club.arenaRefusedUntil! - world.day} days.`;
   return null;
 }
 
@@ -150,7 +150,7 @@ export function arenaDay(world: World): void {
         category: 'board', from: 'The Board',
         subject: 'New stand turned down',
         body: !affordable
-          ? `The board can't find ${euros(project.cost)} for a new stand — the club would want well over that in the bank first.`
+          ? `The board can't find ${euros(project.cost)} for a new stand, the club would want well over that in the bank first.`
           : 'The board isn\'t ready to build on your say-so with results as they are.',
       });
       return;

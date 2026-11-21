@@ -447,7 +447,7 @@ export function trainingDay(world: World): void {
     const today = trainingWeek(world, club, monday)[world.day - monday];
     if (today === undefined) continue;
     const harder = today.session === 'match' ? 1 : INTENSITY[today.intensity].dev;
-    learnTactic(club.tactics, (FAMILIARITY_GAIN[today.session] ?? 0) * harder);
+    learnTactic(club.tactics, (FAMILIARITY_GAIN[today.session] ?? 0) * harder, club.id === world.userClubId);
     if (today.session === 'match') continue;
     const s = SESSIONS[today.session];
     for (const p of club.players) {
@@ -458,7 +458,10 @@ export function trainingDay(world: World): void {
     }
   }
   // The national sides meet seldom: their tactic comes slowly.
-  for (const team of [...world.nationalTeams, ...(world.internationals?.youthTeams ?? [])]) if (team.tactics !== undefined) learnTactic(team.tactics, NATIONAL_GAIN);
+  // (Any of them the manager may have in hand is compared in full: those he edits are edited in place.)
+  for (const team of world.nationalTeams) if (team.tactics !== undefined) learnTactic(team.tactics, NATIONAL_GAIN, team.managedByUser);
+  // The youth sides' coach is noted elsewhere: each of them compared in full.
+  for (const team of world.internationals?.youthTeams ?? []) if (team.tactics !== undefined) learnTactic(team.tactics, NATIONAL_GAIN, true);
   // Days gone by have nothing more to look up.
   const days = dayIndex.get(world);
   if (days !== undefined) for (const d of days.keys()) if (d < world.day - 14) days.delete(d);
@@ -577,7 +580,7 @@ export function trainPositions(world: World): void {
       delete plan[p];
       postMessage(world, {
         subject: `${store.fullName(p)} can play ${POSITION_NAME_LOWER[pos]}`,
-        body: `${store.fullName(p)} has learnt to play ${POSITION_NAME_LOWER[pos]} — he is accomplished there now, ` +
+        body: `${store.fullName(p)} has learnt to play ${POSITION_NAME_LOWER[pos]}, he is accomplished there now, ` +
           'and goes back to his normal training.',
         playerIdx: p,
         from: 'Coaching Staff',

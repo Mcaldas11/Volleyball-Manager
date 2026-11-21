@@ -205,13 +205,13 @@ function prose(world: World, i: number, confidence: number): string[] {
     const ambition = get('ambition');
     if (pro >= 16) lines.push('A model professional');
     else if (pro <= 7) lines.push('Questions about his attitude and application');
-    if (ambition >= 17) lines.push('Highly ambitious — will not sit on a bench');
+    if (ambition >= 17) lines.push('Highly ambitious, will not sit on a bench');
     const injury = get('injuryProneness');
     if (injury >= 15) lines.push('Worrying injury record');
   }
 
   if (lines.length === 0) lines.push('No standout qualities identified yet');
-  if (confidence < 0.25) lines.unshift('Report is preliminary — limited viewings');
+  if (confidence < 0.25) lines.unshift('Report is preliminary, limited viewings');
   return lines;
 }
 

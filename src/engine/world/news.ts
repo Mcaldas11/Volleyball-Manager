@@ -169,7 +169,7 @@ export function newsCoachSacked(world: World, club: Club, coach: Staff | undefin
       ? `${club.name} part company with ${coachName(coach)}`
       : `${club.name} looking for a new head coach`,
     body: `${club.name} have dismissed ${coach !== undefined ? `head coach ${coachName(coach)}` : 'their head coach'} ` +
-      `after a run of results the board could no longer accept${where !== '' ? ` — the club sit ${where}` : ''}. ` +
+      `after a run of results the board could no longer accept${where !== '' ? `, the club sit ${where}` : ''}. ` +
       'The search for a successor begins at once.',
     nation: club.nation,
     clubId: club.id,
@@ -375,7 +375,7 @@ function matchReport(world: World, f: Fixture): void {
     kind: 'result',
     headline,
     body: `${winner.name} beat ${loser.name} ${score} (${sets}) ${homeWon ? 'at home' : 'on the road'} ` +
-      `in the ${comp.name}${stage !== '' ? `, ${stage.toLowerCase()}` : ''}${rivalry !== null ? ` — ${rivalry}, in front of a full house` : ''}.` +
+      `in the ${comp.name}${stage !== '' ? `, ${stage.toLowerCase()}` : ''}${rivalry !== null ? `, ${rivalry}, in front of a full house` : ''}.` +
       `${mvp >= 0 ? ` ${store.fullName(mvp)} was named player of the match.` : ''}`,
     nation: winner.nation,
     clubId: winner.id,
@@ -596,7 +596,7 @@ export function newsChampions(world: World, champions: ReadonlyArray<{ competiti
     postNews(world, {
       kind: 'title',
       headline: `${club.name} are ${comp.name} champions`,
-      body: `${club.name} have won the ${comp.name}${club.titlesWon > 1 ? ` — the club's ${ordinal(club.titlesWon)} major title` : ''}.`,
+      body: `${club.name} have won the ${comp.name}${club.titlesWon > 1 ? `, the club's ${ordinal(club.titlesWon)} major title` : ''}.`,
       nation: big ? -1 : club.nation,
       clubId: club.id,
       competitionId: comp.id,

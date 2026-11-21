@@ -85,7 +85,7 @@ export function missionLabel(m: MissionSpec): string {
 /** Send the scouts out. The first report comes in a week. */
 export function addMission(world: World, spec: MissionSpec): { ok: boolean; text: string; mission?: ScoutMission } {
   if (world.userClubId < 0) return { ok: false, text: 'No club.' };
-  if (missionsOf(world).length >= MAX_MISSIONS) return { ok: false, text: `The scouts can run ${MAX_MISSIONS} missions at once — call one off first.` };
+  if (missionsOf(world).length >= MAX_MISSIONS) return { ok: false, text: `The scouts can run ${MAX_MISSIONS} missions at once, call one off first.` };
   const all = (world.scoutMissions ??= []);
   const mission: ScoutMission = {
     ...spec, id: (all.at(-1)?.id ?? 0) + 1, created: world.day, nextReport: world.day + MISSION_REPORT_DAYS, found: [], active: true,
@@ -146,7 +146,7 @@ export function missionReport(world: World, m: ScoutMission): number[] {
     subject: picks.length > 0 ? `Scouting mission: ${picks.length} new name${picks.length === 1 ? '' : 's'}` : 'Scouting mission: nothing new this week',
     body: picks.length > 0
       ? `Our report on the brief "${missionLabel(m)}". ${picks.length === 1 ? 'He is' : 'They are'} on your shortlist now.`
-      : `Nobody new who fits "${missionLabel(m)}" this week. We keep looking — or widen the brief.`,
+      : `Nobody new who fits "${missionLabel(m)}" this week. We keep looking, or widen the brief.`,
     tables: picks.length > 0 ? [{
       label: missionLabel(m),
       columns: ['Player', 'Pos', 'Age', 'Club', 'Value', 'Our rating'],

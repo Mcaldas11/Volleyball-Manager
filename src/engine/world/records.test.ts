@@ -23,7 +23,7 @@ test('everyone starts a match on 6.0, and stays within 1-10', () => {
   assert.ok(bad < 5 && bad >= 1, `a disastrous match rates poorly (${bad})`);
 });
 
-test('an ordinary night ends in the yellow, around 6.6, a good one past 7, an 8 rare and a 9 rarer still — the same on both engines', () => {
+test('an ordinary night ends in the yellow, around 6.6, a good one past 7, an 8 rare and a 9 rarer still, the same on both engines', () => {
   const report = runRatingReport(80, 77);
   for (const samples of [report.detailed, report.quick]) {
     const all = [...samples.values()].flatMap((s) => s.ratings).sort((a, b) => a - b);
@@ -45,7 +45,7 @@ test('an ordinary night ends in the yellow, around 6.6, a good one past 7, an 8 
   }
 });
 
-test('a few points into a match nobody is anywhere near a 10 — a rating goes only as far as the time on court has earned', () => {
+test('a few points into a match nobody is anywhere near a 10, a rating goes only as far as the time on court has earned', () => {
   const world = generateWorld({ seed: 31, startYear: 2026, scale: 'small', manager: stubManager() });
   const [a, b] = world.clubs.filter((c) => c.tier === 1 && c.players.length >= 12);
   const reachAfter = new Map<number, number>([[5, 0], [10, 0], [20, 0]]);

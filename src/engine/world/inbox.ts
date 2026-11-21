@@ -231,7 +231,7 @@ export function roundupNotices(world: World, playedToday: readonly number[]): vo
     postMessage(world, {
       subject: `Matchday ${round + 1} round-up`,
       body: `Every result from matchday ${round + 1}, and where it leaves the table` +
-        (pos >= 0 ? ` — ${club.shortName} sit ${ordinal(pos + 1)} on ${table[pos][4]} points.` : '.'),
+        (pos >= 0 ? `, ${club.shortName} sit ${ordinal(pos + 1)} on ${table[pos][4]} points.` : '.'),
       roundup: { competitionId: comp.id, round, table },
       category: 'matchday',
     });
@@ -294,7 +294,7 @@ export function tacticReadNotice(world: World, club: Club): void {
   postMessage(world, stage === 2
     ? {
       subject: 'The opposition have us worked out',
-      body: `Teams know exactly how we play now — our ${known} above all — and they are setting up to stop it. ` +
+      body: `Teams know exactly how we play now, our ${known} above all, and they are setting up to stop it. ` +
         'It is costing us points. We need to change things: even a few adjustments to the instructions will ' +
         'throw them, and the more we change, the longer they will need to catch up.' + advice,
       from: 'Assistant Manager',
@@ -303,7 +303,7 @@ export function tacticReadNotice(world: World, club: Club): void {
     }
     : {
       subject: 'The opposition are starting to read us',
-      body: `Our opponents have been studying the video, and they are picking up our patterns — our ${known} most ` +
+      body: `Our opponents have been studying the video, and they are picking up our patterns, our ${known} most ` +
         'of all. Nothing to panic about yet, but a few small adjustments to the tactic would keep them guessing.' + advice,
       from: 'Assistant Manager',
       clubId: club.id,
@@ -388,7 +388,7 @@ export function monthlyLoanReports(world: World): void {
     const games = `${stats.apps} appearance${stats.apps === 1 ? '' : 's'} in ${stats.clubMatches} match${stats.clubMatches === 1 ? '' : 'es'}`;
     const injured = stats.clubMatches - (stats.fitMatches ?? stats.clubMatches);
     postMessage(world, {
-      subject: `Loan update: ${name} — ${month}`,
+      subject: `Loan update: ${name}, ${month}`,
       body: `${name}'s ${month} at ${club}: ${games}` +
         (injured > 0 ? `, ${injured === stats.clubMatches ? 'all of them' : `${injured} of them`} missed through injury` : '') +
         (stats.apps > 0 ? `, averaging a rating of ${(stats.ratingSum / stats.apps).toFixed(1)}` : '') +

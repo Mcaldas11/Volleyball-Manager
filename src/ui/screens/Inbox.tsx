@@ -464,7 +464,7 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
           </>
         )}
         <ReportRow k="Availability" tone={out > 0 ? 'bad' : 'good'}>
-          {out > 0 ? `Injured — ${injuryDuration(out)} to go` : 'Available'}
+          {out > 0 ? `Injured, ${injuryDuration(out)} to go` : 'Available'}
         </ReportRow>
       </div>
     );
@@ -557,7 +557,7 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     const buyer = offer !== undefined ? world.clubs[offer.buyingClubId] : undefined;
     const status = offer === undefined ? 'Closed' : offer.status === 'countered'
       ? 'Your asking price is with them'
-      : offer.status === 'accepted' ? 'Agreed — the player is deciding' : 'Awaiting your answer';
+      : offer.status === 'accepted' ? 'Agreed, the player is deciding' : 'Awaiting your answer';
     return (
       <div className="paper-report">
         <div className="paper-label">The offer</div>
@@ -579,7 +579,7 @@ function MessageDetail({ message: m }: { message: GameMessage }): JSX.Element | 
     const a = world.staffApproaches?.find((x) => x.id === m.staffApproachId);
     const suitor = a !== undefined ? world.clubs[a.clubId] : undefined;
     const status = a === undefined ? 'Closed' : {
-      open: 'Awaiting your answer', countered: 'Your asking price is with them', deciding: 'Agreed — he is deciding',
+      open: 'Awaiting your answer', countered: 'Your asking price is with them', deciding: 'Agreed, he is deciding',
       accepted: 'He has gone', rejected: 'You kept him', declined: 'He chose to stay', expired: 'Lapsed',
     }[a.status];
     return (
@@ -812,7 +812,7 @@ function TreatmentChoice({ p }: { p: number }): JSX.Element | null {
     return (
       <div className="treat-done">
         <Icon name="check" size={13} /> {TREATMENT_NAMES[c.treatment]}
-        <span className="paper-muted"> — back {g.longDateLabel(world.day + world.players.injuryDaysLeft[p])}</span>
+        <span className="paper-muted">, back {g.longDateLabel(world.day + world.players.injuryDaysLeft[p])}</span>
       </div>
     );
   }
@@ -1219,7 +1219,7 @@ function StaffApproachActions({ id, fee }: { id: number; fee: number }): JSX.Ele
   const [ask, setAsk] = useState(Math.round(fee * 1.3 / 1000) * 1000);
   return (
     <span className="staff-approach-actions">
-      <button className="paper-btn primary-dark" onClick={() => g.answerStaffApproach(id, true)}>Let him go — {money(fee)}</button>
+      <button className="paper-btn primary-dark" onClick={() => g.answerStaffApproach(id, true)}>Let him go, {money(fee)}</button>
       <span className="staff-approach-ask">
         <MoneyInput value={ask} onChange={setAsk} min={fee} />
         <button className="paper-btn" onClick={() => g.counterStaffApproach(id, ask)}>Ask for more</button>
@@ -1255,7 +1255,7 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     out.push(
       <span key="answered" className="paper-note">
         {{
-          countered: 'Your asking price is with them.', deciding: 'Agreed — he is deciding.', accepted: 'He has gone.',
+          countered: 'Your asking price is with them.', deciding: 'Agreed, he is deciding.', accepted: 'He has gone.',
           rejected: 'You kept him.', declined: 'He chose to stay.', expired: 'The approach lapsed.', open: '',
         }[approach.status]}
       </span>,
@@ -1266,7 +1266,7 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     const mg = world.mindGames?.find((x) => x.fixtureId === m.mindGameOf);
     if (mg !== undefined && mg.reply === undefined && world.fixtures[mg.fixtureId]?.played !== true) {
       for (const r of MIND_GAME_REPLIES) {
-        out.push(<button key={`mg-${r.id}`} className={`paper-btn${r.id === 'fire' ? ' primary-dark' : ''}`} title={`${r.line} — ${r.hint}`} onClick={() => g.answerMindGame(mg.fixtureId, r.id)}>{r.name}</button>);
+        out.push(<button key={`mg-${r.id}`} className={`paper-btn${r.id === 'fire' ? ' primary-dark' : ''}`} title={`${r.line}, ${r.hint}`} onClick={() => g.answerMindGame(mg.fixtureId, r.id)}>{r.name}</button>);
       }
     } else if (mg?.reply !== undefined) {
       out.push(<span key="mg-done" className="paper-note">You replied: {MIND_GAME_REPLIES.find((r) => r.id === mg.reply)?.name.toLowerCase()}.</span>);

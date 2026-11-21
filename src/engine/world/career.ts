@@ -269,7 +269,7 @@ function seasonName(world: World, season: number): string {
 
 function recordLine(job: ManagerJob | undefined): string {
   if (job === undefined || job.won + job.lost === 0) return '';
-  return ` — ${job.won + job.lost} matches, ${job.won} won and ${job.lost} lost`;
+  return `, ${job.won + job.lost} matches, ${job.won} won and ${job.lost} lost`;
 }
 
 // ---- Head coaches -------------------------------------------------------------
@@ -803,7 +803,7 @@ export function applicationBlock(world: World, clubId: number): string | null {
   if (club === undefined) return 'There is no such club.';
   if (clubId === world.userClubId) return 'You already manage this club.';
   if (career.offers.some((o) => o.clubId === clubId)) return `${club.name} have already offered you the job.`;
-  if (career.applications.some((a) => a.clubId === clubId)) return `You have applied — ${club.name} will answer soon.`;
+  if (career.applications.some((a) => a.clubId === clubId)) return `You have applied, ${club.name} will answer soon.`;
   if (vacancyAt(world, clubId) === undefined) return `${club.name} are not looking for a head coach.`;
   if (blocked(world, clubId)) return `${club.name} will not consider you again so soon.`;
   return null;
@@ -854,7 +854,7 @@ export function interestBlock(world: World, clubId: number): string | null {
   if (clubId === world.userClubId) return 'You already manage this club.';
   if (club.players.length === 0) return `${club.name} have no squad to coach.`;
   if (career.offers.some((o) => o.clubId === clubId)) return `${club.name} have already offered you the job.`;
-  if (career.applications.some((a) => a.clubId === clubId)) return `You have made your interest known — ${club.name} will answer soon.`;
+  if (career.applications.some((a) => a.clubId === clubId)) return `You have made your interest known, ${club.name} will answer soon.`;
   if (blocked(world, clubId)) return `${club.name} will not consider you again so soon.`;
   if (career.applications.filter((a) => a.speculative === true).length >= MAX_APPROACHES) {
     return `You already have ${MAX_APPROACHES} approaches waiting on an answer.`;
@@ -1144,7 +1144,7 @@ function judgeUser(world: World): void {
     career.warnedOn = world.day;
     postMessage(world, {
       subject: 'Final warning from the board',
-      body: `The board's patience is running out. Results at ${club.name} must improve immediately — ` +
+      body: `The board's patience is running out. Results at ${club.name} must improve immediately, ` +
         'another poor run and the board will have no choice but to act.',
       clubId: club.id,
       category: 'board',

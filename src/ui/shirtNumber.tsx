@@ -75,7 +75,7 @@ function NumberGrid({ p, anchor, close }: { p: number; anchor: HTMLElement | nul
               key={n}
               type="button"
               className={`shirt-cell${n === mine ? ' mine' : ''}${taken ? ' taken' : ''}`}
-              title={n === mine ? 'His number' : taken ? `${store.fullName(q)} wears it — swap` : 'Free'}
+              title={n === mine ? 'His number' : taken ? `${store.fullName(q)} wears it, swap` : 'Free'}
               onClick={() => pick(n)}
             >
               {n}

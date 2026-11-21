@@ -8,7 +8,7 @@ import { teamAwardsOf } from './teamAwards.ts';
 import { generateWorld } from './worldGen.ts';
 import { DAYS_PER_SEASON, stubManager } from './world.ts';
 
-test('a competition ends with its team awards — the best attack, defence, block, serve and passing — each with the players who made it', () => {
+test('a competition ends with its team awards, the best attack, defence, block, serve and passing, each with the players who made it', () => {
   const world = generateWorld({ seed: 82, startYear: 2026, scale: 'small', manager: stubManager() });
   const ctx = newSeasonContext();
   startSeason(world, ctx);

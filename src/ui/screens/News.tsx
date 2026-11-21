@@ -136,7 +136,7 @@ export function NewsScreen(): JSX.Element {
           />
         </header>
         <Paged className="news-items" items=".news-item" resetKey={`${filter}/${nation}`} follow=".news-item.on">
-          {items.length === 0 && <p className="news-none">No stories here yet — the papers fill up as the season goes on.</p>}
+          {items.length === 0 && <p className="news-none">No stories here yet, the papers fill up as the season goes on.</p>}
           {shown.map((n) => (
             <button
               key={n.id}

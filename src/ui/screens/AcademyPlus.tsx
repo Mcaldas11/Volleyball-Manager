@@ -105,10 +105,10 @@ export function AcademyDevelopment(): JSX.Element {
                       onChange={(v) => set(p, { area: v })} title="The part of his game it works on" />
                     <Dropdown<ProgrammeArea | 'none'> size="sm" value={choice.second === choice.area ? 'none' : choice.second} searchable={false}
                       options={[{ value: 'none' as const, label: 'No second area' }, ...AREA_OPTIONS.filter((o) => o.value !== choice.area).map((o) => ({ value: o.value, label: `+ ${o.label} (30%)` }))]}
-                      onChange={(v) => set(p, { second: v })} title="A second area for three steps in ten — 70/30" />
+                      onChange={(v) => set(p, { second: v })} title="A second area for three steps in ten, 70/30" />
                     <Dropdown<ProgrammeIntensity> size="sm" value={choice.intensity} options={INTENSITY_OPTIONS} searchable={false}
                       onChange={(v) => set(p, { intensity: v })}
-                      title="Intensive: more comes of it — and more tiredness, and more risk of a knock" />
+                      title="Intensive: more comes of it, and more tiredness, and more risk of a knock" />
                     <span className="acx-cost">{money(cost)}</span>
                     <button className="sm primary" disabled={block !== null} title={block ?? 'Start the twelve weeks'}
                       onClick={() => g.startProgramme(p, choice.area, choice.intensity, choice.second === 'none' || choice.second === choice.area ? undefined : choice.second)}>
@@ -175,7 +175,7 @@ export function AcademyRecruitment(): JSX.Element {
         )}
         <p className="acx-foot faint">
           {`${MAX_SEARCHES} searches a season, one at a time. Finding a player is not signing him: that is a fee of its own. ` +
-            "The potential is the scouts' guess — the better your scouts, the closer it is."}
+            "The potential is the scouts' guess, the better your scouts, the closer it is."}
         </p>
       </Card>
 
@@ -249,7 +249,7 @@ export function AcademyFacilities(): JSX.Element {
       actions={<Funds extra={`board confidence ${Math.round(club.boardConfidence)}%`} />}>
       <p className="acx-lead">
         Better youth facilities bring the academy's players on; a wider recruitment reach brings better ones in each summer. Both need the board's
-        approval, a building job and upkeep — and the board builds one thing at a time, across the whole club.
+        approval, a building job and upkeep, and the board builds one thing at a time, across the whole club.
       </p>
       <div className="acx-facilities">
         {kinds.map((kind) => {
@@ -263,7 +263,7 @@ export function AcademyFacilities(): JSX.Element {
               <p className="faint">{FACILITY_EFFECTS[kind]}</p>
               {level < 20 && <p>{`Next level: ${level + 1}/20 · ${money(upgradeCost(club, kind))} · ${monthsWork(buildDays(club, kind))}`}</p>}
               {mine && project !== undefined && (
-                <p className="acx-status pos">{project.stage === 'asked' ? `With the board — answer by ${g.dateLabelForDay(project.until)}` : `Being built — done ${g.dateLabelForDay(project.until)}`}</p>
+                <p className="acx-status pos">{project.stage === 'asked' ? `With the board, answer by ${g.dateLabelForDay(project.until)}` : `Being built, done ${g.dateLabelForDay(project.until)}`}</p>
               )}
               <div className="acx-fac-foot">
                 <button className="sm" disabled={block !== null} title={block ?? 'Ask the board to pay for it'} onClick={() => setConfirm(kind)}>
@@ -403,8 +403,8 @@ export function AcademyInternationals(): JSX.Element {
         <span className="faint">Recommendations left</span> <b>{left}/{MAX_RECOMMENDATIONS}</b></span>}>
       <div className="acx-intl-head">
         <p className="acx-lead">
-          The U19s play their championship late in July, the U21s in mid-August — players called up are away until their side goes out.
-          {advice !== undefined && <> Head of youth: <b>{store.shortName(advice.p)}</b> is {ordinalLabel(advice.order)} in the {nationNameOf(advice.side)} coach's thinking — a word could get him in.</>}
+          The U19s play their championship late in July, the U21s in mid-August, players called up are away until their side goes out.
+          {advice !== undefined && <> Head of youth: <b>{store.shortName(advice.p)}</b> is {ordinalLabel(advice.order)} in the {nationNameOf(advice.side)} coach's thinking, a word could get him in.</>}
         </p>
         <Segmented<IntlFilter> size="sm" options={[['all', 'All'], ['contention', 'In the picture'], ['capped', 'Capped']]} value={filter} onChange={setFilter} />
       </div>

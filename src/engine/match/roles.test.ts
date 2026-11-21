@@ -43,7 +43,7 @@ test('receiving in P1 a 5-1 stays put: the outside passing in zone 2 hits on the
   assert.ok([...where.served.oh].some((lane) => /outside/i.test(lane)), 'serving in P1, they switch as usual');
 });
 
-test('a 4-2 receiving with its setter in zone 1 stays put too — each outside, passing in zone 2, hits on the right, the setter at the net on the left', () => {
+test('a 4-2 receiving with its setter in zone 1 stays put too, each outside, passing in zone 2, hits on the right, the setter at the net on the left', () => {
   const { world, home, away } = sides(74);
   const store = world.players;
   home.tactics = { ...home.tactics, formation: Formation.FourTwo };
@@ -77,7 +77,7 @@ test('a 4-2 receiving with its setter in zone 1 stays put too — each outside, 
   assert.ok(switched > 0, 'serving, they switch as usual');
 });
 
-test('whoever starts in a slot plays its position — an outside as opposite, a libero as an outside — and so does whoever replaces him', () => {
+test('whoever starts in a slot plays its position, an outside as opposite, a libero as an outside, and so does whoever replaces him', () => {
   const { world, home, away } = sides(72);
   const store = world.players;
   const oh = home.bench.find((p) => store.position[p] === Position.OutsideHitter)!;
@@ -105,7 +105,7 @@ test('whoever starts in a slot plays its position — an outside as opposite, a 
   const result = sim.buildResult();
   assert.equal(result.roles?.get(libero), Position.OutsideHitter);
   const line = result.stats.home.players.get(libero);
-  assert.ok((line?.attacksTotal ?? 0) > 0, 'the libero attacks — he is an outside hitter tonight');
+  assert.ok((line?.attacksTotal ?? 0) > 0, 'the libero attacks, he is an outside hitter tonight');
 });
 
 test('a player can learn a position in training, and playing there teaches it too', () => {

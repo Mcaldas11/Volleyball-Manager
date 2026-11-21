@@ -24,7 +24,7 @@ test('a 4-2 starts two setters diagonal, where a 5-1 has a setter and an opposit
   assert.deepEqual(fourTwo.lineup.map((p) => store.position[p]), [...LINEUP_SLOT_POSITIONS_42]);
 });
 
-test('in a 4-2 both setters set — from the back row — and both attack, from the front', () => {
+test('in a 4-2 both setters set, from the back row, and both attack, from the front', () => {
   const { world, a, b } = twoClubs(62);
   const store = world.players;
   a.tactics.formation = Formation.FourTwo;
@@ -76,7 +76,7 @@ function secondTouches(seed: number, formation: Formation) {
   return { store, home, pairs };
 }
 
-test('nobody plays the ball twice: when the setter digs in a 5-1, the libero sets — and on a bad ball he often does', () => {
+test('nobody plays the ball twice: when the setter digs in a 5-1, the libero sets, and on a bad ball he often does', () => {
   const { store, home, pairs } = secondTouches(63, Formation.FiveOne);
   assert.ok(pairs.every((x) => x.first !== x.second), 'never the same player twice');
   const setter = home.lineup[0];
@@ -119,7 +119,7 @@ function tiredSetter(formation: Formation) {
   return { store, sim, home, setter, tire };
 }
 
-test('in a 4-2, a setter who has to come off can make way for an opposite — the other setter sets on', () => {
+test('in a 4-2, a setter who has to come off can make way for an opposite, the other setter sets on', () => {
   const { store, sim, home, setter, tire } = tiredSetter(Formation.FourTwo);
   assert.ok(home.bench.some((p) => store.position[p] === Position.Opposite));
   const fresh = sim.suggestSubstitution(0);

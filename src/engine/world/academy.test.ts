@@ -123,7 +123,7 @@ test('a search position is respected, and a full academy signs no one', () => {
   }
 });
 
-test('balance: a programme clearly helps, an intensive one more and at a cost — and nobody passes his potential', () => {
+test('balance: a programme clearly helps, an intensive one more and at a cost, and nobody passes his potential', () => {
   for (const intensity of ['normal', 'intensive'] as const) {
     const { world } = managed(301);
     const store = world.players;

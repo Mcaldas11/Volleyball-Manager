@@ -51,7 +51,7 @@ export function DiagnosisScreen(): JSX.Element {
                 );
               })}
             </div>
-            <p className="faint as-foot">A change made here goes into the tactic for good — training brings the familiarity back. The diagnosis reads only what the matches show: a sample, not the truth.</p>
+            <p className="faint as-foot">A change made here goes into the tactic for good, training brings the familiarity back. The diagnosis reads only what the matches show: a sample, not the truth.</p>
           </div>
         )}
       </Card>
@@ -110,8 +110,8 @@ export function PrepLabScreen(): JSX.Element {
               <p className={`as-summary ${result.confidence === 'noise' ? 'v-early' : result.edge > 0 ? 'v-hold' : 'v-adjust'}`}>
                 <Icon name={result.edge > 0 ? 'check' : 'alert'} size={15} />
                 {result.confidence === 'noise'
-                  ? `No real difference over ${result.matches} matches (${result.edge >= 0 ? '+' : ''}${result.edge.toFixed(1)} points per hundred) — it could go either way.`
-                  : `${result.edge > 0 ? 'Better' : 'Worse'}: ${result.edge >= 0 ? '+' : ''}${result.edge.toFixed(1)} points per hundred rallies — ${result.confidence === 'clear' ? 'a clear difference' : 'likely, not certain'}.`}
+                  ? `No real difference over ${result.matches} matches (${result.edge >= 0 ? '+' : ''}${result.edge.toFixed(1)} points per hundred), it could go either way.`
+                  : `${result.edge > 0 ? 'Better' : 'Worse'}: ${result.edge >= 0 ? '+' : ''}${result.edge.toFixed(1)} points per hundred rallies, ${result.confidence === 'clear' ? 'a clear difference' : 'likely, not certain'}.`}
               </p>
               {result.edge > 0 && result.confidence !== 'noise' && (
                 <div className="tl-lab-run">
@@ -130,7 +130,7 @@ export function PrepLabScreen(): JSX.Element {
         actions={<span className="faint">{g.dateLabelForDay(fixture.day)}</span>}>
         <div className="tl-opp">
           <div className="tl-opp-head"><ClubCrest club={opp} size={34} /><b><ClubLink id={opp.id} /></b></div>
-          <p className="faint">{`The staff's read — ${Math.round(scouted.accuracy * 100)}% sure on the whole. Better scouts and analysts read him better.`}</p>
+          <p className="faint">{`The staff's read, ${Math.round(scouted.accuracy * 100)}% sure on the whole. Better scouts and analysts read him better.`}</p>
           <dl className="tl-opp-facts">
             <dt>Attack</dt><dd>{OFFENSE_NAMES[scouted.offense]} {sure(scouted.offenseSure)}</dd>
             <dt>Tempo</dt><dd>{TEMPO_NAMES[scouted.tempo]} {sure(scouted.tempoSure)}</dd>

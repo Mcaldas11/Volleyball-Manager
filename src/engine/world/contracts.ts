@@ -44,7 +44,7 @@ export function contractNotices(world: World): void {
       const next = nextTransferWindow(world.day).window;
       push({
         subject: 'Transfer window closed',
-        body: `The ${WINDOW_NAME[w.name]} transfer window has closed. You can still negotiate — but a player ` +
+        body: `The ${WINDOW_NAME[w.name]} transfer window has closed. You can still negotiate, but a player ` +
           `under contract signed from now on only joins when the ${WINDOW_NAME[next.name]} window opens on ` +
           `${OPENS_ON[next.name]}. Free agents join at once.`,
         category: 'news',
@@ -69,7 +69,7 @@ export function contractNotices(world: World): void {
         subject: `Contract expiring: ${store.fullName(p)}`,
         body: `${store.fullName(p)}'s contract runs out on ${ends}. If it isn't renewed he will leave on a free ` +
           'transfer at the end of the season. ' + (option
-          ? 'The club holds an option on one more season, on the same terms: take it up from his profile by 1 May — or open talks on a new deal.'
+          ? 'The club holds an option on one more season, on the same terms: take it up from his profile by 1 May, or open talks on a new deal.'
           : 'Open contract talks to offer him a new deal.'),
         playerIdx: p,
         category: 'contract',

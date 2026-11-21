@@ -7,7 +7,7 @@ import { toTeamSetup } from '../season/seasonEngine.ts';
 import { challengeChecksFor, MatchFormat, MatchSimulator, type Shot } from './engine.ts';
 import { ballMark, isIn, landingFor } from './landing.ts';
 
-test('a shot comes down over its own stretch of the court — the whole court between them — and one hit out lands clearly out', () => {
+test('a shot comes down over its own stretch of the court, the whole court between them, and one hit out lands clearly out', () => {
   const rng = new Rng(5);
   const rnd = (): number => rng.float();
   const inShots: Shot[] = ['line', 'shortLine', 'cross', 'cut', 'tip', 'roll', 'seam', 'deep', 'quick'];

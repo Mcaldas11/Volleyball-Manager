@@ -9,7 +9,7 @@ import { toTeamSetup } from '../season/seasonEngine.ts';
 
 const { Setter: S, OutsideHitter: OH, MiddleBlocker: MB, Opposite: OPP, Libero: L } = Position;
 
-test('the libero takes a back-row middle\'s place — in zone 1 too, the moment his side is not serving', () => {
+test('the libero takes a back-row middle\'s place, in zone 1 too, the moment his side is not serving', () => {
   // Players 0-5 on court, 6 the libero; the middle (2) in zone 1.
   const positions = [S, OH, MB, OPP, OH, MB, L];
   const court = [2, 3, 5, 0, 1, 4];

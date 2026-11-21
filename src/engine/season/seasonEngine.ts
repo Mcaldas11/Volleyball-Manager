@@ -330,7 +330,7 @@ export function forfeitIfShort(world: World, ctx: SeasonContext, fixture: Fixtur
   const had = homeLoses ? home : away;
   const score = `${sets}-0`;
   postNews(world, {
-    kind: 'result', headline: `${loser.name} can't field a team — ${winner.name} win ${score} by default`,
+    kind: 'result', headline: `${loser.name} can't field a team, ${winner.name} win ${score} by default`,
     body: `With only ${had} player${had === 1 ? '' : 's'} fit to play, ${loser.name} could not take the court. The match goes to ${winner.name}, ${score}, every set ${points}-0.`,
     nation: loser.nation, clubId: winner.id, otherClubId: loser.id, competitionId: fixture.competitionId,
     fans: { story: 'match', club: winner.id, other: loser.id, score },
@@ -341,7 +341,7 @@ export function forfeitIfShort(world: World, ctx: SeasonContext, fixture: Fixtur
       category: 'matchday', from: 'League Office', clubId: ours ? winner.id : loser.id, fixtureId: fixture.id,
       subject: ours ? `Match lost by default: ${score} to ${winner.shortName}` : `Match won by default: ${score} against ${loser.shortName}`,
       body: ours
-        ? `You had only ${had} player${had === 1 ? '' : 's'} fit to play — a side needs ${MIN_PLAYERS} to take the court. The match is awarded to ${winner.name}, ${score}, every set ${points}-0. Sign players, or bring youngsters up from the academy, before the next one.`
+        ? `You had only ${had} player${had === 1 ? '' : 's'} fit to play, a side needs ${MIN_PLAYERS} to take the court. The match is awarded to ${winner.name}, ${score}, every set ${points}-0. Sign players, or bring youngsters up from the academy, before the next one.`
         : `${loser.name} had only ${had} player${had === 1 ? '' : 's'} fit to play and could not take the court. The match is yours, ${score}, every set ${points}-0.`,
     });
   }

@@ -234,7 +234,7 @@ function Room({ g, session }: { g: Game; session: InterviewSession }): JSX.Eleme
       {about !== undefined && store.isActive(about) && (
         <div className="press-about">
           <PlayerFace playerId={store.id[about]} name={store.fullName(about)} size={24} />
-          <span><b>{store.fullName(about)}</b> will read what you say — praise lifts him, criticism stings.</span>
+          <span><b>{store.fullName(about)}</b> will read what you say, praise lifts him, criticism stings.</span>
         </div>
       )}
 

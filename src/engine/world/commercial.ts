@@ -126,7 +126,7 @@ export function sponsorDay(world: World): void {
       category: 'finance', from: 'Commercial Department',
       subject: 'Sponsorship offers for the season',
       body: `Three companies want their name on the shirt this season: ${offers.map((o) => o.name).join(', ')}. ` +
-        `Pick one on the Tickets & Sponsors screen — if you leave it ${CHOOSE_DAYS} days, we will sign the steady deal.`,
+        `Pick one on the Tickets & Sponsors screen, if you leave it ${CHOOSE_DAYS} days, we will sign the steady deal.`,
       sponsorOffers: true,
     });
     return;

@@ -616,8 +616,26 @@ export class Court3D {
     this.renderTrophy(motion, now, dt);
 
     this.cameraman.aim(this.camera, motion, now, dt, this.width, this.height);
+    // The first frame would compile every shader there and then, the page frozen for a second or
+    // more: they are compiled alongside instead, and the court is drawn once they are ready (the
+    // painted hall shows meanwhile). Anything new later compiles as it comes, as before.
+    if (this.compiled !== 'yes') {
+      if (this.compiled === 'no') {
+        this.compiled = 'pending';
+        const done = (): void => { this.compiled = 'yes'; };
+        try {
+          this.renderer.compileAsync(this.scene, this.camera).then(done, done);
+        } catch {
+          done();
+        }
+      }
+      return;
+    }
     this.renderer.render(this.scene, this.camera);
   }
+
+  /** The shaders: not asked for yet, being compiled, or ready to draw with. */
+  private compiled: 'no' | 'pending' | 'yes' = 'no';
 
   /** Where a player's head is on screen, CSS px — for the labels over them. */
   headOnScreen(p: number): { X: number; Y: number; s: number } | null {

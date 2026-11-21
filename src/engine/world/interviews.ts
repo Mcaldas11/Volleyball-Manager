@@ -309,7 +309,7 @@ function contextFor(world: World, f: Fixture, kind: InterviewKind): { ctx: Ctx; 
       occasions.push('Relegation playoff');
     } else occasions.push('Placement playoff');
     // The third game of a series settles it.
-    if (at?.game === 3) occasions[occasions.length - 1] += ' — game three, the decider';
+    if (at?.game === 3) occasions[occasions.length - 1] += ', game three, the decider';
   } else if (comp !== undefined && isCupCompetition(comp)) {
     if (comp.kind === 'continental') tags.add('continental');
     if (comp.kind === 'clubworld') tags.add('clubworld');
@@ -484,7 +484,7 @@ const PRE: readonly Archetype[] = [
       'Stay calm, stick to the plan, and the result will follow.',
       'Focus on the process, not the opponent.',
       'One point at a time, like always.',
-      'Go out and take it — nobody hands you these matches.',
+      'Go out and take it, nobody hands you these matches.',
       "I've told them to be ruthless from the first serve.",
     ],
   },
@@ -493,10 +493,10 @@ const PRE: readonly Archetype[] = [
     prompt: (c) => `Any concerns going into the match against ${c.opp.name}?`,
     answers: (c) => [
       'A few fitness niggles, nothing that worries me.',
-      'Just the usual — travel, recovery, small things.',
+      'Just the usual, travel, recovery, small things.',
       'No more than any other week.',
-      nat(c, "It's a long season, there's always something to manage.", "A tournament is short — there's always something to manage."),
-      'None at all — we are ready.',
+      nat(c, "It's a long season, there's always something to manage.", "A tournament is short, there's always something to manage."),
+      'None at all, we are ready.',
       'The only concern is whether they can handle us.',
     ],
   },
@@ -516,7 +516,7 @@ const PRE: readonly Archetype[] = [
     kind: 'pre', needs: ['home'], weight: 1,
     prompt: (c) => `What will the crowd at the ${c.club.arenaName} bring tomorrow?`,
     answers: () => [
-      'Our fans have been incredible all season — they lift us every time.',
+      'Our fans have been incredible all season, they lift us every time.',
       'Playing at home is special. We want to give them something back.',
       'It helps, but the crowd does not win you sets.',
       'Home or away, the court is the same size.',
@@ -529,7 +529,7 @@ const PRE: readonly Archetype[] = [
     prompt: (c) => `${c.opp.name} are hard to beat at home. How do you approach the trip?`,
     answers: () => [
       "It's a tough place to go, and we know it. We'll be ready.",
-      'Their fans make it difficult — that is part of the challenge.',
+      'Their fans make it difficult, that is part of the challenge.',
       'We treat it like any other match.',
       'An away match is just a match with a longer bus ride.',
       'We go there to win, not to survive.',
@@ -540,7 +540,7 @@ const PRE: readonly Archetype[] = [
     kind: 'pre', needs: ['oppStar'], weight: 2,
     prompt: (c) => `${c.opp.name} will be relying on ${name(c, c.oppStar)}. How do you stop him?`,
     answers: () => [
-      "He's a top player — we've studied him closely.",
+      "He's a top player, we've studied him closely.",
       "We have a plan for him, but they're more than one player.",
       "We'll focus on our own side of the net.",
       'Every player can be stopped on the day.',
@@ -556,7 +556,7 @@ const PRE: readonly Archetype[] = [
       `${name(c, c.ownStar)} has been brilliant, but this is a team.`,
       "He's a big part of what we do, and he knows how much we trust him.",
       "He's doing his job, like everyone else.",
-      "One player doesn't win a match — six do.",
+      "One player doesn't win a match, six do.",
       nat(c, `He's the best in the league in his position, simple as that.`, `He's among the best in the world in his position, simple as that.`),
       'If they want to stop us, they have to stop him first. Good luck.',
     ],
@@ -590,7 +590,7 @@ const PRE: readonly Archetype[] = [
     kind: 'pre', needs: ['oppForm'], weight: 2,
     prompt: (c) => `${c.opp.name} have won ${c.oppRun} in a row. Are they the team to beat right now?`,
     answers: () => [
-      "They've earned that form — credit to them.",
+      "They've earned that form, credit to them.",
       "We're watching the same tape everyone else is. They're a good side.",
       "Form is temporary. It's the head-to-head that decides these things.",
       "We'll worry about our own game, not theirs.",
@@ -603,7 +603,7 @@ const PRE: readonly Archetype[] = [
     prompt: () => "There's talk the board are losing patience. Is your job under threat?",
     answers: () => [
       'I have a good relationship with the board. We all want the same thing.',
-      "I understand the expectations — that's the job.",
+      "I understand the expectations, that's the job.",
       "That's a question for the board, not me.",
       'I only think about the next match.',
       'Results will answer that question, starting tomorrow.',
@@ -628,7 +628,7 @@ const PRE: readonly Archetype[] = [
     answers: () => [
       'The players have been fantastic with me. I just want them to enjoy it.',
       "It's an honour. We'll build this step by step.",
-      "You'll see it on the court — I'd rather not give much away.",
+      "You'll see it on the court, I'd rather not give much away.",
       "It takes time to put your stamp on a team. We're working on it.",
       'A team that plays to win, from the first serve.',
       'Expect a side that is hard to beat from tomorrow.',
@@ -678,7 +678,7 @@ const PRE: readonly Archetype[] = [
       "Everything. For the players, for the fans, for the city.",
       nat(c, 'It would be a reward for a whole season of work.', 'It would be a reward for everything this group has put in.'),
       "We'll talk about meaning afterwards. First we have to play it.",
-      'A final is a match like any other — just with a trophy at the end.',
+      'A final is a match like any other, just with a trophy at the end.',
       "We didn't come this far to finish second.",
       'The trophy is coming home with us.',
     ],
@@ -807,7 +807,7 @@ const PRE: readonly Archetype[] = [
   },
   {
     kind: 'pre', needs: ['clubworld'], weight: 5,
-    prompt: () => 'The World Club Cup — the whole world is watching. Can you go all the way?',
+    prompt: () => 'The World Club Cup, the whole world is watching. Can you go all the way?',
     answers: () => [
       "It's an honour to be here. We want to make the club proud.",
       'Only the best clubs in the world are here. We respect them all.',
@@ -835,7 +835,7 @@ const PRE: readonly Archetype[] = [
     prompt: () => 'How have the players settled in since they reported for duty?',
     answers: () => [
       'Brilliantly. There is a real hunger in this group.',
-      'They know each other well — that helps us from the first day.',
+      'They know each other well, that helps us from the first day.',
       'There is always a little time needed. We are getting there.',
       'Club form and country form are different things. We are working on it.',
       'We have no time to settle. We play to win from the first ball.',
@@ -927,7 +927,7 @@ const POST: readonly Archetype[] = [
       nat(c, "It's one match. The table will tell the story in May.", "It's one match. The tournament will tell the story."),
       'Exactly where we were this morning: working.',
       'Where we expect to be. Nothing has changed.',
-      'With a lot to prove — and we will prove it.',
+      'With a lot to prove, and we will prove it.',
     ],
   },
   // The player of the match.
@@ -941,7 +941,7 @@ const POST: readonly Archetype[] = [
       'He played well, like a lot of his teammates.',
       'He did his job. That is what we expect.',
       'Good, but he knows he can do even more.',
-      "I'd rather not single anyone out — he still made mistakes.",
+      "I'd rather not single anyone out, he still made mistakes.",
     ],
   },
   {
@@ -959,7 +959,7 @@ const POST: readonly Archetype[] = [
   // How it came.
   {
     kind: 'post', needs: ['won', 'whitewash'], weight: 3,
-    prompt: () => 'Three sets to nil — the perfect night?',
+    prompt: () => 'Three sets to nil, the perfect night?',
     answers: () => [
       'Close to it. The focus was there from the first point.',
       'The players were superb. They deserve the evening off.',
@@ -985,7 +985,7 @@ const POST: readonly Archetype[] = [
     kind: 'post', needs: ['comeback'], weight: 5,
     prompt: () => 'Two sets down and you came back. What did you tell them?',
     answers: () => [
-      'To believe. And they did — huge credit to the players.',
+      'To believe. And they did, huge credit to the players.',
       'That character wins matches. This group has plenty of it.',
       'To keep playing our game, one point at a time.',
       'Nothing special. The players found the answers themselves.',
@@ -1040,7 +1040,7 @@ const POST: readonly Archetype[] = [
   },
   {
     kind: 'post', needs: ['shock'], weight: 4,
-    prompt: (c) => `Losing to ${c.opp.name}, a side you were expected to beat — how do you explain it?`,
+    prompt: (c) => `Losing to ${c.opp.name}, a side you were expected to beat, how do you explain it?`,
     answers: (c) => [
       `${c.opp.name} were better tonight. We have to accept it.`,
       nat(c, 'It is one bad night in a long season.', 'It is one bad night. We have to answer straight away.'),
@@ -1068,7 +1068,7 @@ const POST: readonly Archetype[] = [
     prompt: () => 'Who do you dedicate this trophy to?',
     answers: (c) => [
       'To the fans. They never stopped believing.',
-      'To my players and my staff — and to my family.',
+      'To my players and my staff, and to my family.',
       nat(c, 'To everyone at the club, from the office to the kit room.', 'To everyone at the federation, from the staff to the kit room.'),
       "To the people who made this possible. They know who they are.",
       'To everyone who doubted us.',
@@ -1157,7 +1157,7 @@ const POST: readonly Archetype[] = [
         'It is a big win, but it is three points.',
         'We will enjoy it tonight and move on tomorrow.',
         'This city is ours.',
-        'Let them have the next one — if they can.',
+        'Let them have the next one, if they can.',
       ]
       : [
         'With our heads up. The players gave everything.',
@@ -1207,7 +1207,7 @@ const POST: readonly Archetype[] = [
   },
   {
     kind: 'post', needs: ['bronze', 'lost'], weight: 8,
-    prompt: () => 'Fourth place — so close to a medal. How does that feel?',
+    prompt: () => 'Fourth place, so close to a medal. How does that feel?',
     answers: () => [
       'Painful. But I am proud of what these players gave.',
       'We will look back on a good tournament, in time.',
@@ -1383,7 +1383,7 @@ export function generateInterviewSessions(world: World, day: number): void {
       body: session.stakes === 'huge'
         ? `The press room is packed: ${session.crowd} journalists want to hear from you ahead of the ${session.occasion.toLowerCase()}.`
         : session.stakes === 'big'
-          ? `A big crowd of journalists want your thoughts ahead of ${where} — ${session.occasion.toLowerCase()}.`
+          ? `A big crowd of journalists want your thoughts ahead of ${where}, ${session.occasion.toLowerCase()}.`
           : `The press want time with you ahead of ${where}.`,
       category: 'interview',
       fixtureId: f.id,
@@ -1441,7 +1441,7 @@ export function generatePostMatchInterview(world: World, f: Fixture): InterviewS
     year: world.year,
     subject: ctx.tags.has('trophy') ? `Press conference: ${ctx.compName} winners` : 'Post-match press conference',
     body: `The press want your reaction to the ${ctx.score} ${won ? 'win over' : 'defeat to'} ${ctx.opp.name}` +
-      `${session.stakes === 'routine' ? '' : ` — ${session.crowd} journalists are waiting`}.`,
+      `${session.stakes === 'routine' ? '' : `, ${session.crowd} journalists are waiting`}.`,
     category: 'interview',
     fixtureId: f.id,
     interviewId: session.id,
@@ -1545,7 +1545,7 @@ export function answerInterviewQuestion(
     if (msg !== undefined) {
       msg.body = (session.kind === 'pre'
         ? `You fielded ${session.questions.length} questions from the press before the match.`
-        : `You gave the press your reaction after the match — ${session.questions.length} questions.`) +
+        : `You gave the press your reaction after the match, ${session.questions.length} questions.`) +
         (session.headline !== '' ? ` Tomorrow's headline: ${session.headline}` : '');
     }
     pressHeadline(world, session);
@@ -1593,7 +1593,7 @@ export function declineInterview(world: World, sessionId: number): boolean {
   world.pendingInterviews.splice(idx, 1);
   // Those who came for nothing remember it.
   stoodUp(world, session.questions.map((q) => q.journalist.name));
-  if (msg !== undefined) msg.body = 'You declined to attend the press conference — the journalists who came will remember it.';
+  if (msg !== undefined) msg.body = 'You declined to attend the press conference, the journalists who came will remember it.';
   return true;
 }
 
@@ -1620,8 +1620,8 @@ export function expireStaleInterviews(world: World): void {
       const msg = interviewMessage(world, s);
       if (msg !== undefined) {
         msg.body = s.kind === 'pre'
-          ? 'The moment passed — the press conference was never finished.'
-          : 'The press have moved on — the post-match conference was never given.';
+          ? 'The moment passed, the press conference was never finished.'
+          : 'The press have moved on, the post-match conference was never given.';
       }
     }
   }
@@ -1784,7 +1784,7 @@ export function generateNationalInterviewSessions(world: World, day: number): vo
         body: session.stakes === 'huge'
           ? `The press room is packed: ${session.crowd} journalists want to hear from you ahead of the ${session.occasion.toLowerCase()}.`
           : session.stakes === 'big'
-            ? `A big crowd of journalists want your thoughts ahead of ${ahead} — ${session.occasion.toLowerCase()}.`
+            ? `A big crowd of journalists want your thoughts ahead of ${ahead}, ${session.occasion.toLowerCase()}.`
             : `The press want time with you ahead of ${ahead}.`,
         from: `${ctx.club.name} Volleyball Federation`,
         category: 'interview',
@@ -1819,7 +1819,7 @@ export function generateNationalPostMatchInterview(world: World, t: Tournament, 
     year: world.year,
     subject: ctx.tags.has('trophy') ? `Press conference: ${ctx.compName} winners` : 'Post-match press conference',
     body: `The press want your reaction to ${ctx.club.name}'s ${ctx.score} ${won ? 'win over' : 'defeat to'} ${ctx.opp.name}` +
-      `${session.stakes === 'routine' ? '' : ` — ${session.crowd} journalists are waiting`}.`,
+      `${session.stakes === 'routine' ? '' : `, ${session.crowd} journalists are waiting`}.`,
     from: `${ctx.club.name} Volleyball Federation`,
     category: 'interview',
     fixtureId: key,

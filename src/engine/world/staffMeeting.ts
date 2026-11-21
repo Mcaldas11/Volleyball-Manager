@@ -238,7 +238,7 @@ export function meetingSuggestions(world: World): Array<Omit<MeetingItem, 'id' |
     out.push({
       ...mind, kind: 'morale', p,
       title: `${name(p)} is down`,
-      text: 'His head has gone a bit — it shows in training. A word from you would mean more than anything from us.',
+      text: 'His head has gone a bit, it shows in training. A word from you would mean more than anything from us.',
       accept: 'Call him in',
     });
   }
@@ -266,7 +266,7 @@ export function staffMeetingDay(world: World): void {
   postMessage(world, {
     category: 'staff', from: 'Staff meeting',
     subject: `Staff meeting: ${n} suggestion${n === 1 ? '' : 's'}`,
-    body: 'The staff have met for the month. Each of them has brought you something: take it or leave it — whatever is still open at next month\'s meeting lapses.',
+    body: 'The staff have met for the month. Each of them has brought you something: take it or leave it, whatever is still open at next month\'s meeting lapses.',
     meetingId: id,
   });
 }
@@ -299,7 +299,7 @@ export function acceptSuggestion(world: World, meetingId: number, itemId: number
         }
       }
       item.outcome = picks.length === 0
-        ? 'Nobody suitable within reach right now — the scouts will keep looking.'
+        ? 'Nobody suitable within reach right now, the scouts will keep looking.'
         : `${picks.map((c) => store.fullName(c)).join(', ')} added to the squad plan. Full reports in a week.`;
       break;
     }
@@ -338,6 +338,6 @@ export function declineSuggestion(world: World, meetingId: number, itemId: numbe
   const item = meetingById(world, meetingId)?.items.find((i) => i.id === itemId);
   if (item === undefined || item.status !== 'open') return;
   item.status = 'declined';
-  item.outcome = 'Noted — left as it is.';
+  item.outcome = 'Noted, left as it is.';
   remember(world, item);
 }

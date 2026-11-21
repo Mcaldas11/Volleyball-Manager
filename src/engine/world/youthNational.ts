@@ -224,7 +224,7 @@ export function toggleSendDown(world: World, p: number, age: YouthAge): string {
   (sent[side] ??= []).push(p);
   if (I.frame !== undefined) I.frame.players = I.frame.players.filter((x) => x !== p);
   const t = nextTournamentFor(world, side);
-  return `${name} goes down to ${nationName(side)}${t !== undefined ? ` — their coach will call him for the ${t.name}` : ''}.`;
+  return `${name} goes down to ${nationName(side)}${t !== undefined ? `, their coach will call him for the ${t.name}` : ''}.`;
 }
 
 /**
@@ -287,7 +287,7 @@ export function recommendToYouthSide(world: World, p: number): { ok: boolean; te
   return {
     ok: true,
     text: `${nationName(side)}'s coach has your word on ${world.players.fullName(p)}` +
-      `${t !== undefined ? ` — he will be looked at for the ${t.name}` : ''}.`,
+      `${t !== undefined ? `, he will be looked at for the ${t.name}` : ''}.`,
   };
 }
 

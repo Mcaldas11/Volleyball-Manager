@@ -141,7 +141,7 @@ export function predictionsDay(world: World): void {
         subject: `The press tip ${own.name} to finish ${ordinal(at)}`,
         body: `The season previews are out: the papers have ${own.name} ${ordinal(at)} of ${order.length} in the ${comp.name}, ` +
           `${at === 1 ? 'the favourites for the title' : `behind ${name(order[0])}`}. ` +
-          'The board read them too — finish well above where you are tipped and they will notice; well below, and they will notice that as well.',
+          'The board read them too, finish well above where you are tipped and they will notice; well below, and they will notice that as well.',
       });
     }
   }

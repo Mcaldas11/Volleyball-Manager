@@ -57,7 +57,7 @@ test('every nation has U21 and U19 sides, and the summer of 2026 brings the U19 
   assert.equal(I.tournaments.filter((t) => t.youth === undefined && t.kind === 'continental').length, 5);
 });
 
-test('a youth squad is drawn by age — academy players too — and its caps are youth caps', () => {
+test('a youth squad is drawn by age, academy players too, and its caps are youth caps', () => {
   const { world, ctx } = start(72);
   const t = youthOf(world, 19)[0];
   const store = world.players;

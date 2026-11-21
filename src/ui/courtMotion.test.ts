@@ -431,7 +431,7 @@ test('the line judges flag every ball near their lines: down for in, up for out,
   assert.equal(LINE_JUDGES.length, 2);
 });
 
-test('after a point the side that won it comes together — round the one who won it, if someone did', () => {
+test('after a point the side that won it comes together, round the one who won it, if someone did', () => {
   const { sim, store, teamOf } = liveMatch(15);
   const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
   let now = 0;
@@ -466,7 +466,7 @@ test('after a point the side that won it comes together — round the one who wo
   assert.ok(heroes >= 2, `team-mates ran to the one who won it ${heroes} times`);
 });
 
-test('a tip is no full swing — the elbow stays soft — and it still meets the ball', () => {
+test('a tip is no full swing, the elbow stays soft, and it still meets the ball', () => {
   let tips = 0;
   const { sim, store, teamOf } = liveMatch(16);
   const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
@@ -507,7 +507,7 @@ test('shuffling sideways the feet step and close, and never cross', () => {
   }
 });
 
-test('a time-out: both sides go to their benches and stand round their coach — and back to their places after', () => {
+test('a time-out: both sides go to their benches and stand round their coach, and back to their places after', () => {
   const { sim, store, teamOf } = liveMatch(17);
   const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
   m.setSideline({ bench: [[], []], waiting: [[], []], warming: new Set() }, 0, 0);
@@ -531,7 +531,7 @@ test('a time-out: both sides go to their benches and stand round their coach —
   }
 });
 
-test('before the first serve: lined up, then hands slapped at the net — each side on its own — then to their places', () => {
+test('before the first serve: lined up, then hands slapped at the net, each side on its own, then to their places', () => {
   const { sim, store, teamOf } = liveMatch(18);
   const m = new CourtMotion((p) => ({ height: store.heightCm[p] / 100, hand: store.hasFlag(p, PlayerFlag.LeftHanded) ? -1 : 1 }), teamOf);
   const pre = sim.snapshot();
@@ -618,7 +618,7 @@ test('the serve waits for the server: the ball is tossed only from behind the en
     if (entry === null) break;
     const beats = rallyBeats(pre, entry.serveTeam, entry.contacts, store.position, i, 0, entry.winner);
     const server = m.bodies.get(entry.contacts[0].player)!;
-    assert.ok(Math.abs(server.y) > 9, `rally ${i}: tossed from ${server.y.toFixed(2)} m — behind the line`);
+    assert.ok(Math.abs(server.y) > 9, `rally ${i}: tossed from ${server.y.toFixed(2)} m, behind the line`);
     for (const beat of beats) {
       m.scene(beat, now);
       run(beat.ms);
@@ -696,7 +696,7 @@ test('the ball kids keep four balls going, none ever left in the air: in someone
   }
 });
 
-test('before the first serve the server waits empty-handed — no ball hangs at his spot — until a ball kid throws him one', () => {
+test('before the first serve the server waits empty-handed, no ball hangs at his spot, until a ball kid throws him one', () => {
   let first = true;
   let fromKid = false;
   const m = playWithKids(11, 3, (m, now, phase) => {

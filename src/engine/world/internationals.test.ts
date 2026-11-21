@@ -62,7 +62,7 @@ test('the summer of 2026 is the continental championships, and every season ends
   assert.ok(vnl.startDay > euro.knockoutDays[euro.knockoutDays.length - 1] + 200, 'the spring after');
 });
 
-test('a tournament plays out: pools, a bracket to a final and a bronze match, medals and an MVP — and everyone goes home', () => {
+test('a tournament plays out: pools, a bracket to a final and a bronze match, medals and an MVP, and everyone goes home', () => {
   const { world, ctx } = start(42);
   const euro = byKind(world, 'continental').find((t) => t.confederation === 'CEV')!;
   runTo(world, ctx, euro.knockoutDays[euro.knockoutDays.length - 1] + 1);
@@ -303,7 +303,7 @@ test("coaching a nation: the squad is the manager's to name, the day waits for i
   assert.ok(squad.every((p) => store.nationalCaps[p] === caps.get(p)), 'no second cap for the same match');
 });
 
-test('national jobs: always a few going, and an application is answered within a week — with an offer to accept in the inbox', () => {
+test('national jobs: always a few going, and an application is answered within a week, with an offer to accept in the inbox', () => {
   const { world, ctx } = start(51);
   const I = internationals(world);
   assert.ok(I.vacancies.length >= 3);

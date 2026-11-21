@@ -323,7 +323,7 @@ export function CalendarScreen(): JSX.Element {
           <section className="cal-card">
             <span className="cal-card-title">Pre-season friendlies</span>
             {friendlies.length === 0 && invitations.length === 0 && (
-              <p className="hm-empty">None arranged yet — the board books a couple if you leave it.</p>
+              <p className="hm-empty">None arranged yet, the board books a couple if you leave it.</p>
             )}
             {friendlies.map((f) => {
               const isHome = f.home === club.id;

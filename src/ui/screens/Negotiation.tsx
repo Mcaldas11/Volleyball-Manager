@@ -81,7 +81,7 @@ export function NegotiationScreen(): JSX.Element | null {
     <div className="contract-awaiting">
       <Icon name="clock" size={18} />
       <span>
-        <b>Awaiting reply</b> — due {g.dateLabelForDay(pending.resolvesOn)}.
+        <b>Awaiting reply</b>, due {g.dateLabelForDay(pending.resolvesOn)}.
         {' '}{t.kind === 'loan'
           ? `${sellingClub?.name ?? 'The club'} are considering lending him, with you paying ` +
             `${Math.round((pending.offer.wageShare ?? 0.5) * 100)}% of his wage and promising playing time as a ` +
@@ -89,7 +89,7 @@ export function NegotiationScreen(): JSX.Element | null {
           : t.stage === 'fee'
             ? `${sellingClub?.name ?? 'The club'} are considering your bid of ${money(pending.offer.fee)}.`
             : `${renewal ? 'He is' : 'He and his agent are'} considering ${money(pending.offer.wage)} a season until ${endsLabel(startSeason + pending.offer.years - 1)}. ${smallPrintLine(pending.offer)}`}
-        {' '}Keep playing — the answer will come to your inbox.
+        {' '}Keep playing, the answer will come to your inbox.
       </span>
     </div>
   );
@@ -151,7 +151,7 @@ export function NegotiationScreen(): JSX.Element | null {
             </p>
             <p className="contract-hint">
               Clubs lend players to see them play: promising more games makes a yes likelier, especially for a young
-              player. Keep your promise — fall well short and {sellingClub.shortName} will complain, then recall him.
+              player. Keep your promise, fall well short and {sellingClub.shortName} will complain, then recall him.
             </p>
           </div>
         )}
@@ -231,7 +231,7 @@ export function NegotiationScreen(): JSX.Element | null {
         {pending === null && n.message === null && t.reply === 'feeRejected' && (
           <p className="contract-note">
             <Icon name="alert" size={15} />
-            <span>They turned down {money(t.lastOffer.fee)}{t.valuation !== null && <> — they value him at around <b>{money(t.valuation)}</b></>}.</span>
+            <span>They turned down {money(t.lastOffer.fee)}{t.valuation !== null && <>, they value him at around <b>{money(t.valuation)}</b></>}.</span>
           </p>
         )}
 
@@ -288,8 +288,8 @@ export function NegotiationScreen(): JSX.Element | null {
             <div className="contract-demands-head">
               <span className="contract-demands-title"><Icon name="user" size={13} /> His demands</span>
               {/* His last answer: what is shown is where he stands now. */}
-              {pending === null && t.reply === 'close' && <span className="contract-reply close">Close — he would sign for this</span>}
-              {pending === null && t.reply === 'far' && <span className="contract-reply far">Nowhere near — this is what he wants</span>}
+              {pending === null && t.reply === 'close' && <span className="contract-reply close">Close, he would sign for this</span>}
+              {pending === null && t.reply === 'far' && <span className="contract-reply far">Nowhere near, this is what he wants</span>}
             </div>
             <ContractRow label="Wage">{money(d.wage)} <span className="faint">/ season</span></ContractRow>
             <ContractRow label="Role">{SQUAD_ROLE_NAMES[d.role]}</ContractRow>
@@ -334,7 +334,7 @@ export function NegotiationScreen(): JSX.Element | null {
                     className={`contract-option${n.termsYears >= MAX_CONTRACT_YEARS ? ' disabled' : ''}`}
                     title={n.termsYears >= MAX_CONTRACT_YEARS
                       ? 'Not on a five-season deal'
-                      : 'The club may add one more season on the same terms — yours to take up by 1 May of the last season'}
+                      : 'The club may add one more season on the same terms, yours to take up by 1 May of the last season'}
                   >
                     <input
                       type="checkbox"

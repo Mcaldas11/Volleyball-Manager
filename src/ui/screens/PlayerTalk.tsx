@@ -90,7 +90,7 @@ export function PlayerTalkScreen(): JSX.Element | null {
               {request === undefined ? <span className="faint">No</span>
                 : request.status === 'listed' ? <span className="warn">Listed at his request</span>
                   : request.status === 'promised' ? <span className="warn">Stays, for games</span>
-                    : <span className="bad">{request.status === 'refused' ? 'Yes — refused' : 'Yes — asked'}</span>}
+                    : <span className="bad">{request.status === 'refused' ? 'Yes, refused' : 'Yes, asked'}</span>}
             </span>
           </div>
           <div className="ptalk-fact">

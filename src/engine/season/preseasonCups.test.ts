@@ -38,7 +38,7 @@ test('a group of four: everyone plays everyone once, in three rounds of two', ()
   for (const r of rounds) assert.equal(new Set(r.flat()).size, 4, 'nobody twice in a day');
 });
 
-test('the table: 3 for a 3-0 or 3-1, 2 for a 3-2, 1 for a 2-3 — then the semi-finals are 1v4 and 2v3', () => {
+test('the table: 3 for a 3-0 or 3-1, 2 for a 3-2, 1 for a 2-3, then the semi-finals are 1v4 and 2v3', () => {
   const g = [10, 20, 30, 40];
   const fx = [
     played(1, 10, 40, 3, 0), played(2, 20, 30, 3, 2),
@@ -70,7 +70,7 @@ test('the prize is small, and bigger for eight', () => {
   assert.equal(cupPrize(0, 4) % 1000, 0);
 });
 
-test('a hosted tournament fills, plays its rounds, a 3rd-place match — and its trophy counts for nothing', () => {
+test('a hosted tournament fills, plays its rounds, a 3rd-place match, and its trophy counts for nothing', () => {
   const { world, ctx } = career(77);
   const user = world.clubs[world.userClubId];
   const dates = hostDates(world, 4);

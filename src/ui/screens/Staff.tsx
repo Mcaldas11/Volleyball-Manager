@@ -21,7 +21,7 @@ const INTEREST_LABEL: Readonly<Record<StaffInterest, string>> = {
   keen: 'Keen', open: 'Open', reluctant: 'Unsure', refuses: 'Won’t come',
 };
 const INTEREST_HINT: Readonly<Record<StaffInterest, string>> = {
-  keen: 'He would jump at it', open: 'He would listen', reluctant: 'He needs persuading — your club is below what he is used to', refuses: 'He won’t consider a club of your standing',
+  keen: 'He would jump at it', open: 'He would listen', reluctant: 'He needs persuading, your club is below what he is used to', refuses: 'He won’t consider a club of your standing',
 };
 
 function ratingTone(r: number): string {
@@ -127,7 +127,7 @@ export function StaffScreen(): JSX.Element {
               })}
             </div>
           )}
-          <p className="staff-duty"><b>{STAFF_ROLE_NAMES[role]}</b> — {STAFF_DUTIES[role]}</p>
+          <p className="staff-duty"><b>{STAFF_ROLE_NAMES[role]}</b>, {STAFF_DUTIES[role]}</p>
           <StaffMarketTable key={`${role}/${employed}`} role={role} employed={employed} />
         </Panel>
       </div>
@@ -163,9 +163,9 @@ function StaffSlot({ s }: { s: Staff }): JSX.Element {
         {talks !== null && <span className="staff-tag" title="Contract talks under way">In talks</span>}
         <span className="staff-actions">
           <button className="sm icon-btn" title={talks !== null ? 'Contract talks' : 'Offer a new contract'} onClick={() => g.openStaffTalks(s.id)}><Icon name="contract" size={12} /></button>
-          <button className={`sm icon-btn${s.listed === true ? ' on' : ''}`} title={s.listed === true ? 'Take him off the list' : 'Make him available — other clubs will come in for him'}
+          <button className={`sm icon-btn${s.listed === true ? ' on' : ''}`} title={s.listed === true ? 'Take him off the list' : 'Make him available, other clubs will come in for him'}
             onClick={() => g.toggleStaffListed(s.id)}><Icon name="transfers" size={12} /></button>
-          <button className="sm icon-btn danger" title="Release him — paying up his contract" onClick={() => setReleasing(g.staffSeverance(s.id))}><Icon name="close" size={12} /></button>
+          <button className="sm icon-btn danger" title="Release him, paying up his contract" onClick={() => setReleasing(g.staffSeverance(s.id))}><Icon name="close" size={12} /></button>
         </span>
       </span>
       {releasing !== null && (
@@ -190,7 +190,7 @@ function StaffMarketTable({ role, employed }: { role: StaffRole; employed: boole
   const list = g.staffMarket(role, employed);
   const wrapRef = useRef<HTMLDivElement>(null);
   const fit = useFitList(wrapRef, list.length, { min: 30, max: 40 });
-  if (list.length === 0) return <Empty>{employed ? 'Nobody in this role at other clubs.' : 'Nobody out of work in this role just now — more come onto the market each month.'}</Empty>;
+  if (list.length === 0) return <Empty>{employed ? 'Nobody in this role at other clubs.' : 'Nobody out of work in this role just now, more come onto the market each month.'}</Empty>;
   return (
     <>
       <div className="table-wrap staff-market-list" ref={wrapRef}>

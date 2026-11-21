@@ -81,7 +81,7 @@ function FriendlyForm(): JSX.Element {
         <h2 className="hol-title">Arrange a Friendly</h2>
         <p className="hol-sub">
           {booked.length + pending.length} of {MAX_FRIENDLIES} friendlies arranged this pre-season.
-          {' '}Invite a club and it answers within a few days — or have the board fix one up.
+          {' '}Invite a club and it answers within a few days, or have the board fix one up.
         </p>
 
         {dates.length === 0 || full ? (

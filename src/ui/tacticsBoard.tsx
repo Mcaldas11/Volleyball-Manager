@@ -85,10 +85,10 @@ const COMBO_ZONE_OPTIONS: Array<[number, string]> = [[1, 'Allowed'], [0, 'Not he
 const HINTS: Readonly<Record<string, string>> = {
   formation: '5-1: one setter runs the offence. 4-2: two setters diagonal; the one in the back row sets.',
   offense: 'How the setter shares the ball out across the attack lanes.',
-  tempo: 'Faster tempo beats the block but asks more of the pass and the setter — the set lower and flatter; a slow one puts the ball up high, giving the hitter time, and the block too.',
-  combos: 'How often a pin attack off a good pass is run as a combination off the middle — X, tandem, shoot, pipe. Rehearse them in training.',
-  middle: 'With the setter at the net — P2, P3, P4 — the right side is free: the quick at his head (the 1), the 31 further out in front, the back quick (costas) or the slide behind him (china). Any: the setter mixes them.',
-  middleBack: 'With the setter in the back row — P1, P6, P5 — the opposite is up at the net on the right, so there is no slide: the quick in front or the back quick.',
+  tempo: 'Faster tempo beats the block but asks more of the pass and the setter, the set lower and flatter; a slow one puts the ball up high, giving the hitter time, and the block too.',
+  combos: 'How often a pin attack off a good pass is run as a combination off the middle, X, tandem, shoot, pipe. Rehearse them in training.',
+  middle: 'With the setter at the net, P2, P3, P4, the right side is free: the quick at his head (the 1), the 31 further out in front, the back quick (costas) or the slide behind him (china). Any: the setter mixes them.',
+  middleBack: 'With the setter in the back row, P1, P6, P5, the opposite is up at the net on the right, so there is no slide: the quick in front or the back quick.',
   pins: 'A high ball gives the hitter time and the block time too; a fast, flat set beats the block but is harder to hit.',
   zoneCombos: 'Whether combinations may be run off a pass coming down in this zone.',
   backRow: 'Back-row attacks: the pipe from zone 6, a ball to the opposite in zone 1, or both.',
@@ -153,7 +153,7 @@ export function BlockPlanCard({ tactics: t, onChange, slim = false }: { tactics:
     <>
       {slim
         ? (
-          <button className="bp3-slim" onClick={() => setOpen(true)} title="Where the block sets up against the outside, the opposite and the pipe — in 3D">
+          <button className="bp3-slim" onClick={() => setOpen(true)} title="Where the block sets up against the outside, the opposite and the pipe, in 3D">
             <Icon name="tactics" size={14} /> <b>Block plan</b> <span>{blockPlansSummary(t)}</span>
           </button>
         )
@@ -483,7 +483,7 @@ function DefenceEditor({ tactics: t, onChange }: { tactics: TeamTactics; onChang
         ))}
       </div>
       <p className="zcourt-note">
-        Covers <b>{Math.round(score * 100)}%</b> of what comes from the {ATTACK_SOURCE_NAMES[source].toLowerCase()} —
+        Covers <b>{Math.round(score * 100)}%</b> of what comes from the {ATTACK_SOURCE_NAMES[source].toLowerCase()},
         drag 5, 6, 1 and the {FREE_ZONE[source]} who doesn't block.
       </p>
     </div>
@@ -674,7 +674,7 @@ function ServingOrders({ tactics: t, onChange }: { tactics: TeamTactics; onChang
         </table>
       </div>
       <p className="tboard-note">
-        Every serve is struck from behind the end line — behind zone 1 on the right, 6 in the middle or 5 on the left. The
+        Every serve is struck from behind the end line, behind zone 1 on the right, 6 in the middle or 5 on the left. The
         jump serve is the hardest and the likeliest to be missed; the standing float the safest; the jump float
         in between, and it wobbles like the float.
       </p>

@@ -61,11 +61,11 @@ export function StaffNegotiationScreen(): JSX.Element | null {
     <div className="contract-awaiting">
       <Icon name="clock" size={18} />
       <span>
-        <b>Awaiting reply</b> — due {g.dateLabelForDay(pending.resolvesOn)}.
+        <b>Awaiting reply</b>, due {g.dateLabelForDay(pending.resolvesOn)}.
         {' '}{t.stage === 'fee'
           ? `${his?.name ?? 'His club'} are considering ${money(pending.offer.fee)} in compensation.`
           : `He is considering ${money(pending.offer.wage)} a season until ${endsLabel(world.season + pending.offer.years - 1)}.`}
-        {' '}Keep playing — the answer will come to your inbox.
+        {' '}Keep playing, the answer will come to your inbox.
       </span>
     </div>
   );
@@ -97,7 +97,7 @@ export function StaffNegotiationScreen(): JSX.Element | null {
         <ContractRow label="Rating">{staffRating(s).toFixed(1)} <span className="faint">/ 20</span></ContractRow>
         <ContractRow label="Contract until">{endsLabel(contractEndSeason(s.contractUntil))}</ContractRow>
         <ContractRow label="Current wage">{money(s.wage)}</ContractRow>
-        <ContractRow label="Half his contract">{money(compensationFor(world, s))} <span className="faint">· what is left on it, halved — his club may want more</span></ContractRow>
+        <ContractRow label="Half his contract">{money(compensationFor(world, s))} <span className="faint">· what is left on it, halved, his club may want more</span></ContractRow>
         {rivalsRow}
 
         {awaiting}
@@ -117,7 +117,7 @@ export function StaffNegotiationScreen(): JSX.Element | null {
         {pending === null && n.message === null && t.reply === 'feeRejected' && (
           <p className="contract-note">
             <Icon name="alert" size={15} />
-            <span>They turned down {money(t.lastOffer.fee)}{t.valuation !== null && <> — they want around <b>{money(t.valuation)}</b></>}.</span>
+            <span>They turned down {money(t.lastOffer.fee)}{t.valuation !== null && <>, they want around <b>{money(t.valuation)}</b></>}.</span>
           </p>
         )}
 

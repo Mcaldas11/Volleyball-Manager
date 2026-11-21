@@ -31,7 +31,7 @@ export function RetirementSheet({ p }: { p: number }): JSX.Element {
   const record = tally.filter(([n]) => n > 0).map(([n, what]) => `${n.toLocaleString()} ${what}`);
   const status = plan === undefined ? (store.isActive(p) ? 'He is no longer thinking of stopping.' : 'He has retired.')
     : plan.persuaded === true ? 'You talked him round: he plays on another season.'
-      : plan.staffRole !== undefined ? `He stops at the end of the season — and joins your staff as ${STAFF_ROLE_NAMES[plan.staffRole].toLowerCase()}.`
+      : plan.staffRole !== undefined ? `He stops at the end of the season, and joins your staff as ${STAFF_ROLE_NAMES[plan.staffRole].toLowerCase()}.`
         : plan.talked === 'refused' ? 'You tried to talk him round; his mind is made up.'
           : 'He stops at the end of the season.';
   const canTalk = ours && plan !== undefined && plan.talked === undefined && plan.staffRole === undefined && plan.persuaded !== true;

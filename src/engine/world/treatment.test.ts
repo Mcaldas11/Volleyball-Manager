@@ -24,7 +24,7 @@ function setup(seed: number): { world: World; club: World['clubs'][number] } {
   return { world, club };
 }
 
-test('the medical room asks how a real injury is treated — and each way costs what it says', () => {
+test('the medical room asks how a real injury is treated, and each way costs what it says', () => {
   const { world, club } = setup(121);
   const store = world.players;
   const [a, b, c, knock] = club.players;
@@ -53,7 +53,7 @@ test('the medical room asks how a real injury is treated — and each way costs 
   assert.ok(RETURN_CONDITION.rest > RETURN_CONDITION.normal && RETURN_CONDITION.normal > RETURN_CONDITION.rush);
 });
 
-test('a player rushed back may break down in a match — less often with good doctors', () => {
+test('a player rushed back may break down in a match, less often with good doctors', () => {
   const { world, club } = setup(122);
   const store = world.players;
   // The medical room matters.

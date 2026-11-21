@@ -133,7 +133,7 @@ test('a new kit builds him again; the same look does not', () => {
   assert.notEqual(player.head, first);
 });
 
-test('a coach in each outfit: his clothes, trousers and shoes, no number — and stands like anyone else', () => {
+test('a coach in each outfit: his clothes, trousers and shoes, no number, and stands like anyone else', () => {
   const kit = { shirt: '#1f4fa8', shorts: '#14213d', libero: '#1f4fa8' };
   const triangles = (p: CourtPlayer): number => {
     let n = 0;
@@ -159,7 +159,7 @@ test('a coach in each outfit: his clothes, trousers and shoes, no number — and
   assert.equal(coloursFor(figureLook(DEFAULT_LOOK, kit, false)).sole, '#0d0f13', 'smart shoes, dark soles');
 });
 
-test('a woman — player or coach, every hairstyle — on the same skeleton, feet on the floor', () => {
+test('a woman, player or coach, every hairstyle, on the same skeleton, feet on the floor', () => {
   const kit = { shirt: '#1f4fa8', shorts: '#14213d', libero: '#1f4fa8' };
   const looks: Look[] = [0, 1, 2].map((hairStyle) => ({ ...LOOK, women: true, hairStyle }));
   for (const outfit of ['suit', 'tracksuit', 'polo'] as const) looks.push(figureLook({ ...DEFAULT_LOOK, outfit, beard: 2 }, kit, true));

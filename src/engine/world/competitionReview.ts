@@ -347,7 +347,7 @@ function postReview(world: World, comp: Competition, r: CompetitionReview): void
     award('mvp') !== null ? `Most valuable player: ${award('mvp')}.` : '',
     award('scorer') !== null ? `Top scorer: ${award('scorer')}.` : '',
     teamHonours.length > 0 ? `Your side take ${teamHonours.length === 1 ? 'a team award' : `${teamHonours.length} team awards`}: ${listOf(teamHonours)}.` : '',
-    'The full review — the awards, the team awards, the team of the competition, the surprises and the disappointments — is below.',
+    'The full review, the awards, the team awards, the team of the competition, the surprises and the disappointments, is below.',
   ];
   postMessage(world, {
     category: 'awards',

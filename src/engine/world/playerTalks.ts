@@ -33,9 +33,9 @@ export const CHAT_NAMES: Readonly<Record<ChatTopic, string>> = {
 
 export const CHAT_HINTS: Readonly<Record<ChatTopic, string>> = {
   praise: 'Best when he has been playing well',
-  criticise: 'Best when he has been poor — and takes it well',
+  criticise: 'Best when he has been poor, and takes it well',
   encourage: 'Best when he is down, or out of form',
-  promise: 'Regular games within eight weeks — keep your word',
+  promise: 'Regular games within eight weeks, keep your word',
   mood: 'What is on his mind',
 };
 
@@ -92,7 +92,7 @@ export function chatOpening(world: World, p: number): string {
   if (blocked !== undefined) {
     return `You turned down ${world.clubs[blocked.clubId]?.name ?? 'that club'}. I wanted that move, boss \u2014 I think I deserve an explanation.`;
   }
-  if (world.transferRequests?.[p]?.status === 'refused') return 'If this is about me staying — I haven\u2019t changed my mind.';
+  if (world.transferRequests?.[p]?.status === 'refused') return 'If this is about me staying, I haven\u2019t changed my mind.';
   if (morale >= 75) return 'Boss! You wanted to see me?';
   if (morale >= 50) return 'You wanted a word?';
   if (morale >= 30) return 'What is it?';
@@ -111,7 +111,7 @@ export function chatBlock(world: World, club: Club, p: number, topic: ChatTopic)
   if (!club.players.includes(p)) return 'He is not one of your players.';
   const last = world.playerChats?.[p];
   if (topic !== 'mood' && last !== undefined && world.day - last < CHAT_COOLDOWN) {
-    return `You spoke to him ${world.day - last === 0 ? 'today' : `${world.day - last} days ago`} — give it a while.`;
+    return `You spoke to him ${world.day - last === 0 ? 'today' : `${world.day - last} days ago`}, give it a while.`;
   }
   if (topic === 'promise') {
     if ((world.promises ?? []).some((x) => x.p === p)) return 'You have already promised him games.';
@@ -136,16 +136,16 @@ export function talkToPlayer(world: World, club: Club, p: number, topic: ChatTop
   switch (topic) {
     case 'praise':
       morale = good ? 8 : poor ? -3 : 3;
-      text = good ? `${name} is delighted — he knows he has been playing well, and that you have noticed.`
+      text = good ? `${name} is delighted, he knows he has been playing well, and that you have noticed.`
         : poor ? `${name} shrugs it off. He knows he hasn't been at his best, and the praise rings hollow.`
           : `${name} appreciates the word.`;
-      reply = good ? 'Thanks, boss. I feel sharp — and it\u2019s good to know you\u2019ve noticed.'
+      reply = good ? 'Thanks, boss. I feel sharp, and it\u2019s good to know you\u2019ve noticed.'
         : poor ? '...Thanks. But I know I haven\u2019t been at my best.'
           : 'Thanks, boss. I appreciate it.';
       break;
     case 'criticise':
       morale = good ? -10 : poor ? (takesIt ? 4 : -8) : (takesIt ? 0 : -5);
-      text = good ? `${name} is furious — he has been playing well, and doesn't see what more you want.`
+      text = good ? `${name} is furious, he has been playing well, and doesn't see what more you want.`
         : poor && takesIt ? `${name} accepts it: he knows he has to do better, and means to.`
           : poor ? `${name} reacts badly. He doesn't take criticism well.`
             : takesIt ? `${name} takes it on board without a word.` : `${name} doesn't think he deserved that.`;
@@ -157,14 +157,14 @@ export function talkToPlayer(world: World, club: Club, p: number, topic: ChatTop
     case 'encourage': {
       const down = poor || store.morale[p] < 40;
       morale = down ? 6 : 1;
-      text = down ? `${name} is grateful — it was what he needed to hear.` : `${name} nods. He wasn't worried.`;
+      text = down ? `${name} is grateful, it was what he needed to hear.` : `${name} nods. He wasn't worried.`;
       reply = down ? 'Thanks. I needed that.' : 'I\u2019m fine, boss, honestly.';
       break;
     }
     case 'promise':
       morale = 8;
       (world.promises ??= []).push({ p, clubId: club.id, madeOn: world.day, due: world.day + PROMISE_DAYS });
-      text = `${name} is pleased — he'll hold you to it. He expects to be playing regularly within eight weeks.`;
+      text = `${name} is pleased, he'll hold you to it. He expects to be playing regularly within eight weeks.`;
       reply = 'I\u2019ll hold you to that.';
       break;
     case 'mood':
@@ -188,13 +188,13 @@ function worriesOf(world: World, p: number): Array<[string, string]> {
   const promise = (world.promises ?? []).find((x) => x.p === p);
   if (promise !== undefined) {
     const left = Math.max(0, promise.due - world.day);
-    out.push([`he is waiting on your promise of games — ${left} days left`, `I\u2019m still waiting on those games you promised me`]);
+    out.push([`he is waiting on your promise of games, ${left} days left`, `I\u2019m still waiting on those games you promised me`]);
   }
   if (world.transferRequests?.[p]?.status === 'refused') out.push(['he still wants to leave', 'I still want to leave']);
   const moved = world.movePromises?.[p];
   if (moved?.kind === 'contract') {
     const left = Math.max(0, moved.due - world.day);
-    out.push([`he is waiting on the better contract you promised him — ${left} days left`, 'I\u2019m still waiting on that new contract you promised me']);
+    out.push([`he is waiting on the better contract you promised him, ${left} days left`, 'I\u2019m still waiting on that new contract you promised me']);
   } else if (moved?.kind === 'sale') {
     out.push(['he expects to be let go if the right offer comes in, as you promised', 'I\u2019m holding you to your word \u2014 if the right offer comes, I go']);
   }
@@ -209,7 +209,7 @@ export function moodOf(world: World, club: Club, p: number): string {
   const mood = store.morale[p] >= 75 ? 'very happy' : store.morale[p] >= 55 ? 'content' : store.morale[p] >= 35 ? 'a little low' : 'unhappy';
   void club;
   return worries.length === 0
-    ? `${name} is ${mood} at the club — nothing on his mind.`
+    ? `${name} is ${mood} at the club, nothing on his mind.`
     : `${name} is ${mood}: ${worries.join('; ')}.`;
 }
 
@@ -238,7 +238,7 @@ export function playerHappinessWeek(world: World): void {
       postMessage(world, {
         category: 'contract', from: name, playerIdx: pr.p,
         subject: `${name}: a promise kept`,
-        body: `You told ${name} he would be playing regularly, and he has been. He is grateful — and it has not gone unnoticed in the dressing room.`,
+        body: `You told ${name} he would be playing regularly, and he has been. He is grateful, and it has not gone unnoticed in the dressing room.`,
       });
     } else {
       store.morale[pr.p] = Math.max(0, store.morale[pr.p] - 15);
@@ -246,7 +246,7 @@ export function playerHappinessWeek(world: World): void {
       postMessage(world, {
         category: 'contract', from: name, playerIdx: pr.p,
         subject: `${name}: a promise broken`,
-        body: `You promised ${name} regular games, and he hasn't had them. He feels let down — and is wondering whether his future lies elsewhere.`,
+        body: `You promised ${name} regular games, and he hasn't had them. He feels let down, and is wondering whether his future lies elsewhere.`,
       });
     }
   }
@@ -266,7 +266,7 @@ export function playerHappinessWeek(world: World): void {
         category: 'contract', from: assistantName(world, club.id), playerIdx: p,
         subject: `${name} is unhappy`,
         body: `A word about ${name}, boss: ${why}. If nothing changes, I'd expect him to ask to leave within a few weeks. ` +
-          'A talk with him — or some games — might settle him.',
+          'A talk with him, or some games, might settle him.',
       });
     }
     if ((weeks[p] ?? 0) < UNHAPPY_WEEKS || store.hasFlag(p, PlayerFlag.Transferable)) continue;
@@ -313,7 +313,7 @@ export function changesOfMind(world: World): void {
       subject: `${name} changes his mind`,
       body: wasListed
         ? `${name} has asked to come off the transfer list. He is happier now, and wants to stay and fight for his place.`
-        : `${name} has withdrawn his transfer request. He has settled — he wants to stay.`,
+        : `${name} has withdrawn his transfer request. He has settled, he wants to stay.`,
     });
   }
 }
@@ -341,7 +341,7 @@ export function answerTransferRequest(world: World, p: number, answer: 'list' | 
     req.status = 'promised';
     (world.promises ??= []).push({ p, clubId: club.id, madeOn: world.day, due: world.day + PROMISE_DAYS });
     store.morale[p] = Math.min(100, store.morale[p] + 5);
-    return `${name} will stay — for now. He expects regular games within eight weeks.`;
+    return `${name} will stay, for now. He expects regular games within eight weeks.`;
   }
   req.status = 'refused';
   store.morale[p] = Math.max(0, store.morale[p] - 10);
