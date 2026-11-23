@@ -5,7 +5,7 @@ import { PlayerFlag } from '../model/players.ts';
 import { advanceDay, newSeasonContext, startSeason, type SeasonContext } from '../season/seasonEngine.ts';
 import { appointManager } from './career.ts';
 import {
-  appointNationalCoach, applyIntlResult, eligibleFor, internationals, matchImportance, nameSquad, nationalTeamOf, nationName,
+  appointNationalCoach, applyIntlResult, createFriendly, eligibleFor, otherCallUps, internationals, matchImportance, nameSquad, nationalTeamOf, nationName,
   nationalOfferTerms, nationSetup, offerNationalJob, squadDue, squadOf, suggestSquad, userMatchToday, userNation, type Tournament,
 } from './internationals.ts';
 import { toggleFrame } from './nationalExtras.ts';
@@ -179,4 +179,34 @@ test('the academy: a prospect put forward counts with the youth coach, and the c
   assert.equal(line.side, side);
   assert.ok(line.recommended);
   assert.ok(lines.every((l) => store.ageOn(l.p, world.year, 181) <= 21));
+});
+
+test('one year, one level: a player called up by the seniors is not for the youth sides, and the other way round', () => {
+  const { world, ctx } = start(77);
+  const I = internationals(world);
+  const u21 = youthOf(world, 21)[0];
+  const side = u21.teams[0];
+  const nation = baseNation(side);
+  // A senior friendly whose squad is called the same day as the U21s': the seniors go first.
+  const friendly = createFriendly(world, nation, baseNation(u21.teams[1]), u21.callUpDay + 3);
+  assert.equal(friendly.callUpDay, u21.callUpDay);
+  runTo(world, ctx, u21.callUpDay + 1);
+  const seniors = new Set(I.tournaments.filter((t) => t.youth === undefined && t.status !== 'planned').flatMap((t) => t.squads.flatMap(([, s]) => s)));
+  const youngSeniors = squadOf(friendly, nation).filter((p) => world.players.ageOn(p, world.year, 181) <= 21);
+  for (const [, squad] of u21.squads) for (const p of squad) assert.ok(!seniors.has(p), `${world.players.fullName(p)} is in both`);
+  for (const p of youngSeniors) assert.ok(!squadOf(u21, side).includes(p), 'the senior call-up won the day');
+
+  // And the other way: the U21s called this year are not the seniors' to call at the summer's major.
+  const major = I.tournaments.find((t) => t.youth === undefined && t.kind === 'continental' && t.teams.includes(nation))!;
+  const blocked = otherCallUps(world, major);
+  const u21Player = squadOf(u21, side)[0];
+  assert.match(blocked.get(u21Player) ?? '', /Called up to the U21 squad/);
+  runTo(world, ctx, friendly.startDay + 1);
+  appointNationalCoach(world, nation);
+  const mine = suggestSquad(world, nation);
+  assert.ok(mine.every((p) => !blocked.has(p)), 'the assistant leaves them out');
+  const forced = [...mine.slice(0, 13), u21Player];
+  assert.match(nameSquad(world, forced) ?? '', /Called up to the U21 squad/);
+  runTo(world, ctx, major.callUpDay + 1);
+  for (const [, squad] of major.squads) for (const p of squad) assert.ok(!blocked.has(p), 'no U21 at the senior major');
 });

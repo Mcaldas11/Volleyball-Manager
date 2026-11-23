@@ -145,7 +145,8 @@ export function stanceOnAgreedSale(world: World, offer: IncomingOffer, agreed: b
   if (stance === 'keen') return true;
   if (stance === 'staying') {
     const goes = agreed && hash01(p, offer.id * 13 + 5) < 0.15;
-    if (!goes) store.morale[p] = Math.max(0, store.morale[p] - 6);
+    // A release clause paid is not the club selling him: it had no say. Staying hurts nothing then.
+    if (!goes && offer.clause !== true) store.morale[p] = Math.max(0, store.morale[p] - 6);
     return goes;
   }
   return agreed;

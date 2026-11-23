@@ -24,6 +24,7 @@ import { POSITION_NAMES, type Position } from '../model/positions.ts';
 import { StaffRole, type Staff } from '../model/staff.ts';
 import { MONTH_NAMES, MONTH_STARTS } from './inbox.ts';
 import type { FanBrief } from './fans.ts';
+import { arrivalQuote, awardQuote, canSpeak, renewalQuote, withQuote, type PlayerQuote } from './playerVoices.ts';
 import { highlightAwards, managersLeague, playerOfMonthMessage, type MonthPlayerLine } from './monthAwards.ts';
 import { stageLabel } from '../season/cups.ts';
 import {
@@ -51,6 +52,8 @@ export interface NewsItem {
   competitionId?: number;
   /** What the fans' comments under it turn on — absent on stories from before they had their say. */
   fans?: FanBrief;
+  /** A player's own words in it — see playerVoices.ts. */
+  quote?: PlayerQuote;
 }
 
 /** How many stories the feed keeps. */
@@ -271,8 +274,8 @@ export function newsSignings(world: World, signings: ReadonlyArray<{ playerIdx: 
     const to = world.clubs[s.to];
     const from = world.clubs[s.from];
     const name = store.fullName(s.playerIdx);
-    postNews(world, {
-      kind: 'transfer',
+    const item = {
+      kind: 'transfer' as const,
       headline: `${name} joins ${to.name}${from !== undefined ? ` from ${from.name}` : ''}`,
       body: `${to.name} have signed ${name}, ${describe(world, s.playerIdx)}, on a free transfer` +
         `${from !== undefined ? ` after his contract at ${from.name} ran out` : ''}. ` +
@@ -281,8 +284,10 @@ export function newsSignings(world: World, signings: ReadonlyArray<{ playerIdx: 
       clubId: to.id,
       otherClubId: from?.id,
       playerIdx: s.playerIdx,
-      fans: { story: 'signing', club: to.id, other: from?.id, player: s.playerIdx },
-    });
+      fans: { story: 'signing' as const, club: to.id, other: from?.id, player: s.playerIdx },
+    };
+    const said = arrivalQuote(world, s.playerIdx, s.from, s.to);
+    postNews(world, said !== null ? withQuote(world, item, s.playerIdx, said, `${name} on the move`) : item);
   }
 }
 
@@ -294,8 +299,8 @@ export function newsTransfer(world: World, p: number, fromId: number, toId: numb
   if (to === undefined || (!own && !followed(world, to))) return;
   const name = world.players.fullName(p);
   const price = fee >= 1_000_000 ? `€${(fee / 1_000_000).toFixed(1)}M` : fee > 0 ? `€${Math.round(fee / 1000)}k` : '';
-  postNews(world, {
-    kind: 'transfer',
+  const item = {
+    kind: 'transfer' as const,
     headline: `${name} joins ${to.name}${from !== undefined ? ` from ${from.name}` : ''}`,
     body: `${to.name} have signed ${name}, ${describe(world, p)}` +
       `${from !== undefined ? ` from ${from.name}` : ''}${price !== '' ? ` for a fee of ${price}` : ' on a free transfer'}.` +
@@ -304,23 +309,25 @@ export function newsTransfer(world: World, p: number, fromId: number, toId: numb
     clubId: to.id,
     otherClubId: from?.id,
     playerIdx: p,
-    fans: { story: 'signing', club: to.id, other: from?.id, player: p, fee },
-  });
+    fans: { story: 'signing' as const, club: to.id, other: from?.id, player: p, fee },
+  };
+  const said = canSpeak(world, p) ? arrivalQuote(world, p, fromId, toId) : null;
+  postNews(world, said !== null ? withQuote(world, item, p, said, `${name} on the move`) : item);
 }
 
 /** A star who stays: his contract extended at a followed club. */
 export function newsExtension(world: World, club: Club, p: number): void {
   if (!followed(world, club) || club.id === world.userClubId || !starAt(world, club, p, 2)) return;
   const name = world.players.fullName(p);
-  postNews(world, {
-    kind: 'contract',
+  postNews(world, withQuote(world, {
+    kind: 'contract' as const,
     headline: `${name} commits his future to ${club.name}`,
     body: `${name}, ${describe(world, p)}, has signed a new contract with ${club.name}, ending talk of a move.`,
     nation: club.nation,
     clubId: club.id,
     playerIdx: p,
-    fans: { story: 'extension', club: club.id, player: p },
-  });
+    fans: { story: 'extension' as const, club: club.id, player: p },
+  }, p, renewalQuote(world, p, club.id), `${name} on the new contract`));
 }
 
 // ---- Injuries -----------------------------------------------------------------------------
@@ -529,8 +536,8 @@ function monthlyAwards(world: World): void {
     }
     const club = best >= 0 ? world.clubs[store.clubId[best]] : undefined;
     if (club !== undefined) {
-      postNews(world, {
-        kind: 'award',
+      const item = {
+        kind: 'award' as const,
         headline: `${store.fullName(best)} named ${comp.name} Player of the Month`,
         body: `${store.fullName(best)} of ${club.name} is the ${poss(comp.name)} Player of the Month for ${month}: ` +
           `${bestLine[2]} points in ${bestLine[0]} matches at an average rating of ${bestLine[1].toFixed(2)}.`,
@@ -538,8 +545,11 @@ function monthlyAwards(world: World): void {
         clubId: club.id,
         playerIdx: best,
         competitionId: comp.id,
-        fans: { story: 'playerAward', club: club.id, player: best },
-      });
+        fans: { story: 'playerAward' as const, club: club.id, player: best },
+      };
+      // He dedicates it: to someone at home, a teammate, the fans.
+      postNews(world, withQuote(world, item, best, awardQuote(world, best, `${comp.name} Player of the Month`),
+        `${store.fullName(best)} dedicates the award`));
     }
 
     // Coach of the month: the most wins over the month, three matches or more.

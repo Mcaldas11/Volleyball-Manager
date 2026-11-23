@@ -12,6 +12,7 @@
  * coaching staff, where what he knew as a player becomes what he teaches.
  */
 
+import { retirementQuote, withQuote } from './playerVoices.ts';
 import { Rng } from '../core/rng.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { POSITION_NAMES, type Position } from '../model/positions.ts';
@@ -129,16 +130,16 @@ export function retirementDay(world: World): void {
     .sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
   for (const p of names.slice(0, 8)) {
     const club = world.clubs[plans[p].clubId];
-    postNews(world, {
-      kind: 'retirement',
+    postNews(world, withQuote(world, {
+      kind: 'retirement' as const,
       headline: `${store.fullName(p)} to retire at the end of the season`,
       body: `${store.fullName(p)}, ${describe(world, p)} at ${club?.name ?? 'his club'}, has announced that this will be his last season.` +
         careerLine(world, p),
       nation: club?.nation ?? store.nation[p],
       clubId: club?.id,
       playerIdx: p,
-      fans: { story: 'retiring', club: club?.id, player: p },
-    });
+      fans: { story: 'retiring' as const, club: club?.id, player: p },
+    }, p, retirementQuote(world, p, false), `${store.fullName(p)} on retiring`));
   }
 
   // The manager hears about his own first.
@@ -239,16 +240,16 @@ export function farewell(world: World, p: number): void {
   const plan = retirementPlan(world, p);
   if (notable(world, p, clubId)) {
     const club = clubId >= 0 ? world.clubs[clubId] : undefined;
-    postNews(world, {
-      kind: 'retirement',
+    postNews(world, withQuote(world, {
+      kind: 'retirement' as const,
       headline: `${store.fullName(p)} retires`,
       body: `${store.fullName(p)} has played his last match${club !== undefined ? ` for ${club.name}` : ''}, at ${store.ageOn(p, world.year, 181)}.` +
         `${careerLine(world, p)}${plan?.staffRole !== undefined ? ` He stays on at the club as ${STAFF_ROLE_NAMES[plan.staffRole].toLowerCase()}.` : ''}`,
       nation: club?.nation ?? store.nation[p],
       clubId: club?.id,
       playerIdx: p,
-      fans: { story: 'retired', club: club?.id, player: p },
-    });
+      fans: { story: 'retired' as const, club: club?.id, player: p },
+    }, p, retirementQuote(world, p, true), `${store.fullName(p)} says goodbye`));
   }
   if (plan?.staffRole !== undefined && clubId >= 0) {
     const club = world.clubs[clubId];

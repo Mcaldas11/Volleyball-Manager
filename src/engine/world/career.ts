@@ -23,6 +23,7 @@
 import { calendarOf } from './calendar.ts';
 import { fixtureRivalry } from './rivals.ts';
 import { newsCoachAppointed, newsCoachSacked, newsManagerAppointed } from './news.ts';
+import { departureReactions } from './playerVoices.ts';
 import { compareTableRows, type Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import {
@@ -726,6 +727,9 @@ function leaveClub(world: World, exit: JobExit): Club | undefined {
     job.endDay = world.day;
     job.exit = exit;
   }
+  // The dressing room has its say: in the paper, and in his inbox.
+  const said = departureReactions(world, club, exit, job?.startDay ?? world.day);
+  career.reputation = clampReputation(career.reputation * said);
 
   world.talks = [];
   world.incomingOffers = [];

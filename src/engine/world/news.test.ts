@@ -39,8 +39,9 @@ test('a season makes the news: coaches, rumours, injuries, results and the month
   }
   assert.ok(news.some((n) => n.headline.includes('Player of the Month')));
   assert.ok(news.some((n) => n.headline.includes('Coach of the Month')));
-  // A paper, not a firehose: a handful of stories a week.
-  assert.ok(news.length > 60 && news.length < 400, `${news.length} stories in a season`);
+  // A paper, not a firehose: a handful of stories a week, the players' own words among them.
+  assert.ok(news.length > 60 && news.length < 460, `${news.length} stories in a season`);
+  assert.ok(news.filter((n) => n.kind === 'press' && n.quote !== undefined).length < 60, 'players speak, but not every day');
 });
 
 test('the paper covers the leagues that matter, and every story names its country', () => {

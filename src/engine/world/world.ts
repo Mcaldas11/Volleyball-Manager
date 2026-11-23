@@ -15,6 +15,7 @@ import type { Draft } from './createClub.ts';
 import type { PreContract } from './agents.ts';
 import type { ScoutMission } from './recruitment.ts';
 import type { Delegation } from './delegation.ts';
+import type { StaffHiringState } from './staffHiring.ts';
 import type { DirectorTask } from './director.ts';
 import { calendarOf, type ClubCalendar } from './calendar.ts';
 import type { ContractExtras } from './contractTerms.ts';
@@ -834,6 +835,8 @@ export interface World {
   delegation?: Partial<Delegation>;
   /** The deals handed to the Director of Football — see director.ts. */
   directorTasks?: DirectorTask[];
+  /** The staff hiring handed over: the manager's brief and the hires lined up or made — see staffHiring.ts. */
+  staffHiring?: StaffHiringState;
   /** The squad planner's transfer targets — see squadPlanner.ts. */
   squadPlan?: SquadPlanState;
   /** The monthly staff meetings, the latest last — see staffMeeting.ts. */

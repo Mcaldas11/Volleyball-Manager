@@ -17,6 +17,7 @@ import { UnemployedHome } from './Career.tsx';
 import { NewsVisual, openNewsStory } from './News.tsx';
 import arena from '../menu-arena.jpg';
 import { NationalHome } from './National.tsx';
+import { watchSides } from '../watchLive.tsx';
 
 /** The six attributes that say most about a player in each role. */
 const KEY_ATTRS: Readonly<Record<Position, readonly AttributeName[]>> = {
@@ -377,10 +378,10 @@ function ForToday(): JSX.Element {
   if (g.ownFixtureToday() === null && g.nationalMatchToday() === null) {
     const watch = g.watchableMatches()[0];
     if (watch !== undefined) {
-      const home = world.clubs[watch.home];
-      const away = world.clubs[watch.away];
+      // A club match or a national one (its id below zero): its sides named either way.
+      const [home, away] = watchSides(world, watch);
       items.push({ key: 'watch', icon: 'play', urgency: 1, go: 'fixtures', act: () => g.watchMatch(watch.id),
-        text: `Watch ${home.shortName} v ${away.shortName} live from the stands` });
+        text: `Watch ${home.short} v ${away.short} live from the stands` });
     }
   }
 

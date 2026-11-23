@@ -1,5 +1,7 @@
 import { useState, type JSX } from 'react';
-import { internationalNotes } from '../../engine/world/internationals.ts';
+import { internationalNotes, userNation, type IntlMatch, type Tournament } from '../../engine/world/internationals.ts';
+import { sideCode, sideName } from '../../engine/world/sides.ts';
+import { Flag, Segmented } from '../components.tsx';
 import { stageLabel } from '../../engine/season/cups.ts';
 import {
   FRIENDLY_NOTICE_DAYS, friendliesOf, friendlyRequests, friendlyWindow,
@@ -26,6 +28,12 @@ const LAYERS: ReadonlyArray<[Layer, string]> = [
   ['windows', 'Windows & internationals'], ['training', 'Training'], ['youth', 'U19'], ['academy', 'Academy'], ['club', 'Contracts & club'],
 ];
 const LAYERS_KEY = 'vm.calendarLayers';
+
+/** Whose matches the calendar shows: the club's, the national team's, or both mixed. */
+type TeamFilter = 'all' | 'club' | 'national';
+
+/** One of the manager's national team's matches. */
+interface NationalDate { t: Tournament; m: IntlMatch; side: number }
 
 function readLayers(): Set<Layer> {
   try {
@@ -139,26 +147,52 @@ export function CalendarScreen(): JSX.Element {
     for (const l of world.loans) if (l.parentClubId === club.id || l.loanClubId === club.id) add(l.endsOn, { kind: 'club', label: `Loan ends · ${world.players.shortName(l.playerIdx)}` });
   }
 
-  const ownOn = (day: number): Fixture[] =>
+  // The club's matches and the national team's, mixed or one of the two.
+  const [teams, setTeams] = useState<TeamFilter>('all');
+  const showClub = teams !== 'national';
+  const showNational = teams !== 'club';
+  const ownOn = (day: number): Fixture[] => (!showClub ? [] :
     (world.fixturesByDay.get(day) ?? [])
       .map((id) => world.fixtures[id])
-      .filter((f) => f.home === club.id || f.away === club.id);
+      .filter((f) => f.home === club.id || f.away === club.id));
+  // The national team's matches across the seasons the six weeks on show and the next few months span.
+  const nationalAll: NationalDate[] = [...new Set([
+    Math.floor(gridStart / DAYS_PER_SEASON), Math.floor((gridStart + 41) / DAYS_PER_SEASON), world.season,
+  ])].flatMap((s) => g.managerNationalMatches(s));
+  const hasNational = nationalAll.length > 0 || userNation(world) >= 0;
+  const nationalOn = (day: number): NationalDate[] => (showNational ? nationalAll.filter((x) => x.m.day === day) : []);
+  // Its matches are chips of their own: not repeated among the international notes.
+  const nationalLabels = new Set(nationalAll.map(({ m, side }) => `${sideName(side)} v ${sideName(m.home === side ? m.away : m.home)}`));
+  const openNational = (x: NationalDate): void => {
+    if (x.m.played) g.openIntlReport(x.m.id, true);
+    else if (x.m.day === today && g.nationalMatchToday() !== null) g.openNationalMatchday();
+    else g.openTournament(x.t.id);
+  };
 
-  const upcoming = g.ownFixtures().filter((f) => !f.played && f.day >= today).slice(0, 5);
-  const next = upcoming[0];
+  const upcomingClub = showClub ? g.ownFixtures().filter((f) => !f.played && f.day >= today).slice(0, 5) : [];
+  const upcomingNational = nationalAll.filter((x) => !x.m.played && x.m.day >= today).slice(0, 5);
+  const upcoming: Array<{ day: number; f?: Fixture; n?: NationalDate }> = [
+    ...upcomingClub.map((f) => ({ day: f.day, f })),
+    ...upcomingNational.map((n) => ({ day: n.m.day, n })),
+  ].sort((a, b) => a.day - b.day).slice(0, 5);
+  const next = upcomingClub[0];
+  const nextNat = upcomingNational[0];
   // The next date worth knowing: a match, or a window opening or shutting.
   let nextNote: { day: number; label: string } | null = null;
   for (let d = today; d < today + 200 && nextNote === null; d++) {
     const n = notesOn(d)[0];
     if (n !== undefined) nextNote = { day: d, label: n.label };
   }
-  const nextStop = next !== undefined && (nextNote === null || next.day <= nextNote.day)
+  const clubStop = next !== undefined && (nextNote === null || next.day <= nextNote.day)
     ? { day: next.day, label: `${next.home === club.id ? 'vs' : 'at'} ${world.clubs[next.home === club.id ? next.away : next.home]?.name ?? '—'}` }
     : nextNote;
+  const nextStop = nextNat !== undefined && (clubStop === null || nextNat.m.day < clubStop.day)
+    ? { day: nextNat.m.day, label: `${sideName(nextNat.side)} v ${sideName(nextNat.m.home === nextNat.side ? nextNat.m.away : nextNat.m.home)}` }
+    : clubStop;
 
   const monthTitle = formatDate(monthDate, 'monthYear');
   const notesFor = (day: number): Array<{ label: string; kind: string }> => (day >= 0
-    ? [...(layers.has('windows') ? [...notesOn(day), ...internationalNotes(world, day)] : []), ...(layerNotes.get(day) ?? [])]
+    ? [...(layers.has('windows') ? [...notesOn(day), ...internationalNotes(world, day).filter((n) => !nationalLabels.has(n.label))] : []), ...(layerNotes.get(day) ?? [])]
     : []);
   const selectedNotes = notesFor(selectedDay);
   const noteScreen = (n: { label: string; kind: string }): ScreenId => (n.kind === 'training' ? 'training'
@@ -214,6 +248,10 @@ export function CalendarScreen(): JSX.Element {
           <button className="cal-full" onClick={() => g.go('fixtures')}>Full schedule</button>
         </header>
         <div className="cal-layers" title="What the calendar shows besides the matches">
+          {hasNational && (
+            <Segmented<TeamFilter> size="sm" value={teams} onChange={setTeams}
+              options={[['all', 'All matches'], ['club', 'Club'], ['national', 'National']]} />
+          )}
           {LAYERS.map(([l, label]) => (
             <button key={l} className={`cal-layer ${l}${layers.has(l) ? ' on' : ''}`} onClick={() => toggle(l)} aria-pressed={layers.has(l)}>{label}</button>
           ))}
@@ -247,6 +285,7 @@ export function CalendarScreen(): JSX.Element {
                       {day === today && <span className="cal-today">Today</span>}
                     </span>
                     {fixtures.map((f) => <FixtureChip key={f.id} fixture={f} />)}
+                    {nationalOn(day).map((x) => <NationalChip key={`n${x.m.id}`} date={x} onOpen={() => openNational(x)} />)}
                     {notes.map((n, i) => <span key={`${n.label}-${i}`} className={`cal-note ${n.kind}`} title={n.label}>{n.label}</span>)}
                   </div>
                 );
@@ -257,8 +296,9 @@ export function CalendarScreen(): JSX.Element {
           <div className="calendar-agenda">
             {cells.filter((day) => g.calendarDate(day)?.getUTCMonth() === month).map((day) => {
               const fixtures = day >= 0 ? ownOn(day) : [];
+              const nats = nationalOn(day);
               const notes = notesFor(day);
-              if (fixtures.length === 0 && notes.length === 0 && day !== today) return null;
+              if (fixtures.length === 0 && nats.length === 0 && notes.length === 0 && day !== today) return null;
               const date = g.calendarDate(day);
               return (
                 <section key={day} className={`calendar-agenda-day${day === today ? ' today' : ''}`}>
@@ -268,8 +308,9 @@ export function CalendarScreen(): JSX.Element {
                   </button>
                   <div className="calendar-agenda-content">
                     {fixtures.map((f) => <FixtureChip key={f.id} fixture={f} />)}
+                    {nats.map((x) => <NationalChip key={`n${x.m.id}`} date={x} onOpen={() => openNational(x)} />)}
                     {notes.map((n, i) => <span key={i} className={`cal-note ${n.kind}`}>{n.label}</span>)}
-                    {fixtures.length === 0 && notes.length === 0 && <span className="faint">Nothing scheduled</span>}
+                    {fixtures.length === 0 && nats.length === 0 && notes.length === 0 && <span className="faint">Nothing scheduled</span>}
                   </div>
                 </section>
               );
@@ -286,12 +327,27 @@ export function CalendarScreen(): JSX.Element {
             {ownOn(selectedDay).map((f) => {
               const opp = world.clubs[f.home === club.id ? f.away : f.home];
               return (
-                <button key={f.id} className="calendar-event" onClick={() => (f.played ? g.go('fixtures') : g.go('lineup'))}>
+                <button key={f.id} className="calendar-event" onClick={() => (f.played ? g.openMatchReport(f.id, true) : g.go('lineup'))}>
                   <Icon name="ball" size={19} />
                   <span>
                     <b>{opp?.name ?? 'Match'}</b>
                     <small>{world.competitions[f.competitionId]?.name} · {f.home === club.id ? 'Home' : 'Away'}</small>
                     <small>{f.played ? `${f.homeSets}–${f.awaySets}` : 'Prepare match'}</small>
+                  </span>
+                </button>
+              );
+            })}
+            {nationalOn(selectedDay).map((x) => {
+              const opp = x.m.home === x.side ? x.m.away : x.m.home;
+              const us = x.m.home === x.side ? x.m.homeSets : x.m.awaySets;
+              const them = x.m.home === x.side ? x.m.awaySets : x.m.homeSets;
+              return (
+                <button key={`n${x.m.id}`} className="calendar-event national" onClick={() => openNational(x)}>
+                  <Flag nation={x.side} />
+                  <span>
+                    <b>{sideName(x.side)} v {sideName(opp)}</b>
+                    <small>{x.t.name} · {x.m.stage}</small>
+                    <small>{x.m.played ? `${us > them ? 'Won' : 'Lost'} ${us}–${them} · match report` : x.m.day === today ? 'Prepare match' : 'Open the tournament'}</small>
                   </span>
                 </button>
               );
@@ -302,7 +358,7 @@ export function CalendarScreen(): JSX.Element {
                 <span><b>{n.label}</b><small>Open workspace</small></span>
               </button>
             ))}
-            {ownOn(selectedDay).length === 0 && selectedNotes.length === 0 && <p className="hm-empty">No events in the selected layers.</p>}
+            {ownOn(selectedDay).length === 0 && nationalOn(selectedDay).length === 0 && selectedNotes.length === 0 && <p className="hm-empty">No events in the selected layers.</p>}
           </div>
           <div className="calendar-day-actions">
             <button onClick={() => g.go('training')}><Icon name="training" size={14} /> Training plan</button>
@@ -380,7 +436,27 @@ export function CalendarScreen(): JSX.Element {
         <section className="cal-card">
           <span className="cal-card-title">Upcoming matches</span>
           {upcoming.length === 0 && <p className="hm-empty">No fixtures scheduled.</p>}
-          {upcoming.map((f) => {
+          {upcoming.map(({ f, n }) => {
+            if (n !== undefined) {
+              const date = g.calendarDate(n.m.day);
+              const opp = n.m.home === n.side ? n.m.away : n.m.home;
+              return (
+                <div key={`n${n.m.id}`} className="cal-up national">
+                  <span className="cal-up-date">
+                    <b>{date?.getUTCDate()}</b>
+                    <span>{date !== null ? formatDate(date, 'weekday') : ''}</span>
+                  </span>
+                  <span className="cal-up-main">
+                    <strong className="club-link" onClick={() => g.openTournament(n.t.id)}>
+                      <Flag nation={n.side} /> {sideCode(n.side)} v {sideName(opp)}
+                    </strong>
+                    <span>{n.t.name} · {n.m.stage}</span>
+                  </span>
+                  {n === nextNat && <span className="cal-up-next">Next</span>}
+                </div>
+              );
+            }
+            if (f === undefined) return null;
             const isHome = f.home === club.id;
             const opp = world.clubs[isHome ? f.away : f.home];
             const comp = world.competitions[f.competitionId];
@@ -412,6 +488,7 @@ export function CalendarScreen(): JSX.Element {
           <span><b className="lg-continental">Continental</b>: Champions Cup and the like</span>
           <span><b className="lg-world">World</b>: World Club Cup</span>
           <span><b className="lg-friendly">Friendly</b>: pre-season friendly</span>
+          {hasNational && <span><b className="lg-national">National</b>: your national team's match</span>}
           <span><b className="lg-deadline">Deadline</b>: transfer window closes</span>
           <span><b className="lg-training">Training</b>: the session planned</span>
           <span><b className="lg-youth">U19</b>: the academy side's match</span>
@@ -437,6 +514,22 @@ export function shortCompName(comp: Competition | undefined): string {
   return comp.organizer ?? 'Cont.';
 }
 
+/** One of the national team's matches on the calendar, its flag first: a result opens its report. */
+function NationalChip({ date: { m, side }, onOpen }: { date: NationalDate; onOpen: () => void }): JSX.Element {
+  const opp = m.home === side ? m.away : m.home;
+  const us = m.home === side ? m.homeSets : m.awaySets;
+  const them = m.home === side ? m.awaySets : m.homeSets;
+  const name = `${sideCode(side)} v ${sideName(opp)}`;
+  const won = us > them;
+  return (
+    <button className={`cal-chip national${m.played ? ` result ${won ? 'win' : 'loss'}` : ''}`}
+      title={`${sideName(side)} v ${sideName(opp)}, ${m.stage}${m.played ? `: ${us}-${them}, open the match report` : ''}`}
+      onClick={(e) => { e.stopPropagation(); onOpen(); }}>
+      <Flag nation={side} />{m.played ? ` ${won ? 'W' : 'L'} ${us}-${them} · ` : ' '}{name}
+    </button>
+  );
+}
+
 function FixtureChip({ fixture: f }: { fixture: Fixture }): JSX.Element {
   const g = useGame();
   const world = g.world!;
@@ -454,9 +547,10 @@ function FixtureChip({ fixture: f }: { fixture: Fixture }): JSX.Element {
     const them = isHome ? f.awaySets : f.homeSets;
     const won = us > them;
     return (
-      <span className={`cal-chip result ${won ? 'win' : 'loss'}`} title={`${comp?.name ?? ''}: ${opp?.name ?? ''} ${us}-${them}`}>
+      <button className={`cal-chip result ${won ? 'win' : 'loss'}`} title={`${comp?.name ?? ''}: ${opp?.name ?? ''} ${us}-${them}, open the match report`}
+        onClick={(e) => { e.stopPropagation(); g.openMatchReport(f.id, true); }}>
         {won ? 'W' : 'L'} {us}-{them} · {name}
-      </span>
+      </button>
     );
   }
   return (

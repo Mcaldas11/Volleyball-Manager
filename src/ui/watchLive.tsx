@@ -6,10 +6,11 @@
 
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { createPortal } from 'react-dom';
-import type { WatchAngle } from '../engine/season/spectator.ts';
+import { intlTournamentOf, type WatchAngle } from '../engine/season/spectator.ts';
 import { nationName } from '../engine/world/internationals.ts';
-import type { Fixture } from '../engine/world/world.ts';
-import { ClubCrest } from './components.tsx';
+import { sideCode, sideName } from '../engine/world/sides.ts';
+import type { Fixture, World } from '../engine/world/world.ts';
+import { ClubCrest, Flag } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
 import { pageRect, pageSize } from './zoom.ts';
@@ -22,8 +23,27 @@ export function watchReasonText(angle: WatchAngle | null): string {
     case 'national': return `${angle.players.length} ${nationName(angle.nation)} player${angle.players.length === 1 ? '' : 's'}`;
     case 'shortlist': return `${angle.players.length} on your shortlist`;
     case 'job': return angle.open ? 'No head coach there, be seen' : '';
+    case 'clubPlayers': return `${angle.players.length} of your player${angle.players.length === 1 ? '' : 's'} playing`;
+    case 'rival': return `Scout ${nationName(angle.nation)}`;
     default: return '';
   }
+}
+
+/** One side of a match on the list: a club, or a national team (its fixture's id below zero). */
+interface WatchSide { name: string; short: string; emblem: (size: number) => JSX.Element }
+
+export function watchSides(world: World, f: Fixture): [WatchSide, WatchSide] {
+  const side = (id: number): WatchSide => {
+    if (f.id < 0) return { name: sideName(id), short: sideCode(id), emblem: () => <Flag nation={id} /> };
+    const c = world.clubs[id];
+    return { name: c?.name ?? '?', short: c?.shortName ?? '?', emblem: (size) => <ClubCrest club={c} size={size} /> };
+  };
+  return [side(f.home), side(f.away)];
+}
+
+/** The competition a match on the list is in: a national team's, by its tournament's name. */
+function watchCompetition(world: World, f: Fixture): string {
+  return intlTournamentOf(world, f)?.name ?? world.competitions[f.competitionId]?.name ?? '';
 }
 
 /** "Watch live" beside one of today's matches — only while it can be watched. */
@@ -43,17 +63,16 @@ export function WatchLiveButton({ fixture, compact = false }: { fixture: Fixture
 export function WatchMatchItem({ fixture, onPick }: { fixture: Fixture; onPick: () => void }): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const home = world.clubs[fixture.home];
-  const away = world.clubs[fixture.away];
+  const [home, away] = watchSides(world, fixture);
   const reason = watchReasonText(g.watchReason(fixture));
-  const comp = world.competitions[fixture.competitionId]?.name ?? '';
+  const comp = watchCompetition(world, fixture);
   return (
     <button className="watch-live-item" onClick={() => { onPick(); g.watchMatch(fixture.id); }}>
       <span className="watch-live-crests">
-        <ClubCrest club={home} size={18} /><ClubCrest club={away} size={18} />
+        {home.emblem(18)}{away.emblem(18)}
       </span>
       <span className="menu-pop-stack">
-        <span>{home.shortName} v {away.shortName}</span>
+        <span>{home.short} v {away.short}</span>
         <span className="faint">{reason !== '' ? `${reason} · ${comp}` : comp}</span>
       </span>
     </button>
@@ -63,9 +82,8 @@ export function WatchMatchItem({ fixture, onPick }: { fixture: Fixture; onPick: 
 /** Words a search can find a match by: both clubs, their short names, and the competition. */
 function searchText(g: ReturnType<typeof useGame>, f: Fixture): string {
   const w = g.world!;
-  const h = w.clubs[f.home];
-  const a = w.clubs[f.away];
-  return fold(`${h.name} ${h.shortName} ${a.name} ${a.shortName} ${w.competitions[f.competitionId]?.name ?? ''}`);
+  const [h, a] = watchSides(w, f);
+  return fold(`${h.name} ${h.short} ${a.name} ${a.short} ${watchCompetition(w, f)}`);
 }
 
 /** Lower case, accents gone: "Kraków" is found by "krakow". */
@@ -134,14 +152,14 @@ export function WatchLiveMenu({ align = 'right', label = 'Watch live' }: { align
   const groups = new Map<string, typeof shown>();
   for (const x of shown) {
     if (watchReasonText(x.angle) !== '') continue;
-    const name = g.world!.competitions[x.fixture.competitionId]?.name ?? 'Other';
+    const name = watchCompetition(g.world!, x.fixture) || 'Other';
     groups.set(name, [...(groups.get(name) ?? []), x]);
   }
 
   return (
     <div className="watch-live-menu">
       <button ref={trigger} className={`sm watch-live-trigger${open ? ' on' : ''}`} onClick={() => (open ? close() : setOpen(true))}
-        title="Today's matches of other clubs, live from the stands">
+        title="Today's matches of other clubs and national teams, live from the stands">
         <Icon name="play" size={12} /> {label} <span className="watch-live-count">{count}</span> <Icon name="chevronDown" size={12} />
       </button>
       {open && at !== null && createPortal(
@@ -153,7 +171,7 @@ export function WatchLiveMenu({ align = 'right', label = 'Watch live' }: { align
           </div>
           <label className="watch-live-search">
             <Icon name="search" size={14} />
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search a club or competition" spellCheck={false} />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search a club, nation or competition" spellCheck={false} />
             {query !== '' && <button className="icon-btn" title="Clear" onClick={() => setQuery('')}><Icon name="close" size={13} /></button>}
           </label>
           <div className="watch-live-list">
@@ -185,14 +203,13 @@ export function WatchLiveMenu({ align = 'right', label = 'Watch live' }: { align
 function WatchRow({ fixture, reason, onPick }: { fixture: Fixture; reason?: string; onPick: () => void }): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const home = world.clubs[fixture.home];
-  const away = world.clubs[fixture.away];
-  const comp = world.competitions[fixture.competitionId]?.name ?? '';
+  const [home, away] = watchSides(world, fixture);
+  const comp = watchCompetition(world, fixture);
   return (
     <button className="watch-live-row" onClick={() => { onPick(); g.watchMatch(fixture.id); }}>
-      <span className="watch-live-side home"><span>{home.name}</span><ClubCrest club={home} size={22} /></span>
+      <span className="watch-live-side home"><span>{home.name}</span>{home.emblem(22)}</span>
       <span className="watch-live-v">v</span>
-      <span className="watch-live-side away"><ClubCrest club={away} size={22} /><span>{away.name}</span></span>
+      <span className="watch-live-side away">{away.emblem(22)}<span>{away.name}</span></span>
       <span className="watch-live-go"><Icon name="play" size={12} /></span>
       {reason !== undefined && <span className="watch-live-why"><Icon name="star" size={11} /> {reason} · <span className="faint">{comp}</span></span>}
     </button>

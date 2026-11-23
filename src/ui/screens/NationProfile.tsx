@@ -156,7 +156,7 @@ export function NationProfile(): JSX.Element | null {
             const us = home ? m.homeSets : m.awaySets;
             const them = home ? m.awaySets : m.homeSets;
             return (
-              <div key={`${t.id}-${m.id}`} className="nation-result" onClick={() => g.openTournament(t.id)}>
+              <div key={`${t.id}-${m.id}`} className="nation-result" title="Open the match report" onClick={() => g.openIntlReport(m.id, true)}>
                 <span className="nation-result-main">
                   <span className="nation-result-opp"><Flag nation={opp} /> {sideName(opp)}</span>
                   <span className="faint">{t.name} · {m.stage}</span>

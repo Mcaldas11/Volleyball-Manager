@@ -12,10 +12,13 @@ import { aggregateTeam, sideOutPct, breakPointPct } from '../../engine/match/sta
 import type { Position } from '../../engine/model/positions.ts';
 import { playoffBandSizes, seriesScore } from '../../engine/season/playoffs.ts';
 import { knockoutRoundName, knockoutRounds, stageLabel } from '../../engine/season/cups.ts';
-import type { Competition, PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
+import type { Competition, Fixture, PlayoffGroup, PlayoffTie, World } from '../../engine/world/world.ts';
 import {
-  Card, ClubCrest, ClubLink, Empty, FormGuide, PlayerLink, RatingBadge, Segmented, StatTile,
+  Card, ClubCrest, ClubLink, Empty, Flag, FormGuide, PlayerLink, RatingBadge, Segmented, StatTile,
 } from '../components.tsx';
+import { findIntlMatch, userNation, type IntlMatch, type Tournament } from '../../engine/world/internationals.ts';
+import { intlFixture } from '../../engine/season/spectator.ts';
+import { sideCode, sideName } from '../../engine/world/sides.ts';
 import { useGame, type WatchedMatch } from '../state.ts';
 import { CompetitionStatsView } from '../competitionStats.tsx';
 import { Dropdown } from '../dropdown.tsx';
@@ -25,43 +28,61 @@ import { seasonLabel } from './Squad.tsx';
 
 type NameLookup = { shortName: (i: number) => string };
 
+/** One row of the manager's schedule: a club match, or a national team's (its fixture's id below zero). */
+type ScheduleRow =
+  | { kind: 'club'; f: Fixture; ours: number }
+  | { kind: 'national'; f: Fixture; t: Tournament; m: IntlMatch; ours: number };
+
+type ScheduleFilter = 'all' | 'club' | 'national';
+
 /**
  * The manager's matches, a season at a time — this one first, any before it
- * a pick away. A match already played opens its report beside the list.
+ * a pick away: his club's and his national team's together, in date order,
+ * each marked by its crest or flag. A match already played opens its report
+ * beside the list.
  */
 export function FixturesScreen(): JSX.Element {
   const g = useGame();
   const world = g.world!;
-  const seasons = g.managerSeasons();
+  const intlSeasons = [...new Set((world.internationals?.tournaments ?? []).map((t) => t.season))];
+  const seasons = [...new Set([...g.managerSeasons(), ...intlSeasons.filter((s) => g.managerNationalMatches(s).length > 0)])]
+    .sort((a, b) => b - a);
   const [season, setSeason] = useState(world.season);
-  const fixtures = g.managerFixtures(season);
+  const [filter, setFilter] = useState<ScheduleFilter>('all');
+  const clubFixtures = g.managerFixtures(season);
+  const nationalMatches = g.managerNationalMatches(season);
+  const hasNational = nationalMatches.length > 0 || userNation(world) >= 0;
   const watched = g.reviewLast();
   // Which side of each match was his: the club he had charge of then.
   const jobs = world.career.jobs;
-  const oursAt = (f: (typeof fixtures)[number]): number => {
+  const oursAt = (f: Fixture): number => {
     const job = jobs.find((j) => (f.home === j.clubId || f.away === j.clubId) && f.day >= j.startDay && (j.endDay < 0 || f.day <= j.endDay));
     return job?.clubId ?? world.userClubId;
   };
-  const played = fixtures.filter((f) => f.played);
-  const wins = played.filter((f) => {
-    const isHome = f.home === oursAt(f);
-    return isHome ? f.homeSets > f.awaySets : f.awaySets > f.homeSets;
-  }).length;
+  const allRows: ScheduleRow[] = [
+    ...clubFixtures.map((f): ScheduleRow => ({ kind: 'club', f, ours: oursAt(f) })),
+    ...nationalMatches.map(({ t, m, side }): ScheduleRow => ({ kind: 'national', f: intlFixture(t, m), t, m, ours: side })),
+  ].sort((a, b) => a.f.day - b.f.day || (a.kind === b.kind ? 0 : a.kind === 'club' ? -1 : 1));
+  const rows = allRows.filter((r) => filter === 'all' || r.kind === filter);
+  const isWin = (r: ScheduleRow): boolean => (r.f.home === r.ours ? r.f.homeSets > r.f.awaySets : r.f.awaySets > r.f.homeSets);
+  const played = rows.filter((r) => r.f.played);
+  const wins = played.filter(isWin).length;
   const current = season === world.season;
-  const nextIdx = current ? fixtures.findIndex((f) => !f.played) : -1;
+  const nextIdx = current ? rows.findIndex((r) => !r.f.played) : -1;
   // Opened at the next match, the ones just played above it.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const row = scrollRef.current?.querySelector('tr.next-fixture');
     const box = scrollRef.current;
     if (row instanceof HTMLElement && box !== null) box.scrollTop = Math.max(0, row.offsetTop - box.clientHeight / 2);
-  }, [season]);
+  }, [season, filter]);
+  const what = filter === 'club' ? 'club matches' : filter === 'national' ? 'national team matches' : 'matches';
 
   return (
     <>
       <div className="tiles">
-        <StatTile label="Played" value={`${played.length}/${fixtures.length}`}
-          sub={current ? 'matches this season' : `matches in ${seasonLabel(world, season)}`} />
+        <StatTile label="Played" value={`${played.length}/${rows.length}`}
+          sub={current ? `${what} this season` : `${what} in ${seasonLabel(world, season)}`} />
         <StatTile label="Won" value={wins} tone="good" />
         <StatTile label="Lost" value={played.length - wins} tone={played.length - wins > 0 ? 'bad' : undefined} />
         <StatTile
@@ -74,6 +95,10 @@ export function FixturesScreen(): JSX.Element {
         <Card title="Schedule" icon="schedule" flush
           actions={(
             <>
+              {hasNational && (
+                <Segmented<ScheduleFilter> size="sm" value={filter} onChange={setFilter}
+                  options={[['all', 'All'], ['club', 'Club'], ['national', 'National']]} />
+              )}
               <WatchLiveMenu />
               <Dropdown<number>
                 size="sm"
@@ -89,6 +114,7 @@ export function FixturesScreen(): JSX.Element {
               <thead>
                 <tr>
                   <th>Date</th>
+                  {hasNational && <th className="fx-team" title="Club or national team">Team</th>}
                   <th>Competition</th>
                   <th className="fx-stage">Stage</th>
                   <th>Venue</th>
@@ -98,30 +124,46 @@ export function FixturesScreen(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {fixtures.length === 0 && (
-                  <tr><td colSpan={7} className="faint">No matches that season.</td></tr>
+                {rows.length === 0 && (
+                  <tr><td colSpan={hasNational ? 8 : 7} className="faint">No {what} that season.</td></tr>
                 )}
-                {fixtures.map((f, i) => {
-                  const isHome = f.home === oursAt(f);
-                  const opponent = world.clubs[isHome ? f.away : f.home];
+                {rows.map((r, i) => {
+                  const f = r.f;
+                  const isHome = f.home === r.ours;
+                  const opp = isHome ? f.away : f.home;
                   const comp = world.competitions[f.competitionId];
-                  const won = f.played && ((isHome && f.homeSets > f.awaySets) || (!isHome && f.awaySets > f.homeSets));
+                  const won = f.played && isWin(r);
                   const open = watched?.fixture.id === f.id;
+                  const national = r.kind === 'national';
+                  // A national team plays at home only in its own country.
+                  const venue = !national ? (isHome ? 'home' : 'away') : r.t.host === r.ours ? 'home' : r.t.host === opp ? 'away' : 'neutral';
                   return (
-                    <tr key={f.id}
-                      className={`${i === nextIdx ? 'next-fixture' : ''}${f.played ? ' clickable' : ''}${open ? ' selected' : ''}`}
+                    <tr key={`${r.kind}-${f.id}`}
+                      className={`${i === nextIdx ? 'next-fixture' : ''}${f.played ? ' clickable' : ''}${open ? ' selected' : ''}${national ? ' fx-national' : ''}`}
                       title={f.played ? 'Open the match report' : undefined}
                       onClick={f.played ? () => g.openMatchReport(f.id) : undefined}>
                       <td className="dim">
                         {g.weekdayLabelForDay(f.day)} {g.dateLabelForDay(f.day)}
                         {i === nextIdx && <span className="next-tag">Next</span>}
                       </td>
-                      <td className={comp?.kind === 'league' ? 'faint' : 'strong'}>{comp?.name ?? ''}</td>
-                      <td className="faint fx-stage">{stageLabel(world, f)}</td>
-                      <td><span className={`venue-tag ${isHome ? 'home' : 'away'}`}>{isHome ? 'Home' : 'Away'}</span></td>
+                      {hasNational && (
+                        <td className="fx-team">
+                          {r.kind === 'national'
+                            ? <span className="fx-team-tag national" title={`${sideName(r.ours)}, national team`}><Flag nation={r.ours} /> {sideCode(r.ours)}</span>
+                            : (
+                              <span className="fx-team-tag club" title={`${world.clubs[r.ours]?.name ?? ''}, club`}>
+                                {world.clubs[r.ours] !== undefined && <ClubCrest club={world.clubs[r.ours]} size={16} />} {world.clubs[r.ours]?.shortName ?? ''}
+                              </span>
+                            )}
+                        </td>
+                      )}
+                      <td className={national || comp?.kind !== 'league' ? 'strong' : 'faint'} title={r.kind === 'national' ? r.t.name : comp?.name}>{r.kind === 'national' ? r.t.name : comp?.name ?? ''}</td>
+                      <td className="faint fx-stage">{r.kind === 'national' ? r.m.stage : stageLabel(world, f)}</td>
+                      <td><span className={`venue-tag ${venue === 'neutral' ? 'away' : venue}`}>{venue === 'home' ? 'Home' : venue === 'away' ? 'Away' : 'Neutral'}</span></td>
                       <td>
-                        {opponent !== undefined ? <ClubLink id={opponent.id} /> : '—'}
-                        <RivalTag kind={fixtureRivalry(world, f)} />
+                        {national
+                          ? <span className="intl-nation"><Flag nation={opp} /> {sideName(opp)}</span>
+                          : <>{world.clubs[opp] !== undefined ? <ClubLink id={opp} /> : '—'}<RivalTag kind={fixtureRivalry(world, f)} /></>}
                       </td>
                       <td>
                         {f.played
@@ -168,10 +210,16 @@ export function MatchScreen({ onClose }: { onClose?: () => void } = {}): JSX.Ele
 
   const { result, homeName, awayName } = watched;
   const world = g.world!;
-  const homeClub = world.clubs[watched.fixture.home];
-  const awayClub = world.clubs[watched.fixture.away];
+  // A national team's match: its sides are nations, its competition the tournament.
+  const national = watched.national !== undefined;
+  const homeClub = national ? undefined : world.clubs[watched.fixture.home];
+  const awayClub = national ? undefined : world.clubs[watched.fixture.away];
   const homeWon = result.homeSets > result.awaySets;
   const comp = world.competitions[watched.fixture.competitionId];
+  const intl = national ? findIntlMatch(world, watched.national!.matchId) : null;
+  const side = (id: number): JSX.Element => national
+    ? <span className="report-nation"><b>{sideName(id)}</b></span>
+    : <ClubLink id={id} crest={false} />;
   // The rally log only while it is still in memory; the box score kept for good.
   const tabs: Array<readonly [ReportTab, string]> = [
     ...(hasLog ? [['log', 'Rally log'] as const] : []),
@@ -193,12 +241,16 @@ export function MatchScreen({ onClose }: { onClose?: () => void } = {}): JSX.Ele
       )}
     >
       <div className="report-when faint">
-        {comp?.name ?? ''} · {stageLabel(world, watched.fixture)}{rivalryName(world, watched.fixture) !== null && <> · {rivalryName(world, watched.fixture)}</>} · {g.weekdayLabelForDay(watched.fixture.day)} {g.dateLabelForDay(watched.fixture.day)}
+        {national
+          ? <>{intl !== null ? `${intl.t.name} · ${intl.m.stage}` : watched.national!.title}</>
+          : <>{comp?.name ?? ''} · {stageLabel(world, watched.fixture)}{rivalryName(world, watched.fixture) !== null && <> · {rivalryName(world, watched.fixture)}</>}</>}
+        {' · '}{g.weekdayLabelForDay(watched.fixture.day)} {g.dateLabelForDay(watched.fixture.day)}
       </div>
       <div className="report-score">
         <div className={`report-team${homeWon ? ' won' : ''}`}>
           {homeClub !== undefined && <ClubCrest club={homeClub} size={44} />}
-          <ClubLink id={watched.fixture.home} crest={false} />
+          {national && <span className="side-flag report-flag"><Flag nation={watched.fixture.home} /></span>}
+          {side(watched.fixture.home)}
         </div>
         <div className="report-center">
           <div className="report-sets">
@@ -216,7 +268,8 @@ export function MatchScreen({ onClose }: { onClose?: () => void } = {}): JSX.Ele
           </div>
         </div>
         <div className={`report-team right${!homeWon ? ' won' : ''}`}>
-          <ClubLink id={watched.fixture.away} crest={false} />
+          {side(watched.fixture.away)}
+          {national && <span className="side-flag report-flag"><Flag nation={watched.fixture.away} /></span>}
           {awayClub !== undefined && <ClubCrest club={awayClub} size={44} />}
         </div>
       </div>
@@ -231,14 +284,14 @@ export function MatchScreen({ onClose }: { onClose?: () => void } = {}): JSX.Ele
         {!hasBox && (
           <p className="report-note">
             Only the score was kept of this match: it was played before match reports were saved. Every match from now on
-            keeps its box score and rotations.
+            keeps its box score and rotations{national ? ", national teams' too" : ''}.
           </p>
         )}
         {tab === 'log' && hasLog && (
           <RallyLog
             log={result.log ?? []}
-            homeCode={homeClub?.shortName ?? homeName.slice(0, 3).toUpperCase()}
-            awayCode={awayClub?.shortName ?? awayName.slice(0, 3).toUpperCase()}
+            homeCode={national ? sideCode(watched.fixture.home) : homeClub?.shortName ?? homeName.slice(0, 3).toUpperCase()}
+            awayCode={national ? sideCode(watched.fixture.away) : awayClub?.shortName ?? awayName.slice(0, 3).toUpperCase()}
           />
         )}
         {tab === 'box' && hasBox && <BoxScore />}

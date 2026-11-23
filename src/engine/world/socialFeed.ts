@@ -67,6 +67,16 @@ export function socialFeed(world: World, filter: 'all' | 'club' = 'all'): Social
     if (n.day < from) continue;
     if (filter === 'club' && n.clubId !== clubId && n.otherClubId !== clubId) continue;
     posts.push(fromStory(world, n));
+    // A player's own words: he posts them himself too.
+    const q = n.quote;
+    if (q !== undefined && q.p >= 0 && q.p < store.count) {
+      const name = store.fullName(q.p);
+      posts.push({
+        key: `q${n.id}`, day: n.day, kind: 'player', author: name, handle: `@${tag(name)}`,
+        clubId: n.clubId, p: q.p, text: q.text,
+        likes: count(n.id, 15, 1800), reposts: count(n.id, 16, 110), replies: fanComments(world, n).slice(2, 4),
+      });
+    }
   }
   if (club !== undefined) {
     const clubHandle = `@${tag(club.shortName)}official`;
@@ -94,7 +104,7 @@ export function socialFeed(world: World, filter: 'all' | 'club' = 'all'): Social
     }
     // A new signing says hello.
     for (const n of world.news) {
-      if (n.day < from || n.kind !== 'transfer' || n.playerIdx === undefined || store.clubId[n.playerIdx] !== clubId) continue;
+      if (n.day < from || n.kind !== 'transfer' || n.quote !== undefined || n.playerIdx === undefined || store.clubId[n.playerIdx] !== clubId) continue;
       posts.push({
         key: `s${n.id}`, day: n.day, kind: 'player', author: store.fullName(n.playerIdx), handle: `@${tag(store.fullName(n.playerIdx))}`,
         clubId, p: n.playerIdx, text: `Proud to join ${club.name}. Let’s make it a season to remember! 🏐`,

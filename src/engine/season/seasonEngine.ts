@@ -13,9 +13,11 @@
  * a match took.
  */
 
+import { comebackVoice, matchVoices } from '../world/playerVoices.ts';
 import { agentsDay } from '../world/agents.ts';
 import { recruitmentDay } from '../world/recruitment.ts';
 import { delegationDay } from '../world/delegation.ts';
+import { staffHiringDay } from '../world/staffHiring.ts';
 import { directorDay } from '../world/director.ts';
 import { blockedMovesDay } from '../world/blockedMoves.ts';
 import { mindGamesDay } from '../world/mindGames.ts';
@@ -405,6 +407,7 @@ export function playFixture(
   updateTable(world, fixture);
   applyMatchFinances(world, home, away, fixture);
   aftermath(world, fixture, result.homeStats, result.awayStats, true);
+  matchVoices(world, fixture, result.homeStats, result.awayStats);
   opponentsStudy(world, fixture);
 }
 
@@ -512,6 +515,7 @@ export function applyMatchResult(
   const away = world.clubs[fixture.away];
   if (home !== undefined && away !== undefined) applyMatchFinances(world, home, away, fixture);
   aftermath(world, fixture, homeStats, awayStats, true);
+  matchVoices(world, fixture, homeStats, awayStats, result.lastPoint);
   opponentsStudy(world, fixture);
 }
 
@@ -675,6 +679,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   careerDay(world);
   staffDay(world);
   processStaffDeals(world);
+  staffHiringDay(world);
   retirementDay(world);
   friendliesDay(world);
   trainingDay(world);
@@ -778,6 +783,7 @@ function dailyRecovery(world: World, store: PlayerStore): void {
     if (store.injuryDaysLeft[i] > 0) {
       store.injuryDaysLeft[i]--;
       if (store.injuryDaysLeft[i] === 0) {
+        const over = store.injuryType[i];
         store.injuryType[i] = 0;
         store.setFlag(i, PlayerFlag.Injured, false);
         // Players come back short of match fitness — how short, as the manager had him treated.
@@ -788,6 +794,8 @@ function dailyRecovery(world: World, store: PlayerStore): void {
           // One of his out on loan: his club still wants to know.
           recoveryNotice(world, i, world.clubs[store.clubId[i]]);
         }
+        // Back from a long one: he says how it was.
+        comebackVoice(world, i, over);
       }
       continue;
     }

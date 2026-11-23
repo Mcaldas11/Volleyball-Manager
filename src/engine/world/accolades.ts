@@ -14,6 +14,7 @@
  * of his league's and of the world's in his inbox.
  */
 
+import { seasonAwardStory } from './playerVoices.ts';
 import { Position } from '../model/positions.ts';
 import { finalStandingsOrder } from '../season/playoffs.ts';
 import { headCoachOf } from './career.ts';
@@ -341,6 +342,12 @@ export function seasonAwards(world: World, seasonRecord: SeasonRecord, extras: S
     const night = leagueNight(world, comp, titles);
     if (night === null) continue;
     record(world, night);
+    // The winners speak, and dedicate it.
+    for (const a of night.awards) {
+      const w = a.shortlist[0];
+      if (w?.p === undefined || (a.kind !== 'player' && a.kind !== 'young')) continue;
+      seasonAwardStory(world, w.p, `${comp.name} ${a.kind === 'player' ? 'Player' : 'Young Player'} of the Season`, comp.id);
+    }
     if (comp.id === own) announce(world, night, comp.organizer ?? comp.name, `${comp.name} awards`);
   }
   const top = leagues.filter((c) => c.tier <= 1);
@@ -351,6 +358,7 @@ export function seasonAwards(world: World, seasonRecord: SeasonRecord, extras: S
   // The World Player of the Year is the season's, for the record books.
   const best = night.awards.find((a) => a.kind === 'player')?.shortlist[0];
   if (best?.p !== undefined) seasonRecord.playerOfTheYear = best.p;
+  if (best?.p !== undefined) seasonAwardStory(world, best.p, 'World Player of the Year');
   const young = night.awards.find((a) => a.kind === 'young')?.shortlist[0];
   if (young?.p !== undefined) seasonRecord.youngPlayerOfTheYear = young.p;
   const y = world.startYear + world.season;

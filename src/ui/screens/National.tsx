@@ -11,7 +11,7 @@ import { useMemo, useState, type JSX } from 'react';
 import { Position, POSITION_SHORT } from '../../engine/model/positions.ts';
 import { Formation, FORMATION_NAMES } from '../../engine/match/tactics.ts';
 import {
-  capsFor, eligibleFor, nationalTeamOf, nextTournamentFor, rankingFor, recentForm, sideRank, sideScore, squadOf, squadProblem,
+  capsFor, eligibleFor, nationalTeamOf, otherCallUps, nextTournamentFor, rankingFor, recentForm, sideRank, sideScore, squadOf, squadProblem,
   SQUAD_SHAPE, SQUAD_SIZE, userNation, type IntlMatch, type Tournament,
 } from '../../engine/world/internationals.ts';
 import { baseNation, isYouthSide, sideAge, sideSuffix, youthSide, type YouthAge } from '../../engine/world/sides.ts';
@@ -79,10 +79,14 @@ export function SquadPicker({ t, nation, compact = false }: {
   const [picked, setPicked] = useState<number[]>(() => (named ? [...I!.chosen!.players] : g.suggestedNationalSquad()));
   const [pos, setPos] = useState<number>(-1);
   const [sort, onSort] = useSort<PickSort>('score');
-  const problem = squadProblem(world, picked);
+
   const daysToCall = t.callUpDay - world.day;
   const age = (p: number): number => store.ageOn(p, world.year, 181);
   const outTooLong = (p: number): boolean => store.injuryDaysLeft[p] > Math.max(0, daysToCall);
+  // Called up at the other level this year: not his to pick.
+  const elsewhere = useMemo(() => otherCallUps(world, t), [world, t, world.day]);
+  const clash = picked.find((p) => elsewhere.has(p));
+  const problem = squadProblem(world, picked) ?? (clash !== undefined ? `${store.fullName(clash)}: ${elsewhere.get(clash)}.` : null);
 
   const rows = sortBy(pool.filter((p) => pos < 0 || store.position[p] === pos), sort, (p, k) => {
     switch (k) {
@@ -161,7 +165,7 @@ export function SquadPicker({ t, nation, compact = false }: {
           <tbody>
             {rows.map((p) => {
               const on = picked.includes(p);
-              const out = outTooLong(p);
+              const out = outTooLong(p) || elsewhere.has(p);
               const dual = store.nation2[p] !== 0xffff && store.nation2[p] !== store.nation[p];
               return (
                 <tr key={p} className={`clickable${on ? ' nat-on' : ''}${out ? ' nat-out' : ''}`}
@@ -181,7 +185,9 @@ export function SquadPicker({ t, nation, compact = false }: {
                   <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
                   <td className="num"><RatingBadge value={recentForm(world, p)} size="sm" /></td>
                   {!compact && <td className="num">{capsFor(world, p, nation)}</td>}
-                  <td>{store.injuryDaysLeft[p] > 0
+                  <td>{elsewhere.has(p)
+                    ? <span className="bad" title={elsewhere.get(p)}>{elsewhere.get(p)}</span>
+                    : store.injuryDaysLeft[p] > 0
                     ? <span className="bad">Injured · {store.injuryDaysLeft[p]}d</span>
                     : <Bar value={store.condition[p]} />}</td>
                   {!compact && <td className="num dim">{Math.round(sideScore(world, p, nation))}</td>}
@@ -203,7 +209,9 @@ export function NationMatch({ m, nation, host }: { m: IntlMatch; nation: number;
   const them = m.home === nation ? m.awaySets : m.homeSets;
   const today = m.day === world.day && !m.played;
   return (
-    <div className={`nat-match${m.played ? (us > them ? ' won' : ' lost') : ''}${today ? ' today' : ''}`}>
+    <div className={`nat-match${m.played ? (us > them ? ' won' : ' lost') : ''}${today ? ' today' : ''}${m.played ? ' clickable' : ''}`}
+      title={m.played ? 'Open the match report' : undefined}
+      onClick={m.played ? () => g.openIntlReport(m.id, true) : undefined}>
       <span className="nat-match-date">{g.dateLabelForDay(m.day)}</span>
       <span className="nat-match-stage">{m.stage}</span>
       <span className="intl-nation"><Flag nation={opp} /> {opp === host ? 'at' : 'v'} {nationName(opp)}</span>

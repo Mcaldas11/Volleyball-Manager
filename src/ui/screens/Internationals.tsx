@@ -24,6 +24,8 @@ import { NationCoachLine } from '../nationCoach.tsx';
 import { Icon } from '../icons.tsx';
 import { useGame } from '../state.ts';
 import { Dropdown } from '../dropdown.tsx';
+import { intlFixture } from '../../engine/season/spectator.ts';
+import { WatchLiveButton } from '../watchLive.tsx';
 
 const MEDALS = ['gold', 'silver', 'bronze'] as const;
 
@@ -735,14 +737,20 @@ function Qualification({ t, home }: { t: Tournament; home: number }): JSX.Elemen
   );
 }
 
-function MatchRow({ m }: { m: IntlMatch }): JSX.Element {
+/** A match: played, it opens its report; on today and watchable, a button to go and see it from the stands. */
+function MatchRow({ t, m }: { t: Tournament; m: IntlMatch }): JSX.Element {
+  const g = useGame();
   const homeWon = m.played && m.homeSets > m.awaySets;
   const awayWon = m.played && m.awaySets > m.homeSets;
+  const fixture = intlFixture(t, m);
+  const watch = !m.played && g.canWatchMatch(fixture);
   return (
-    <div className={`intl-match${m.bronze ? ' bronze' : ''}`}>
+    <div className={`intl-match${m.bronze ? ' bronze' : ''}${m.played ? ' clickable' : ''}`}
+      title={m.played ? 'Open the match report' : undefined}
+      onClick={m.played ? () => g.openIntlReport(m.id, true) : undefined}>
       <span className="intl-match-stage">{m.stage}</span>
       <Nation n={m.home} bold={homeWon} />
-      <b className="intl-score">{m.played ? `${m.homeSets}-${m.awaySets}` : 'v'}</b>
+      <b className="intl-score">{m.played ? `${m.homeSets}-${m.awaySets}` : watch ? <WatchLiveButton fixture={fixture} compact /> : 'v'}</b>
       <Nation n={m.away} bold={awayWon} />
     </div>
   );
@@ -760,7 +768,7 @@ function Bracket({ t }: { t: Tournament }): JSX.Element {
       {rounds.map((r) => (
         <div key={r} className="intl-round">
           {t.matches.filter((m) => m.round === r).sort((a, b) => Number(a.bronze) - Number(b.bronze) || a.slot - b.slot)
-            .map((m) => <MatchRow key={m.id} m={m} />)}
+            .map((m) => <MatchRow key={m.id} t={t} m={m} />)}
         </div>
       ))}
     </div>
@@ -779,13 +787,13 @@ function Results({ t }: { t: Tournament }): JSX.Element {
       {nextDay !== undefined && (
         <div className="intl-day">
           <span className="intl-day-label">Next · {g.dateLabelForDay(nextDay)}</span>
-          {next.filter((m) => m.day === nextDay).map((m) => <MatchRow key={m.id} m={m} />)}
+          {next.filter((m) => m.day === nextDay).map((m) => <MatchRow key={m.id} t={t} m={m} />)}
         </div>
       )}
       {days.map((d) => (
         <div key={d} className="intl-day">
           <span className="intl-day-label">{g.dateLabelForDay(d)}</span>
-          {played.filter((m) => m.day === d).map((m) => <MatchRow key={m.id} m={m} />)}
+          {played.filter((m) => m.day === d).map((m) => <MatchRow key={m.id} t={t} m={m} />)}
         </div>
       ))}
       {played.length === 0 && nextDay === undefined && <p className="intl-none">No matches yet.</p>}

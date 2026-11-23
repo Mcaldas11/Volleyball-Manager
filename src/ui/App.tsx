@@ -28,6 +28,7 @@ import { ReplayViewer } from './replay.tsx';
 import { TacticPicker } from './tacticPicker.tsx';
 import { ProcessingWindow } from './processing.tsx';
 import { TaskWindow } from './taskWindow.tsx';
+import { MatchReportWindow } from './matchReportWindow.tsx';
 import { CLUBLESS_SCREENS, NATIONAL_TEAM_SCREENS, PHASE_NAMES, useGame, type ScreenId } from './state.ts';
 import { NationalSquadScreen } from './screens/National.tsx';
 import {
@@ -164,6 +165,7 @@ export function App(): JSX.Element {
       <ErrorScreen><AppBody /></ErrorScreen>
       <TaskWindow />
       {g.settingsOpen && <PreferencesDialog />}
+      <MatchReportWindow />
       {g.prefs.showFps && <FpsCounter />}
       {splash && <Splash onDone={() => setSplash(false)} />}
     </>

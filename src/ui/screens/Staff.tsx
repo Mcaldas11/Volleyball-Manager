@@ -52,6 +52,9 @@ export function StaffScreen(): JSX.Element {
   const [role, setRole] = useState<StaffRole>(StaffRole.AssistantCoach);
   const [employed, setEmployed] = useState(false);
   const talks = g.staffTalks();
+  const hirer = g.staffHiringDelegate();
+  const brief = hirer !== null ? g.staffHiring() : null;
+  const waiting = brief?.hires.filter((h) => h.status === 'pending') ?? [];
 
   const spent = staffWageBill(world, club);
   const budget = staffBudget(club);
@@ -89,7 +92,7 @@ export function StaffScreen(): JSX.Element {
                       ...Array.from({ length: open }, (_, i) => (
                         <button key={`${r}-open-${i}`} className={`staff-slot vacant${role === r ? ' active' : ''}`} onClick={() => setRole(r)}
                           title={STAFF_DUTIES[r]}>
-                          <span className="staff-slot-vacant"><Icon name="search" size={12} /> <b>{STAFF_ROLE_NAMES[r]}</b> · vacant</span>
+                          <span className="staff-slot-vacant"><Icon name="search" size={12} /> <b>{STAFF_ROLE_NAMES[r]}</b> · {waiting.some((h) => h.role === r && h.replaces === undefined) ? 'hire lined up' : 'vacant'}</span>
                         </button>
                       )),
                     ];
@@ -125,6 +128,14 @@ export function StaffScreen(): JSX.Element {
                   </button>
                 );
               })}
+            </div>
+          )}
+          {hirer !== null && brief !== null && (
+            <div className="staff-hiring-strip staff-talks-strip">
+              <Icon name="staff" size={13} />
+              <span>Hiring delegated to <b>{staffName(hirer)}</b> ({STAFF_ROLE_NAMES[hirer.role].toLowerCase()}), up to {money(brief.maxWage)} a season, {brief.scope === 'empty' ? 'empty roles' : 'every open place'}.</span>
+              {waiting.length > 0 && <span className="faint">{waiting.length} waiting for your word.</span>}
+              <button className="sm" onClick={() => g.go('director')}>Manage</button>
             </div>
           )}
           <p className="staff-duty"><b>{STAFF_ROLE_NAMES[role]}</b>, {STAFF_DUTIES[role]}</p>

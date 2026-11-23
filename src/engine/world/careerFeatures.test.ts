@@ -6,7 +6,7 @@ import { appointManager, applyForJob, isUnemployed, startOutOfWork } from './car
 import { advanceDay, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
 import { HUB_METRIC_KEYS, leagueHub, rotationHub } from './dataHub.ts';
 import { interviewEffect, interviewQuestions, interviewReaction } from './jobInterview.ts';
-import { coachLegends, coachRanking } from './coachLegends.ts';
+import { coachLegends, coachRanking, coachScore } from './coachLegends.ts';
 import { challengeClubs, challengeSeasonEnd, startChallenge } from './challenges.ts';
 import { answerMindGame } from './mindGames.ts';
 import { socialFeed } from './socialFeed.ts';
@@ -70,7 +70,8 @@ test('the coaches\' world ranking includes the manager; a club\'s legends are th
   const ranking = coachRanking(world);
   assert.ok(ranking.length > 10);
   assert.ok(ranking.some((c) => c.staffId === -1));
-  for (let i = 1; i < ranking.length; i++) assert.ok(ranking[i - 1].reputation >= ranking[i].reputation);
+  // In order of standing: titles, record and the level he coaches at, not his name alone.
+  for (let i = 1; i < ranking.length; i++) assert.ok(coachScore(world, ranking[i - 1]) >= coachScore(world, ranking[i]));
   for (const club of world.clubs.slice(0, 30)) for (const c of coachLegends(world, { clubId: club.id })) assert.ok(c.here > 0);
 });
 

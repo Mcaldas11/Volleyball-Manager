@@ -5,7 +5,8 @@
 
 import { useState, type JSX } from 'react';
 import { POSITION_NAMES, POSITION_SHORT, POSITIONS, type Position } from '../../engine/model/positions.ts';
-import { staffRating } from '../../engine/model/staff.ts';
+import { STAFF_ROLE_NAMES, staffName, staffRating } from '../../engine/model/staff.ts';
+import { WAGE_LIMITS, type StaffHire } from '../../engine/world/staffHiring.ts';
 import { contractEndSeason, seasonEndYear } from '../../engine/world/world.ts';
 import { HANDLER_NAMES, TASK_HANDLERS, TASK_NAMES, type DelegableTask } from '../../engine/world/delegation.ts';
 import { missionLabel, MAX_MISSIONS, type MissionSpec } from '../../engine/world/recruitment.ts';
@@ -200,7 +201,31 @@ const TASK_HINT: Readonly<Record<DelegableTask, string>> = {
   friendlies: 'Books three pre-season friendlies at the right level.',
   training: 'The assistant runs the whole programme, weekly focus, intensity, everyone\'s individual work. Your own settings stop counting.',
   press: 'The assistant fronts the press conferences: calm, nothing to win or lose. No journalist feels stood up.',
+  staff: 'Fills the open places in the backroom from the people out of work, within the staff budget and your limit. He judges them with his own eye, and each hire waits 3 days for your word.',
 };
+
+const HIRE_STATUS: Readonly<Record<StaffHire['status'], string>> = { pending: 'Waiting', done: 'Signed', failed: 'Fell through', cancelled: 'Stopped' };
+
+/** The brief for the staff hiring, once it is handed over: the most a wage may be, which places, and the contracts running out. */
+function StaffHiringBrief(): JSX.Element | null {
+  const g = useGame();
+  const brief = g.staffHiring();
+  if (brief === null) return null;
+  const limits = WAGE_LIMITS.includes(brief.maxWage) ? WAGE_LIMITS : [...WAGE_LIMITS, brief.maxWage].sort((a, b) => a - b);
+  return (
+    <div className="rc-hire-brief">
+      <Dropdown size="sm" value={brief.maxWage} onChange={(v) => g.setStaffHiringBrief({ maxWage: v })}
+        title="The most any one hire may be paid a season"
+        options={limits.map((w) => ({ value: w, label: `Up to ${money(w)}/season` }))} />
+      <Segmented size="sm" value={brief.scope} onChange={(v) => g.setStaffHiringBrief({ scope: v })}
+        options={[['empty', 'Empty roles'], ['all', 'Every open place']] as const} />
+      <label className="rc-hire-check" title="In March and April, a man out of contract in June can be replaced by someone clearly better">
+        <input type="checkbox" checked={brief.replaceExpiring} onChange={(e) => g.setStaffHiringBrief({ replaceExpiring: e.target.checked })} />
+        <span>Replace weak staff out of contract</span>
+      </label>
+    </div>
+  );
+}
 
 const STATUS: Readonly<Record<DirectorTask['status'], string>> = { working: 'In hand', done: 'Done', failed: 'Walked away', cancelled: 'Taken back' };
 
@@ -211,6 +236,8 @@ export function DirectorScreen(): JSX.Element {
   const director = g.director();
   const delegation = g.delegation();
   const tasks = g.directorTasks();
+  const hires = [...(world.staffHiring?.hires ?? [])].reverse();
+  const hirer = g.staffHiringDelegate();
   if (delegation === null) return <Empty>No club.</Empty>;
   return (
     <div className="rc-director">
@@ -242,6 +269,7 @@ export function DirectorScreen(): JSX.Element {
           ))}
         </Card>
       </Paged>
+      <div className="rc-right">
       <Card title={`Deals handed to the director · ${tasks.filter((t) => t.status === 'working').length} in hand`} icon="transfers" flush className="rc-card">
         {tasks.length === 0 ? <Empty>No deals handed over yet. Use "Director" on a player's profile or your shortlist.</Empty> : (
           <div className="table-wrap rc-scroll">
@@ -263,6 +291,36 @@ export function DirectorScreen(): JSX.Element {
           </div>
         )}
       </Card>
+      {(hires.length > 0 || delegation.staff !== 'manager') && (
+        <Card title={`Staff hires · ${hires.filter((h) => h.status === 'pending').length} waiting`} icon="staff" flush className="rc-card">
+          {delegation.staff !== 'manager' && <StaffHiringBrief />}
+          {hires.length === 0 ? <Empty>Nothing lined up. {hirer !== null ? `${staffName(hirer)} looks over the backroom every week.` : ''}</Empty> : (
+            <div className="table-wrap rc-scroll">
+              <table className="data-table">
+                <thead><tr><th>Staff</th><th>Role</th><th>His rating</th><th>Wage</th><th>Status</th><th>What came of it</th><th /></tr></thead>
+                <tbody>
+                  {hires.map((h) => {
+                    const s = world.staff[h.staffId];
+                    const old = h.replaces !== undefined ? world.staff[h.replaces] : undefined;
+                    return (
+                      <tr key={h.id}>
+                        <td><span className="player-link" onClick={() => g.selectCoach(s.id)}>{staffName(s)}</span></td>
+                        <td>{STAFF_ROLE_NAMES[h.role]}{old !== undefined && <small className="faint"> for {staffName(old)}</small>}</td>
+                        <td>{h.judged.toFixed(1)}</td>
+                        <td className="faint">{money(h.wage)}/season · {h.years}y</td>
+                        <td><span className={`rc-status ${h.status === 'pending' ? 'working' : h.status}`}>{HIRE_STATUS[h.status]}</span></td>
+                        <td className="rc-outcome">{h.outcome ?? `Signs ${g.dateLabelForDay(h.signsOn)}.`}</td>
+                        <td>{h.status === 'pending' && <button className="sm" onClick={() => g.cancelStaffHire(h.id)}>Stop</button>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+      </div>
     </div>
   );
 }

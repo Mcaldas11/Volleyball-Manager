@@ -74,6 +74,11 @@ export function keepMatchReport(world: World, fixture: Fixture, result: MatchRes
   const club = world.userClubId;
   if (club < 0 || (fixture.home !== club && fixture.away !== club)) return;
   if (world.competitions[fixture.competitionId]?.kind === 'international') return;
+  (world.matchReports ??= new Map()).set(fixture.id, packReport(result));
+}
+
+/** A finished match's box score and rotations, packed to be kept: the manager's club's, or any national team's. */
+export function packReport(result: MatchResult): MatchReport {
   const lines: number[][] = [];
   const pack = (team: TeamMatchStats, side: 0 | 1): void => {
     for (const [p, s] of team.players) {
@@ -84,18 +89,18 @@ export function keepMatchReport(world: World, fixture: Fixture, result: MatchRes
   pack(result.stats.home, 0);
   pack(result.stats.away, 1);
   const rotations = (team: TeamMatchStats): number[][] => team.rotations.map((r) => ROTATION_FIELDS.map((k) => r[k]));
-  (world.matchReports ??= new Map()).set(fixture.id, {
+  return {
     lines,
     rotations: [rotations(result.stats.home), rotations(result.stats.away)],
     opponentErrors: [result.stats.home.opponentErrors, result.stats.away.opponentErrors],
     longestRun: [result.stats.home.longestRun, result.stats.away.longestRun],
     totalRallies: result.totalRallies,
     ...(result.log !== null ? { flow: rallyFlow(result.log) } : {}),
-  });
+  };
 }
 
 /** A kept match as the report screens read it: the box score and the rotations, no rally log. */
-export function reportResult(fixture: Fixture, report: MatchReport): MatchResult {
+export function reportResult(fixture: Pick<Fixture, 'homeSets' | 'awaySets' | 'setScores' | 'mvp'>, report: MatchReport): MatchResult {
   const team = (side: 0 | 1): TeamMatchStats => {
     const t = newTeamStats();
     for (const line of report.lines) {
@@ -127,7 +132,7 @@ export function reportResult(fixture: Fixture, report: MatchReport): MatchResult
 }
 
 /** The bare result of a match nothing more was kept of: the score and the sets. */
-export function bareResult(fixture: Fixture): MatchResult {
+export function bareResult(fixture: Pick<Fixture, 'homeSets' | 'awaySets' | 'setScores' | 'mvp'>): MatchResult {
   const team = (side: 0 | 1): TeamMatchStats => {
     const t = newTeamStats();
     t.setsWon = side === 0 ? fixture.homeSets : fixture.awaySets;

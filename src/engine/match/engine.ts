@@ -344,6 +344,8 @@ export interface MatchResult {
   highlights?: Highlight[];
   /** Who got hurt, and how it ended: came off for it, played on, got worse — see injury.ts. */
   injuries?: MatchInjury[];
+  /** The match's last point, when the losing side gave it away: who erred, and how. */
+  lastPoint?: { player: number; team: 0 | 1; kind: RallyContact['kind'] };
 }
 
 /**
@@ -796,6 +798,8 @@ export class MatchSimulator {
   private readonly recording: boolean;
   /** The best point and play so far, when the match keeps them. */
   private readonly best: { point: Highlight | null; play: Highlight | null } | null;
+  /** The rally just played, for the match's last point. */
+  private lastEntry: RallyLogEntry | null = null;
   private readonly setScores: Array<[number, number]> = [];
   private contacts: RallyContact[] = [];
   private totalRallies = 0;
@@ -986,6 +990,7 @@ export class MatchSimulator {
     if (before !== null) this.weighHighlight(entry, before.court, before.sets);
 
     this.noteCall(entry, serving, bestBefore);
+    this.lastEntry = entry;
     this.awardPoint(winner);
     // Anyone hurt: the engine's coach answers straight away; the live user's waits for him.
     if (!this.matchOver) for (const t of [0, 1] as const) if (!this.ownInjuries[t]) this.coachInjuries(t);
@@ -1751,7 +1756,18 @@ export class MatchSimulator {
       highlights: this.best !== null
         ? [this.best.point, this.best.play].filter((h): h is Highlight => h !== null)
         : undefined,
+      lastPoint: this.lastPointLost(),
     };
+  }
+
+  /** The last rally, if the losing side gave it away: a serve, a pass, an attack or a set that went wrong. */
+  private lastPointLost(): MatchResult['lastPoint'] {
+    const e = this.lastEntry;
+    if (!this.matchOver || e === null || e.overturned === true) return undefined;
+    const c = e.contacts[e.contacts.length - 1];
+    if (c === undefined || c.team === e.winner) return undefined;
+    const errs: ReadonlyArray<RallyContact['kind']> = ['serveError', 'receptionError', 'attackError', 'blocked', 'setError', 'digError'];
+    return errs.includes(c.kind) ? { player: c.player, team: c.team, kind: c.kind } : undefined;
   }
 
   /**

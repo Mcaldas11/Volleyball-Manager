@@ -16,6 +16,7 @@
  * moves when the next window opens (see moves.ts).
  */
 
+import { renewalStory } from './playerVoices.ts';
 import type { Club } from '../model/club.ts';
 import { bidTurnedDown, stanceLine, stanceOf, stanceOnAgreedSale } from './offerStance.ts';
 import { PlayerFlag } from '../model/players.ts';
@@ -586,6 +587,8 @@ function resolveTerms(world: World, club: Club, t: Talks, offer: TalksOffer): vo
         playerIdx: p,
         category,
       });
+      // He tells the press how he feels about staying.
+      if (club.id === world.userClubId) renewalStory(world, p, club);
       closeTalks(world, t);
       return;
     }
@@ -933,9 +936,11 @@ function processSales(world: World): void {
       removeOffers(world, (x) => x.id !== o.id);
       say(world, {
         subject: `${name} rejects ${buyer.name}`,
-        body: stance === 'staying'
-          ? `${name} has turned down the move to ${buyer.name}. He never wanted to leave, and he is hurt that the club was ready to let him go.`
-          : `${name} has turned down the move to ${buyer.name}, he is staying.`,
+        body: stance === 'staying' && o.clause === true
+          ? `${name} has turned down the move to ${buyer.name}. They paid his release clause, but he never wanted to leave: he is staying.`
+          : stance === 'staying'
+            ? `${name} has turned down the move to ${buyer.name}. He never wanted to leave, and he is hurt that the club was ready to let him go.`
+            : `${name} has turned down the move to ${buyer.name}, he is staying.`,
         playerIdx: o.playerIdx,
         from: name,
         category: 'offer',

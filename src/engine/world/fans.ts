@@ -25,7 +25,8 @@ export type FanStory =
   | 'rumour' | 'signing' | 'extension' | 'sacked' | 'appointed' | 'injury' | 'shock' | 'top' | 'retiring' | 'retired'
   | 'playerAward' | 'coachAward' | 'title' | 'match' | 'derby'
   | 'nationTitle' | 'nationShock' | 'nationMatch' | 'nationCoachIn' | 'nationCoachOut' | 'tournament' | 'qualified'
-  | 'press' | 'pressBold' | 'tips' | 'spotted' | 'homecoming';
+  | 'press' | 'pressBold' | 'tips' | 'spotted' | 'homecoming'
+  | 'playerWord' | 'playerUpset' | 'playerBrave' | 'coachFarewell';
 
 /** What a story's comments turn on. */
 export interface FanBrief {
@@ -69,6 +70,75 @@ type Line = readonly [FanMood, string];
  * nations, {coach}, {score}, {fee}, {weeks}, {comp}.
  */
 const VOICES: Readonly<Record<FanStory, Partial<Record<Side, readonly Line[]>>>> = {
+  playerWord: {
+    club: [
+      ['happy', 'Love hearing {p} talk like that. One of us.'],
+      ['delighted', '{p} gets what this club is about.'],
+      ['happy', 'Class from {p}, on and off the court.'],
+      ['neutral', 'Nice words. Now let us see it on the court every week.'],
+      ['happy', 'This is why {p} is my favourite player.'],
+    ],
+    nation: [
+      ['happy', 'Proud of {p}. That is what the shirt means.'],
+      ['delighted', 'Legend. Give {p} the armband.'],
+    ],
+    rival: [
+      ['neutral', 'Fair play to {p}, good words.'],
+      ['angry', 'Media training at its finest.'],
+    ],
+  },
+  playerUpset: {
+    club: [
+      ['worried', 'Not great to wash this in public, {p}.'],
+      ['angry', 'Keep it in the dressing room, {p}.'],
+      ['neutral', 'To be fair, {p} has a point.'],
+      ['worried', 'This will not end well. Summer exit incoming?'],
+      ['happy', 'Finally someone says it out loud.'],
+    ],
+    nation: [
+      ['worried', 'Not the time for this, {p}.'],
+      ['neutral', 'Honest at least.'],
+    ],
+    rival: [
+      ['happy', 'Trouble at {c}. Grab the popcorn.'],
+      ['neutral', 'Come to us, {p}, you will play every week.'],
+    ],
+  },
+  playerBrave: {
+    club: [
+      ['happy', 'That is the mentality. Head up, {p}!'],
+      ['delighted', 'Champions want the last ball. {p} gets it.'],
+      ['neutral', 'It happens. One point does not change what {p} gives us.'],
+      ['worried', 'Brave words. Just put it in next time, {p}.'],
+      ['happy', 'I would give {p} that ball again too.'],
+    ],
+    nation: [
+      ['happy', 'Head up, {p}. The country is behind you.'],
+      ['neutral', 'Tough way to lose. We go again.'],
+    ],
+    other: [
+      ['happy', 'Thanks for the point, {p}. Respect for owning it though.'],
+      ['neutral', 'Classy from {p}. Could have been any of us.'],
+    ],
+    otherNation: [
+      ['happy', 'We will take it! Respect to {p} for fronting up.'],
+    ],
+  },
+  coachFarewell: {
+    club: [
+      ['happy', 'Nice from {p}. Shows what {coach} meant to that group.'],
+      ['neutral', 'The players liked {coach}. The results did not.'],
+      ['worried', 'If the players are this sad, did the board get it wrong?'],
+      ['happy', 'Thank you {coach}. The players have said it all.'],
+    ],
+    nation: [
+      ['happy', 'Good to hear {p} backing {coach}.'],
+      ['neutral', 'New coach, same players. Let us see.'],
+    ],
+    rival: [
+      ['neutral', 'Classy words from {p}.'],
+    ],
+  },
   spotted: {
     club: [
       ['happy', '{coach} in our stands? Somebody is being watched.'],
@@ -485,6 +555,7 @@ const COMMENTS: Readonly<Record<FanStory, number>> = {
   playerAward: 3, coachAward: 3, title: 6, match: 5, derby: 6,
   nationTitle: 6, nationShock: 4, nationMatch: 5, nationCoachIn: 3, nationCoachOut: 3, tournament: 4, qualified: 4,
   press: 3, pressBold: 5, tips: 3, spotted: 4, homecoming: 4,
+  playerWord: 3, playerUpset: 4, playerBrave: 4, coachFarewell: 3,
 };
 
 /** Words in a club's name that say nothing about it. */

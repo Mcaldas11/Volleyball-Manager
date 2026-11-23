@@ -7732,6 +7732,11 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .rc-foot { flex: none; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 12px; }
 .rc-director { display: grid; flex: 1 1 0; grid-template-columns: minmax(340px, 460px) minmax(0, 1fr); gap: 16px; min-height: 0; }
 .rc-col { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow-y: auto; }
+.rc-right { display: flex; flex-direction: column; gap: 16px; min-height: 0; min-width: 0; }
+.rc-hire-brief { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.rc-hire-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
+.staff-hiring-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-dim); }
+.staff-hiring-strip b { color: var(--gold-bright); }
 .rc-dof { display: flex; flex-direction: column; gap: 8px; }
 .rc-dof p { margin: 0; font-size: 13px; line-height: 1.5; }
 .rc-dof-name { display: flex; align-items: center; gap: 10px; font-size: 16px; }
@@ -8758,3 +8763,33 @@ input[type="range"]:disabled { cursor: default; opacity: 0.45; }
 .acx-status.named { color: var(--gold, #c9a227); }
 .acx-status.outside { color: var(--text-dim, #888); }
 .acx-away td { background: color-mix(in srgb, var(--good, #3fb950) 7%, transparent); }
+
+/* National team matches beside the club's: Fixtures, Calendar, and their reports. */
+.fx-team { width: 1%; white-space: nowrap; }
+.fx-team-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-dim); }
+.fx-team-tag.national { color: var(--gold-bright); }
+.fx-team-tag .flag-img { width: 18px; height: 12px; }
+tr.fx-national > td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+.report-nation { display: inline-flex; align-items: center; gap: 6px; }
+
+.report-flag { width: 52px; height: 35px; }
+.intl-report-window { width: min(1000px, calc(100% - 32px)); height: min(720px, calc(var(--app-h, 100vh) - 48px)); display: flex; flex-direction: column; }
+.intl-report-window > .match-report { flex: 1; min-height: 0; margin: 0; box-shadow: var(--shadow-pop); }
+.intl-report-window > .match-report > .card-body { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.intl-report-window .report-body { flex: 1; min-height: 0; overflow-y: auto; }
+.intl-match.clickable, .nat-match.clickable { cursor: pointer; }
+.intl-match.clickable:hover, .nat-match.clickable:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.intl-score .watch-live-btn { padding: 2px 6px; }
+.cal-chip.national { display: flex; align-items: center; gap: 4px; color: var(--gold-bright); background: rgba(215, 167, 63, 0.16); border-color: rgba(215, 167, 63, 0.55); }
+.cal-chip.national .flag-img { width: 14px; height: 10px; flex: none; }
+.calendar-workspace .cal-chip.national { border-left-color: var(--gold-bright) !important; }
+.calendar-workspace .cal-chip.national.result.win { color: #5fd47f; }
+.calendar-workspace .cal-chip.national.result.loss { color: #f07d75; }
+.calendar-event.national .flag-img { width: 22px; height: 15px; flex: none; }
+.cal-up.national .flag-img { width: 16px; height: 11px; }
+.cal-layers .segmented { margin-right: 6px; }
+.lg-national { color: var(--gold-bright); }
+/* Beside an open report the Team column is just the crest or flag. */
+.fixtures-layout.with-report th.fx-team { font-size: 0; }
+.fixtures-layout.with-report .fx-team-tag { font-size: 0; gap: 0; }
+.fixtures-layout.with-report .fixtures-scroll td:not(:first-child) { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

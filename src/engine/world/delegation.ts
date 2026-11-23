@@ -3,7 +3,8 @@
  * to the Director of Football, who keeps whoever is worth keeping, within the wage budget, and
  * lets the rest go; the pre-season friendlies to the assistant or the director, who book them;
  * the training to the assistant, who runs the whole programme as he sees fit; the press
- * conferences to the assistant, who fronts them — calmly, nothing to win or lose.
+ * conferences to the assistant, who fronts them — calmly, nothing to win or lose; the staff hiring
+ * to either, who fills the backroom's open places — see staffHiring.ts.
  */
 
 import { PlayerFlag } from '../model/players.ts';
@@ -16,7 +17,7 @@ import { willRetire } from './retirement.ts';
 import { contractEndSeason, DAYS_PER_SEASON, euros, type World } from './world.ts';
 
 export type Handler = 'manager' | 'assistant' | 'director';
-export type DelegableTask = 'renewals' | 'friendlies' | 'training' | 'press';
+export type DelegableTask = 'renewals' | 'friendlies' | 'training' | 'press' | 'staff';
 
 export type Delegation = Record<DelegableTask, Handler>;
 
@@ -26,6 +27,7 @@ export const TASK_HANDLERS: Readonly<Record<DelegableTask, readonly Handler[]>> 
   friendlies: ['manager', 'assistant', 'director'],
   training: ['manager', 'assistant'],
   press: ['manager', 'assistant'],
+  staff: ['manager', 'assistant', 'director'],
 };
 
 export const TASK_NAMES: Readonly<Record<DelegableTask, string>> = {
@@ -33,6 +35,7 @@ export const TASK_NAMES: Readonly<Record<DelegableTask, string>> = {
   friendlies: 'Pre-season friendlies',
   training: 'Training',
   press: 'Press conferences',
+  staff: 'Staff hiring',
 };
 
 export const HANDLER_NAMES: Readonly<Record<Handler, string>> = {
@@ -41,7 +44,7 @@ export const HANDLER_NAMES: Readonly<Record<Handler, string>> = {
   director: 'Director of Football',
 };
 
-const DEFAULT: Delegation = { renewals: 'manager', friendlies: 'manager', training: 'manager', press: 'manager' };
+const DEFAULT: Delegation = { renewals: 'manager', friendlies: 'manager', training: 'manager', press: 'manager', staff: 'manager' };
 
 /** Who does each job at the manager's club now. */
 export function delegationOf(world: World): Delegation {

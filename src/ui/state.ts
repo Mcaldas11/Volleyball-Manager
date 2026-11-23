@@ -14,6 +14,7 @@ import {
   addMission, cancelMission, isShortlisted, missionsOf, scoutEstimate, shortlistOf, toggleShortlist, type MissionSpec, type ScoutMission,
 } from '../engine/world/recruitment.ts';
 import { delegationOf, handlerAvailable, setDelegation, type DelegableTask, type Delegation, type Handler } from '../engine/world/delegation.ts';
+import { cancelStaffHire, planStaffHires, setStaffHiringBrief, staffHiringDelegate, staffHiringOf, type StaffHiringBrief, type StaffHiringState } from '../engine/world/staffHiring.ts';
 import {
   cancelDirectorTask, delegateDeal, directorBlock, directorOf, directorTaskFor, directorTasks, type DirectorTask,
 } from '../engine/world/director.ts';
@@ -28,7 +29,7 @@ import { acceptSuggestion, declineSuggestion, meetingsOf, type StaffMeeting } fr
 import { applyPreferences, loadPreferences, savePreferences, type Preferences } from './preferences.ts';
 import { loadManagerProfile, saveManagerProfile } from './managerProfile.ts';
 import { playAroundTheLeague, type AroundTheLeague } from '../engine/season/aroundTheLeague.ts';
-import { canWatch, commitWatched, nextWatchDay, spectatorSetup, watchableToday, watchAngle, watchListToday, type WatchAngle } from '../engine/season/spectator.ts';
+import { canWatch, commitWatched, intlFixture, nextWatchDayAll, spectatorSetup, watchableToday, watchAngle, watchListToday, type WatchAngle } from '../engine/season/spectator.ts';
 import { bookCamp, type CampKind } from '../engine/world/camp.ts';
 import { requestLowerTarget, requestWages } from '../engine/world/board.ts';
 import { setUiGame } from './gameGender.ts';
@@ -107,7 +108,7 @@ import {
   expressNationalInterest, nationalInterestBlock, type NationalCounter,
   askNationalContract, leaveNationalJob, matchImportance, nameSquad,
   nationalApplicationBlock, nationName, nationSetup, nextTournamentFor, postMatchReport, squadDue, squadOf,
-  startNationalCareer, suggestSquad, userMatchToday, userNation, nationalTeamOf, type IntlMatch, type Tournament,
+  startNationalCareer, suggestSquad, userMatchToday, userNation, nationalTeamOf, findIntlMatch, type IntlMatch, type Tournament,
 } from '../engine/world/internationals.ts';
 import {
   answerOffers, applyForJobs, countHolidayDay, DEFAULT_HOLIDAY, returnDay, type HolidayPlan,
@@ -697,7 +698,7 @@ export interface MatchdayState {
    * bench is the manager's — the engine coaches both sides — and at full time
    * the view goes back to `back`, where it was opened from.
    */
-  spectator?: { back: NavEntry };
+  spectator?: { back: NavEntry; intl?: { tournamentId: number; matchId: number } };
 }
 
 const COACHING_MODE_KEY = 'vm.coachingMode';
@@ -851,6 +852,8 @@ class Game {
   watched: WatchedMatch | null = null;
   /** The manager's national team's last match, for its result screen. */
   private lastNational: WatchedMatch | null = null;
+  /** The report open is shown in a window over the screen: a match opened from a tournament, a nation's page or the calendar. */
+  reportOverlay = false;
   lastRollover: RolloverReport | null = null;
   /** Set right after a rollover the user's own club won a league title in —
    *  cleared once the celebration has been shown. */
@@ -2648,12 +2651,17 @@ class Game {
    * while it is still in memory; its box score and rotations from the save
    * once it isn't; the score and the sets for one played before reports were kept.
    */
-  openMatchReport(fixtureId: number): void {
+  openMatchReport(fixtureId: number, overlay = false): void {
+    if (fixtureId < 0) {
+      this.openIntlReport(-1 - fixtureId, overlay);
+      return;
+    }
     const world = this.world;
     const fixture = world?.fixtures[fixtureId];
     if (world === null || fixture === undefined || !fixture.played) return;
     const detailed = this.ctx.detailedResults.get(fixture.id);
     const kept = world.matchReports?.get(fixture.id);
+    this.reportOverlay = overlay;
     this.watched = {
       fixture,
       result: detailed ?? (kept !== undefined ? reportResult(fixture, kept) : bareResult(fixture)),
@@ -2661,6 +2669,59 @@ class Game {
       awayName: world.clubs[fixture.away]?.name ?? '?',
     };
     this.emit();
+  }
+
+  /**
+   * Open the report of a national team's match already played — anyone's,
+   * at a tournament still kept: its box score and rotations, the rally log
+   * too while it is in memory (a match watched or coached live).
+   */
+  openIntlReport(matchId: number, overlay = false): void {
+    const world = this.world;
+    const found = world !== null ? findIntlMatch(world, matchId) : null;
+    if (world === null || found === null || !found.m.played) return;
+    const { t, m } = found;
+    const fixture = intlFixture(t, m);
+    const kept = t.reports?.[m.id];
+    const mine = userNation(world);
+    const live = this.ctx.detailedResults.get(fixture.id);
+    this.watched = {
+      fixture,
+      result: live ?? (kept !== undefined ? reportResult(fixture, kept) : bareResult(fixture)),
+      homeName: nationName(m.home),
+      awayName: nationName(m.away),
+      national: { tournamentId: t.id, matchId: m.id, nation: m.home === mine || m.away === mine ? mine : -1, title: `${t.name} · ${m.stage}` },
+    };
+    this.reportOverlay = overlay;
+    this.emit();
+  }
+
+  /**
+   * The national teams' matches the manager had charge of in a season —
+   * senior or youth, the job he holds and any before it — in date order,
+   * each with the side that was his.
+   */
+  managerNationalMatches(season: number): Array<{ t: Tournament; m: IntlMatch; side: number }> {
+    const world = this.world;
+    if (world === null) return [];
+    const jobs = world.career.nationalJobs ?? [];
+    const mine = userNation(world);
+    const sideOn = (m: IntlMatch): number => {
+      for (const j of jobs) {
+        if ((m.home === j.nation || m.away === j.nation) && m.day >= j.startDay && (j.endDay < 0 || m.day <= j.endDay)) return j.nation;
+      }
+      // A national team given at the start, with no job on the record.
+      return jobs.length === 0 && mine >= 0 && (m.home === mine || m.away === mine) ? mine : -1;
+    };
+    const out: Array<{ t: Tournament; m: IntlMatch; side: number }> = [];
+    for (const t of world.internationals?.tournaments ?? []) {
+      for (const m of t.matches) {
+        if (Math.floor(m.day / DAYS_PER_SEASON) !== season) continue;
+        const side = sideOn(m);
+        if (side >= 0) out.push({ t, m, side });
+      }
+    }
+    return out.sort((a, b) => a.m.day - b.m.day || a.m.id - b.m.id);
   }
 
   /** The scouts' plan against a club. */
@@ -2747,6 +2808,7 @@ class Game {
   /** Close the match report beside the fixtures. */
   closeMatchReport(): void {
     this.watched = null;
+    this.reportOverlay = false;
     this.emit();
   }
 
@@ -2835,7 +2897,7 @@ class Game {
   /** The next day with another club's match to watch from the stands, today included — null when none is left. */
   nextWatchDay(): number | null {
     const world = this.world;
-    return world === null ? null : nextWatchDay(world);
+    return world === null ? null : nextWatchDayAll(world);
   }
 
   watchList(): Array<{ fixture: Fixture; angle: WatchAngle }> {
@@ -2861,6 +2923,10 @@ class Game {
    */
   watchMatch(fixtureId: number): void {
     const world = this.world;
+    if (world !== null && fixtureId < 0) {
+      this.watchNationalMatch(-1 - fixtureId);
+      return;
+    }
     const f = world?.fixtures[fixtureId];
     if (world == null || f === undefined || !this.canWatchMatch(f)) return;
     // Six to put on the court — either side short, and it is decided by default before it starts.
@@ -2920,6 +2986,65 @@ class Game {
     this.startLive();
   }
 
+  /**
+   * Go and watch a national team's match at a tournament, from the stands:
+   * the match the day would have played, kept at full time in the
+   * tournament's results and never played again (see spectator.ts).
+   */
+  private watchNationalMatch(matchId: number): void {
+    const world = this.world;
+    const found = world !== null ? findIntlMatch(world, matchId) : null;
+    if (world === null || found === null) return;
+    const { t, m } = found;
+    const f = intlFixture(t, m);
+    if (!this.canWatchMatch(f)) return;
+    this.matchday = {
+      fixture: f,
+      sides: [this.nationalSide(t, m.home), this.nationalSide(t, m.away)],
+      title: `${t.name} · ${m.stage}`,
+      national: null,
+      final: m.stage === 'Final' && t.kind !== 'friendly' ? t.name : null,
+      stage: 'lineup',
+      setBreakPending: false,
+      opponentChanges: [],
+      userIsHome: true,
+      homeLineup: [],
+      homeLibero: -1,
+      homeDefensiveLibero: -1,
+      homeBench: [],
+      speed: 1,
+      paused: false,
+      pauseUntil: null,
+      log: [],
+      snapshot: null,
+      timeoutsUsed: [0, 0],
+      timeoutActive: null,
+      lastSubstitution: null,
+      lastShout: null,
+      opponentMoves: [],
+      assistantApplied: {},
+      assistantPrompt: null,
+      assistantStops: [],
+      spectator: { back: this.navEntry(), intl: { tournamentId: t.id, matchId: m.id } },
+    };
+    this.selectedPlayer = null;
+    this.selectedClub = null;
+    this.selectedCoach = null;
+    this.selectedNation = null;
+    this.selectedReview = null;
+    this.selectedCompetition = null;
+    this.negotiation = null;
+    this.staffNegotiation = null;
+    this.incomingOffer = null;
+    this.coachTalk = null;
+    this.playerTalk = null;
+    this.watched = null;
+    const setup = spectatorSetup(world, f);
+    this.spectatorTactics = setup.home.tactics;
+    this.liveSim = new MatchSimulator(world.players, setup);
+    this.startLive();
+  }
+
   /** Leave the stands before the end: nothing is kept — the day plays the match as it would have. */
   leaveWatching(): void {
     const md = this.matchday;
@@ -2936,7 +3061,14 @@ class Game {
     const story = commitWatched(world, this.ctx, md.fixture, result);
     this.matchday = null;
     this.liveSim = null;
-    this.captureWatched(md.fixture);
+    this.spectatorTactics = null;
+    if (md.spectator.intl !== undefined) {
+      const ref = md.spectator.intl;
+      this.watched = {
+        fixture: md.fixture, result, homeName: nationName(md.fixture.home), awayName: nationName(md.fixture.away),
+        national: { tournamentId: ref.tournamentId, matchId: ref.matchId, nation: -1, title: md.title },
+      };
+    } else this.captureWatched(md.fixture);
     this.notice = story !== null ? `In the news: ${story.headline}.` : '';
     this.restoreNav(md.spectator.back);
   }
@@ -3657,6 +3789,8 @@ class Game {
 
   /** The tactic the other side is playing this match — a copy of its own, its bench's to change. */
   private opponentTactics: TeamTactics | null = null;
+  /** In the stands at a national team's match: the home side's tactics, as the engine plays them. */
+  private spectatorTactics: TeamTactics | null = null;
 
   /**
    * The other bench reads the manager's side — where it attacks, whom its
@@ -4269,6 +4403,32 @@ class Game {
     const world = this.world;
     if (world === null) return;
     this.notice = setDelegation(world, task, handler);
+    // The staff hiring handed over: he looks over the backroom at once.
+    if (task === 'staff' && delegationOf(world).staff === handler && handler !== 'manager') {
+      const n = planStaffHires(world).length;
+      if (n > 0) this.notice += ` ${n === 1 ? 'One hire' : `${n} hires`} lined up, see Staff hires.`;
+    }
+    this.emit();
+  }
+
+  staffHiring(): StaffHiringState | null {
+    return this.world === null ? null : staffHiringOf(this.world);
+  }
+
+  /** Who the staff hiring is with, or null while it is the manager's. */
+  staffHiringDelegate(): Staff | null {
+    return this.world === null ? null : staffHiringDelegate(this.world) ?? null;
+  }
+
+  setStaffHiringBrief(brief: Partial<StaffHiringBrief>): void {
+    if (this.world === null) return;
+    setStaffHiringBrief(this.world, brief);
+    this.emit();
+  }
+
+  cancelStaffHire(id: number): void {
+    if (this.world === null) return;
+    this.notice = cancelStaffHire(this.world, id);
     this.emit();
   }
 
@@ -5660,6 +5820,7 @@ class Game {
     const md = this.matchday;
     if (md?.national != null) return this.nationalTactics();
     // In the stands, the near side is the home club.
+    if (md?.spectator?.intl !== undefined) return this.spectatorTactics;
     if (md?.spectator !== undefined) return this.world?.clubs[md.fixture.home]?.tactics ?? null;
     return this.club?.tactics ?? null;
   }
@@ -5905,6 +6066,8 @@ class Game {
     this.lastNational = {
       fixture, result, homeName: nationName(m.home), awayName: nationName(m.away), national: ref,
     };
+    // The rally log, while it is in memory: the report opened again from the fixtures has it.
+    if (result.log !== null) this.ctx.detailedResults.set(fixture.id, result);
     // The press want the manager's reaction, as after a club's match.
     generateNationalPostMatchInterview(world, t, m);
     // A final won: the nation's title, celebrated as a club's is.

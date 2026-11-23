@@ -47,11 +47,53 @@ export function allCoaches(world: World): CoachEntry[] {
   return out;
 }
 
-/** The world ranking: the coaches in work — and the manager — by reputation. */
+/** What a title is worth to a coach's standing: the world's club title most, a domestic league well, a minor cup least. */
+function titleWeight(world: World, competitionId: number): number {
+  const c = world.competitions[competitionId];
+  if (c === undefined) return 1;
+  const rep = Math.max(0.3, c.reputation / 10000);
+  switch (c.kind) {
+    case 'clubworld': return 9;
+    case 'continental': return 4 + 3 * rep;
+    case 'league': return (c.tier === 1 ? 3 : 1) * (0.6 + rep);
+    case 'cup': return 1.5 * (0.6 + rep);
+    case 'supercup': return 0.6;
+    default: return 0.4;
+  }
+}
+
+/**
+ * A coach's standing for the world ranking, not his name alone: what he has
+ * won (weighted by what it was), how much and how often he wins, the level he
+ * coaches at now, and his reputation. A short run of wins counts for little;
+ * a record needs matches behind it before its rate weighs fully.
+ */
+export function coachScore(world: World, c: CoachEntry): number {
+  const titles = c.titles.reduce((s, t) => s + titleWeight(world, t.competitionId), 0);
+  const games = c.won + c.lost;
+  // The win rate, pulled towards 50% until there are a hundred matches behind it.
+  const rate = (c.won + 50) / (games + 100);
+  const club = world.clubs[c.clubId];
+  const league = club !== undefined ? world.competitions[club.leagueId] : undefined;
+  const level = club === undefined ? 0.5
+    : (league !== undefined ? Math.max(0.2, league.reputation / 10000) : 0.5) * (club.tier === 1 ? 1 : club.tier === 2 ? 0.6 : 0.35);
+  // Titles with no record behind them (from before the save) count, but less than ones won on the record.
+  const proven = Math.min(1, 0.45 + games / 120);
+  return (
+    c.reputation / 10000 * 25 +
+    Math.min(70, titles * 3 * proven) +
+    (rate - 0.5) * 80 +
+    Math.min(25, Math.sqrt(c.won) * 1.2) +
+    level * 20
+  );
+}
+
+/** The world ranking: the coaches in work — and the manager — by their standing (see coachScore). */
 export function coachRanking(world: World): CoachEntry[] {
-  return allCoaches(world)
+  const scored = allCoaches(world)
     .filter((c) => c.clubId >= 0 || c.staffId === -1)
-    .sort((a, b) => b.reputation - a.reputation || b.titles.length - a.titles.length);
+    .map((c) => ({ c, score: coachScore(world, c) }));
+  return scored.sort((a, b) => b.score - a.score || b.c.titles.length - a.c.titles.length).map((x) => x.c);
 }
 
 /** A club's legends — or a country's, `nation` set — the coaches who won most there. */

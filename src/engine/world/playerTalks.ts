@@ -12,6 +12,7 @@
  * promise him the games he wants, or refuse — and refusing has its cost.
  */
 
+import { benchedVoice } from './playerVoices.ts';
 import type { Club } from '../model/club.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { StaffRole } from '../model/staff.ts';
@@ -177,11 +178,42 @@ export function talkToPlayer(world: World, club: Club, p: number, topic: ChatTop
   return { ok: true, text, reply, morale };
 }
 
+/** Days a new signing is given before he expects his games. */
+const SETTLING_DAYS = 42;
+/** Official matches the club plays with him in the squad before the same. */
+const SETTLING_MATCHES = 4;
+
+/**
+ * Just arrived: a player who joined the club in the last six weeks, or before
+ * it has played four official matches with him, is still finding his feet; he
+ * doesn't complain about his minutes yet, to the manager or to the press.
+ */
+export function stillSettling(world: World, p: number): boolean {
+  const club = world.players.clubId[p];
+  if (club < 0) return false;
+  let joined = -1;
+  for (const t of world.transferLog) if (t.playerIdx === p && t.toClub === club && t.day > joined) joined = t.day;
+  if (joined < 0) return false;
+  const since = world.day - joined;
+  if (since < SETTLING_DAYS) return true;
+  if (since > 160) return false;
+  let matches = 0;
+  for (let d = joined; d <= world.day; d++) {
+    for (const id of world.fixturesByDay.get(d) ?? []) {
+      const f = world.fixtures[id];
+      if (f === undefined || !f.played || (f.home !== club && f.away !== club)) continue;
+      if (world.competitions[f.competitionId]?.kind === 'friendly') continue;
+      if (++matches >= SETTLING_MATCHES) return false;
+    }
+  }
+  return true;
+}
+
 /** What is weighing on a player: each worry, as told about him and as he would say it. */
 function worriesOf(world: World, p: number): Array<[string, string]> {
   const store = world.players;
   const out: Array<[string, string]> = [];
-  if (store.playingTime[p] < 30 && store.getAttr(p, 'ambition') >= 11) out.push(['he wants to be playing more', 'I want to be playing more']);
+  if (store.playingTime[p] < 30 && store.getAttr(p, 'ambition') >= 11 && !stillSettling(world, p)) out.push(['he wants to be playing more', 'I want to be playing more']);
   if (contractEndSeason(store.contractUntil[p]) <= world.season) {
     out.push(['his contract is running out and nobody has talked to him about it', 'my contract is running out and nobody has talked to me about it']);
   }
@@ -260,7 +292,8 @@ export function playerHappinessWeek(world: World): void {
     if ((weeks[p] ?? 0) === 2 && world.transferRequests?.[p] === undefined && world.day - (warned[p] ?? -999) > 60) {
       warned[p] = world.day;
       const name = store.fullName(p);
-      const why = store.playingTime[p] < 30 ? 'he is not getting the games he wants'
+      const short = store.playingTime[p] < 30 && !stillSettling(world, p);
+      const why = short ? 'he is not getting the games he wants'
         : store.morale[p] < 20 ? 'he is miserable, and it is starting to show in training' : 'something is eating at him';
       postMessage(world, {
         category: 'contract', from: assistantName(world, club.id), playerIdx: p,
@@ -268,6 +301,8 @@ export function playerHappinessWeek(world: World): void {
         body: `A word about ${name}, boss: ${why}. If nothing changes, I'd expect him to ask to leave within a few weeks. ` +
           'A talk with him, or some games, might settle him.',
       });
+      // Short of games, he is asked about it in public: about half the time it gets out.
+      if (short && hash01(world.day, p) < 0.5) benchedVoice(world, p, club);
     }
     if ((weeks[p] ?? 0) < UNHAPPY_WEEKS || store.hasFlag(p, PlayerFlag.Transferable)) continue;
     const asked = world.transferRequests?.[p];
