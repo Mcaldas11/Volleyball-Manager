@@ -105,7 +105,7 @@ import {
 import {
   acceptNationalOffer, applyForNationalJob, applyIntlResult, askForSquad, canPlayForCountry, counterNationalOffer, declineNationalOffer,
   expressNationalInterest, nationalInterestBlock, type NationalCounter,
-  leaveNationalJob, matchImportance, nameSquad,
+  askNationalContract, leaveNationalJob, matchImportance, nameSquad,
   nationalApplicationBlock, nationName, nationSetup, nextTournamentFor, postMatchReport, squadDue, squadOf,
   startNationalCareer, suggestSquad, userMatchToday, userNation, nationalTeamOf, type IntlMatch, type Tournament,
 } from '../engine/world/internationals.ts';
@@ -6146,6 +6146,14 @@ class Game {
     if (club === null || this.matchday !== null) return;
     const name = tacticSlots(club)[index]?.name;
     if (deleteTacticSlot(club, index)) this.notice = `${name} deleted.`;
+    this.emit();
+  }
+
+  /** Ask the federation for a new contract — its answer in a notice, and in the inbox. */
+  askNationalContract(): void {
+    const world = this.world;
+    if (world === null || this.processing) return;
+    this.notice = askNationalContract(world).text;
     this.emit();
   }
 

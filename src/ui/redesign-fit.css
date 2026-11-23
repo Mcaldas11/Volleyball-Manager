@@ -3734,3 +3734,8 @@ html.tut-on :is(.hol-overlay, .menu-pop, .vm-nav-pop, .watch-live-pop, .lv-quick
 /* One to watch: its rows of attributes a touch tighter, so the last is never cut at the card's foot. */
 .portal-people .hm-watch .hm-attrs { gap: 0 14px !important; }
 .portal-people .hm-watch .hm-attrs > * { line-height: 1.2; padding-block: 1px; }
+
+/* Career: the column beside the attributes scrolls inside itself when its cards run long, never cut one in half. */
+.cp-side-stack { overflow-y: auto !important; scrollbar-width: none; min-height: 0; }
+.cp-side-stack::-webkit-scrollbar { display: none; }
+.cp-side-stack > .card { flex: none !important; }

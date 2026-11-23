@@ -1,6 +1,6 @@
 import { InterestButton } from '../nationCoach.tsx';
 import { listPage, useListPages } from '../components.tsx';
-import { nationalCoachName, nationName, rankingFor } from '../../engine/world/internationals.ts';
+import { nationalContractAskBlock, nationalCoachName, nationName, rankingFor } from '../../engine/world/internationals.ts';
 import { baseNation, sideAge, type YouthAge } from '../../engine/world/sides.ts';
 import { useMemo, useState, type JSX } from 'react';
 import type { Club } from '../../engine/model/club.ts';
@@ -434,7 +434,8 @@ export function CareerScreen(): JSX.Element {
         )}
         <div className="cp-side-stack">
           <CurrentJobCard />
-          <Card title={`Job Offers (${career.offers.length})`} icon="offer"><OffersList /></Card>
+          {/* Only when there is one: an empty card here was squeezed half out of the column. */}
+          {career.offers.length > 0 && <Card title={`Job Offers (${career.offers.length})`} icon="offer"><OffersList /></Card>}
           {career.applications.length > 0 && (
             <Card title="Applications" icon="contract"><ApplicationsList /></Card>
           )}
@@ -472,6 +473,7 @@ function CurrentJobCard(): JSX.Element {
   const club = g.club;
   const job = currentJob(world);
   const [confirming, setConfirming] = useState(false);
+  const [view, setView] = useState<'club' | 'national'>('club');
   const busy = g.processing || g.matchday !== null || g.postMatch !== null;
 
   const nationalTeam = world.career.nationalTeam;
@@ -495,8 +497,15 @@ function CurrentJobCard(): JSX.Element {
   }
 
   const conf = club.boardConfidence;
+  if (nationalTeam !== undefined && view === 'national') {
+    return (
+      <Card title="Current Job" icon="world" actions={<JobTabs club={club.shortName} nation={nationalTeam} view={view} onView={setView} />}>
+        <NationalJobBlock nation={nationalTeam} />
+      </Card>
+    );
+  }
   return (
-    <Card title="Current Job" icon="club">
+    <Card title="Current Job" icon="club" actions={nationalTeam !== undefined ? <JobTabs club={club.shortName} nation={nationalTeam} view={view} onView={setView} /> : undefined}>
       <div className="coach-row career-job-head">
         <ClubCrest club={club} size={40} />
         <div className="coach-row-text">
@@ -522,8 +531,15 @@ function CurrentJobCard(): JSX.Element {
           </div>
         </div>
       )}
-      {nationalTeam !== undefined && <NationalJobBlock nation={nationalTeam} />}
     </Card>
+  );
+}
+
+/** Club and country: which of the two jobs the card is about. */
+function JobTabs({ club, nation, view, onView }: { club: string; nation: number; view: 'club' | 'national'; onView: (v: 'club' | 'national') => void }): JSX.Element {
+  return (
+    <Segmented<'club' | 'national'> size="sm" value={view} onChange={onView}
+      options={[['club', club], ['national', NATIONS[nation]?.code ?? 'National']]} />
   );
 }
 
@@ -536,16 +552,10 @@ function ContractBlock(): JSX.Element | null {
   const offer = world.career.contractOffer;
   const lastSeason = contract.untilSeason <= world.season;
   const blocked = contractAskBlock(world);
-  const nationalContract = world.career.nationalJobs?.find((j) => j.endDay < 0)?.contract;
   return (
     <div className="career-contract">
       <KV k="Contract"><span className={lastSeason ? 'warn' : undefined}>Until 30 June {contractEndYear(world, contract)}</span></KV>
       <KV k="Wage">{money(contract.wage)} a season</KV>
-      {nationalContract !== undefined && (
-        <KV k={`${nationName(world.career.nationalTeam ?? -1) ?? 'National team'} contract`}>
-          {money(nationalContract.wage)} a season, until June {contractEndYear(world, nationalContract)}
-        </KV>
-      )}
       {offer != null ? (
         <div className="career-offer">
           <span className="career-offer-kicker">New contract offered</span>
@@ -572,7 +582,13 @@ function NationalJobBlock({ nation }: { nation: number }): JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const busy = g.processing || g.matchday !== null || g.postMatch !== null;
   const rank = worldRanking(world).indexOf(nation) + 1;
-  const since = world.career.nationalJobs?.find((j) => j.nation === nation && j.endDay < 0)?.startDay;
+  const job = world.career.nationalJobs?.find((j) => j.nation === nation && j.endDay < 0);
+  const since = job?.startDay;
+  const record = since !== undefined ? nationalRecord(world, nation, since, -1) : null;
+  const games = record !== null ? record.won + record.lost : 0;
+  const rate = games > 0 ? record!.won / games : 0;
+  const contract = job?.contract;
+  const askBlock = nationalContractAskBlock(world);
   return (
     <div className="career-national">
       <div className="coach-row career-job-head">
@@ -582,6 +598,26 @@ function NationalJobBlock({ nation }: { nation: number }): JSX.Element {
           <span className="faint">Head coach{since !== undefined ? ` since ${g.dateLabelForDay(since)}` : ''} · #{rank} in the world</span>
         </div>
       </div>
+      {record !== null && (
+        <>
+          <KV k="Federation's mood">
+            <span className={games < 5 ? undefined : rate >= 0.6 ? 'good' : rate >= 0.5 ? undefined : 'bad'}>
+              {games < 5 ? 'Waiting to see' : rate >= 0.75 ? 'Delighted' : rate >= 0.6 ? 'Pleased' : rate >= 0.5 ? 'Satisfied' : 'Unhappy'}
+            </span>
+          </KV>
+          <div className="career-meter"><Bar value={games < 5 ? 50 : Math.round(rate * 100)} wide /></div>
+          <KV k="Record">{record.won}W {record.lost}L{record.titles.length > 0 ? ` · ${record.titles.length} title${record.titles.length === 1 ? '' : 's'}` : ''}</KV>
+        </>
+      )}
+      {contract !== undefined && (
+        <div className="career-contract">
+          <KV k="Contract">Until June {contractEndYear(world, contract)}</KV>
+          <KV k="Wage">{money(contract.wage)} a season</KV>
+          <button className="block career-ask" disabled={askBlock !== null || busy} title={askBlock ?? undefined} onClick={() => g.askNationalContract()}>
+            <Icon name="contract" size={14} /> Ask for a new contract
+          </button>
+        </div>
+      )}
       {!confirming ? (
         <button className="danger block career-resign" disabled={busy} onClick={() => setConfirming(true)}>
           <Icon name="exit" size={14} /> Step down as national coach

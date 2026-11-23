@@ -2153,6 +2153,52 @@ export function counterNationalOffer(world: World, offerId: number, wage: number
   return { outcome: 'counter', text: `${fed} can't go that far, but comes up to ${euros(offer.terms.wage)} a season, until June ${year(until)}.${shorter}` };
 }
 
+/** Matches a federation wants to see before it talks about a new contract. */
+const NATIONAL_ASK_MIN_MATCHES = 5;
+
+/** Why the manager can't ask his federation for a new contract now, or null when he can. */
+export function nationalContractAskBlock(world: World): string | null {
+  const nation = userNation(world);
+  const job = world.career.nationalJobs?.find((j) => j.nation === nation && j.endDay < 0);
+  if (nation < 0 || job === undefined || job.contract === undefined) return 'You have no national contract';
+  if (job.askedSeason === world.season) return 'You have asked the federation once this season already';
+  const { won, lost } = nationalRecord(world, nation, job.startDay, -1);
+  if (won + lost < NATIONAL_ASK_MIN_MATCHES) return `Too early: the federation wants to see ${NATIONAL_ASK_MIN_MATCHES} matches first`;
+  return null;
+}
+
+/**
+ * Ask the federation for a new contract, once a season: on a winning record it
+ * offers two more years and a little more money, on an even one a year more as
+ * he is, and otherwise it turns him down. The answer comes to the inbox too.
+ */
+export function askNationalContract(world: World): { ok: boolean; text: string } {
+  const block = nationalContractAskBlock(world);
+  if (block !== null) return { ok: false, text: block };
+  const nation = userNation(world);
+  const job = world.career.nationalJobs!.find((j) => j.nation === nation && j.endDay < 0)!;
+  const c = job.contract!;
+  job.askedSeason = world.season;
+  const { won, lost } = nationalRecord(world, nation, job.startDay, -1);
+  const rate = won / Math.max(1, won + lost);
+  const from = `${nationName(nation)} Volleyball Federation`;
+  const year = (season: number): number => world.startYear + season + 1;
+  let text: string;
+  let ok = true;
+  if (rate >= 0.6) {
+    job.contract = { wage: Math.round((c.wage * 1.1) / 1000) * 1000, untilSeason: Math.max(c.untilSeason, world.season) + 2 };
+    text = `The federation agrees: ${euros(job.contract.wage)} a season, until June ${year(job.contract.untilSeason)}.`;
+  } else if (rate >= 0.5) {
+    job.contract = { wage: c.wage, untilSeason: Math.max(c.untilSeason, world.season) + 1 };
+    text = `The federation offers a year more on the same terms: ${euros(job.contract.wage)} a season, until June ${year(job.contract.untilSeason)}.`;
+  } else {
+    ok = false;
+    text = `The federation will not talk about a new contract on ${won} wins and ${lost} defeats. Your deal runs until June ${year(c.untilSeason)}.`;
+  }
+  postMessage(world, { subject: `${nationName(nation)}: your contract`, body: text, from, category: 'career' });
+  return { ok, text };
+}
+
 /** His national contract running out as a new season starts: results earn him another two years; without them, the job ends. */
 function nationalContractDay(world: World): void {
   const nation = userNation(world);
