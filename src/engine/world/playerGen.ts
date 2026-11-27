@@ -45,6 +45,8 @@ export interface PlayerGenOptions {
   isRegen?: boolean;
   /** Overrides the age-derived current ability fraction. */
   abilityFraction?: number;
+  /** A measured height, used in place of a drawn one (the real-data world). */
+  heightCm?: number;
 }
 
 /**
@@ -98,7 +100,7 @@ export function generatePlayer(store: PlayerStore, rng: Rng, opts: PlayerGenOpti
   const levelBias = (opts.potential / 2000 - 0.5) * 2.4;
   // Women players stand about twelve centimetres shorter, position for position.
   const mean = HEIGHT_MEAN[position] - (store.women ? WOMEN_HEIGHT_GAP : 0);
-  const height = Math.round(
+  const height = opts.heightCm ?? Math.round(
     rng.gaussianClamped(
       mean + nationDef.heightBias + levelBias,
       HEIGHT_SD,

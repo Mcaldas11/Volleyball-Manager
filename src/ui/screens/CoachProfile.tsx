@@ -6,7 +6,8 @@ import { Formation, type TeamTactics } from '../../engine/match/tactics.ts';
 import { coachSpells, spellTrophies } from '../../engine/world/career.ts';
 import { CONFEDERATIONS, NATIONS, type Confederation } from '../../engine/world/nations.ts';
 import { contractEndSeason } from '../../engine/world/world.ts';
-import { attrClass, ClubCrest, clubThemeStyle, Flag, initials, KV, money, StarMeter } from '../components.tsx';
+import { attrClass, ClubCrest, clubThemeStyle, Flag, initials, KV, money, PersonFace, StarMeter } from '../components.tsx';
+import { staffPhotoUrl } from '../uniqueFaces.ts';
 import { AccoladeList, AllHonoursButton, HonourList, honourOf, type Honour } from '../honours.tsx';
 import { coachAccolades } from '../../engine/world/accolades.ts';
 import { Icon } from '../icons.tsx';
@@ -295,6 +296,7 @@ export function CoachProfile(): JSX.Element | null {
   if (coach === undefined) return null;
 
   const name = `${coach.firstName} ${coach.lastName}`;
+  const photo = staffPhotoUrl(world, coach.id);
   const club = coach.clubId >= 0 ? world.clubs[coach.clubId] : undefined;
   const spells = coachSpells(world, coach);
   const won = spells.reduce((s, x) => s + x.won, 0);
@@ -314,7 +316,9 @@ export function CoachProfile(): JSX.Element | null {
   return (
     <div className="club-profile cp" data-pronouns="keep">
       <header className="cp-head" style={club !== undefined ? clubThemeStyle(club) : undefined}>
-        <span className="coach-initials cp-face">{initials(name)}</span>
+        {photo !== undefined
+          ? <span className="cp-face cp-photo"><PersonFace photoUrl={photo} name={name} size={58} /></span>
+          : <span className="coach-initials cp-face">{initials(name)}</span>}
         <div className="cp-who">
           <h2>{name}</h2>
           <span>{world.year - coach.birthYear} years old (born {coach.birthYear})</span>

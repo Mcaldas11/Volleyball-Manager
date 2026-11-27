@@ -1,5 +1,5 @@
 import { InterestButton } from '../nationCoach.tsx';
-import { listPage, useListPages } from '../components.tsx';
+import { listPage, useListPages, tierName } from '../components.tsx';
 import { nationalContractAskBlock, nationalCoachName, nationName, rankingFor } from '../../engine/world/internationals.ts';
 import { baseNation, sideAge, type YouthAge } from '../../engine/world/sides.ts';
 import { useMemo, useState, type JSX } from 'react';
@@ -80,7 +80,7 @@ function OffersList(): JSX.Element {
             <ClubCrest club={c} size={34} />
             <div className="job-item-main">
               <strong className="player-link" onClick={() => g.selectClub(c.id)}>{c.name}</strong>
-              <span className="faint">{world.competitions[c.leagueId]?.name ?? `Tier ${c.tier}`} · until {g.dateLabelForDay(o.expiresOn)}</span>
+              <span className="faint">{world.competitions[c.leagueId]?.name ?? tierName(c.tier)} · until {g.dateLabelForDay(o.expiresOn)}</span>
               {o.contract !== undefined && <span className="faint">{contractTerms(world, o.contract)}</span>}
             </div>
             <div className="job-item-actions">
@@ -732,7 +732,7 @@ export function JobCentreScreen(): JSX.Element {
                             <span className="strong">{club.name}</span>
                           </span>
                         </td>
-                        <td className="dim"><Flag nation={club.nation} /> {league?.name ?? `Tier ${club.tier}`}</td>
+                        <td className="dim"><Flag nation={club.nation} /> {league?.name ?? tierName(club.tier)}</td>
                         <td><StarMeter value={club.reputation} max={10000} size={11} /></td>
                         <td className="num dim">{ordinal(club.boardExpectation)}</td>
                         <td className="dim">{g.dateLabelForDay(v.since)}</td>
@@ -833,7 +833,7 @@ function AllClubs({ conf, query }: { conf: Confederation | 'all'; query: string 
           onChange={setTier}
           options={[
             { value: 0, label: 'Every division', icon: <Icon name="trophy" size={14} /> },
-            ...tiers.map((t) => ({ value: t, label: tierLabel(t), hint: `Tier ${t}`, icon: <Icon name="trophy" size={14} /> })),
+            ...tiers.map((t) => ({ value: t, label: tierLabel(t), hint: tierName(t), icon: <Icon name="trophy" size={14} /> })),
           ]}
         />
         <Segmented
@@ -876,7 +876,7 @@ function AllClubs({ conf, query }: { conf: Confederation | 'all'; query: string 
                         <span className="strong">{club.name}</span>
                       </span>
                     </td>
-                    <td className="dim"><Flag nation={club.nation} /> {league?.name ?? `Tier ${club.tier}`}</td>
+                    <td className="dim"><Flag nation={club.nation} /> {league?.name ?? tierName(club.tier)}</td>
                     <td><StarMeter value={club.reputation} max={10000} size={11} /></td>
                     <td className="dim">{coach !== undefined ? `${coach.firstName} ${coach.lastName}` : <span className="warn">Vacant</span>}</td>
                     <td className={coach !== undefined ? moodClass(club.boardConfidence) : 'dim'}>{coach !== undefined ? boardMood(club.boardConfidence) : '—'}</td>
@@ -1003,7 +1003,7 @@ export function UnemployedHome(): JSX.Element {
                       <div className="job-item-main">
                         <strong className="player-link" onClick={() => g.selectClub(c.id)}>{c.name}</strong>
                         <span className="faint">
-                          {world.competitions[c.leagueId]?.name ?? `Tier ${c.tier}`} · <span className={interest.cls}>{interest.label}</span>
+                          {world.competitions[c.leagueId]?.name ?? tierName(c.tier)} · <span className={interest.cls}>{interest.label}</span>
                         </span>
                       </div>
                       <div className="job-item-actions"><VacancyAction club={c} /></div>

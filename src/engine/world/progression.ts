@@ -37,7 +37,7 @@ import { injuryNotice } from './inbox.ts';
 import { notePlayerEvent, SERIOUS_INJURY_DAYS } from './playerTimeline.ts';
 import { loanOf } from './loans.ts';
 import { seasonEndDay, type World } from './world.ts';
-import { clubWeek, weekEffect, weekInjury, type ClubWeek } from './training.ts';
+import { clubWeek, weekEffect, weekInjury, youthWeek, type ClubWeek } from './training.ts';
 
 /** Injuries a player can pick up, with duration in days and severity. */
 interface InjuryDef {
@@ -90,11 +90,13 @@ export function rollInjuries(world: World): void {
     const durability = store.getAttr(i, 'durability') / 20;
     const fatigue = 1 - store.condition[i] / 100;
 
-    // Every player carries the load of the week his club planned for him.
-    let week = weeks.get(club);
+    // Every player carries the load of the week his club planned for him — the academy's, for an academy player.
+    const youth = store.hasFlag(i, PlayerFlag.Youth);
+    const key = youth ? -1 - club : club;
+    let week = weeks.get(key);
     if (week === undefined) {
-      week = clubWeek(world, world.clubs[club]);
-      weeks.set(club, week);
+      week = (youth ? youthWeek(world, world.clubs[club]) : null) ?? clubWeek(world, world.clubs[club]);
+      weeks.set(key, week);
     }
     const planned = weekInjury(world, world.clubs[club], i, week);
     // Base weekly risk, modulated by the things that actually drive it — less
@@ -251,10 +253,13 @@ export function weeklyTraining(world: World): void {
     const quality = 0.45 + coaching[club] * 0.6 + facilities * 0.35;
     // Every club trains to its plan: the week's sessions and the player's own programme.
     const c = world.clubs[club];
-    let week = weeks.get(club);
+    // An academy player trains to the academy's week when the manager has set one.
+    const youth = store.hasFlag(i, PlayerFlag.Youth);
+    const key = youth ? -1 - club : club;
+    let week = weeks.get(key);
     if (week === undefined) {
-      week = clubWeek(world, c);
-      weeks.set(club, week);
+      week = (youth ? youthWeek(world, c) : null) ?? clubWeek(world, c);
+      weeks.set(key, week);
     }
     const plan = weekEffect(world, c, i, week);
 
@@ -270,9 +275,30 @@ export function weeklyTraining(world: World): void {
     const planned = gap > 0 ? plan.dev : 1;
     const delta = gap * rate * drive * quality * planned * (gap > 0 ? games : 1) + rng.gaussian(0, 0.7);
 
+    // A player already at his ceiling who works for it, plays and is well coached now and then
+    // breaks through it: his potential moves up, and the weeks after carry him past where it was.
+    if (gap <= 0 && age >= 19 && age <= 30 && minutes > 0.3) {
+      const chance = BREAKTHROUGH_WEEKLY * drive * quality * minutes;
+      if (weekRoll(store.id[i], world.day) < chance) {
+        store.potentialAbility[i] = Math.min(1990, pa + 15 + Math.round(weekRoll(store.id[i], world.day + 7919) * 35));
+      }
+    }
+
     if (Math.abs(delta) < 0.05) continue;
     applyAbilityDelta(store, i, delta, age, rng, plan.bias);
   }
+}
+
+/** A week's chance of breaking through one's potential, for a driven regular under good coaching. */
+const BREAKTHROUGH_WEEKLY = 0.006;
+
+/** A number in [0, 1) for a player and a day, drawn without touching the world's dice. */
+function weekRoll(id: number, day: number): number {
+  let h = Math.imul(id ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(day + 0x632be5ab, 0xc2b2ae35);
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
 }
 
 /**
@@ -516,11 +542,13 @@ export function retirePlayer(world: World, i: number): void {
  * genuine future international should be a rare and memorable event, not an
  * annual occurrence.
  */
-export function generateYouthIntake(world: World, rng: Rng = world.rng): number[] {
+export function generateYouthIntake(world: World, rng: Rng = world.rng, skip?: ReadonlySet<number>): number[] {
   const store = world.players;
   const created: number[] = [];
 
   for (const club of world.clubs) {
+    // A club whose academy is already its real under-21s (a real-data world's first intake).
+    if (skip?.has(club.id)) continue;
     const count = 1 + Math.round((club.youthRecruitment / 20) * 3 * rng.range(0.6, 1.4));
 
     for (let n = 0; n < count; n++) {
@@ -571,7 +599,7 @@ export function revisePotential(world: World, seasonStats: SeasonStats): void {
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i)) continue;
     const age = store.ageOn(i, world.year, 181);
-    if (age > 25 || age < 16) continue;
+    if (age > 28 || age < 16) continue;
 
     const line = seasonStats.get(i);
     const played = line?.matches ?? 0;
@@ -584,6 +612,8 @@ export function revisePotential(world: World, seasonStats: SeasonStats): void {
     if (played >= 15) delta += rng.range(0, 28);
     else if (played <= 2) delta -= rng.range(0, 22);
 
+    // From 26 a ceiling only moves up, for one still outgrowing it; it no longer comes down.
+    if (age > 25 && delta < 0) continue;
     const next = Math.round(store.potentialAbility[i] + delta);
     store.potentialAbility[i] = Math.max(actual, Math.min(1990, next));
   }

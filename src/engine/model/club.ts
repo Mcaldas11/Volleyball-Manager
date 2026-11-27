@@ -148,6 +148,8 @@ export interface Club {
   ticketPrice?: number;
   /** The sponsor signed for the season — see commercial.ts. */
   sponsor?: SponsorDeal;
+  /** An under-21 side: the senior club it belongs to, by id. It signs no one older than 21, and its players move up at 22. */
+  under21Of?: number;
   /** Affiliate clubs, by id — see affiliates.ts. */
   affiliates?: number[];
   /** An upgrade with the board, or being built — see facilities.ts. */

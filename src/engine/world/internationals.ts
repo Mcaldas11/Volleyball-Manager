@@ -2132,6 +2132,9 @@ export function nationalCoachName(world: World, nation: number): string | null {
   if (userNation(world) === nation) return `${world.manager.firstName} ${world.manager.lastName}`;
   const I = internationals(world);
   if (I.vacancies.some((v) => v.nation === nation)) return null;
+  // A real-data world: the real coach, until the job first changes hands.
+  const real = world.realNationalCoaches?.[nation];
+  if (real !== undefined && (I.coachTurns?.[nation] ?? 0) === 0) return real;
   const rng = new Rng(`ncoach:${world.seed}:${nation}:${I.coachTurns?.[nation] ?? 0}`);
   const bank = bankFor(NATIONS[baseNation(nation)]?.nameGroup ?? '');
   return `${rng.pick(bank.first)} ${rng.pick(bank.last)}`;

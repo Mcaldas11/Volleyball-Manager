@@ -10,7 +10,9 @@ import {
   type ProgrammeArea, type ProgrammeIntensity, type SearchScope,
 } from '../../engine/world/academy.ts';
 import { buildDays, FACILITY_EFFECTS, FACILITY_NAMES, facilityLevel, upgradeCost, type FacilityKind } from '../../engine/world/facilities.ts';
-import { FOCUS_LABELS } from '../../engine/world/training.ts';
+import {
+  FOCUS_LABELS, individualOf, planOf, PLAYER_LOAD, type IndividualFocus, type Intensity, type PlayerLoad, type WeeklyFocus,
+} from '../../engine/world/training.ts';
 import { CAREER_PATHS, PATH_NAMES, type CareerPath } from '../../engine/world/academyPlans.ts';
 import { Position, POSITION_NAMES, POSITIONS } from '../../engine/model/positions.ts';
 import { abilityClass, Bar, Card, ClubLink, Empty, Flag, money, PlayerFace, PlayerLink, Pos, Segmented, StarMeter } from '../components.tsx';
@@ -465,4 +467,90 @@ export function AcademyInternationals(): JSX.Element {
 function ordinalLabel(n: number): string {
   const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
   return `${n}${s}`;
+}
+
+// ---- Training -------------------------------------------------------------------------
+
+const YOUTH_FOCUS: ReadonlyArray<readonly [WeeklyFocus, string]> = [
+  ['auto', 'With the first team'], ['physical', 'Physical'], ['technical', 'Technical'], ['tactical', 'Tactical'], ['balanced', 'Balanced'],
+];
+const YOUTH_INTENSITY: ReadonlyArray<readonly [Intensity, string]> = [['low', 'Low'], ['normal', 'Normal'], ['high', 'High']];
+const FOCUS_OPTIONS = (Object.keys(FOCUS_LABELS) as IndividualFocus[]).map((f) => ({ value: f, label: FOCUS_LABELS[f] }));
+const LOAD_OPTIONS = (Object.keys(PLAYER_LOAD) as PlayerLoad[]).map((l) => ({ value: l, label: PLAYER_LOAD[l].label }));
+
+/** The academy's own training: the week's focus and how hard, and what each prospect works on. */
+export function AcademyTraining(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const store = world.players;
+  const plan = planOf(club);
+  const youth = g.youthSquad();
+  const set = plan.youth ?? { focus: 'auto' as WeeklyFocus, intensity: 'normal' as Intensity };
+  const byAssistant = world.delegation?.training === 'assistant';
+  const setWeek = (patch: Partial<{ focus: WeeklyFocus; intensity: Intensity }>): void => {
+    plan.youth = { ...set, ...patch };
+    g.touch();
+  };
+  const setOwn = (p: number, patch: Partial<{ focus: IndividualFocus; load: PlayerLoad }>): void => {
+    const now = individualOf(world, club, p);
+    plan.individual[p] = { focus: now.focus, load: now.load, ...patch };
+    g.touch();
+  };
+  return (
+    <Card title="Academy Training" icon="training" flush className="academy-card acx-card"
+      actions={<span className="faint">{youth.length} prospects</span>}>
+      <p className="acx-lead">
+        {byAssistant
+          ? 'Your assistant runs the training, the academy\'s with the first team\'s. Take it back on the Training screen to set it here.'
+          : 'The academy can train apart from the first team: its own focus and its own intensity, every week. Harder weeks bring them on faster and tire them more.'}
+      </p>
+      <div className="acx-train-week">
+        <label><span className="faint">Weekly focus</span>
+          <Segmented<WeeklyFocus> size="sm" options={YOUTH_FOCUS} value={set.focus} onChange={(v) => { if (!byAssistant) setWeek({ focus: v }); }} />
+        </label>
+        <label><span className="faint">Intensity</span>
+          <Segmented<Intensity> size="sm" options={YOUTH_INTENSITY} value={set.intensity}
+            onChange={(v) => { if (!byAssistant && set.focus !== 'auto') setWeek({ intensity: v }); }} />
+        </label>
+      </div>
+      {youth.length === 0 ? <Empty>No players in the academy.</Empty> : (
+        <div className="table-wrap">
+          <table className="data-table acx-training">
+            <thead>
+              <tr>
+                <th />
+                <th>Name</th>
+                <th>Pos</th>
+                <th className="num">Age</th>
+                <th className="num">Ability</th>
+                <th className="num">Potential</th>
+                <th>Works on</th>
+                <th>Load</th>
+              </tr>
+            </thead>
+            <tbody>
+              {youth.map((p) => {
+                const own = individualOf(world, club, p);
+                return (
+                  <tr key={p}>
+                    <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                    <td className="strong"><PlayerLink idx={p} /></td>
+                    <td><Pos pos={store.position[p] as Position} /></td>
+                    <td className="num">{store.ageOn(p, world.year, 181)}</td>
+                    <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                    <td className="num"><StarMeter value={store.potentialAbility[p]} size={11} /></td>
+                    <td><Dropdown<IndividualFocus> size="sm" value={own.focus} options={FOCUS_OPTIONS} searchable={false}
+                      onChange={(v) => setOwn(p, { focus: v })} /></td>
+                    <td><Dropdown<PlayerLoad> size="sm" value={own.load} options={LOAD_OPTIONS} searchable={false}
+                      onChange={(v) => setOwn(p, { load: v })} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
 }

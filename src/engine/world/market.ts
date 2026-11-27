@@ -112,7 +112,7 @@ export function pickLateDeals(world: World): LateDeal[] {
     const fringe = [...seller.players].sort((a, b) => store.currentAbility[a] - store.currentAbility[b])
       .filter((p) => loanOf(world, p) === undefined && pendingMoveOf(world, p) === undefined)[0];
     if (fringe === undefined) continue;
-    const buyers = world.clubs.filter((c) => c.id !== seller.id && c.id !== world.userClubId && c.nation === seller.nation &&
+    const buyers = world.clubs.filter((c) => c.id !== seller.id && c.id !== world.userClubId && c.nation === seller.nation && c.under21Of === undefined &&
       c.players.length > 0 && c.players.length < MAX_SQUAD - 1 && c.reputation >= seller.reputation - 500);
     if (buyers.length === 0) continue;
     const buyer = buyers[Math.floor(hash01(world.day, seller.id * 17 + 6) * buyers.length)];

@@ -33,6 +33,8 @@ import { generateYouthIntake } from './progression.ts';
 import { ensureCupCompetitions } from '../season/cups.ts';
 import { balanceRelegationSlots, divisionSize } from '../season/pyramid.ts';
 import { seedClubHistories } from './clubHistory.ts';
+import { logoCrest, RealWorldPlan } from './realWorld.ts';
+import type { RealDb } from '../../data/real/realDb.ts';
 import {
   contractEndSeason, newWorld, seasonEndDay, type Competition, type ManagerProfile, type NationalTeam, type World,
 } from './world.ts';
@@ -46,6 +48,11 @@ export interface WorldGenOptions {
   manager: ManagerProfile;
   /** The men's game or the women's. Absent: the men's. */
   gender?: 'men' | 'women';
+  /**
+   * A local real-data file: the top flights it covers get the real clubs and
+   * rosters, the rest of the world is generated as always. Men's game only.
+   */
+  real?: RealDb;
 }
 
 /**
@@ -90,6 +97,7 @@ export function generateWorld(opts: WorldGenOptions): World {
   setNationsGame(gender);
   const rng = world.rng;
   const usedNames = new Set<string>();
+  const real = opts.real !== undefined && gender === 'men' ? new RealWorldPlan(opts.real) : null;
 
   for (let n = 0; n < NATIONS.length; n++) {
     const nation = NATIONS[n];
@@ -98,15 +106,26 @@ export function generateWorld(opts: WorldGenOptions): World {
     for (let t = 0; t < shape.length; t++) {
       const tier = t + 1;
       for (let g = 0; g < shape[t]; g++) {
-        const size = clubsPerDivision(tier, rng);
+        // A real division where the file has one: the top flight, and the tier below where it is a single league.
+        const realLeague = shape[t] === 1 ? real?.leagueFor(nation.code, tier) : undefined;
+        const size = realLeague !== undefined ? real!.clubCount(realLeague) : clubsPerDivision(tier, rng);
         const comp = createLeague(world, n, tier, g, shape[t], size);
+        if (realLeague !== undefined) {
+          comp.name = `${nation.name} ${realLeague.name}`;
+          if (realLeague.logo) comp.logo = logoCrest(realLeague.logo, realLeague.name.slice(0, 3).toUpperCase());
+        }
 
+        const made: Club[] = [];
         for (let c = 0; c < size; c++) {
           const club = createClub(world, rng, n, tier, usedNames);
           club.leagueId = comp.id;
           comp.participants.push(club.id);
           comp.table.push(newTableRow(club.id));
+          made.push(club);
         }
+        if (realLeague !== undefined) real!.adopt(made, realLeague);
+        // Beside a real top flight, its clubs' under-21 sides in a league of their own.
+        if (realLeague !== undefined && tier === 1) createUnder21League(world, rng, n, made, usedNames, real!);
       }
     }
   }
@@ -119,15 +138,30 @@ export function generateWorld(opts: WorldGenOptions): World {
   // The veterans' long careers come from dice of their own.
   const veterans = new Rng(opts.seed ^ 0x01d_ca9e);
   for (const club of world.clubs) {
-    buildSquad(world, rng, club, veterans);
+    const rc = real?.clubs.get(club.id);
+    if (club.under21Of !== undefined && real !== null) {
+      const senior = world.clubs[club.under21Of];
+      finishSquad(world, club, real.buildUnder21Squad(world, rng, club, real.clubs.get(senior.id), squadLevelFor(senior.reputation)));
+    } else if (rc !== undefined) finishSquad(world, club, real!.buildSquad(world, rng, club, rc, squadLevelFor(club.reputation)));
+    else buildSquad(world, rng, club, veterans);
     hireStaff(world, rng, club);
+    if (rc !== undefined) {
+      real!.nameStaff(world, club, rc, (role) => {
+        const s = generateStaff(world, rng, club.nation, role, club.reputation);
+        s.clubId = club.id;
+        club.staff.push(s.id);
+        return s;
+      });
+    }
   }
+  // National-team players with no club in the file, in place of generated ones.
+  real?.placeInternationals(world);
 
   // Every club starts with an academy — two years' intakes, from dice of their
   // own so the rest of the world comes out as it always has.
   const academies = new Rng(opts.seed ^ 0x5eed_ac4d);
-  generateYouthIntake(world, academies);
-  generateYouthIntake(world, academies);
+  generateYouthIntake(world, academies, real?.realYouth);
+  generateYouthIntake(world, academies, real?.realYouth);
 
   // Where every senior player has been before.
   seedClubHistories(world, 0);
@@ -138,7 +172,9 @@ export function generateWorld(opts: WorldGenOptions): World {
   planInternationals(world);
   // Every squad has trained together: its setters and hitters know each other.
   seedChemistry(world);
-  // The real players written into the game, free agents to begin with.
+  // The real players written into the game, free agents to begin with, unless a real roster already has him.
+  real?.claimUniques(world);
+  real?.nameNationalCoaches(world);
   addUniquePlayers(world);
 
   return world;
@@ -184,6 +220,40 @@ function createLeague(
   world.competitions.push(comp);
   void size;
   return comp;
+}
+
+// ---- Under-21 sides ----------------------------------------------------------
+
+/** The tier an under-21 league sits at: off the bottom of every pyramid, which leaves it out. */
+export const UNDER21_TIER = 99;
+
+function createUnder21League(world: World, rng: Rng, nation: number, seniors: Club[], usedNames: Set<string>, real: RealWorldPlan): void {
+  const top = world.competitions[seniors[0]?.leagueId ?? -1];
+  if (top === undefined) return;
+  const comp = createLeague(world, nation, UNDER21_TIER, 0, 1, seniors.length);
+  comp.name = `${NATIONS[nation].name} U21`;
+  comp.under21 = true;
+  comp.reputation = Math.round(top.reputation * 0.3);
+  comp.promotionSlots = 0;
+  comp.relegationSlots = 0;
+  comp.hasPlayoffs = false;
+  comp.prizePool = Math.round(top.prizePool * 0.05);
+  for (const senior of seniors) {
+    const club = createClub(world, rng, nation, UNDER21_TIER, usedNames);
+    club.name = `${senior.name} U21`;
+    club.shortName = senior.shortName;
+    club.under21Of = senior.id;
+    if (senior.crest !== undefined) club.crest = senior.crest;
+    club.arenaName = senior.arenaName;
+    club.reputation = Math.round(senior.reputation * 0.35);
+    club.arenaCapacity = Math.round(Math.min(senior.arenaCapacity, 300 + senior.arenaCapacity * 0.15));
+    club.finances = newFinances(club.reputation, club.arenaCapacity);
+    club.leagueId = comp.id;
+    comp.participants.push(club.id);
+    comp.table.push(newTableRow(club.id));
+    (senior.affiliates ??= []).push(club.id);
+    void real;
+  }
 }
 
 // ---- Clubs ----------------------------------------------------------------
@@ -297,8 +367,14 @@ function buildSquad(world: World, rng: Rng, club: Club, veterans: Rng): void {
     }
   }
 
-  club.players = created;
   void nationDef;
+  finishSquad(world, club, created);
+}
+
+/** A built squad on the club's books: its preferred six and libero, and wages to match. */
+function finishSquad(world: World, club: Club, created: number[]): void {
+  const store = world.players;
+  club.players = created;
 
   // Preferred starting six in 5-1 rotational order: setter and opposite
   // diagonal, the two outsides diagonal, the two middles diagonal.

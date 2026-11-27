@@ -447,6 +447,31 @@ function runTransferWindow(world: World): number {
     });
   }
 
+  // An under-21 side's players move up at 22: to the senior club when it has room, onto the free list when not.
+  // Eligible next season: no older than 21 in the year it starts.
+  const nextStart = world.startYear + world.season + 1;
+  const under21Next = (p: number): boolean => nextStart - store.birthYear[p] <= 21;
+  for (const club of world.clubs) {
+    if (club.under21Of === undefined) continue;
+    const senior = world.clubs[club.under21Of];
+    for (const p of [...club.players]) {
+      if (under21Next(p)) continue;
+      club.players = club.players.filter((x) => x !== p);
+      club.preferredLineup = club.preferredLineup.filter((x) => x !== p);
+      if (club.preferredLibero === p) club.preferredLibero = -1;
+      if (senior !== undefined && senior.players.length < MAX_SQUAD) {
+        senior.players.push(p);
+        store.clubId[p] = senior.id;
+        logTransfer(world, p, club.id, senior.id, 0);
+      } else {
+        store.clubId[p] = -1;
+        logTransfer(world, p, club.id, -1, 0);
+        leftFrom.set(p, club.id);
+        freeAgents.push(p);
+      }
+    }
+  }
+
   // Clubs shop in order of standing — twice round: first every club fills out
   // its core, then the depth behind it, from whoever is left. Otherwise the
   // richest would take the players who start elsewhere to sit on their bench.
@@ -466,7 +491,8 @@ function runTransferWindow(world: World): number {
       if (need <= 0) continue;
 
       const candidates = [...available]
-        .filter((p) => store.position[p] === posKey && store.wage[p] <= wageRoom)
+        .filter((p) => store.position[p] === posKey && store.wage[p] <= wageRoom &&
+          (club.under21Of === undefined || under21Next(p)))
         .sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
 
       for (const p of candidates) {

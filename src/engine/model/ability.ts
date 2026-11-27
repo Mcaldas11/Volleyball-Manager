@@ -140,6 +140,15 @@ export function selectionScore(store: PlayerStore, i: number): number {
   return store.currentAbility[i] * (0.7 + 0.3 * (store.condition[i] / 100));
 }
 
+/** What his Current Ability would be if he played `pos`, without changing him. */
+export function abilityAt(store: PlayerStore, i: number, pos: Position): number {
+  const own = store.position[i];
+  store.position[i] = pos;
+  const ca = computeCurrentAbility(store, i);
+  store.position[i] = own;
+  return ca;
+}
+
 /** Recompute and store CA. Call after any attribute change. */
 export function refreshAbility(store: PlayerStore, i: number): number {
   const ca = computeCurrentAbility(store, i);

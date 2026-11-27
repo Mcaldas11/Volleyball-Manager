@@ -13,8 +13,7 @@ import {
 } from '../../engine/world/world.ts';
 import {
   abilityClass, Bar, Card, ClubCrest, ClubLink, clubThemeStyle, Empty, Flag, FormGuide, initials, KV, managerPhotoUrl, money,
-  PersonFace, PlayerFace, Pos, Segmented, StarMeter,
-} from '../components.tsx';
+  PersonFace, PlayerFace, Pos, Segmented, StarMeter, tierName } from '../components.tsx';
 import { HonourList, honourOf, type Honour } from '../honours.tsx';
 import { Icon, type IconName } from '../icons.tsx';
 import { useGame } from '../state.ts';
@@ -177,7 +176,7 @@ function AboutCard({ club }: { club: Club }): JSX.Element {
   return (
     <OvCard title="About Club" icon="club">
       <KV k="Nation"><Flag nation={club.nation} /> {NATIONS[club.nation]?.name ?? '—'}</KV>
-      <KV k="Division">{comp !== undefined ? `Tier ${comp.tier}` : '—'}</KV>
+      <KV k="Division">{comp !== undefined ? tierName(comp.tier) : '—'}</KV>
       <KV k="Status">{club.tier <= 1 ? 'Professional' : club.tier === 2 ? 'Semi-professional' : 'Amateur'}</KV>
       <KV k="Reputation">{reputationWord(club.reputation)}</KV>
       <KV k="Arena"><span className="ov-ellipsis" title={club.arenaName}>{club.arenaName}</span></KV>

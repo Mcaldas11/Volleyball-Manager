@@ -11,7 +11,8 @@ import {
   HIRABLE_ROLES, STAFF_DUTIES, STAFF_SLOTS, medicalQuality, staffBudget, staffWageBill, type StaffInterest,
 } from '../../engine/world/staffMarket.ts';
 import { contractEndSeason, seasonEndYear } from '../../engine/world/world.ts';
-import { Bar, ClubCrest, Empty, Flag, ListPager, Metric, money, Panel, Segmented, useFitList } from '../components.tsx';
+import { Bar, ClubCrest, Empty, Flag, ListPager, Metric, money, Panel, PersonFace, Segmented, useFitList } from '../components.tsx';
+import { staffPhotoUrl } from '../uniqueFaces.ts';
 import { ConfirmDialog } from '../confirmDialog.tsx';
 import { Dropdown } from '../dropdown.tsx';
 import { Icon, type IconName } from '../icons.tsx';
@@ -155,10 +156,12 @@ function StaffSlot({ s }: { s: Staff }): JSX.Element {
   const [releasing, setReleasing] = useState<number | null>(null);
   const talks = g.staffTalksWith(s.id);
   const rating = staffRating(s);
+  const photo = staffPhotoUrl(g.world!, s.id);
   return (
     <div className={`staff-slot${talks !== null ? ' talks' : ''}`} title={STAFF_DUTIES[s.role]}>
       <span className="staff-slot-main">
         <span className="staff-slot-name">
+          {photo !== undefined && <PersonFace photoUrl={photo} name={staffName(s)} size={20} />}
           <Flag nation={s.nation} /> <span className="player-link" onClick={() => g.selectCoach(s.id)}>{staffName(s)}</span>
         </span>
         <span className={`staff-slot-rating ${ratingTone(rating)}`}>{rating.toFixed(1)}</span>

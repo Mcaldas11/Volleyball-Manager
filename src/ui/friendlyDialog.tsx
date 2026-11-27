@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, type JSX } from 'react';
 import {
   clubFree, friendliesOf, friendlyDates, friendlyInterest, friendlyRequests, MAX_FRIENDLIES,
 } from '../engine/season/friendlies.ts';
-import { ClubCrest, Segmented, StarMeter } from './components.tsx';
+import { ClubCrest, Segmented, StarMeter, tierName } from './components.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
 import { Dropdown } from './dropdown.tsx';
@@ -131,7 +131,7 @@ function FriendlyForm(): JSX.Element {
                     <ClubCrest club={c} size={28} />
                     <span className="fr-club-main">
                       <strong>{c.name}</strong>
-                      <span className="faint">{world.competitions[c.leagueId]?.name ?? `Tier ${c.tier}`}</span>
+                      <span className="faint">{world.competitions[c.leagueId]?.name ?? tierName(c.tier)}</span>
                     </span>
                     <StarMeter value={c.reputation} max={10000} size={12} />
                     <span className={`fr-keen ${block !== null ? 'faint' : keen.cls}`}>{block ?? keen.label}</span>

@@ -1,5 +1,5 @@
 import { PortraitButton } from '../portraitEditor.tsx';
-import { useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX, type ReactNode } from 'react';
 import { DirectorDialog } from './Recruitment.tsx';
 import { PlayerCompare } from './Compare.tsx';
 import { AbilityChart } from '../abilityChart.tsx';
@@ -8,7 +8,7 @@ import { Dropdown, type DropOption } from '../dropdown.tsx';
 import { ConfirmDialog } from '../confirmDialog.tsx';
 import { PATH_NAMES } from '../../engine/world/academyPlans.ts';
 import type { TimelineItem } from '../../engine/world/playerTimeline.ts';
-import { AcademyDevelopment, AcademyFacilities, AcademyInternationals, AcademyPlans, AcademyRecruitment } from './AcademyPlus.tsx';
+import { AcademyDevelopment, AcademyFacilities, AcademyInternationals, AcademyPlans, AcademyRecruitment, AcademyTraining } from './AcademyPlus.tsx';
 import {
   ATTR_LABELS, HIDDEN_ATTR_SET, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS,
   type AttributeName,
@@ -876,7 +876,7 @@ export function PlayerDetail(): JSX.Element | null {
           {!inMatch && (
             <>
               {isYouth && (
-                <button className="primary" onClick={() => { g.promotePlayer(p); g.select(null); }}>
+                <button className="primary" onClick={() => { g.select(null); g.askPromote(p); }}>
                   Promote to first team
                 </button>
               )}
@@ -1286,7 +1286,7 @@ function assessment(pa: number): { text: string; cls: string } {
   return { text: 'Unlikely to make the grade', cls: 'dim' };
 }
 
-type AcademyTab = 'players' | 'plans' | 'development' | 'recruitment' | 'facilities' | 'intl' | 'league';
+type AcademyTab = 'players' | 'training' | 'plans' | 'development' | 'recruitment' | 'facilities' | 'intl' | 'league';
 
 /**
  * The academy: its prospects — what they might become, how their season in
@@ -1304,10 +1304,8 @@ export function YouthScreen(): JSX.Element {
   const [releasing, setReleasing] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const [posFilter, setPosFilter] = useState(-1);
-  const gridRef = useRef<HTMLDivElement>(null);
   const prospects = youth.filter((p) => (posFilter < 0 || store.position[p] === posFilter) &&
     store.fullName(p).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-  const grid = useFitGrid(gridRef, prospects.length, { minWidth: 250, height: 200 });
   const lent = g.academyLoans();
   const bestPotential = youth.length > 0 ? store.potentialAbility[youth[0]] : 0;
 
@@ -1359,10 +1357,11 @@ export function YouthScreen(): JSX.Element {
       </div>
 
       <div className="academy-tabs">
-        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['plans', 'Career plans'], ['development', 'Development'], ['recruitment', 'Recruitment'], ['facilities', 'Facilities'], ['intl', 'Internationals'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
+        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['training', 'Training'], ['plans', 'Career plans'], ['development', 'Development'], ['recruitment', 'Recruitment'], ['facilities', 'Facilities'], ['intl', 'Internationals'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
         <span className="faint">
           {tab === 'players'
             ? 'A new intake arrives each summer. Who plays for the U19s gets the minutes that make training stick.'
+            : tab === 'training' ? "The academy's week: train with the first team, or on its own focus and intensity."
             : tab === 'plans' ? 'The path each prospect is on, and the head of youth seeing it through.'
             : tab === 'development' ? 'Money and weeks put into one prospect at a time, no promise of a star.'
             : tab === 'recruitment' ? "The scouts paid to find youngsters in other clubs' academies."
@@ -1372,26 +1371,27 @@ export function YouthScreen(): JSX.Element {
         </span>
       </div>
 
-      {tab === 'plans' ? <AcademyPlans />
+      {tab === 'training' ? <AcademyTraining />
+        : tab === 'plans' ? <AcademyPlans />
         : tab === 'development' ? <AcademyDevelopment />
         : tab === 'recruitment' ? <AcademyRecruitment />
         : tab === 'facilities' ? <AcademyFacilities />
         : tab === 'intl' ? <AcademyInternationals />
         : tab === 'players' ? (
-        <>
-          <div className="athlete-toolbar">
-            <label className="athlete-search">
-              <Icon name="search" size={15} />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a prospect" aria-label="Find a prospect" />
-            </label>
-            <Segmented size="sm" options={SQUAD_POS_FILTER} value={posFilter} onChange={setPosFilter} />
-            <ListPager page={grid.page} pages={grid.pages} setPage={grid.setPage} />
-          </div>
-          {youth.length === 0
-            ? <Empty>No youth players yet. The next intake arrives at the end of the season.</Empty>
-            : (
-              <div className="athlete-prospect-grid" ref={gridRef} style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))` }}>
-                {prospects.slice(grid.from, grid.to).map((p) => {
+        <AcademyPlayersCard
+          prospects={prospects}
+          empty={youth.length === 0}
+          toolbar={(pager) => (
+            <div className="athlete-toolbar">
+              <label className="athlete-search">
+                <Icon name="search" size={15} />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a prospect" aria-label="Find a prospect" />
+              </label>
+              <Segmented size="sm" options={SQUAD_POS_FILTER} value={posFilter} onChange={setPosFilter} />
+              {pager}
+            </div>
+          )}
+          render={(p) => {
                   const pa = store.potentialAbility[p];
                   const ca = store.currentAbility[p];
                   const a = assessment(pa);
@@ -1435,7 +1435,7 @@ export function YouthScreen(): JSX.Element {
                       </div>
                       <footer onClick={(e) => e.stopPropagation()}>
                         <button className="sm" onClick={() => g.select(p)}>Open profile <Icon name="arrowRight" size={13} /></button>
-                        <button className="sm primary" onClick={() => g.promotePlayer(p)}>Promote</button>
+                        <button className="sm primary" onClick={() => g.askPromote(p)}>Promote</button>
                         <Dropdown<number>
                           size="sm"
                           className="academy-more"
@@ -1454,10 +1454,8 @@ export function YouthScreen(): JSX.Element {
                       </footer>
                     </article>
                   );
-                })}
-              </div>
-            )}
-        </>
+          }}
+        />
       ) : league === undefined
         ? <Empty>Your club has no youth league this season.</Empty>
         : <YouthLeagueView league={league} />}
@@ -1526,6 +1524,32 @@ export function YouthScreen(): JSX.Element {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The academy's prospects as cards, a page at a time, in the academy's card. Its own component so
+ * the grid is measured afresh each time the section is opened, not left measuring the one before.
+ */
+function AcademyPlayersCard({ prospects, empty, toolbar, render }: {
+  prospects: number[];
+  empty: boolean;
+  toolbar: (pager: JSX.Element) => ReactNode;
+  render: (p: number) => JSX.Element;
+}): JSX.Element {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const grid = useFitGrid(gridRef, prospects.length, { minWidth: 250, height: 200 });
+  return (
+    <Card title="Academy Players" icon="youth" className="academy-card acx-card acx-players"
+      actions={toolbar(<ListPager page={grid.page} pages={grid.pages} setPage={grid.setPage} />)}>
+      {empty
+        ? <Empty>No youth players yet. The next intake arrives at the end of the season.</Empty>
+        : (
+          <div className="athlete-prospect-grid" ref={gridRef} style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))` }}>
+            {prospects.slice(grid.from, grid.to).map(render)}
+          </div>
+        )}
+    </Card>
   );
 }
 

@@ -13,8 +13,7 @@ import { InternationalsScreen } from './screens/Internationals.tsx';
 import { PlayerFlag } from '../engine/model/players.ts';
 import type { Position } from '../engine/model/positions.ts';
 import {
-  ClubCrest, clubThemeStyle, Flag, initials, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss, WorkspaceHeading,
-} from './components.tsx';
+  ClubCrest, clubThemeStyle, Flag, initials, managerPhotoUrl, PersonFace, PlayerFace, Pos, useDismiss, WorkspaceHeading, tierName } from './components.tsx';
 import { NATIONS } from '../engine/world/nations.ts';
 import { baseNation, sideCode, sideName } from '../engine/world/sides.ts';
 import { userNation, worldRanking } from '../engine/world/internationals.ts';
@@ -23,6 +22,7 @@ import { FullscreenButton, useFullscreenKey } from './fullscreen.tsx';
 import { useBackNavigation } from './backNav.ts';
 import { HolidayDialog } from './holiday.tsx';
 import { FriendlyDialog } from './friendlyDialog.tsx';
+import { PromoteDialog } from './promoteDialog.tsx';
 import { CupsDialog } from './cupsDialog.tsx';
 import { ReplayViewer } from './replay.tsx';
 import { TacticPicker } from './tacticPicker.tsx';
@@ -244,6 +244,7 @@ function GameShell(): JSX.Element {
       <TrophyOverlay />
       <HolidayDialog />
       <FriendlyDialog />
+      <PromoteDialog />
       <CupsDialog />
       <ReplayViewer />
       <ProcessingWindow />
@@ -991,7 +992,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
                   <span className="search-league"><Icon name="trophy" size={15} /></span>
                   <span className="search-row-main">
                     <strong>{c.name}</strong>
-                    <span className="faint"><Flag nation={c.nation} /> League · Tier {c.tier} · {c.participants.length} clubs</span>
+                    <span className="faint"><Flag nation={c.nation} /> League · {tierName(c.tier)} · {c.participants.length} clubs</span>
                   </span>
                 </button>
               );
@@ -1035,7 +1036,7 @@ function GlobalSearch({ disabled }: { disabled: boolean }): JSX.Element {
                   <ClubCrest club={c} size={26} />
                   <span className="search-row-main">
                     <strong>{c.name}</strong>
-                    <span className="faint">Club · Tier {c.tier}</span>
+                    <span className="faint">Club · {tierName(c.tier)}</span>
                   </span>
                 </button>
               );

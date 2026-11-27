@@ -4,7 +4,7 @@ import { compareTableRows } from '../../engine/model/club.ts';
 import { cupGroupTable, cupProgress, isCupCompetition, nextClubWorldYear, stageLabel } from '../../engine/season/cups.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import type { Competition, Fixture } from '../../engine/world/world.ts';
-import { ClubCrest, ClubLink, Empty, Flag, FormGuide, money } from '../components.tsx';
+import { ClubCrest, ClubLink, Empty, Flag, FormGuide, money, tierName } from '../components.tsx';
 import { CompetitionLogo } from '../crest.tsx';
 import { Icon } from '../icons.tsx';
 import { WatchLiveButton } from '../watchLive.tsx';
@@ -227,7 +227,7 @@ function BrowseBar(): JSX.Element {
           ...worldwide.map((c) => ({ value: c.id, label: c.name, group: 'Continental & world', icon: <Icon name="world" size={14} /> })),
           ...leagues.map((c) => ({
             value: c.id, label: c.name, text: `${c.name} ${NATIONS[c.nation]?.name ?? ''}`, group: 'Leagues',
-            icon: <Flag nation={c.nation} />, hint: `Tier ${c.tier}`,
+            icon: <Flag nation={c.nation} />, hint: tierName(c.tier),
           })),
           ...national.map((c) => ({ value: c.id, label: c.name, group: 'National cups', icon: <Flag nation={c.nation} /> })),
         ]}
@@ -274,7 +274,7 @@ export function CompetitionDetail(): JSX.Element | null {
         <span className="comp-card-icon lg logo"><CompetitionLogo comp={comp} size={44} /></span>
         <div className="comp-page-titles">
           <span className="comp-card-kind">
-            {league ? <><Flag nation={comp.nation} /> {NATIONS[comp.nation]?.name} · Tier {comp.tier}</> : <>{competitionKind(comp)} · {comp.organizer ?? ''}</>}
+            {league ? <><Flag nation={comp.nation} /> {NATIONS[comp.nation]?.name} · {tierName(comp.tier)}</> : <>{competitionKind(comp)} · {comp.organizer ?? ''}</>}
           </span>
           <h2>{comp.name}</h2>
           <span className="faint">

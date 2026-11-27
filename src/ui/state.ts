@@ -52,7 +52,7 @@ import {
   MatchFormat, MatchSimulator, registeredLiberos, rotationSteps, simulateMatch, SUBS_PER_SET, type MatchResult, type RallyLogEntry, type ShoutKind,
   type SubstitutionPlan, type SubstitutionReason, type TeamSetup,
 } from '../engine/match/engine.ts';
-import { bestByAbility } from '../engine/model/ability.ts';
+import { bestByAbility, refreshAbility } from '../engine/model/ability.ts';
 import type { Club } from '../engine/model/club.ts';
 import { matchRating, playedInMatch } from '../engine/match/playerRating.ts';
 import type { PlayerMatchStats } from '../engine/match/stats.ts';
@@ -90,6 +90,7 @@ import {
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
 import { calendarOf } from '../engine/world/calendar.ts';
 import { generateWorld, type WorldScale } from '../engine/world/worldGen.ts';
+import type { RealDb } from '../data/real/realDb.ts';
 import {
   contractEndSeason, currentPhase, dayOfSeason, DAYS_PER_SEASON, euros, logTransfer, nextTransferWindow, seasonEndDay, SeasonPhase,
   transferWindowOn,
@@ -907,14 +908,14 @@ class Game {
   }
 
   /** A new career's world, built under the processing window: the world, then its first season. */
-  async createWorld(scale: WorldScale, seed: number, gender: 'men' | 'women' = 'men'): Promise<void> {
+  async createWorld(scale: WorldScale, seed: number, gender: 'men' | 'women' = 'men', real?: RealDb): Promise<void> {
     const manager = this.pendingManager;
     if (manager === null || this.task !== null) return;
     const size = `${scale[0].toUpperCase()}${scale.slice(1)}`;
-    await this.beginTask('Building the world', `${size} world · the ${gender === 'women' ? "women's" : "men's"} game`,
+    await this.beginTask('Building the world', `${size} world · the ${gender === 'women' ? "women's" : "men's"} game${real !== undefined ? ' · real database' : ''}`,
       ['Nations, clubs and players', 'The season ahead'], scale !== 'small');
     try {
-      const world = generateWorld({ seed, startYear: 2026, scale, manager, gender });
+      const world = generateWorld({ seed, startYear: 2026, scale, manager, gender, real });
       await this.taskStep(1);
       this.beginCareer(world, scale, gender);
     } catch (err) {
@@ -7365,11 +7366,37 @@ class Game {
     this.emit();
   }
 
-  /** Promote a youth player into the senior squad, contract and all. */
-  promotePlayer(playerIdx: number): void {
+  /** The youth player whose promotion is being decided: the position he goes up in. */
+  promoting: number | null = null;
+
+  /** Ask where a youth player will play before he goes up. */
+  askPromote(playerIdx: number): void {
+    this.promoting = playerIdx;
+    this.emit();
+  }
+
+  cancelPromote(): void {
+    this.promoting = null;
+    this.emit();
+  }
+
+  /**
+   * Promote a youth player into the senior squad, contract and all — in `position`
+   * when one is chosen, his old one kept as his second.
+   */
+  promotePlayer(playerIdx: number, position?: Position): void {
     const world = this.world;
     const club = this.club;
+    this.promoting = null;
     if (world === null || club === null) return;
+    const store = world.players;
+    if (position !== undefined && position !== store.position[playerIdx]) {
+      const old = store.position[playerIdx];
+      store.position[playerIdx] = position;
+      store.secondary[playerIdx] = old;
+      store.setFamiliarity(playerIdx, old, 100);
+      refreshAbility(store, playerIdx);
+    }
     club.youthPlayers = club.youthPlayers.filter((p) => p !== playerIdx);
     club.players.push(playerIdx);
     world.players.setFlag(playerIdx, PlayerFlag.Youth, false);

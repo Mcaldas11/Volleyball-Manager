@@ -139,6 +139,8 @@ export interface Competition {
   promotionSlots: number;
   relegationSlots: number;
   hasPlayoffs: boolean;
+  /** An under-21 league: outside the pyramid, no one up or down, no cups from it. */
+  under21?: boolean;
   playoffTeams: number;
   /** Winner of the most recent edition; -1 if never contested. */
   champion: number;
@@ -823,6 +825,12 @@ export interface World {
   shirtNumbers?: Record<number, number>;
   /** The real players written into the game, where each is in the store, by key — see uniquePlayers.ts. */
   uniquePlayers?: Record<string, number>;
+  /** A real-data world's photos, by permanent player id: files the dev server serves (see realWorld.ts). */
+  realPhotos?: Record<number, string>;
+  /** The same for the real coaches, by staff id. */
+  realStaffPhotos?: Record<number, string>;
+  /** A real-data world's national team head coaches, by nation index, until the job first changes hands. */
+  realNationalCoaches?: Record<number, string>;
   /** Agents' business: the summer moves lined up for the manager's players, and the clients offered him lately — see agents.ts. */
   preContracts?: Record<number, PreContract>;
   agentPitches?: Record<number, number>;

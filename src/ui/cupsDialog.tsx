@@ -14,7 +14,7 @@ import { friendlyCupDays } from '../engine/world/nationalExtras.ts';
 import { nationName, poolTable, rankingFor, userNation, type Tournament } from '../engine/world/internationals.ts';
 import { sideAge } from '../engine/world/sides.ts';
 import type { LeagueTableRow } from '../engine/model/club.ts';
-import { ClubCrest, Flag, Segmented } from './components.tsx';
+import { ClubCrest, Flag, Segmented, tierName } from './components.tsx';
 import { Dropdown } from './dropdown.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
@@ -368,7 +368,7 @@ function HostClub({ onDone }: { onDone: () => void }): JSX.Element {
               <ClubCrest club={c} size={26} />
               <span className="fr-club-main">
                 <strong>{c.name}</strong>
-                <span className="faint">{world.competitions[c.leagueId]?.name ?? `Tier ${c.tier}`}</span>
+                <span className="faint">{world.competitions[c.leagueId]?.name ?? tierName(c.tier)}</span>
               </span>
             </button>
           );

@@ -87,7 +87,7 @@ export function youthState(world: World): YouthState {
   if (world.youth !== undefined && world.youth.season === world.season) return world.youth;
   const leagues: YouthLeague[] = [];
   for (const comp of world.competitions) {
-    if (comp.kind !== 'league' || comp.participants.length < 4) continue;
+    if (comp.kind !== 'league' || comp.under21 === true || comp.participants.length < 4) continue;
     const clubs = comp.participants.filter((id) => world.clubs[id] !== undefined);
     leagues.push({
       leagueId: comp.id,

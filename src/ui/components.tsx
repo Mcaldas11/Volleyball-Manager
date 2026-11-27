@@ -496,6 +496,11 @@ export function Empty({ children }: { children: ReactNode }): JSX.Element {
  * sim lays out its widgets: a header strip with an optional icon and actions,
  * and a body below.
  */
+/** A division's level in words: "Tier 2", or "U21" for an under-21 league, which sits outside the pyramid. */
+export function tierName(tier: number): string {
+  return tier >= 99 ? 'U21' : `Tier ${tier}`;
+}
+
 export function Card({
   title, icon, actions, children, className, flush = false, style,
 }: {

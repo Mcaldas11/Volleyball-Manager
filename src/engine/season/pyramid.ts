@@ -27,7 +27,7 @@ const GROUP_SPREAD = 2;
 export function leaguePyramids(world: World): Map<number, Competition[][]> {
   const out = new Map<number, Competition[][]>();
   for (const comp of world.competitions) {
-    if (comp.kind !== 'league') continue;
+    if (comp.kind !== 'league' || comp.under21 === true) continue;
     const tiers = out.get(comp.nation) ?? [];
     (tiers[comp.tier - 1] ??= []).push(comp);
     out.set(comp.nation, tiers);

@@ -17,9 +17,9 @@ import {
 import type { Position } from '../../engine/model/positions.ts';
 import type { Competition, ManagerLook, ManagerProfile } from '../../engine/world/world.ts';
 import { NATIONS, nationsIn, type Confederation } from '../../engine/world/nations.ts';
+import { REAL_DB_URL, type RealDb } from '../../data/real/realDb.ts';
 import {
-  abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, Segmented, StarMeter,
-} from '../components.tsx';
+  abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, Segmented, StarMeter, tierName } from '../components.tsx';
 import { Icon } from '../icons.tsx';
 import { FullscreenButton } from '../fullscreen.tsx';
 import { useGame, type CareerMode } from '../state.ts';
@@ -513,6 +513,21 @@ const WORLD_SCALES: ReadonlyArray<{ id: 'small' | 'standard' | 'large'; title: s
   { id: 'large', title: 'Large', text: 'Every division worldwide (~117,000 players).' },
 ];
 
+/** The dev server's local real-data file, or null: in a build there is never one. */
+function useLocalRealDb(): RealDb | null {
+  const [db, setDb] = useState<RealDb | null>(null);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    let live = true;
+    fetch(REAL_DB_URL)
+      .then((r) => (r.ok ? r.json() as Promise<RealDb> : null))
+      .then((d) => { if (live && d !== null && d.version === 1 && d.leagues.length > 0) setDb(d); })
+      .catch(() => { /* no file */ });
+    return () => { live = false; };
+  }, []);
+  return db;
+}
+
 export function WorldSetup(): JSX.Element {
   const g = useGame();
   const [scale, setScale] = useState<'small' | 'standard' | 'large'>('standard');
@@ -520,9 +535,13 @@ export function WorldSetup(): JSX.Element {
   const [seed, setSeed] = useState('20260728');
   // The world is built under the processing window, which holds everything else still.
   const building = g.task !== null;
+  // A local real-data file, when the dev server has one: never in a public build.
+  const realDb = useLocalRealDb();
+  const [source, setSource] = useState<'generated' | 'real'>('generated');
+  const useReal = source === 'real' && realDb !== null && gender === 'men';
 
   const start = (): void => {
-    void g.createWorld(scale, Number(seed) || 1, gender);
+    void g.createWorld(scale, Number(seed) || 1, gender, useReal ? realDb : undefined);
   };
 
   return (
@@ -549,7 +568,15 @@ export function WorldSetup(): JSX.Element {
           ))}
         </div>
       </Card>
-      <Card title="World Size" icon="world" style={{ marginTop: 14 }}>
+      <Card title="World Size" icon="world" style={{ marginTop: 14 }}
+        actions={realDb !== null ? (
+          <span className="game-pick" title="Real clubs and players from a file on this computer">
+            <Segmented<'generated' | 'real'> size="sm"
+              options={[['generated', 'Fictional'], ['real', 'Real database (local)']] as const}
+              value={useReal ? 'real' : 'generated'}
+              onChange={(v) => { if (!building && gender === 'men') setSource(v); }} />
+          </span>
+        ) : undefined}>
         <div className="scale-options">
           {WORLD_SCALES.map((s) => (
             <button
@@ -569,11 +596,19 @@ export function WorldSetup(): JSX.Element {
           <span>Seed</span>
           <input value={seed} onChange={(e) => setSeed(e.target.value)} disabled={building} />
         </label>
-        <p className="footnote">
-          The same seed always produces the same world. Every player here is fictional and
-          procedurally generated, see the README for importing real FIVB data with your own VIS
-          credentials.
-        </p>
+        {useReal ? (
+          <p className="footnote">
+            Real clubs and rosters in {realDb.leagues.map((l) => NATIONS.find((n) => n.code === l.nation)?.name ?? l.nation).join(', ')},
+            gathered {new Date(realDb.builtAt).toLocaleDateString('en-GB')} from public league pages. Every ability
+            is estimated. Other leagues are generated. This file stays on this computer.
+          </p>
+        ) : (
+          <p className="footnote">
+            The same seed always produces the same world. Every player here is fictional and
+            procedurally generated, see the README for importing real FIVB data with your own VIS
+            credentials.
+          </p>
+        )}
       </Card>
 
       <div className="wizard-actions">
@@ -715,7 +750,7 @@ export function ClubSelect(): JSX.Element {
                   value={leagueId}
                   onChange={setLeagueId}
                   options={(leaguesByNation.get(nation) ?? []).map((c) => ({
-                    value: c.id, label: divisionName(c), hint: `Tier ${c.tier}`, icon: <Icon name="trophy" size={15} />,
+                    value: c.id, label: divisionName(c), hint: tierName(c.tier), icon: <Icon name="trophy" size={15} />,
                   }))}
                 />
               </span>
@@ -754,7 +789,7 @@ export function ClubSelect(): JSX.Element {
                 <ClubCrest club={c} size={54} />
                 <span className="club-tile-name">{c.name}</span>
                 {searching && (
-                  <span className="club-tile-meta"><Flag nation={c.nation} /> Tier {c.tier}</span>
+                  <span className="club-tile-meta"><Flag nation={c.nation} /> {tierName(c.tier)}</span>
                 )}
               </button>
             ))}
@@ -769,7 +804,7 @@ export function ClubSelect(): JSX.Element {
                   <ClubCrest club={club} size={28} />
                   <span>
                     <strong>{club.name}</strong>
-                    <span className="faint"> · {clubLeague?.name ?? `Tier ${club.tier}`}</span>
+                    <span className="faint"> · {clubLeague?.name ?? tierName(club.tier)}</span>
                   </span>
                 </span>
               )}
@@ -791,7 +826,7 @@ export function ClubSelect(): JSX.Element {
                 <ClubCrest club={club} size={64} />
                 <div>
                   <strong className="club-preview-name">{club.name}</strong>
-                  <span className="faint"><Flag nation={club.nation} /> {NATIONS[club.nation].name} · Tier {club.tier}</span>
+                  <span className="faint"><Flag nation={club.nation} /> {NATIONS[club.nation].name} · {tierName(club.tier)}</span>
                 </div>
               </div>
               <KV k="League">{clubLeague !== undefined ? divisionName(clubLeague) : '—'}</KV>

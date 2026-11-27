@@ -59,6 +59,8 @@ export interface TrainingPlan {
   assistantIndividual: boolean;
   /** A position each player is learning, by player index — absent on plans from before it could be set. */
   positions?: Record<number, Position>;
+  /** The academy's own training, set by the manager: absent, or 'auto', and it trains with the first team. */
+  youth?: { focus: WeeklyFocus; intensity: Intensity };
 }
 
 export interface Session {
@@ -497,6 +499,25 @@ export function clubWeek(world: World, club: Club): ClubWeek {
     for (const a of KIND_IDX[k]) bias[a] += (kinds[k] / total) * 1.5;
   }
   return { dev, load, bias: new Map([['auto', bias]]) };
+}
+
+/**
+ * The academy's week when the manager has set its training: a normal week's work
+ * at its own intensity, pulled toward its own focus. Null when it trains with the
+ * first team (the default, and every other club).
+ */
+export function youthWeek(world: World, club: Club): ClubWeek | null {
+  if (!ownPlan(world, club)) return null;
+  const y = planOf(club).youth;
+  if (y === undefined || y.focus === 'auto') return null;
+  const int = INTENSITY[y.intensity];
+  const bias = new Float64Array(ATTR_COUNT).fill(1);
+  if (y.focus === 'balanced') {
+    for (const k of ['physical', 'technical', 'tactical'] as const) for (const a of KIND_IDX[k]) bias[a] += 0.5;
+  } else {
+    for (const a of KIND_IDX[y.focus]) bias[a] += 1.5;
+  }
+  return { dev: NORMAL_WEEK_DEV * int.dev, load: NORMAL_WEEK_LOAD * int.load, bias: new Map([['auto', bias]]) };
 }
 
 /** How much likelier an injury a player's week has made him. */
