@@ -65,7 +65,7 @@
   const clamp = (x, low = 0, high = 1) => Math.max(low, Math.min(high, x));
   const setting = (name) => clamp(Number(read(name, defaults[name])) || 0, 0, 100);
   const state = {
-    enabled: read('enabled', 'on') !== 'off',
+    enabled: true,
     gains: Object.fromEntries(channels.map(k => [k, setting(k)])),
     ready: false, started: false, active: false, optionalLoaded: 0,
     last: {}, lastHit: '', lastPose: '', effortCount: 0, errors: 0, matchStart: null,
@@ -106,8 +106,10 @@
     try { return clamp(Number(localStorage.getItem('vm.soundVolume') ?? '1')); }
     catch { return 1; }
   };
+  // One switch for the match's sound: the game's own (vm.sound and its volume). The old separate
+  // switch of this script stayed off once turned off, and the game's toggle could not turn it back on.
   const allowed = () => state.matchStart !== null && isLive() && !state.paused &&
-    !document.hidden && !mutedByFocus && baseEnabled() && state.enabled;
+    !document.hidden && !mutedByFocus && baseEnabled();
 
   // All 25 known SFX and 4 music files are SHA-checked during packaging.
   // Read the copied catalog once on launch. Never fetch from external providers.
@@ -270,7 +272,7 @@
   function canIntercept() {
     if (!isLive()) return false; // Splash screen and menus keep existing audio.
     if (state.paused) return true; // Suppress original fallback during manual pause.
-    if (!state.enabled || !baseEnabled() || document.hidden || mutedByFocus) return true;
+    if (!baseEnabled() || document.hidden || mutedByFocus) return true;
     unlock();
     if (!state.ready || !ctx || ctx.state !== 'running') return false; // Original fallback until ready.
     return true;

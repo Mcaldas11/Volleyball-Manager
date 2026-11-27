@@ -25,12 +25,22 @@ export function under21Eligible(world: World, p: number): boolean {
   return world.players.birthYear[p] >= world.startYear + world.season - 20;
 }
 
-/** A club's players for a match day: an under-21 side's own and the senior club's of under-21 age. */
+/**
+ * A club's players for a match day: an under-21 side's own and the senior
+ * club's of under-21 age, whom its coach calls down for the match, all but
+ * those the manager, coaching the senior club, has kept back for that day.
+ */
 export function matchSquadPlayers(world: World, club: Club): number[] {
   if (club.under21Of === undefined) return [...club.players];
   const senior = world.clubs[club.under21Of];
-  const extra = senior === undefined ? [] : seniorsEligible(world, senior).filter((p) => !club.players.includes(p));
+  const extra = senior === undefined ? [] : seniorsEligible(world, senior)
+    .filter((p) => !club.players.includes(p) && !keptBack(world, club.id, p));
   return [...club.players, ...extra];
+}
+
+/** Whether the manager has kept a senior player back from the side's match today. */
+function keptBack(world: World, side: number, p: number): boolean {
+  return (world.under21?.matchCalls ?? []).some((c) => c.side === side && c.day === world.day && c.kept && c.players.includes(p));
 }
 
 /** The first team's players who could also play for the side. */
@@ -93,6 +103,20 @@ export interface Under21Relations {
   requests: CallUpRequest[];
   /** The day the senior club last asked: it does not ask every week. */
   lastAsked: number;
+  /** The under-21 coach's calls for the senior club's young players, match by match, when the manager coaches the senior club. */
+  matchCalls?: MatchCall[];
+}
+
+/** The under-21 coach wants some of the first team's young players for one match. */
+export interface MatchCall {
+  id: number;
+  side: number;
+  /** The match day. */
+  day: number;
+  players: number[];
+  /** The manager's answer: kept back, or (the default) let go. */
+  kept: boolean;
+  answered: boolean;
 }
 
 export function under21Relations(world: World): Under21Relations {
@@ -160,6 +184,72 @@ export function under21Day(world: World): void {
       + `He would be registered with the first team from now on${under21Eligible(world, best.p) ? ', and still play for you on your match days' : ''}. `
       + `Saying yes is what the club expects of its under-21 coach, and saying no will be remembered. Answer within ${ANSWER_DAYS} days.`,
   });
+}
+
+/** How many days before its match the side's coach asks for the first team's young players. */
+const CALL_AHEAD = 2;
+
+/**
+ * Each day, when the manager coaches a senior club with an under-21 side: the
+ * side's coach, two days before a match, asks for the first-team players of
+ * under-21 age he would put on the court. They go unless the manager keeps
+ * them back; the matches fall on different days.
+ */
+export function seniorCallDay(world: World): void {
+  if (managedSide(world) !== null) return;
+  const senior = world.clubs[world.userClubId];
+  if (senior === undefined) return;
+  const side = under21SideOf(world, senior);
+  if (side === undefined) return;
+  const R = under21Relations(world);
+  R.matchCalls = (R.matchCalls ?? []).filter((c) => c.day >= world.day - 7);
+  const day = world.day + CALL_AHEAD;
+  if (R.matchCalls.some((c) => c.side === side.id && c.day === day)) return;
+  const fixture = (world.fixturesByDay.get(day) ?? []).map((id) => world.fixtures[id])
+    .find((f) => f !== undefined && (f.home === side.id || f.away === side.id));
+  if (fixture === undefined) return;
+  const store = world.players;
+  const fit = (p: number): boolean => store.injuryDaysLeft[p] === 0;
+  // The ones he would start: among the two best at their position, the side's own and the seniors together.
+  const young = seniorsEligible(world, senior).filter(fit);
+  const pool = [...side.players.filter(fit), ...young];
+  const wanted = young.filter((p) => {
+    const better = pool.filter((x) => x !== p && store.position[x] === store.position[p] && store.currentAbility[x] > store.currentAbility[p]);
+    return better.length < 2;
+  });
+  if (wanted.length === 0) return;
+  const call: MatchCall = { id: R.nextId++, side: side.id, day, players: wanted, kept: false, answered: false };
+  R.matchCalls.push(call);
+  const opponent = world.clubs[fixture.home === side.id ? fixture.away : fixture.home];
+  const names = wanted.map((p) => store.fullName(p));
+  const one = names.length === 1;
+  const list = one ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  postMessage(world, {
+    category: 'board', from: `${side.name} coach`, clubId: side.id, playerIdx: wanted[0], matchCallId: call.id,
+    subject: `${side.name} want ${one ? names[0] : `${names.length} of your players`} for their match`,
+    body: `The under-21 coach would like ${list} for the match against ${opponent?.name ?? 'their opponents'} in ${CALL_AHEAD} days. `
+      + `The under-21s play on other days, so ${one ? 'he stays' : 'they stay'} available to you. `
+      + `${one ? 'He goes' : 'They go'} unless you keep ${one ? 'him' : 'them'} back.`,
+  });
+}
+
+/** The manager's answer to the side's call for a match: let them go, or keep them back. */
+export function answerMatchCall(world: World, id: number, letGo: boolean): string {
+  const call = (world.under21?.matchCalls ?? []).find((c) => c.id === id);
+  if (call === undefined || call.answered || call.day < world.day) return 'That match has been played.';
+  call.answered = true;
+  call.kept = !letGo;
+  const side = world.clubs[call.side];
+  const n = call.players.length;
+  const who = n === 1 ? world.players.fullName(call.players[0]) : `The ${n} players`;
+  return letGo
+    ? `${who} will play for ${side?.name ?? 'the under-21s'}.`
+    : `${who} ${n === 1 ? 'stays' : 'stay'} with the first team for that match.`;
+}
+
+/** Whether the side's call for a match still waits on the manager. */
+export function matchCallPending(world: World, id: number): boolean {
+  return (world.under21?.matchCalls ?? []).some((c) => c.id === id && !c.answered && c.day >= world.day);
 }
 
 /** The manager's answer to a request. Silence, when the request lapses, counts as a no, a little less sharply. */

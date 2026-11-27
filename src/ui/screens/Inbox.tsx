@@ -1350,6 +1350,15 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     );
   }
 
+  if (m.matchCallId !== undefined && (world.under21?.matchCalls ?? []).some((c) => c.id === m.matchCallId && !c.answered && c.day >= world.day)) {
+    out.push(
+      <button key="matchcall-yes" className="paper-btn primary-dark" onClick={() => g.answerMatchCall(m.matchCallId!, true)}>
+        <Icon name="check" size={15} /> Let them play
+      </button>,
+      <button key="matchcall-no" className="paper-btn" onClick={() => g.answerMatchCall(m.matchCallId!, false)}>Keep them</button>,
+    );
+  }
+
   const cupInvite = m.cupInviteId !== undefined
     ? world.preseasonCups?.invites.find((i) => i.id === m.cupInviteId && i.answered === undefined && i.expiresOn >= world.day)
     : undefined;

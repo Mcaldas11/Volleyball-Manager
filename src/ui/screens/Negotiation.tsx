@@ -146,7 +146,7 @@ export function NegotiationScreen(): JSX.Element | null {
             </ContractRow>
             <p className="contract-hint">
               {sellingClub.shortName} pay the rest: {money(wage - cost)} · Room in the wage budget:{' '}
-              <b className={wageRoom < cost ? 'bad' : ''}>{money(wageRoom)}</b>
+              <b className={cost > 0 && wageRoom < cost ? 'bad' : ''}>{money(wageRoom)}</b>
               {windowHint}
             </p>
             <p className="contract-hint">

@@ -26,9 +26,13 @@ export function soundOn(): boolean {
 export function setSoundOn(on: boolean): void {
   try {
     window.localStorage.setItem(KEY, on ? 'on' : 'off');
+    // Turned on with the volume left at nothing would still be silence: back to a level that is heard.
+    if (on && Number(window.localStorage.getItem(VOLUME_KEY) ?? '1') <= 0) window.localStorage.setItem(VOLUME_KEY, '0.8');
   } catch {
     // Without storage it simply isn't remembered.
   }
+  // The match's own sound (crowd, ball, whistles) follows the same switch.
+  window.__vmMatchAudio?.setEnabled?.(on);
 }
 
 /** How loud the sounds are, 0 to 1. */
@@ -267,6 +271,7 @@ declare global {
       crowd?: (loud: number, point?: PointCue) => boolean;
       phase?: (phase: string, data?: unknown) => void;
       review?: (phase: string, data?: unknown) => void;
+      setEnabled?: (on: boolean) => void;
     };
   }
 }

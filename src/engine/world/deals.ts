@@ -683,7 +683,8 @@ function resolveLoan(world: World, club: Club, t: Talks, offer: TalksOffer): voi
   const shareText = `${Math.round(share * 100)}% of his wages`;
 
   const problem = squadSize(world, club) >= MAX_SQUAD ? 'the squad is full'
-    : wageRoom(world, club) < store.wage[p] * share ? 'there is no longer room in the wage budget'
+    // Paying none of his wage asks nothing of the budget.
+    : share > 0 && wageRoom(world, club) < store.wage[p] * share ? 'there is no longer room in the wage budget'
       : null;
   if (problem !== null) {
     say(world, { subject: `Loan off: ${name}`, body: `The loan for ${name} has fallen through: ${problem}.`, playerIdx: p, category: 'offer' });

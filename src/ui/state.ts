@@ -85,7 +85,7 @@ import type { BallMark } from '../engine/match/landing.ts';
 import { offerStaffRole, persuadeToPlayOn, retirementPlan, willRetire, type RetirementPlan } from '../engine/world/retirement.ts';
 import { interestedClubs, type ClubInterest } from '../engine/world/interest.ts';
 import {
-  advanceDay, applyMatchResult, forfeitIfShort, isSeasonOver, matchPrep, newSeasonContext, oppositionRead, pickLineup,
+  advanceDay, applyMatchResult, forfeitIfShort, isSeasonOver, matchPrep, matchSquadClub, newSeasonContext, oppositionRead, pickLineup,
   playFixture, startSeason, toTeamSetup, type SeasonContext,
 } from '../engine/season/seasonEngine.ts';
 import { endSeason, type RolloverReport } from '../engine/season/rollover.ts';
@@ -164,7 +164,7 @@ import {
   type SearchScope,
 } from '../engine/world/academy.ts';
 import { notePlayerEvent, playerTimeline, type TimelineItem } from '../engine/world/playerTimeline.ts';
-import { answerCallUp, askForSenior, callUpFromUnder21, managedSide, matchSquadPlayers, sendToUnder21, under21SideOf } from '../engine/world/under21.ts';
+import { answerCallUp, answerMatchCall, askForSenior, callUpFromUnder21, managedSide, matchSquadPlayers, sendToUnder21, under21SideOf } from '../engine/world/under21.ts';
 import { diagnose, emptyStats, mergeStats, opponentCounter, playStats, type Diagnosis, type Finding, type TacticChange } from '../engine/match/assistant.ts';
 import { PREP_VARIANTS, runPrepLab, scoutOpponent, type LabResult, type ScoutedOpponent } from '../engine/world/prepLab.ts';
 import { currentFamiliarity, overallFamiliarity } from '../engine/match/tacticFamiliarity.ts';
@@ -3385,8 +3385,9 @@ class Game {
         roomEdge: cohesionEdge(cohesionOf(world, c.id)), chemistry: chemistryFor(world),
       };
     };
-    const homeSetup = md.userIsHome ? userSetup : theirs(homeClub);
-    const awaySetup = md.userIsHome ? theirs(awayClub) : userSetup;
+    // An under-21 opponent brings the senior club's young players its coach has called down.
+    const homeSetup = md.userIsHome ? userSetup : theirs(matchSquadClub(world, homeClub)!);
+    const awaySetup = md.userIsHome ? theirs(matchSquadClub(world, awayClub)!) : userSetup;
     this.opponentTactics = (md.userIsHome ? awaySetup : homeSetup).tactics;
     md.opponentMoves = [];
     md.assistantApplied = {};
@@ -6910,6 +6911,8 @@ class Game {
   setLoanShare(share: number): void {
     if (this.negotiation === null) return;
     this.negotiation.loanShare = share;
+    // A new share: the last one's complaint no longer stands.
+    this.negotiation.message = null;
     this.emit();
   }
 
@@ -6930,7 +6933,8 @@ class Game {
     const lender = world.clubs[t.sellingClubId];
     if (lender === undefined) return;
     const cost = world.players.wage[t.playerIdx] * n.loanShare;
-    if (cost > wageRoom(world, club)) {
+    // Paying none of his wage asks nothing of the budget, however stretched it is.
+    if (cost > 0 && cost > wageRoom(world, club)) {
       n.message = 'Not enough room in the wage budget for that share of his wage.';
       this.emit();
       return;
@@ -7378,6 +7382,13 @@ class Game {
   callUpFromUnder21(p: number): void {
     if (this.world === null || this.club === null) return;
     this.notice = callUpFromUnder21(this.world, this.club, p).text;
+    this.emit();
+  }
+
+  /** Answer the under-21 coach's call for the first team's young players for a match. */
+  answerMatchCall(id: number, letGo: boolean): void {
+    if (this.world === null) return;
+    this.notice = answerMatchCall(this.world, id, letGo);
     this.emit();
   }
 

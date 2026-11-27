@@ -6,7 +6,7 @@ import { StaffRole } from '../model/staff.ts';
 import { NATION_BY_CODE } from './nations.ts';
 import { generateWorld } from './worldGen.ts';
 import { stubManager } from './world.ts';
-import { under21Relations, answerCallUp, callUpFromUnder21, matchSquadPlayers, sendToUnder21, under21Day, under21Eligible, under21SideOf } from './under21.ts';
+import { under21Relations, answerCallUp, answerMatchCall, callUpFromUnder21, matchSquadPlayers, seniorCallDay, sendToUnder21, under21Day, under21Eligible, under21SideOf } from './under21.ts';
 import { acceptJobOffer, appointManager, askForFirstTeamJob, careerDay, firstTeamAskBlock, sackCoach } from './career.ts';
 import { advanceDay, isSeasonOver, matchSquadClub, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
@@ -210,6 +210,35 @@ test("coaching an under-21 side: the senior club asks for a player, and the answ
   assert.ok(senior.players.includes(request.playerIdx), 'he went up');
   assert.ok(world.under21!.goodwill > goodwill);
   assert.ok(matchSquadPlayers(world, side).includes(request.playerIdx) || !under21Eligible(world, request.playerIdx), 'still plays for the side if young enough');
+});
+
+test("coaching the first team: the under-21 coach asks for its young players before a match, and they can be kept back", () => {
+  const world = generateWorld({ seed: 7, startYear: 2026, scale: 'small', manager: stubManager(), real: fakeDb() });
+  const senior = world.clubs.find((c) => c.name === 'Clube Primeiro')!;
+  const side = under21SideOf(world, senior)!;
+  appointManager(world, senior.id);
+  startSeason(world, newSeasonContext());
+  const store = world.players;
+  // One of the first team, the best at his position, young enough for the under-21s.
+  const young = [...senior.players].sort((a, b) => store.currentAbility[b] - store.currentAbility[a])[0];
+  store.birthYear[young] = 2007;
+  store.injuryDaysLeft[young] = 0;
+  const first = world.fixtures.filter((f) => f.home === side.id || f.away === side.id).sort((a, b) => a.day - b.day)[0];
+  assert.ok(first !== undefined, 'the side has matches');
+  world.day = first.day - 2;
+  seniorCallDay(world);
+  const call = world.under21?.matchCalls?.find((c) => c.day === first.day);
+  assert.ok(call !== undefined && call.players.includes(young), 'the coach asked for him');
+  assert.ok(world.messages.some((m) => m.matchCallId === call.id), 'in the inbox');
+  world.day = first.day;
+  assert.ok(matchSquadPlayers(world, side).includes(young), 'unanswered, he goes');
+  world.day = first.day - 1;
+  answerMatchCall(world, call.id, false);
+  world.day = first.day;
+  assert.ok(!matchSquadPlayers(world, side).includes(young), 'kept back for that match');
+  assert.ok(senior.players.includes(young), 'and still in the first team');
+  world.day = first.day + 7;
+  assert.ok(matchSquadPlayers(world, side).includes(young), 'only for that match');
 });
 
 test('the under-21 coach can ask for the first-team job, and the board can say yes', () => {

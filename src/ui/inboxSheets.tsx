@@ -487,7 +487,9 @@ function competitionNamed(world: World, subject: string): number | undefined {
  */
 export function ContextSheet({ message: m }: { message: GameMessage }): JSX.Element | null {
   const g = useGame();
-  const world = g.world!;
+  // Between saves (loading one, back to the menu) there is no world for a moment: nothing to show.
+  const world = g.world;
+  if (world === null) return null;
   const me = world.userClubId;
   const s = m.subject;
   // A player's milestone for the club: his numbers there.

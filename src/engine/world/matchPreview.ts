@@ -13,7 +13,7 @@
 import { Rng } from '../core/rng.ts';
 import type { Club } from '../model/club.ts';
 import { MatchFormat } from '../match/engine.ts';
-import { pickLineup } from '../season/seasonEngine.ts';
+import { matchSquadClub, pickLineup } from '../season/seasonEngine.ts';
 import { quickScore } from '../season/quickSim.ts';
 import { fanName, handle, type FanComment, type FanMood } from './fans.ts';
 import { postMessage } from './inbox.ts';
@@ -68,8 +68,8 @@ export function oddsFor(world: World, f: Fixture): { homeWin: number; results: M
   const away = world.clubs[f.away];
   if (home === undefined || away === undefined) return null;
   const store = world.players;
-  const h = pickLineup(store, home);
-  const a = pickLineup(store, away);
+  const h = pickLineup(store, matchSquadClub(world, home)!);
+  const a = pickLineup(store, matchSquadClub(world, away)!);
   const rng = new Rng(`odds:${f.id}`);
   const counts = new Map<string, number>();
   let wins = 0;

@@ -452,6 +452,8 @@ export interface GameMessage {
   jobOfferId?: number;
   /** The senior club's request for one of the under-21 side's players: the inbox offers the answers. */
   callUpRequestId?: number;
+  /** The under-21 coach's call for the first team's young players for a match: the inbox offers the answers. */
+  matchCallId?: number;
   /** An invitation to a pre-season tournament, club or national — see preseasonCups.ts: the inbox offers the answers. */
   cupInviteId?: number;
   /** A federation's offer of its national team job — see `Internationals.offers`. */

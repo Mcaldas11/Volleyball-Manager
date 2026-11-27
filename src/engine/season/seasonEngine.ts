@@ -13,7 +13,7 @@
  * a match took.
  */
 
-import { under21Day } from '../world/under21.ts';
+import { matchSquadPlayers, seniorCallDay, under21Day } from '../world/under21.ts';
 import { comebackVoice, matchVoices } from '../world/playerVoices.ts';
 import { agentsDay } from '../world/agents.ts';
 import { recruitmentDay } from '../world/recruitment.ts';
@@ -289,13 +289,9 @@ function opponentsStudy(world: World, fixture: Fixture): void {
  */
 export function matchSquadClub(world: World, club: Club | undefined): Club | undefined {
   if (club === undefined || club.under21Of === undefined) return club;
-  const senior = world.clubs[club.under21Of];
-  if (senior === undefined) return club;
-  const store = world.players;
   // Under 21 for the season: born in its first year less 20 or later (2006 or later for 2026/27).
-  const born = world.startYear + world.season - 20;
-  const eligible = senior.players.filter((p) => store.birthYear[p] >= born && !club.players.includes(p));
-  return eligible.length === 0 ? club : { ...club, players: [...club.players, ...eligible] };
+  const players = matchSquadPlayers(world, club);
+  return players.length === club.players.length ? club : { ...club, players };
 }
 
 export function toTeamSetup(store: PlayerStore, club: Club, mustStart?: ReadonlySet<number>): TeamSetup {
@@ -682,6 +678,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   sponsorDay(world);
   affiliatesDay(world);
   under21Day(world);
+  seniorCallDay(world);
   monthlyLoanReports(world);
   contractNotices(world);
   // Deadline day: the bids fly in and the other clubs do their late business, before the day's answers.
