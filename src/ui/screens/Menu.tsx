@@ -17,7 +17,7 @@ import {
 import type { Position } from '../../engine/model/positions.ts';
 import type { Competition, ManagerLook, ManagerProfile } from '../../engine/world/world.ts';
 import { NATIONS, nationsIn, type Confederation } from '../../engine/world/nations.ts';
-import { REAL_DB_URL, type RealDb } from '../../data/real/realDb.ts';
+import { REAL_DB_URL, REAL_DB_WOMEN_URL, type RealDb } from '../../data/real/realDb.ts';
 import {
   abilityClass, Card, ClubCrest, clubThemeStyle, Flag, FlagByCode, KV, money, PlayerFace, Pos, Segmented, StarMeter, tierName } from '../components.tsx';
 import { Icon } from '../icons.tsx';
@@ -513,18 +513,29 @@ const WORLD_SCALES: ReadonlyArray<{ id: 'small' | 'standard' | 'large'; title: s
   { id: 'large', title: 'Large', text: 'Every division worldwide (~117,000 players).' },
 ];
 
-/** The dev server's local real-data file, or null: in a build there is never one. */
-function useLocalRealDb(): RealDb | null {
+/** The public real database every build carries (no photos, logos or minors), loaded only when asked for. */
+const PUBLIC_REAL_DB = import.meta.glob<{ default: RealDb }>('../../data/real/public/*.json');
+
+/**
+ * The real database for the game being set up: on the dev server the full local
+ * file when there is one (photos and all), otherwise the public one the game ships.
+ */
+function useRealDb(gender: 'men' | 'women'): RealDb | null {
   const [db, setDb] = useState<RealDb | null>(null);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    setDb(null);
     let live = true;
-    fetch(REAL_DB_URL)
-      .then((r) => (r.ok ? r.json() as Promise<RealDb> : null))
-      .then((d) => { if (live && d !== null && d.version === 1 && d.leagues.length > 0) setDb(d); })
-      .catch(() => { /* no file */ });
+    const ok = (d: RealDb | null): d is RealDb => d !== null && d.version === 1 && d.leagues.length > 0;
+    const fromPublic = (): Promise<RealDb | null> => {
+      const load = PUBLIC_REAL_DB[`../../data/real/public/${gender === 'women' ? 'real-db-women' : 'real-db'}.json`];
+      return load === undefined ? Promise.resolve(null) : load().then((m) => m.default).catch(() => null);
+    };
+    const local = import.meta.env.DEV
+      ? fetch(gender === 'women' ? REAL_DB_WOMEN_URL : REAL_DB_URL).then((r) => (r.ok ? r.json() as Promise<RealDb> : null)).catch(() => null)
+      : Promise.resolve(null);
+    void local.then((d) => (ok(d) ? d : fromPublic())).then((d) => { if (live && ok(d)) setDb(d); });
     return () => { live = false; };
-  }, []);
+  }, [gender]);
   return db;
 }
 
@@ -536,9 +547,9 @@ export function WorldSetup(): JSX.Element {
   // The world is built under the processing window, which holds everything else still.
   const building = g.task !== null;
   // A local real-data file, when the dev server has one: never in a public build.
-  const realDb = useLocalRealDb();
+  const realDb = useRealDb(gender);
   const [source, setSource] = useState<'generated' | 'real'>('generated');
-  const useReal = source === 'real' && realDb !== null && gender === 'men';
+  const useReal = source === 'real' && realDb !== null;
 
   const start = (): void => {
     void g.createWorld(scale, Number(seed) || 1, gender, useReal ? realDb : undefined);
@@ -570,11 +581,11 @@ export function WorldSetup(): JSX.Element {
       </Card>
       <Card title="World Size" icon="world" style={{ marginTop: 14 }}
         actions={realDb !== null ? (
-          <span className="game-pick" title="Real clubs and players from a file on this computer">
+          <span className="game-pick" title="Real clubs, players and coaches of this season">
             <Segmented<'generated' | 'real'> size="sm"
-              options={[['generated', 'Fictional'], ['real', 'Real database (local)']] as const}
+              options={[['generated', 'Fictional'], ['real', 'Real database']] as const}
               value={useReal ? 'real' : 'generated'}
-              onChange={(v) => { if (!building && gender === 'men') setSource(v); }} />
+              onChange={(v) => { if (!building) setSource(v); }} />
           </span>
         ) : undefined}>
         <div className="scale-options">
@@ -600,7 +611,7 @@ export function WorldSetup(): JSX.Element {
           <p className="footnote">
             Real clubs and rosters in {realDb.leagues.map((l) => NATIONS.find((n) => n.code === l.nation)?.name ?? l.nation).join(', ')},
             gathered {new Date(realDb.builtAt).toLocaleDateString('en-GB')} from public league pages. Every ability
-            is estimated. Other leagues are generated. This file stays on this computer.
+            is estimated. Other leagues are generated.
           </p>
         ) : (
           <p className="footnote">

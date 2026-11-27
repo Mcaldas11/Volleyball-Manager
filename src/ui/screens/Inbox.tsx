@@ -1341,6 +1341,15 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
     );
   }
 
+  if (m.callUpRequestId !== undefined && (world.under21?.requests ?? []).some((r) => r.id === m.callUpRequestId)) {
+    out.push(
+      <button key="callup-yes" className="paper-btn primary-dark" onClick={() => g.answerCallUp(m.callUpRequestId!, true)}>
+        <Icon name="check" size={15} /> Let him go up
+      </button>,
+      <button key="callup-no" className="paper-btn" onClick={() => g.answerCallUp(m.callUpRequestId!, false)}>Keep him</button>,
+    );
+  }
+
   const cupInvite = m.cupInviteId !== undefined
     ? world.preseasonCups?.invites.find((i) => i.id === m.cupInviteId && i.answered === undefined && i.expiresOn >= world.day)
     : undefined;

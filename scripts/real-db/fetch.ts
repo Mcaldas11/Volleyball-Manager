@@ -14,11 +14,14 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { RealClub, RealCoach, RealDb, RealNationalCoach, RealInternational, RealLeague, RealPlayer, RealPosition } from '../../src/data/real/realDb.ts';
 import { createHash } from 'node:crypto';
-import { NAME_BANKS } from '../../src/engine/world/names.ts';
+import { bankFor, NAME_BANKS } from '../../src/engine/world/names.ts';
+import { NATIONS } from '../../src/engine/world/nations.ts';
 import { readdirSync, unlinkSync } from 'node:fs';
 import { decode, Disallowed, fetchStats, getImage, getPage, PHOTO_DIR, nameKey, splitSurnameFirst, textLines, titleCase } from './http.ts';
 
-const OUT = join('data', 'local', 'real-db.json');
+/** `--women`: the women's leagues, into a file of their own. */
+const WOMEN = process.argv.includes('--women');
+const OUT = join('data', 'local', WOMEN ? 'real-db-women.json' : 'real-db.json');
 
 // ---- Positions, in the languages the sources write them in ----------------
 
@@ -95,7 +98,10 @@ function log(msg: string): void {
 
 /** Every first name the game's own name banks know, to tell "Kolev Kiril" from "Kiril Kolev". */
 const FIRST_NAMES = new Set<string>();
-for (const bank of Object.values(NAME_BANKS)) for (const n of bank.first) FIRST_NAMES.add(nameKey(n));
+for (const [group, bank] of Object.entries(NAME_BANKS)) {
+  for (const n of bank.first) FIRST_NAMES.add(nameKey(n));
+  for (const n of bankFor(group, true).first) FIRST_NAMES.add(nameKey(n));
+}
 
 interface Ambiguous { target: { first: string; last: string }; raw: string }
 
@@ -172,7 +178,6 @@ const DP_LEAGUES: DpLeague[] = [
   { nation: 'BIH', tier: 1, host: 'osbih-web.dataproject.com', comp: 50, name: 'Premijer Liga', season: '2026/27', federation: 'OSBiH' },
   // Second tiers.
   { nation: 'POR', tier: 2, host: 'fpv-web.dataproject.com', comp: 148, name: '2.ª Divisão', season: '2026/27', federation: 'FPV' },
-  { nation: 'GER', tier: 2, host: 'vbl-web.dataproject.com', comp: 198, name: '2. Liga Pro', season: '2026/27', federation: 'VBL' },
   { nation: 'ESP', tier: 2, host: 'rfevb-web.dataproject.com', comp: 167, name: 'Superliga 2', season: '2026/27', federation: 'RFEVB' },
   { nation: 'SLO', tier: 2, host: 'ozs-web.dataproject.com', comp: 143, name: '1. liga', season: '2026/27', federation: 'OZS' },
   { nation: 'ROU', tier: 2, host: 'frv-web.dataproject.com', comp: 85, more: [86], name: 'Divizia A2', season: '2026/27', federation: 'FRV' },
@@ -186,6 +191,45 @@ const DP_LEAGUES: DpLeague[] = [
   { nation: 'EST', tier: 2, host: 'evf-web.dataproject.com', comp: 98, name: 'Esiliiga', season: '2026/27', federation: 'EVF' },
 ];
 
+/** The women's leagues, the same federations' portals. */
+const DP_LEAGUES_WOMEN: DpLeague[] = [
+  { nation: 'POR', tier: 1, host: 'fpv-web.dataproject.com', comp: 145, name: 'Liga Solverde.pt', season: '2026/27', federation: 'FPV' },
+  { nation: 'GER', tier: 1, host: 'vbl-web.dataproject.com', comp: 193, name: '1. Bundesliga', season: '2026/27', federation: 'VBL' },
+  { nation: 'ESP', tier: 1, host: 'rfevb-web.dataproject.com', comp: 165, name: 'Liga Iberdrola', season: '2026/27', federation: 'RFEVB' },
+  { nation: 'SLO', tier: 1, host: 'ozs-web.dataproject.com', comp: 146, name: 'Sportklub Superliga', season: '2026/27', federation: 'OZS' },
+  { nation: 'ROU', tier: 1, host: 'frv-web.dataproject.com', comp: 80, name: 'Divizia A1', season: '2026/27', federation: 'FRV' },
+  { nation: 'BUL', tier: 1, host: 'bvf-web.dataproject.com', comp: 66, name: 'Super League', season: '2026/27', federation: 'BVF' },
+  { nation: 'UKR', tier: 1, host: 'uvf-web.dataproject.com', comp: 189, name: 'Superliga', season: '2026/27', federation: 'UVF' },
+  { nation: 'HUN', tier: 1, host: 'hvf-web.dataproject.com', comp: 68, name: 'Extraliga', season: '2026/27', federation: 'MRSZ' },
+  { nation: 'SWE', tier: 1, host: 'svbf-web.dataproject.com', comp: 458, name: 'Elitserien', season: '2026/27', federation: 'SVBF' },
+  { nation: 'NOR', tier: 1, host: 'nvbf-web.dataproject.com', comp: 97, name: 'Mizunoligaen', season: '2026/27', federation: 'NVBF' },
+  { nation: 'SVK', tier: 1, host: 'svf-web.dataproject.com', comp: 97, name: 'Extraliga', season: '2026/27', federation: 'SVF' },
+  { nation: 'CRO', tier: 1, host: 'hos-web.dataproject.com', comp: 135, name: 'Superliga', season: '2026/27', federation: 'HOS' },
+  { nation: 'EST', tier: 1, host: 'evf-web.dataproject.com', comp: 97, name: 'Meistriliiga', season: '2026/27', federation: 'EVF' },
+  { nation: 'ISR', tier: 1, host: 'iva-web.dataproject.com', comp: 51, name: 'Premier League', season: '2026/27', federation: 'IVA' },
+  { nation: 'BIH', tier: 1, host: 'osbih-web.dataproject.com', comp: 52, name: 'Premijer Liga', season: '2026/27', federation: 'OSBiH' },
+  { nation: 'POR', tier: 2, host: 'fpv-web.dataproject.com', comp: 147, name: '2.ª Divisão', season: '2026/27', federation: 'FPV' },
+  { nation: 'GER', tier: 2, host: 'vbl-web.dataproject.com', comp: 198, name: '2. Liga Pro', season: '2026/27', federation: 'VBL' },
+  { nation: 'ESP', tier: 2, host: 'rfevb-web.dataproject.com', comp: 164, name: 'Superliga 2', season: '2026/27', federation: 'RFEVB' },
+  { nation: 'SLO', tier: 2, host: 'ozs-web.dataproject.com', comp: 147, name: '1. liga', season: '2026/27', federation: 'OZS' },
+  { nation: 'ROU', tier: 2, host: 'frv-web.dataproject.com', comp: 83, more: [84], name: 'Divizia A2', season: '2026/27', federation: 'FRV' },
+  { nation: 'BUL', tier: 2, host: 'bvf-web.dataproject.com', comp: 71, name: 'Top League', season: '2026/27', federation: 'BVF' },
+  { nation: 'UKR', tier: 2, host: 'uvf-web.dataproject.com', comp: 190, name: 'Vyshcha Liha', season: '2026/27', federation: 'UVF' },
+  { nation: 'HUN', tier: 2, host: 'hvf-web.dataproject.com', comp: 69, name: 'NB I', season: '2026/27', federation: 'MRSZ' },
+  { nation: 'SWE', tier: 2, host: 'svbf-web.dataproject.com', comp: 460, more: [459], name: 'Division 1', season: '2026/27', federation: 'SVBF' },
+  { nation: 'NOR', tier: 2, host: 'nvbf-web.dataproject.com', comp: 98, name: '1. divisjon', season: '2026/27', federation: 'NVBF' },
+  { nation: 'SVK', tier: 2, host: 'svf-web.dataproject.com', comp: 104, name: '1. liga', season: '2026/27', federation: 'SVF' },
+  { nation: 'CRO', tier: 2, host: 'hos-web.dataproject.com', comp: 136, name: 'Prva liga', season: '2026/27', federation: 'HOS' },
+  { nation: 'EST', tier: 2, host: 'evf-web.dataproject.com', comp: 106, name: 'Esiliiga', season: '2026/27', federation: 'EVF' },
+];
+
+const DP_YOUTH_WOMEN: DpLeague[] = [
+  { nation: 'POR', tier: 9, host: 'fpv-web.dataproject.com', comp: 150, more: [153], name: 'Sub21', season: '2026/27', federation: 'FPV' },
+  { nation: 'HUN', tier: 9, host: 'hvf-web.dataproject.com', comp: 71, name: 'U20', season: '2026/27', federation: 'MRSZ' },
+  { nation: 'SVK', tier: 9, host: 'svf-web.dataproject.com', comp: 101, name: '1. liga juniorky', season: '2026/27', federation: 'SVF' },
+  { nation: 'EST', tier: 9, host: 'evf-web.dataproject.com', comp: 105, name: 'U-20', season: '2026/27', federation: 'EVF' },
+];
+
 /** This season's men's under-21 (or under-20) leagues: their squads join the top-flight clubs they belong to. */
 const DP_YOUTH: DpLeague[] = [
   { nation: 'POR', tier: 9, host: 'fpv-web.dataproject.com', comp: 149, more: [152], name: 'Sub21', season: '2026/27', federation: 'FPV' },
@@ -196,7 +240,8 @@ const DP_YOUTH: DpLeague[] = [
 
 /** "SL Benfica (Sub21)", "MOK Rijeka - juniori": the club's own name. */
 function seniorName(youthName: string): string {
-  return youthName.replace(/\(.*?\)/g, ' ').replace(/[-–]\s*(juniori|junior|u-?2\d|sub-?2\d)\b.*$/i, ' ')
+  // "CA Madalena B (Sub21)": the club's second under-21 side is the club's too.
+  return youthName.replace(/\(.*?\)/g, ' ').replace(/\s+B\s*$/, ' ').replace(/[-–]\s*(juniori|junior|u-?2\d|sub-?2\d)\b.*$/i, ' ')
     .replace(/\b(u-?2\d|sub-?2\d|juniori|junior)\b/gi, ' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -217,11 +262,54 @@ function attachYouth(leagues: RealLeague[], youth: RealLeague[]): number {
       if (club === undefined) continue;
       // Someone on both lists plays for the first team.
       const senior = new Set(club.players.map((p) => nameKey(`${p.first} ${p.last}`)));
-      club.youth = [...(club.youth ?? []), ...yc.players.filter((p) => !senior.has(nameKey(`${p.first} ${p.last}`)))];
+      // The same side can play in two divisions of the under-21s: each player once.
+      const had = new Set((club.youth ?? []).map((p) => nameKey(`${p.first} ${p.last}`)));
+      club.youth = [...(club.youth ?? []), ...yc.players.filter((p) => {
+        const k = nameKey(`${p.first} ${p.last}`);
+        if (senior.has(k) || had.has(k)) return false;
+        had.add(k);
+        return true;
+      })];
       n += yc.players.length;
     }
   }
   return n;
+}
+
+/** A season label's first year: "2022/2023", "FPV 2021/22", "21/22". */
+function seasonYear(label: string): number | null {
+  let m = /(19|20)(\d{2})\s*[/-]\s*(\d{2,4})/.exec(label);
+  if (m !== null) return Number(m[1] + m[2]);
+  m = /\b(\d{2})\s*\/\s*(\d{2})\b/.exec(label);
+  if (m !== null && Number(m[2]) === (Number(m[1]) + 1) % 100) return 2000 + Number(m[1]);
+  return null;
+}
+
+/** The clubs a DataProject player page lists, the seasons it can tell, newest first. */
+function dpCareer(html: string): { year: number; club: string }[] | undefined {
+  // The history list: a team and a season to each row.
+  const out: { year: number; club: string }[] = [];
+  for (const m of html.matchAll(/HistoryListView_ctrl(\d+)_link"[^>]*>([\s\S]*?)<\/span>[\s\S]*?HistoryListView_ctrl\1_period"[^>]*>([\s\S]*?)<\/span>/g)) {
+    const club = decode(m[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    const year = seasonYear(decode(m[3]));
+    if (club === '' || year === null) continue;
+    if (!out.some((x) => x.year === year && x.club === club)) out.push({ year, club });
+  }
+  if (out.length > 0) return out;
+  if (/HistoryListView/.test(html)) return undefined;
+  // An older page: the table under the history heading (not the menu's link to the history page).
+  const at = html.search(/<h3>\s*(?:Hist[oó]ri[ae]|History|Historik|Zgodovina|Istoric|История|Історія)\s*<\/h3>/);
+  if (at < 0) return undefined;
+  const table = /<table[\s\S]*?<\/table>/.exec(html.slice(at));
+  if (table === null) return undefined;
+  for (const row of table[0].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+    const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((c) => decode(c[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim());
+    if (cells.length < 2 || cells[0] === '') continue;
+    const year = seasonYear(cells[1]);
+    if (year === null) continue;
+    if (!out.some((x) => x.year === year && x.club === cells[0])) out.push({ year, club: cells[0] });
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 function spanText(html: string, idEnd: string): string | null {
@@ -234,7 +322,16 @@ function spanText(html: string, idEnd: string): string | null {
 
 /** A standings page: team ids in table order. */
 function dpStandings(html: string): number[] {
+  // The table's rows: its team links, up to the first one seen twice (the
+  // results breakdown and the other phases' lists come after it).
   const ids: number[] = [];
+  const table = [...html.matchAll(/TeamID=(\d+)&(?:amp;)?ID=\d+" id="TeamDetails_Link"/g)];
+  for (const m of table) {
+    const id = Number(m[1]);
+    if (ids.includes(id)) break;
+    ids.push(id);
+  }
+  if (ids.length > 0) return ids;
   for (const m of html.matchAll(/TeamID=(\d+)/g)) {
     const id = Number(m[1]);
     if (!ids.includes(id)) ids.push(id);
@@ -252,7 +349,7 @@ async function fetchDataProject(def: DpLeague): Promise<RealLeague> {
     logos.set(Number(m[3]), decode(m[2]));
   }
   const compLogo = new RegExp(`src="([^"]*CompetitionLogo_${def.comp}\.[a-z]+)"`).exec(home);
-  const leagueLogo = compLogo !== null ? await getImage(decode(compLogo[1]), `league-${def.nation}`) : null;
+  const leagueLogo = compLogo !== null ? await getImage(decode(compLogo[1]), `league-${WOMEN ? 'w-' : ''}${def.nation}-${def.tier}`) : null;
   if (teams.size === 0) {
     for (const m of home.matchAll(/CompetitionTeamDetails\.aspx\?TeamID=(\d+)&(?:amp;)?ID=(\d+)/g)) {
       if (Number(m[2]) === def.comp) teams.set(Number(m[1]), '');
@@ -270,6 +367,15 @@ async function fetchDataProject(def: DpLeague): Promise<RealLeague> {
       log(`  ${def.nation}: no standings (${(err as Error).message})`);
     }
   }
+  // The competition lists every club entered in any of its phases (the A2
+  // series, the relegation play-off): only those in the league table play it.
+  if (order.length >= 6 && order.length >= teams.size * 0.6 && order.length < teams.size) {
+    for (const id of [...teams.keys()]) {
+      if (order.includes(id)) continue;
+      log(`  ${def.nation} ${def.comp}: ${teams.get(id) || id} is not in the table, left out`);
+      teams.delete(id);
+    }
+  }
 
   const clubs: RealClub[] = [];
   const ambiguous: Ambiguous[] = [];
@@ -284,7 +390,7 @@ async function fetchDataProject(def: DpLeague): Promise<RealLeague> {
       if (nameLine === undefined) continue;
       const after = lines.slice(lines.indexOf(nameLine) + 1).filter((l) => !l.startsWith('<'));
       // Gone from the club: the portal keeps him on the list with the date he left.
-      if (after.slice(0, 12).some((l) => /^(till och med|hasta el|slutter|bis|jusqu|until|até|fino al|do|koniec|vége)\s.*\d{4}/i.test(l))) continue;
+      if (after.slice(0, 12).some((l) => /^(till och med|hasta el|slutter|bis|jusqu|until|até|fino al|do|koniec|vége|ends at)\s.*\d{4}/i.test(l))) continue;
       const p = emptyPlayer();
       const n = splitSurnameFirst(nameLine);
       p.first = n.first;
@@ -311,6 +417,7 @@ async function fetchDataProject(def: DpLeague): Promise<RealLeague> {
           if (nat !== null && /^[A-Z]{3}$/.test(nat)) p.nation = nat;
           p.position ??= parseRealPosition(spanText(pp, 'LBL_Position'));
           p.heightCm ??= num(spanText(pp, 'Label7'), 150, 230);
+          p.career = dpCareer(pp);
         } catch (err) {
           if (err instanceof Disallowed) throw err;
           log(`  ${def.nation}: player ${idm[1]} failed (${(err as Error).message})`);
@@ -363,7 +470,8 @@ async function fetchDataProject(def: DpLeague): Promise<RealLeague> {
 // ---- PlusLiga (Poland) -----------------------------------------------------
 
 async function fetchPlusLiga(): Promise<RealLeague> {
-  const base = 'https://www.plusliga.pl';
+  // The women's league runs on the same site software, under its own address.
+  const base = WOMEN ? 'https://www.tauronliga.pl' : 'https://www.plusliga.pl';
   const list = await getPage(`${base}/teams.html`);
   const ids = [...new Set([...list.matchAll(/href="\/teams\/id\/(\d+)\.html"/g)].map((m) => Number(m[1])))];
   // The table, for the standing.
@@ -406,6 +514,23 @@ async function fetchPlusLiga(): Promise<RealLeague> {
       p.heightCm = num(at('Wzrost:'), 150, 230);
       p.weightKg = num(at('Waga:'), 50, 140);
       p.spikeReachCm = num(at('Zasięg z wyskoku do ataku:'), 240, 400);
+      // His career in the league: from, to, position, number, club — a row at a time.
+      const k = lines.indexOf('Drużyna', lines.indexOf('KARIERA ZAWODOWA W LIDZE'));
+      if (k > 0) {
+        const career: { year: number; club: string }[] = [];
+        // A row: from, to, then the position and number when given, the club last.
+        const isDate = (l: string | undefined): boolean => l !== undefined && /^\d{2}\.\d{2}\.\d{4}$/.test(l);
+        for (let r = k + 1; isDate(lines[r]) && isDate(lines[r + 1]);) {
+          const [, mo, y] = lines[r].split('.').map(Number);
+          const year = mo >= 7 ? y : y - 1;
+          let e = r + 2;
+          while (e < lines.length && e < r + 6 && !(isDate(lines[e]) && isDate(lines[e + 1])) && !/^Powrót/.test(lines[e])) e++;
+          const club = lines[e - 1];
+          if (e > r + 2 && !/^\d+$/.test(club) && !career.some((x) => x.year === year && x.club === club)) career.push({ year, club });
+          r = e;
+        }
+        if (career.length > 0) p.career = career;
+      }
       const ph = /player-page-grid-photo[\s\S]*?(?:src|data-background)="(\/dl\/[^"]+)"/.exec(pp);
       if (ph !== null) photoUrls.set(p, { url: base + decode(ph[1]), name: `POL-${p.first}-${p.last}` });
       players.push(p);
@@ -423,7 +548,7 @@ async function fetchPlusLiga(): Promise<RealLeague> {
     clubs.push({ name, shortName: shortNameOf(name), city: null, arena: null, standing: standing >= 0 ? standing + 1 : null, logo, coaches, players });
     log(`  POL ${name}: ${players.length} players`);
   }
-  return { nation: 'POL', tier: 1, name: 'PlusLiga', season: '2026/27', source: 'PlusLiga', url: `${base}/teams.html`, clubs };
+  return { nation: 'POL', tier: 1, name: WOMEN ? 'TauronLiga' : 'PlusLiga', season: '2026/27', source: WOMEN ? 'TauronLiga' : 'PlusLiga', url: `${base}/teams.html`, clubs };
 }
 
 // ---- Lega Pallavolo Serie A (Italy) ---------------------------------------
@@ -513,10 +638,11 @@ const COUNTRY: Record<string, string> = {
   Ukraine: 'UKR', 'United States': 'USA', Kazakhstan: 'KAZ', Mexico: 'MEX', Australia: 'AUS', Spain: 'ESP',
   Greece: 'GRE', Slovakia: 'SVK', Croatia: 'CRO', Estonia: 'EST', 'Puerto Rico': 'PUR', Thailand: 'THA',
   India: 'IND', Cameroon: 'CMR', Morocco: 'MAR', Venezuela: 'VEN', Peru: 'PER', Uruguay: 'URU',
+  Sweden: 'SWE', 'Dominican Republic': 'DOM', Kenya: 'KEN', Vietnam: 'VIE', Netherlands_: 'NED', Thailand_: 'THA',
 };
 
 async function fetchInternationals(): Promise<{ list: RealInternational[]; coaches: RealNationalCoach[]; source: string }> {
-  const page = "2025_FIVB_Men's_Volleyball_World_Championship_squads";
+  const page = WOMEN ? "2025_FIVB_Women's_Volleyball_World_Championship_squads" : "2025_FIVB_Men's_Volleyball_World_Championship_squads";
   const url = `https://en.wikipedia.org/wiki/${encodeURIComponent(page).replace(/%27/g, "'")}`;
   const html = await getPage(url);
   const list: RealInternational[] = [];
@@ -531,10 +657,13 @@ async function fetchInternationals(): Promise<{ list: RealInternational[]; coach
       const words = decode(hc[1]).trim().split(/\s+/);
       coaches.push({ nation, first: words.slice(0, -1).join(' '), last: words[words.length - 1] });
     }
-    for (const m of sec.matchAll(/<li[^>]*>\s*\d+\s*<a[^>]*>([^<]+)<\/a>[\s\S]*?>(S|OH|OP|MB|L)<\/span>\s*<\/li>/g)) {
-      const name = decode(m[1]).trim();
+    for (const m of sec.matchAll(/<li[^>]*>\s*\d+\s*<a([^>]*)>([^<]+)<\/a>[\s\S]*?>(S|OH|OP|MB|L)<\/span>\s*<\/li>/g)) {
+      const name = decode(m[2]).trim();
       const words = name.split(' ');
-      list.push({ nation, first: words.slice(0, -1).join(' '), last: words[words.length - 1], position: WIKI_POS[m[2]] ?? null });
+      // A page of his own, when the link is not a red one.
+      const href = /href="(https:\/\/en\.wikipedia\.org\/wiki\/[^"?]+)"/.exec(m[1]);
+      const wiki = href !== null && !/class="new"/.test(m[1]) ? decode(href[1]) : undefined;
+      list.push({ nation, first: words.slice(0, -1).join(' '), last: words[words.length - 1], position: WIKI_POS[m[3]] ?? null, wiki });
     }
   }
   return { list, coaches, source: `https://en.wikipedia.org/wiki/${page} (rosters as registered with the FIVB)` };
@@ -596,20 +725,171 @@ async function fillFromZeroZero(leagues: RealLeague[]): Promise<number> {
         if (score > best) { best = score; club = c; tied = false; } else if (score === best) tied = true;
       }
       if (club === undefined || tied) continue;
-      const entries = [...page.matchAll(/class="photo" style="background-image: url\('([^']+)'\)"><\/div><div class="name">[\s\S]*?<a href="\/(jogador|treinador)\/[^"]+">([^<]+)<\/a>/g)];
-      for (const [, src, kind, rawName] of entries) {
-        if (/No_Photo/i.test(src)) continue;
-        const url = src.startsWith('http') ? src : base + src;
+      // The page must be the club's: its title names it too.
+      const title = /<title>([^<(]+)/.exec(page);
+      if (title !== null && ![...clubTokens(decode(title[1]))].some((t) => clubTokens(club!.name).has(t))) continue;
+      const entries = [...page.matchAll(/class="photo" style="background-image: url\('([^']+)'\)"><\/div><div class="name">[\s\S]*?<a href="(\/(jogador|treinador)\/[^"?]+)[^"]*">([^<]+)<\/a>/g)];
+      for (const [, src, href, kind, rawName] of entries) {
         const name = decode(rawName).trim();
-        const people: { first: string; last: string; photo?: string | null; aka?: string[] }[] = kind === 'jogador' ? [...club.players, ...(club.youth ?? [])] : (club.coaches ?? []);
-        const who = people.find((x) => !x.photo && samePerson(x.first, x.last, name, people, x.aka));
+        const people: { first: string; last: string; photo?: string | null; aka?: string[]; career?: { year: number; club: string; apps?: number; points?: number }[] }[] =
+          kind === 'jogador' ? [...club.players, ...(club.youth ?? [])] : (club.coaches ?? []);
+        const who = people.find((x) => samePerson(x.first, x.last, name, people, x.aka));
         if (who === undefined) continue;
-        who.photo = await getImage(url, `POR-zz-${kind}-${who.first}-${who.last}`, PHOTO_DIR);
-        if (who.photo) found++;
+        if (!who.photo && !/No_Photo/i.test(src)) {
+          who.photo = await getImage(src.startsWith('http') ? src : base + src, `POR-zz-${kind}-${who.first}-${who.last}`, PHOTO_DIR);
+          if (who.photo) found++;
+        }
+        // His career, season by season.
+        if (kind === 'jogador') {
+          try {
+            const seasons = await getPage(`${base}${href}/epocas`);
+            const career: { year: number; club: string; apps?: number; points?: number }[] = [];
+            // The first table is the season-by-season one; what follows repeats it by competition.
+            const first = /<table[\s\S]*?<\/table>/.exec(seasons)?.[0] ?? '';
+            for (const row of first.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+              const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((c) => decode(c[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim());
+              const year = cells.length > 2 ? seasonYear(cells[1]) : null;
+              const clubName = cells[2]?.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+              // Matches (J) and points (GM, goals in football, points in volleyball) where the season has them.
+              const apps = /^\d+$/.test(cells[4] ?? '') ? Number(cells[4]) : undefined;
+              const points = /^\d+$/.test(cells[5] ?? '') ? Number(cells[5]) : undefined;
+              if (year !== null && clubName && !career.some((c) => c.year === year && c.club === clubName)) career.push({ year, club: clubName, apps, points });
+            }
+            // The right man: his latest season on zerozero is at this club (a page's address is not always its club's).
+            const latest = career.reduce((m, c) => Math.max(m, c.year), 0);
+            const here = clubTokens(club.name);
+            const sameClub = career.some((c) => c.year === latest && [...clubTokens(c.club)].some((t) => here.has(t)));
+            if (career.length > 0 && sameClub) who.career = career;
+          } catch (err) {
+            log(`  zerozero career ${name}: ${(err as Error).message}`);
+          }
+        }
       }
     }
   }
   return found;
+}
+
+// ---- National-team players with no club in the sources: their age and height ------
+
+/** VIS position codes. */
+const VIS_POS: Record<string, RealPosition> = { '1': 'S', '2': 'OP', '3': 'OH', '4': 'MB', '5': 'L' };
+
+/**
+ * A national-team player no roster has: his birth date and height, from his
+ * Wikipedia page when he has one, and otherwise from the FIVB's registrations
+ * for the championship (which give no names): where his team has one player
+ * left at his position, that is him.
+ */
+async function ageInternationals(intl: RealInternational[], leagues: RealLeague[]): Promise<number> {
+  const onRoster = new Set<string>();
+  for (const l of leagues) for (const c of l.clubs) for (const p of [...c.players, ...(c.youth ?? [])]) onRoster.add(nameKey(`${p.first} ${p.last}`));
+  const missing = intl.filter((p) => !onRoster.has(nameKey(`${p.first} ${p.last}`)));
+  for (const p of missing) {
+    if (p.wiki === undefined) continue;
+    try {
+      const page = await getPage(p.wiki);
+      const bday = /class="bday">(\d{4})-(\d{2})-(\d{2})</.exec(page);
+      if (bday !== null) {
+        const d = parseDate(`${bday[1]}-${bday[2]}-${bday[3]}`);
+        if (d !== null) { p.birthYear = d.year; p.birthDay = d.day; }
+      }
+      const h = /Height<\/th>[\s\S]{0,200}?(\d)\.(\d{2})\s*m/.exec(page);
+      if (h !== null) p.heightCm = Number(h[1]) * 100 + Number(h[2]);
+    } catch { /* no page after all */ }
+  }
+  // The FIVB's registrations, anonymous: one left per team and position is the one.
+  try {
+    const body = `Request=${encodeURIComponent(`<Request Type="GetVolleyPlayerList" Fields="No Birthdate Height Position TeamCode"><Filter NoTournament="${WOMEN ? 1521 : 1520}"/></Request>`)}`;
+    const xml = await getPage('https://www.fivb.org/Vis2009/XmlRequest.asmx', { method: 'POST', body, contentType: 'application/x-www-form-urlencoded' });
+    const regs = [...xml.matchAll(/<VolleyballPlayer ([^>]*)\/>/g)].map((m) => {
+      const a = Object.fromEntries([...m[1].matchAll(/(\w+)="([^"]*)"/g)].map((x) => [x[1], x[2]]));
+      return { team: a.TeamCode, pos: VIS_POS[a.Position], birth: a.Birthdate, height: Number(a.Height) / 10000 };
+    });
+    for (const team of new Set(intl.map((p) => p.nation))) {
+      for (const pos of ['S', 'OP', 'OH', 'MB', 'L'] as RealPosition[]) {
+        const squad = intl.filter((p) => p.nation === team && p.position === pos);
+        const left = squad.filter((p) => p.birthYear === undefined);
+        if (left.length !== 1) continue;
+        // The registrations at this position not already someone's, by birth date.
+        const known = new Set(squad.filter((p) => p.birthYear !== undefined).map((p) => p.birthYear));
+        const free = regs.filter((r) => r.team === team && r.pos === pos && !known.has(Number(r.birth?.slice(0, 4))));
+        if (free.length !== 1) continue;
+        const d = parseDate(free[0].birth);
+        if (d === null) continue;
+        left[0].birthYear = d.year;
+        left[0].birthDay = d.day;
+        if (free[0].height > 150 && free[0].height < 230) left[0].heightCm = Math.round(free[0].height);
+      }
+    }
+  } catch (err) {
+    log(`  FIVB registrations: ${(err as Error).message}`);
+  }
+  // Still without a date: zerozero's search, a volleyball player of that name.
+  const VOLLEY_POS = /^(DIST|LIB|Z4|Z2|CENT|OPO|OPOS|OP|PONT|PONTA)$/;
+  for (const p of missing) {
+    if (p.birthYear !== undefined) continue;
+    try {
+      const html = await getPage(`https://www.zerozero.pt/pesquisa?search_txt=${encodeURIComponent(`${p.first} ${p.last}`)}`);
+      const text = decode(html.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, '|')).replace(/\s+/g, ' ').replace(/(\|\s*)+/g, '|');
+      const want = nameKey(`${p.first} ${p.last}`);
+      const last = nameKey(p.last);
+      for (const m of text.matchAll(/\|(\d{1,2})\|([^|]{1,6})\|(?:\d{1,3}\|)?([^|]+)\|([^|]+)\|([^|,]+), (\d{4})-(\d{2})-(\d{2})\|/g)) {
+        if (!VOLLEY_POS.test(m[2].trim())) continue;
+        const short = nameKey(m[3]);
+        const full = nameKey(m[4]);
+        if (short !== want && !(full.includes(nameKey(p.first).split(' ')[0]) && full.includes(last))) continue;
+        p.birthYear = Number(m[6]);
+        if (m[7] !== '00') p.birthDay = parseDate(`${m[6]}-${m[7]}-${m[8] === '00' ? '01' : m[8]}`)?.day;
+        break;
+      }
+    } catch { /* not found */ }
+  }
+  return missing.filter((p) => p.birthYear !== undefined).length;
+}
+
+// ---- Careers: only clubs, one a season -----------------------------------------
+
+/** Labels a page's other tables put where a club would be: a birth date, a stats link. */
+const NOT_A_CLUB = /^(statysty|f[öo]delse|fecha|date of birth|geburt|data (de )?nas|datum|rojstv|na[sș]ter|дата|születés|powrót|więcej)/i;
+/** Countries' names, for the national-team rows some histories carry. */
+const NATION_NAMES = new Set(NATIONS.map((n) => n.name.toLowerCase()));
+/** A side of the club's own: its B team, its under-23s. */
+const SIDE_SUFFIX = /\s+(?:[B-FY]|II|III|U\d{2}|team(?:\s+\S+)?|UGP|JSM.*|junior(?:s|es)?|juvenil|sub\s?\d{2})$/i;
+
+function cleanClubName(name: string): string {
+  let n = name.replace(/\s*\([^)]*\b(?:liga|league)\b[^)]*\)\s*$/i, '')
+    .replace(/\s+(?:19|20)\d{2}\s*\/\s*\d{2,4}$/, '')
+    .replace(/\s+/g, ' ').trim();
+  return n;
+}
+
+/** Every career: its rows cleaned, those that are not clubs dropped, the club's own B side in the same season folded into it. */
+function cleanCareers(leagues: RealLeague[]): number {
+  let dropped = 0;
+  for (const l of leagues) for (const c of l.clubs) for (const p of [...c.players, ...(c.youth ?? [])]) {
+    if (p.career === undefined) continue;
+    const kept: NonNullable<RealPlayer['career']> = [];
+    for (const row of p.career) {
+      const club = cleanClubName(row.club);
+      // A national team is not a club.
+      if (!/\p{L}{2}/u.test(club) || /^\d/.test(club) || NOT_A_CLUB.test(club) || NATION_NAMES.has(club.toLowerCase()) || row.year < 1980 || row.year > 2026) { dropped++; continue; }
+      const base = club.replace(SIDE_SUFFIX, '').toLowerCase();
+      const same = kept.find((k) => k.year === row.year && (() => {
+        const kb = k.club.replace(SIDE_SUFFIX, '').toLowerCase();
+        return kb === base || kb.startsWith(`${base} `) || base.startsWith(`${kb} `);
+      })());
+      if (same !== undefined) {
+        // The senior side's name over its B team's.
+        if (SIDE_SUFFIX.test(same.club) && !SIDE_SUFFIX.test(club)) same.club = club;
+        if (row.apps !== undefined) { same.apps = (same.apps ?? 0) + row.apps; same.points = (same.points ?? 0) + (row.points ?? 0); }
+        continue;
+      }
+      kept.push({ ...row, club });
+    }
+    if (kept.length > 0) p.career = kept; else delete p.career;
+  }
+  return dropped;
 }
 
 // ---- Putting it together ---------------------------------------------------
@@ -654,7 +934,7 @@ interface Correction {
  * Each one renames a player (`from`) or adds one the source leaves out (`add`). Applied on every run.
  */
 function applyCorrections(leagues: RealLeague[]): void {
-  const file = join('data', 'local', 'real-corrections.json');
+  const file = join('data', 'local', WOMEN ? 'real-corrections-women.json' : 'real-corrections.json');
   if (!existsSync(file)) return;
   const fixes = JSON.parse(readFileSync(file, 'utf8')) as Correction[];
   for (const f of fixes) {
@@ -740,7 +1020,7 @@ function dedupeYouth(leagues: RealLeague[]): void {
 }
 
 async function main(): Promise<void> {
-  const only = process.argv.slice(2).map((s) => s.toUpperCase());
+  const only = process.argv.slice(2).filter((s) => !s.startsWith('--')).map((s) => s.toUpperCase());
   const want = (code: string): boolean => only.length === 0 || only.includes(code);
 
   log('National-team rosters...');
@@ -757,7 +1037,7 @@ async function main(): Promise<void> {
   // One job per site, its divisions one after the other; sites run side by side, each asked once a second.
   const jobs: (() => Promise<RealLeague[]>)[] = [];
   const byPortal = new Map<string, DpLeague[]>();
-  for (const def of DP_LEAGUES) if (want(def.nation)) byPortal.set(def.host, [...(byPortal.get(def.host) ?? []), def]);
+  for (const def of WOMEN ? DP_LEAGUES_WOMEN : DP_LEAGUES) if (want(def.nation)) byPortal.set(def.host, [...(byPortal.get(def.host) ?? []), def]);
   for (const defs of byPortal.values()) {
     jobs.push(async () => {
       const out: RealLeague[] = [];
@@ -773,8 +1053,10 @@ async function main(): Promise<void> {
       return out;
     });
   }
-  if (want('POL')) jobs.push(async () => [await fetchPlusLiga()]);
-  if (want('ITA')) jobs.push(async () => [await fetchSuperLega(1), await fetchSuperLega(2)]);
+  // tauronliga.pl shows the men's clubs under the women's league's name: no women's rosters to be had from it.
+  if (want('POL') && !WOMEN) jobs.push(async () => [await fetchPlusLiga()]);
+  // The women's Serie A site turns Anthropic's crawler away in its robots.txt: left alone.
+  if (want('ITA') && !WOMEN) jobs.push(async () => [await fetchSuperLega(1), await fetchSuperLega(2)]);
 
   const results = await Promise.allSettled(jobs.map((j) => j()));
   for (const r of results) {
@@ -791,7 +1073,7 @@ async function main(): Promise<void> {
 
   // Under-21 squads, onto their top-flight clubs.
   const youthLeagues: RealLeague[] = [];
-  await Promise.all(DP_YOUTH.filter((d) => want(d.nation)).map(async (def) => {
+  await Promise.all((WOMEN ? DP_YOUTH_WOMEN : DP_YOUTH).filter((d) => want(d.nation)).map(async (def) => {
     try {
       const y = await fetchDataProject(def);
       for (const extra of def.more ?? []) y.clubs.push(...(await fetchDataProject({ ...def, comp: extra })).clubs);
@@ -804,6 +1086,7 @@ async function main(): Promise<void> {
 
   applyCorrections(leagues);
   dedupeYouth(leagues);
+  log(`  ${await ageInternationals(intl.list, leagues)} national-team players with no club in the sources given their real age`);
 
   // Photos, once every roster is read: hosts side by side, each at its own pace.
   log(`Photos: ${photoUrls.size} to get...`);
@@ -834,15 +1117,17 @@ async function main(): Promise<void> {
     if (p.photo && blank.has(p.photo)) p.photo = null;
     if (p.photo) withPhoto++;
   }
-  const fromZz = want('POR') ? await fillFromZeroZero(leagues) : 0;
+  const fromZz = want('POR') && !WOMEN ? await fillFromZeroZero(leagues) : 0;
   log(`  ${fromZz} photos from zerozero.pt`);
   const manual = applyManualPhotos(leagues);
   log(`  ${withPhoto} players with a photo from the sources, ${manual} put in by hand, ${blank.size} placeholder pictures dropped.`);
 
+  log(`  ${cleanCareers(leagues)} career rows that were not clubs left out`);
+
   const db: RealDb = {
     version: 1,
     builtAt: new Date().toISOString(),
-    gender: 'men',
+    gender: WOMEN ? 'women' : 'men',
     sources: leagues.map((l) => ({ name: `${l.source}: ${l.name} ${l.season}`, url: l.url, note: `${l.clubs.length} clubs` })),
     leagues,
     internationals: intl.list,

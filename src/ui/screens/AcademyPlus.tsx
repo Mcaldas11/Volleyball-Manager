@@ -14,6 +14,8 @@ import {
   FOCUS_LABELS, individualOf, planOf, PLAYER_LOAD, type IndividualFocus, type Intensity, type PlayerLoad, type WeeklyFocus,
 } from '../../engine/world/training.ts';
 import { CAREER_PATHS, PATH_NAMES, type CareerPath } from '../../engine/world/academyPlans.ts';
+import { seniorsEligible } from '../../engine/world/under21.ts';
+import { compareTableRows, type Club } from '../../engine/model/club.ts';
 import { Position, POSITION_NAMES, POSITIONS } from '../../engine/model/positions.ts';
 import { abilityClass, Bar, Card, ClubLink, Empty, Flag, money, PlayerFace, PlayerLink, Pos, Segmented, StarMeter } from '../components.tsx';
 import { Dropdown } from '../dropdown.tsx';
@@ -552,5 +554,137 @@ export function AcademyTraining(): JSX.Element {
         </div>
       )}
     </Card>
+  );
+}
+
+// ---- The under-21 side ------------------------------------------------------------------
+
+/** The club's under-21 side: its squad, called up from here, and the first team's young players, sent to it. */
+export function AcademyUnder21(): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const club = g.club!;
+  const store = world.players;
+  const coached = g.managedSide();
+  if (coached !== null) return <CoachingUnder21 senior={coached.senior} />;
+  const side = g.under21Side();
+  if (side === undefined) return <Card title="U21 Side" icon="youth" className="academy-card acx-card"><Empty>The club has no under-21 side.</Empty></Card>;
+  const league = world.competitions[side.leagueId];
+  const table = league !== undefined ? [...league.table].sort(compareTableRows) : [];
+  const place = table.findIndex((r) => r.clubId === side.id) + 1;
+  const next = world.fixtures
+    .filter((f) => !f.played && (f.home === side.id || f.away === side.id))
+    .sort((a, b) => a.day - b.day)[0];
+  const opp = next !== undefined ? world.clubs[next.home === side.id ? next.away : next.home] : undefined;
+  const seniors = seniorsEligible(world, club);
+  const byAbility = (list: number[]): number[] => [...list].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]);
+  const row = (p: number, action: JSX.Element): JSX.Element => (
+    <tr key={p}>
+      <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+      <td className="strong"><PlayerLink idx={p} /></td>
+      <td><Pos pos={store.position[p] as Position} /></td>
+      <td className="num">{store.ageOn(p, world.year, 181)}</td>
+      <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+      <td className="num"><StarMeter value={store.potentialAbility[p]} size={11} /></td>
+      <td className="num">{action}</td>
+    </tr>
+  );
+  const head = (
+    <thead>
+      <tr><th /><th>Name</th><th>Pos</th><th className="num">Age</th><th className="num">Ability</th><th className="num">Potential</th><th /></tr>
+    </thead>
+  );
+  return (
+    <div className="acx-split acx-u21">
+      <Card title={side.name} icon="youth" flush className="academy-card acx-card"
+        actions={(
+          <span className="faint">
+            {league !== undefined && place > 0 ? `${place}${['th', 'st', 'nd', 'rd'][place % 10 > 3 || Math.floor(place / 10) === 1 ? 0 : place % 10]} in ${league.name}` : ''}
+            {opp !== undefined && next !== undefined ? ` · next: ${next.home === side.id ? 'vs' : 'at'} ${opp.shortName}, ${g.dateLabelForDay(next.day)}` : ''}
+          </span>
+        )}>
+        <p className="acx-lead">The under-21 side plays its own league, on its own days. Call a player up and he joins the first team: if he is still under 21, he plays for the side on its match days as well.</p>
+        {side.players.length === 0 ? <Empty>No players in the under-21 squad.</Empty> : (
+          <div className="table-wrap">
+            <table className="data-table">
+              {head}
+              <tbody>{byAbility(side.players).map((p) => row(p, <button className="sm primary" onClick={() => g.callUpFromUnder21(p)}>Call up</button>))}</tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      <Card title="First Team, Under 21" icon="squad" flush className="academy-card acx-card"
+        actions={<span className="faint">{seniors.length} eligible</span>}>
+        <p className="acx-lead">Your first-team players young enough for the under-21s. They play for the side on its match days already; send one down for good to give him the minutes there instead of the bench.</p>
+        {seniors.length === 0 ? <Empty>No first-team player is under 21.</Empty> : (
+          <div className="table-wrap">
+            <table className="data-table">
+              {head}
+              <tbody>{byAbility(seniors).map((p) => row(p, <button className="sm" onClick={() => g.sendToUnder21(p)}>Send to U21</button>))}</tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/** As the under-21 side's coach: the senior club's young players, asked for here, and how the club sees you. */
+function CoachingUnder21({ senior }: { senior: Club }): JSX.Element {
+  const g = useGame();
+  const world = g.world!;
+  const store = world.players;
+  const R = world.under21;
+  const goodwill = R?.goodwill ?? 60;
+  const pending = R?.requests ?? [];
+  const young = [...seniorsEligible(world, senior)].sort((a, b) => store.playingTime[a] - store.playingTime[b]);
+  const mood = goodwill >= 75 ? 'trusts you' : goodwill >= 50 ? 'is happy with you' : goodwill >= 30 ? 'has doubts about you' : 'is unhappy with you';
+  return (
+    <div className="acx-split acx-u21">
+      <Card title={`${senior.name}, Under 21`} icon="squad" flush className="academy-card acx-card"
+        actions={<span className="faint">{young.length} eligible</span>}>
+        <p className="acx-lead">The senior club's young players. They play for you on your match days already. Ask for one who is hardly playing up there and he joins your squad for good: the club says yes more readily for a player on the bench, and the better it thinks of you.</p>
+        {young.length === 0 ? <Empty>No senior player is under 21.</Empty> : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr><th /><th>Name</th><th>Pos</th><th className="num">Age</th><th className="num">Ability</th><th className="num" title="Playing time, 0-100">Minutes</th><th /></tr>
+              </thead>
+              <tbody>
+                {young.map((p) => (
+                  <tr key={p}>
+                    <td className="face-cell"><PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={28} /></td>
+                    <td className="strong"><PlayerLink idx={p} /></td>
+                    <td><Pos pos={store.position[p] as Position} /></td>
+                    <td className="num">{store.ageOn(p, world.year, 181)}</td>
+                    <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                    <td className="num">{Math.round(store.playingTime[p])}</td>
+                    <td className="num"><button className="sm" onClick={() => g.askForSenior(p)}>Ask for him</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      <Card title="The Senior Club" icon="club" className="academy-card acx-card">
+        <p className="acx-lead">{senior.name} {mood}: goodwill {Math.round(goodwill)}/100. It asks for your best players when it needs them; letting them go up raises it, and keeping them lowers it.</p>
+        <Bar value={goodwill} max={100} wide />
+        <p className="faint" style={{ marginTop: 12 }}>
+          {pending.length > 0
+            ? `${pending.length} request${pending.length === 1 ? '' : 's'} waiting in your inbox.`
+            : 'No request waiting.'}
+          {' '}Players sent up this season: {R?.promotedThisSeason ?? 0}. The board judges the season by them as much as by results.
+        </p>
+        <div className="acx-first-team">
+          <p className="faint">Your results here, the players you send up and the club's goodwill count when you ask for the first team, and when its head coach goes.</p>
+          <button className="primary" disabled={g.firstTeamAskBlock() !== null} title={g.firstTeamAskBlock() ?? 'Ask the board for the first-team job'}
+            onClick={() => g.askForFirstTeamJob()}>
+            Ask for the first-team job
+          </button>
+          {g.firstTeamAskBlock() !== null && <p className="faint acx-why">{g.firstTeamAskBlock()}</p>}
+        </div>
+      </Card>
+    </div>
   );
 }

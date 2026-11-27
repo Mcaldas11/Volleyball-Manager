@@ -8,6 +8,7 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import { askForFirstTeamJob, firstTeamAskBlock } from '../engine/world/career.ts';
 import { matchEvent } from './sound.ts';
 import { deletePortraitsOf } from './portraits.ts';
 import {
@@ -163,6 +164,7 @@ import {
   type SearchScope,
 } from '../engine/world/academy.ts';
 import { notePlayerEvent, playerTimeline, type TimelineItem } from '../engine/world/playerTimeline.ts';
+import { answerCallUp, askForSenior, callUpFromUnder21, managedSide, matchSquadPlayers, sendToUnder21, under21SideOf } from '../engine/world/under21.ts';
 import { diagnose, emptyStats, mergeStats, opponentCounter, playStats, type Diagnosis, type Finding, type TacticChange } from '../engine/match/assistant.ts';
 import { PREP_VARIANTS, runPrepLab, scoutOpponent, type LabResult, type ScoutedOpponent } from '../engine/world/prepLab.ts';
 import { currentFamiliarity, overallFamiliarity } from '../engine/match/tacticFamiliarity.ts';
@@ -6352,7 +6354,8 @@ class Game {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return null;
-    return pickLineup(world.players, club);
+    // An under-21 side's sheet takes in the senior club's young players, who play on its match days too.
+    return pickLineup(world.players, { ...club, players: matchSquadPlayers(world, club) });
   }
 
   /** Senior squad, sorted by ability. */
@@ -6360,7 +6363,7 @@ class Game {
     const world = this.world;
     const club = this.club;
     if (world === null || club === null) return [];
-    return [...club.players].sort(
+    return matchSquadPlayers(world, club).sort(
       (a, b) => world.players.currentAbility[b] - world.players.currentAbility[a],
     );
   }
@@ -7363,6 +7366,56 @@ class Game {
     world.players.setFlag(playerIdx, PlayerFlag.LoanListed, false);
     logTransfer(world, playerIdx, club.id, -1, 0);
     this.notice = `${world.players.fullName(playerIdx)} has been released.`;
+    this.emit();
+  }
+
+  /** The club's under-21 side, when it has one (a real-data world). */
+  under21Side(): Club | undefined {
+    return this.world !== null && this.club !== null ? under21SideOf(this.world, this.club) : undefined;
+  }
+
+  /** Bring an under-21 player into the first team. */
+  callUpFromUnder21(p: number): void {
+    if (this.world === null || this.club === null) return;
+    this.notice = callUpFromUnder21(this.world, this.club, p).text;
+    this.emit();
+  }
+
+  /** Answer the senior club's request for one of the side's players. */
+  answerCallUp(id: number, yes: boolean): void {
+    if (this.world === null) return;
+    this.notice = answerCallUp(this.world, id, yes);
+    this.emit();
+  }
+
+  /** As the under-21 coach: ask the senior club for one of its young players. */
+  askForSenior(p: number): void {
+    if (this.world === null) return;
+    this.notice = askForSenior(this.world, p).text;
+    this.emit();
+  }
+
+  /** As the under-21 coach: ask the board for the first-team job. */
+  askForFirstTeamJob(): void {
+    if (this.world === null) return;
+    this.notice = askForFirstTeamJob(this.world).text;
+    this.emit();
+  }
+
+  /** Why the first-team job cannot be asked for now, or null. */
+  firstTeamAskBlock(): string | null {
+    return this.world === null ? 'No career.' : firstTeamAskBlock(this.world);
+  }
+
+  /** As the under-21 coach: the side and the club above it. */
+  managedSide(): { side: Club; senior: Club } | null {
+    return this.world === null ? null : managedSide(this.world);
+  }
+
+  /** Send a young first-team player to the under-21 side. */
+  sendToUnder21(p: number): void {
+    if (this.world === null || this.club === null) return;
+    this.notice = sendToUnder21(this.world, this.club, p).text;
     this.emit();
   }
 

@@ -84,6 +84,8 @@ export interface JobOffer {
   applied: boolean;
   /** The contract that comes with the job. */
   contract?: ManagerContract;
+  /** Caretaker of the senior team, from its under-21 side: back to the side when the club appoints someone. */
+  caretaker?: { returnTo: number };
 }
 
 /** An application for a vacancy, waiting on the club's answer. */
@@ -120,6 +122,10 @@ export interface ManagerCareer {
   warnedOn: number;
   /** Clubs he left on bad terms or turned down, and the day each will consider him again. */
   blockedUntil: Map<number, number>;
+  /** In charge of a senior team as caretaker: its club, the under-21 side he came from, and the day the board decides. */
+  caretaker?: { clubId: number; returnTo: number; until: number };
+  /** The day he last asked his senior club for the first-team job, as its under-21 coach. */
+  firstTeamAskedOn?: number;
   /** The career began out of work, applying for jobs — see startOutOfWork. */
   startedOutOfWork?: boolean;
   /** Day a club last approached him unprompted, -1 if never. */
@@ -345,11 +351,117 @@ function openVacancy(world: World, club: Club, exit: NonNullable<CoachSpell['exi
 }
 
 /** An AI club parts company with its coach, whose name takes the knock. */
-function sackCoach(world: World, club: Club): void {
+export function sackCoach(world: World, club: Club): void {
   const coach = headCoachOf(world, club);
   if (coach !== undefined) coach.reputation = Math.round(coach.reputation * 0.9);
   newsCoachSacked(world, club, coach);
   openVacancy(world, club, 'sacked');
+  promoteFromWithin(world, club);
+}
+
+/** How well the manager has done as the under-21 coach of `senior`, 0-1: the side's table, the players sent up, the senior club's goodwill. */
+function under21Standing(world: World, senior: Club): number | null {
+  const side = world.clubs[world.userClubId];
+  if (side === undefined || side.under21Of !== senior.id) return null;
+  const league = world.competitions[side.leagueId];
+  const table = league !== undefined ? [...league.table].sort(compareTableRows) : [];
+  const place = table.findIndex((r) => r.clubId === side.id);
+  const played = table.some((r) => r.played > 0);
+  const tableScore = !played || place < 0 ? 0.5 : 1 - place / Math.max(1, table.length - 1);
+  const R = world.under21;
+  const goodwill = (R?.goodwill ?? 60) / 100;
+  const promoted = Math.min(1, (R?.promotedThisSeason ?? 0) / 3);
+  return tableScore * 0.4 + goodwill * 0.35 + promoted * 0.25;
+}
+
+/**
+ * The senior club has just let its coach go and the manager runs its under-21
+ * side: in the season, it asks him to take the team as caretaker; between
+ * seasons, a good enough record there gets him the job outright.
+ */
+function promoteFromWithin(world: World, senior: Club): void {
+  const standing = under21Standing(world, senior);
+  if (standing === null) return;
+  const d = dayOfSeason(world);
+  const inSeason = d >= seasonOpens(world) && d < seasonCloses(world);
+  if (inSeason) {
+    if (standing < 0.3) return;
+    const offer = makeOffer(world, senior, false,
+      'Until the board appoints a permanent head coach you would lead the first team as caretaker, and go back to the under-21s afterwards unless they decide to keep you.');
+    offer.caretaker = { returnTo: world.userClubId };
+  } else if (standing >= 0.55) {
+    makeOffer(world, senior, false, 'The board would rather promote from within: your work with the under-21s has not gone unnoticed.');
+  }
+}
+
+/** Why the under-21 coach cannot ask for the first-team job now, or null if he can. */
+export function firstTeamAskBlock(world: World): string | null {
+  const side = world.clubs[world.userClubId];
+  if (side === undefined || side.under21Of === undefined) return 'Only an under-21 coach can ask for his club\'s first-team job.';
+  const senior = world.clubs[side.under21Of];
+  if (senior === undefined) return 'The club has no first team.';
+  if (world.career.offers.some((o) => o.clubId === senior.id)) return `${senior.name} have made you an offer, it is in your inbox.`;
+  if (vacancyAt(world, senior.id) !== undefined) return `The job at ${senior.name} is open: apply in the Job Centre.`;
+  const asked = world.career.firstTeamAskedOn;
+  if (asked !== undefined && world.day - asked < FIRST_TEAM_ASK_GAP) return `You asked recently, give it until ${formatDay(world, asked + FIRST_TEAM_ASK_GAP)}.`;
+  return null;
+}
+
+const FIRST_TEAM_ASK_GAP = 120;
+
+/**
+ * The under-21 coach asks the board for the first team. It weighs his work with
+ * the side against how its head coach is doing: yes, and the coach goes and the
+ * job is offered him; no, and he waits a few months to ask again.
+ */
+export function askForFirstTeamJob(world: World): { ok: boolean; text: string } {
+  const block = firstTeamAskBlock(world);
+  if (block !== null) return { ok: false, text: block };
+  const side = world.clubs[world.userClubId]!;
+  const senior = world.clubs[side.under21Of!]!;
+  world.career.firstTeamAskedOn = world.day;
+  const standing = under21Standing(world, senior) ?? 0;
+  // A head coach in trouble is easier to replace; one the board is happy with, much harder.
+  const coachDoubt = (CONFIDENCE_START - senior.boardConfidence) / 100;
+  const chance = Math.max(0.02, Math.min(0.85, standing - 0.45 + coachDoubt + world.career.reputation / Math.max(1, senior.reputation) * 0.15));
+  if (!world.rng.chance(chance)) {
+    postMessage(world, {
+      subject: `${senior.name} keep their head coach`,
+      body: `The board of ${senior.name} heard you out, but is sticking with its head coach for now. Keep bringing players through and winning with the under-21s, and ask again in a few months.`,
+      from: `${senior.name} Board`, clubId: senior.id, category: 'career',
+    });
+    return { ok: false, text: `${senior.name} say no for now.` };
+  }
+  const coach = headCoachOf(world, senior);
+  if (coach !== undefined) coach.reputation = Math.round(coach.reputation * 0.95);
+  newsCoachSacked(world, senior, coach);
+  openVacancy(world, senior, 'sacked');
+  makeOffer(world, senior, true, 'The board has decided to make a change, and it wants the change to be you.');
+  return { ok: true, text: `${senior.name} agree: the job is yours if you want it, the offer is in your inbox.` };
+}
+
+/** A caretaker's spell comes to its end: the board keeps him, or appoints someone and sends him back to the under-21s. */
+function caretakerDay(world: World): void {
+  const c = world.career.caretaker;
+  if (c === undefined || world.day < c.until) return;
+  world.career.caretaker = undefined;
+  const club = world.clubs[c.clubId];
+  if (club === undefined || world.userClubId !== c.clubId) return;
+  if (club.boardConfidence >= 58) {
+    postMessage(world, {
+      subject: `${club.name} make it permanent`,
+      body: `The board has seen enough: you are ${club.name}'s head coach, no longer the caretaker.`,
+      from: `${club.name} Board`, clubId: club.id, category: 'career',
+    });
+    return;
+  }
+  postMessage(world, {
+    subject: `${club.name} appoint a new head coach`,
+    body: `Thank you for taking the team in a difficult moment. The board has appointed a permanent head coach, and you go back to the under-21s.`,
+    from: `${club.name} Board`, clubId: club.id, category: 'career',
+  });
+  appointManager(world, c.returnTo);
+  if (vacancyAt(world, club.id) === undefined) world.vacancies.push({ clubId: club.id, since: world.day, fillsOn: world.day });
 }
 
 /**
@@ -916,6 +1028,9 @@ export function acceptJobOffer(world: World, offerId: number): boolean {
   if (offer === undefined || to === undefined || offer.expiresOn < world.day) return false;
   const job = currentJob(world);
   const terms = offer.contract;
+  if (offer.caretaker !== undefined) {
+    world.career.caretaker = { clubId: to.id, returnTo: offer.caretaker.returnTo, until: world.day + world.rng.int(21, 45) };
+  }
   const from = leaveClub(world, 'moved');
   if (from !== undefined) {
     postMessage(world, {
@@ -1186,6 +1301,7 @@ export function careerDay(world: World): void {
   career.offers = career.offers.filter((o) => o.expiresOn >= world.day);
   answerApplications(world);
   contractDay(world);
+  caretakerDay(world);
   for (const v of [...world.vacancies]) {
     if (v.fillsOn > world.day) continue;
     if (career.offers.some((o) => o.clubId === v.clubId) || career.applications.some((a) => a.clubId === v.clubId)) continue;

@@ -13,6 +13,7 @@
  * a match took.
  */
 
+import { under21Day } from '../world/under21.ts';
 import { comebackVoice, matchVoices } from '../world/playerVoices.ts';
 import { agentsDay } from '../world/agents.ts';
 import { recruitmentDay } from '../world/recruitment.ts';
@@ -281,6 +282,22 @@ function opponentsStudy(world: World, fixture: Fixture): void {
   tacticReadNotice(world, club);
 }
 
+/**
+ * The club as it takes the court: an under-21 side can also field the senior
+ * club's players of under-21 age, whose matches fall on other days. Everyone
+ * else, just its own squad.
+ */
+export function matchSquadClub(world: World, club: Club | undefined): Club | undefined {
+  if (club === undefined || club.under21Of === undefined) return club;
+  const senior = world.clubs[club.under21Of];
+  if (senior === undefined) return club;
+  const store = world.players;
+  // Under 21 for the season: born in its first year less 20 or later (2006 or later for 2026/27).
+  const born = world.startYear + world.season - 20;
+  const eligible = senior.players.filter((p) => store.birthYear[p] >= born && !club.players.includes(p));
+  return eligible.length === 0 ? club : { ...club, players: [...club.players, ...eligible] };
+}
+
 export function toTeamSetup(store: PlayerStore, club: Club, mustStart?: ReadonlySet<number>): TeamSetup {
   const { lineup, libero, defensiveLibero, bench } = pickLineup(store, club, mustStart);
   return {
@@ -363,8 +380,8 @@ export function playFixture(
   detailed: boolean,
 ): void {
   const store = world.players;
-  const home = world.clubs[fixture.home];
-  const away = world.clubs[fixture.away];
+  const home = matchSquadClub(world, world.clubs[fixture.home]);
+  const away = matchSquadClub(world, world.clubs[fixture.away]);
   if (home === undefined || away === undefined) return;
   // Six to put on the court, or the match is lost by default.
   if (forfeitIfShort(world, ctx, fixture)) return;
@@ -405,7 +422,8 @@ export function playFixture(
   applyMatchLoad(store, result.awayStats, world.rng);
 
   updateTable(world, fixture);
-  applyMatchFinances(world, home, away, fixture);
+  // The clubs themselves, not their match-day squads: the gate and the wages are theirs.
+  applyMatchFinances(world, world.clubs[fixture.home], world.clubs[fixture.away], fixture);
   aftermath(world, fixture, result.homeStats, result.awayStats, true);
   matchVoices(world, fixture, result.homeStats, result.awayStats);
   opponentsStudy(world, fixture);
@@ -426,8 +444,8 @@ export function detailedMatchSetup(
   awayOwed = loanStarters(world, world.clubs[fixture.away]),
 ): MatchSetup {
   const store = world.players;
-  const home = world.clubs[fixture.home];
-  const away = world.clubs[fixture.away];
+  const home = matchSquadClub(world, world.clubs[fixture.home])!;
+  const away = matchSquadClub(world, world.clubs[fixture.away])!;
   const friendly = isFriendly(world, fixture);
   const ownLeague = inManagersLeague(world, fixture);
   return {
@@ -663,6 +681,7 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   ownerDay(world);
   sponsorDay(world);
   affiliatesDay(world);
+  under21Day(world);
   monthlyLoanReports(world);
   contractNotices(world);
   // Deadline day: the bids fly in and the other clubs do their late business, before the day's answers.

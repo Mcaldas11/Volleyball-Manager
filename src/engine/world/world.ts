@@ -450,6 +450,8 @@ export interface GameMessage {
   interviewId?: number;
   /** A club's offer of its head coach's job — see `World.career.offers`. */
   jobOfferId?: number;
+  /** The senior club's request for one of the under-21 side's players: the inbox offers the answers. */
+  callUpRequestId?: number;
   /** An invitation to a pre-season tournament, club or national — see preseasonCups.ts: the inbox offers the answers. */
   cupInviteId?: number;
   /** A federation's offer of its national team job — see `Internationals.offers`. */
@@ -825,8 +827,14 @@ export interface World {
   shirtNumbers?: Record<number, number>;
   /** The real players written into the game, where each is in the store, by key — see uniquePlayers.ts. */
   uniquePlayers?: Record<string, number>;
+  /** Built from a local real-data file: players with no photo are drawn, not given a stock one. */
+  realData?: boolean;
   /** A real-data world's photos, by permanent player id: files the dev server serves (see realWorld.ts). */
   realPhotos?: Record<number, string>;
+  /** A real-data world's careers before the save, by permanent player id: [year the season began, club name]. */
+  realCareers?: Record<number, Array<[number, string] | [number, string, number, number]>>;
+  /** The manager as an under-21 side's coach: the senior club's requests and goodwill, see under21.ts. */
+  under21?: import('./under21.ts').Under21Relations;
   /** The same for the real coaches, by staff id. */
   realStaffPhotos?: Record<number, string>;
   /** A real-data world's national team head coaches, by nation index, until the job first changes hands. */

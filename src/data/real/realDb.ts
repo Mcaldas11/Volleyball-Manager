@@ -30,6 +30,8 @@ export interface RealPlayer {
   potential?: number;
   /** A second position he plays in full, when known (from a hand correction). */
   secondary?: RealPosition | null;
+  /** Where he has played, a season at a time: the year the season began, and the club. */
+  career?: { year: number; club: string; apps?: number; points?: number }[];
   /** Other names he goes by on other sites ("José Neto" for "José N. Pinto"). */
   aka?: string[];
 }
@@ -77,6 +79,12 @@ export interface RealInternational {
   first: string;
   last: string;
   position: RealPosition | null;
+  /** Birth and height where a source has them: without a birth date he is not written over a generated player. */
+  birthYear?: number;
+  birthDay?: number;
+  heightCm?: number;
+  /** His Wikipedia page, when there is one. */
+  wiki?: string;
 }
 
 /** A national team's head coach, as at the 2025 World Championship. */
@@ -90,7 +98,7 @@ export interface RealDb {
   version: 1;
   /** ISO time the file was written. */
   builtAt: string;
-  gender: 'men';
+  gender: 'men' | 'women';
   sources: { name: string; url: string; note: string }[];
   leagues: RealLeague[];
   /** National-team rosters: who has caps, and the nation of players whose club page leaves it out. */
@@ -101,6 +109,8 @@ export interface RealDb {
 
 /** Where the dev server serves the file from, when there is one. */
 export const REAL_DB_URL = '/__local/real-db.json';
+/** The women's file. */
+export const REAL_DB_WOMEN_URL = '/__local/real-db-women.json';
 /** Where the dev server serves the logos from. */
 export const REAL_LOGO_URL = '/__local/real-logos/';
 /** Where the dev server serves the players' photos from. */

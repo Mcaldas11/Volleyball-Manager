@@ -12,15 +12,16 @@
  * of their own nation and position.
  */
 
-import type { Rng } from '../core/rng.ts';
-import type { Club } from '../model/club.ts';
+import { Rng } from '../core/rng.ts';
+import { newFinances, type Club } from '../model/club.ts';
 import { Position, SQUAD_TARGET } from '../model/positions.ts';
 import { StaffRole, type Staff } from '../model/staff.ts';
 import { PlayerFlag } from '../model/players.ts';
 import { REAL_LOGO_URL, type RealClub, type RealDb, type RealLeague, type RealPlayer, type RealPosition } from '../../data/real/realDb.ts';
 import type { CrestDesign } from '../model/club.ts';
-import { NATION_BY_CODE } from './nations.ts';
+import { NATION_BY_CODE, nationStrength } from './nations.ts';
 import { generatePlayer } from './playerGen.ts';
+import { abilityFractionAtAge } from '../model/ability.ts';
 import { UNIQUE_PLAYERS } from './uniquePlayers.ts';
 import { seasonEndDay, type World } from './world.ts';
 
@@ -39,6 +40,24 @@ const MAX_CLUBS = 16;
 const MIN_AT: Record<Position, number> = {
   [Position.Setter]: 2, [Position.Opposite]: 2, [Position.OutsideHitter]: 4, [Position.MiddleBlocker]: 4, [Position.Libero]: 2,
 };
+
+/** His real seasons before the save, kept for his club history. */
+function noteCareer(world: World, id: number, rp: RealPlayer): void {
+  const before = (rp.career ?? []).filter((c) => c.year < world.startYear);
+  if (before.length > 0) {
+    (world.realCareers ??= {})[id] = before.map((c) => (c.apps !== undefined
+      ? [c.year, c.club, c.apps, c.points ?? 0]
+      : [c.year, c.club]));
+  }
+}
+
+/**
+ * A real player's own dice, from who he is: his estimate and his attributes come
+ * out the same in every new world, whatever its seed or whoever else is in it.
+ */
+function playerDice(world: World, rp: RealPlayer): Rng {
+  return new Rng(`real:${world.gender ?? 'men'}:${rp.first}|${rp.last}|${rp.birthYear ?? ''}`);
+}
 
 /** A potential and an ability set by hand win over the estimate. */
 function handSet(rp: RealPlayer, estimated: number): { potential: number; abilityFraction?: number } {
@@ -70,6 +89,8 @@ export class RealWorldPlan {
   private readonly byNation = new Map<string, RealLeague>();
   private readonly intl = new Set<string>();
   private readonly intlLoose = new Set<string>();
+  /** Store indices of the real players, as opposed to the generated players filling squads out. */
+  readonly realIndices = new Set<number>();
   /** Clubs whose academy is their real under-21 squad: no generated intake on top. */
   readonly realYouth = new Set<number>();
   /** The under-21s have clubs of their own: their squads are built there. */
@@ -106,6 +127,12 @@ export class RealWorldPlan {
       club.shortName = rc.shortName;
       club.arenaName = rc.arena ?? `${rc.name} Arena`;
       if (rc.logo) club.crest = logoCrest(rc.logo, rc.shortName);
+      // A fixed standing, the same in every world: its country, its division and its place in the table.
+      const rank = order.length > 1 ? i / (order.length - 1) : 0;
+      const tierFactor = 1 / (1 + (club.tier - 1) * 0.68);
+      const strength = Math.pow(nationStrength(club.nation) / 98, 2.6);
+      club.reputation = Math.round(Math.min(10000, 10000 * strength * tierFactor * (1.1 - 0.32 * rank)));
+      club.finances = newFinances(club.reputation, club.arenaCapacity);
       this.clubs.set(club.id, rc);
     }
   }
@@ -159,7 +186,9 @@ export class RealWorldPlan {
       return best;
     };
 
-    for (const rp of rc.players) {
+    // The club's real under-21 list, those too old for the side this season (born before 2006 for 2026/27): first team.
+    const overAge = (rc.youth ?? []).filter((rp) => rp.birthYear !== null && world.year - rp.birthYear > 20);
+    for (const rp of [...rc.players, ...overAge]) {
       if (rp.first === '' && rp.last === '') continue;
       const position = rp.position !== null ? POS[rp.position] : need();
       const nation = rp.nation !== null ? (NATION_BY_CODE.get(rp.nation) ?? club.nation) : club.nation;
@@ -167,14 +196,22 @@ export class RealWorldPlan {
       const international = this.isInternational(rp.first, rp.last);
       // The estimate: the club's level, more for a national-team player, a
       // little less for a teenager who is on the roster to learn.
-      const lift = international ? 1.13 : age < 20 ? 0.9 : 1;
-      const estimated = Math.round(Math.min(1980, level * lift * rng.gaussianClamped(1, 0.09, 0.76, 1.26)));
+      // A youngster on a real first-team roster is there because he is good already: no discount for his
+      // age, a potential above the club's level, and most of it reached, ahead of the under-21s.
+      const young = world.year - (rp.birthYear ?? 0) <= 20;
+      const lift = international ? 1.13 : young ? 1.08 : 1;
+      const own = playerDice(world, rp);
+      const estimated = Math.round(Math.min(1980, level * lift * own.gaussianClamped(1, 0.09, 0.76, 1.26)));
       const height = rp.heightCm !== null && rp.heightCm >= 150 && rp.heightCm <= 230 ? rp.heightCm : undefined;
-      const { potential, abilityFraction } = handSet(rp, estimated);
+      const set = handSet(rp, estimated);
+      const potential = set.potential;
+      const abilityFraction = set.abilityFraction ?? (young ? Math.max(abilityFractionAtAge(age), 0.8) : undefined);
 
-      const idx = generatePlayer(store, rng, { nation, age, potential, position, currentYear: world.year, heightCm: height, abilityFraction });
+      const idx = generatePlayer(store, own, { nation, age, potential, position, currentYear: world.year, heightCm: height, abilityFraction });
+      this.realIndices.add(idx);
       store.firstName[idx] = store.names.intern(rp.first);
       store.lastName[idx] = store.names.intern(rp.last);
+      store.nation2[idx] = store.nation[idx];
       if (rp.birthYear !== null) store.birthYear[idx] = rp.birthYear;
       if (rp.birthDay !== null) store.birthDay[idx] = rp.birthDay;
       if (rp.weightKg !== null) store.weightKg[idx] = rp.weightKg;
@@ -187,6 +224,7 @@ export class RealWorldPlan {
       store.clubId[idx] = club.id;
       store.contractUntil[idx] = seasonEndDay(world.season + rng.int(0, 2));
       if (rp.photo) (world.realPhotos ??= {})[store.id[idx]] = rp.photo;
+      noteCareer(world, store.id[idx], rp);
       count.set(position, (count.get(position) ?? 0) + 1);
       this.placed.add(personKey(rp.first, rp.last));
       this.placed.add(looseKey(rp.first, rp.last));
@@ -199,10 +237,11 @@ export class RealWorldPlan {
       const position = rp.position !== null ? POS[rp.position] : Position.OutsideHitter;
       const nation = rp.nation !== null ? (NATION_BY_CODE.get(rp.nation) ?? club.nation) : club.nation;
       const age = rp.birthYear !== null ? Math.max(14, Math.min(23, world.year - rp.birthYear)) : 18;
-      const estimated = Math.round(Math.min(1980, level * rng.gaussianClamped(0.95, 0.12, 0.6, 1.35)));
+      const own = playerDice(world, rp);
+      const estimated = Math.round(Math.min(1980, level * own.gaussianClamped(0.95, 0.12, 0.6, 1.35)));
       const height = rp.heightCm !== null && rp.heightCm >= 150 && rp.heightCm <= 230 ? rp.heightCm : undefined;
       const { potential, abilityFraction } = handSet(rp, estimated);
-      const idx = generatePlayer(store, rng, { nation, age, potential, position, currentYear: world.year, heightCm: height, isRegen: true, abilityFraction });
+      const idx = generatePlayer(store, own, { nation, age, potential, position, currentYear: world.year, heightCm: height, isRegen: true, abilityFraction });
       store.firstName[idx] = store.names.intern(rp.first);
       store.lastName[idx] = store.names.intern(rp.last);
       if (rp.birthYear !== null) store.birthYear[idx] = rp.birthYear;
@@ -215,7 +254,7 @@ export class RealWorldPlan {
       club.youthPlayers.push(idx);
       this.placed.add(personKey(rp.first, rp.last));
     }
-    if ((rc.youth ?? []).length > 0) this.realYouth.add(club.id);
+    if (!this.under21Sides && (rc.youth ?? []).length > 0) this.realYouth.add(club.id);
 
     // Short of a position: someone generated, a squad player rather than a starter.
     for (const pos of Object.keys(MIN_AT).map(Number) as Position[]) {
@@ -269,15 +308,30 @@ export class RealWorldPlan {
     const level = seniorLevel + Math.max(0, REAL_LEVEL_TARGET - seniorLevel) * REAL_LEVEL_LIFT;
     const created: number[] = [];
     const count = new Map<Position, number>();
+    // No under-21 starts better than any of the senior club's grown men: below the weakest of them.
+    const firstTeam = club.under21Of !== undefined ? world.clubs[club.under21Of] : undefined;
+    // The real ones: generated fill-ins differ from world to world, and the ceiling must not.
+    const grown = (firstTeam?.players ?? []).filter((p) => world.year - store.birthYear[p] > 20 && this.realIndices.has(p));
+    const ceiling = grown.length > 0 ? Math.min(...grown.map((p) => store.currentAbility[p])) - 50 : Infinity;
+    const capped = (potential: number, age: number, fraction?: number): number | undefined => {
+      const f = fraction ?? abilityFractionAtAge(age);
+      return potential * f > ceiling ? Math.max(0.2, ceiling / Math.max(1, potential)) : fraction;
+    };
     for (const rp of senior?.youth ?? []) {
       if (rp.first === '' && rp.last === '') continue;
+      // Too old for the under-21s this season (born before 2006 for 2026/27): not on this side.
+      if (rp.birthYear !== null && world.year - rp.birthYear > 20) continue;
       const position = rp.position !== null ? POS[rp.position] : Position.OutsideHitter;
       const nation = rp.nation !== null ? (NATION_BY_CODE.get(rp.nation) ?? club.nation) : club.nation;
-      const age = rp.birthYear !== null ? Math.max(15, Math.min(23, world.year - rp.birthYear)) : 19;
-      const estimated = Math.round(Math.min(1980, level * rng.gaussianClamped(0.95, 0.12, 0.6, 1.35)));
+      const age = rp.birthYear !== null ? Math.max(15, Math.min(20, world.year - rp.birthYear)) : 19;
+      const own = playerDice(world, rp);
+      const estimated = Math.round(Math.min(1980, level * own.gaussianClamped(0.95, 0.12, 0.6, 1.35)));
       const height = rp.heightCm !== null && rp.heightCm >= 150 && rp.heightCm <= 230 ? rp.heightCm : undefined;
-      const { potential, abilityFraction } = handSet(rp, estimated);
-      const idx = generatePlayer(store, rng, { nation, age, potential, position, currentYear: world.year, heightCm: height, abilityFraction });
+      const set = handSet(rp, estimated);
+      const potential = set.potential;
+      // A hand-set ability is the user's word; the estimate stays below the first team.
+      const abilityFraction = rp.ability !== undefined ? set.abilityFraction : capped(potential, age, set.abilityFraction);
+      const idx = generatePlayer(store, own, { nation, age, potential, position, currentYear: world.year, heightCm: height, abilityFraction });
       store.firstName[idx] = store.names.intern(rp.first);
       store.lastName[idx] = store.names.intern(rp.last);
       if (rp.birthYear !== null) store.birthYear[idx] = rp.birthYear;
@@ -289,16 +343,22 @@ export class RealWorldPlan {
       store.clubId[idx] = club.id;
       store.contractUntil[idx] = seasonEndDay(world.season + rng.int(0, 2));
       if (rp.photo) (world.realPhotos ??= {})[store.id[idx]] = rp.photo;
+      noteCareer(world, store.id[idx], rp);
       count.set(position, (count.get(position) ?? 0) + 1);
       this.placed.add(personKey(rp.first, rp.last));
       created.push(idx);
     }
-    // A full squad: generated youngsters where the roster is short, or where there is none.
+    // The senior club's own under-21s play for this side too (see matchSquadClub): they count.
+    const seniorClub = club.under21Of !== undefined ? world.clubs[club.under21Of] : undefined;
+    for (const p of seniorClub?.players ?? []) {
+      if (world.year - store.birthYear[p] <= 20) count.set(store.position[p] as Position, (count.get(store.position[p] as Position) ?? 0) + 1);
+    }
+    // A full squad: generated youngsters only where the real ones leave a position short.
     for (const pos of Object.keys(SQUAD_TARGET).map(Number) as Position[]) {
       while ((count.get(pos) ?? 0) < SQUAD_TARGET[pos] - 1) {
-        const age = rng.int(17, 21);
+        const age = rng.int(16, 20);
         const potential = Math.round(Math.min(1980, level * rng.gaussianClamped(0.9, 0.12, 0.6, 1.3)));
-        const idx = generatePlayer(store, rng, { nation: club.nation, age, potential, position: pos, currentYear: world.year });
+        const idx = generatePlayer(store, rng, { nation: club.nation, age, potential, position: pos, currentYear: world.year, abilityFraction: capped(potential, age) });
         store.clubId[idx] = club.id;
         store.contractUntil[idx] = seasonEndDay(world.season + rng.int(0, 2));
         count.set(pos, (count.get(pos) ?? 0) + 1);
@@ -334,6 +394,9 @@ export class RealWorldPlan {
       if (best < 0) continue;
       store.firstName[best] = store.names.intern(p.first);
       store.lastName[best] = store.names.intern(p.last);
+      if (p.birthYear !== undefined) store.birthYear[best] = p.birthYear;
+      if (p.birthDay !== undefined) store.birthDay[best] = p.birthDay;
+      if (p.heightCm !== undefined) store.heightCm[best] = p.heightCm;
       taken.add(best);
       placed++;
     }

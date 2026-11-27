@@ -100,7 +100,10 @@ export async function getPage(url: string, init?: { method?: string; body?: stri
   let lastErr: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const headers: Record<string, string> = { 'User-Agent': USER_AGENT, 'Accept-Language': 'en' };
+      // zerozero answers an English reader from its international site, with other people under the same ids.
+      // and its competition pages to a reader asking in Portuguese with a general list: it is asked in no language.
+      const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
+      if (!u.host.endsWith('zerozero.pt')) headers['Accept-Language'] = 'en';
       if (init?.contentType !== undefined) headers['Content-Type'] = init.contentType;
       const res = await fetch(url, { method: init?.method ?? 'GET', body: init?.body, headers });
       if (res.status === 429 || res.status >= 500) {
@@ -185,6 +188,14 @@ export function splitSurnameFirst(raw: string): { first: string; last: string } 
   const words = raw.trim().split(/\s+/);
   const caps: string[] = [];
   let i = 0;
+  // "Van de VYVER Jutta": the particles before a capitalised surname are part of it.
+  const particle = (w: string): boolean => /^(van|de|der|den|da|do|dos|das|di|von|la|le|del|dal|ter|ten)$/i.test(w);
+  let lead = 0;
+  while (lead < words.length && particle(words[lead])) lead++;
+  if (lead > 0 && lead < words.length && isUpperWord(words[lead])) {
+    caps.push(...words.slice(0, lead).map((w) => w.toUpperCase()));
+    i = lead;
+  }
   while (i < words.length && isUpperWord(words[i])) caps.push(words[i++]);
   if (caps.length === 0 || i === words.length) {
     // No capitalised surname to go by: the last word is the surname.

@@ -19,13 +19,13 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 /** Something on the calendar besides a match. */
 interface DayNote {
   label: string;
-  kind: 'deadline' | 'window' | 'training' | 'youth' | 'academy' | 'club';
+  kind: 'deadline' | 'window' | 'training' | 'youth' | 'u21' | 'academy' | 'club';
 }
 
 /** The calendar's layers: what can be shown on it besides the matches, each on or off. */
-type Layer = 'windows' | 'training' | 'youth' | 'academy' | 'club';
+type Layer = 'windows' | 'training' | 'youth' | 'u21' | 'academy' | 'club';
 const LAYERS: ReadonlyArray<[Layer, string]> = [
-  ['windows', 'Windows & internationals'], ['training', 'Training'], ['youth', 'U19'], ['academy', 'Academy'], ['club', 'Contracts & club'],
+  ['windows', 'Windows & internationals'], ['training', 'Training'], ['youth', 'U19'], ['u21', 'U21'], ['academy', 'Academy'], ['club', 'Contracts & club'],
 ];
 const LAYERS_KEY = 'vm.calendarLayers';
 
@@ -38,11 +38,19 @@ interface NationalDate { t: Tournament; m: IntlMatch; side: number }
 function readLayers(): Set<Layer> {
   try {
     const raw = window.localStorage.getItem(LAYERS_KEY);
-    if (raw !== null) return new Set(JSON.parse(raw) as Layer[]);
+    if (raw !== null) {
+      const kept = new Set(JSON.parse(raw) as Layer[]);
+      // The U21 layer came later: on for a calendar set up before it, once.
+      if (window.localStorage.getItem('vm.calendarU21') === null) {
+        kept.add('u21');
+        window.localStorage.setItem('vm.calendarU21', '1');
+      }
+      return kept;
+    }
   } catch {
     // Nothing kept: the usual layers.
   }
-  return new Set<Layer>(['windows', 'youth', 'academy', 'club']);
+  return new Set<Layer>(['windows', 'youth', 'u21', 'academy', 'club']);
 }
 
 /** Transfer windows opening and closing — the dates a manager plans around. */
@@ -129,6 +137,20 @@ export function CalendarScreen(): JSX.Element {
       }
     }
   }
+  if (layers.has('u21')) {
+    // The club's under-21 side: its league matches, the result once played.
+    const side = world.clubs.find((c) => c.under21Of === club.id);
+    if (side !== undefined) {
+      for (const f of world.fixtures) {
+        if (f.home !== side.id && f.away !== side.id) continue;
+        const home = f.home === side.id;
+        const opp = world.clubs[home ? f.away : f.home];
+        const name = (opp?.shortName ?? '?').replace(/\s*U21$/, '');
+        const score = f.played ? ` ${home ? f.homeSets : f.awaySets}-${home ? f.awaySets : f.homeSets}` : '';
+        add(f.day, { kind: 'u21', label: `U21${score} ${home ? 'vs' : 'at'} ${name}` });
+      }
+    }
+  }
   if (layers.has('academy')) {
     const a = world.academy;
     for (const p of a?.programmes ?? []) {
@@ -196,7 +218,7 @@ export function CalendarScreen(): JSX.Element {
     : []);
   const selectedNotes = notesFor(selectedDay);
   const noteScreen = (n: { label: string; kind: string }): ScreenId => (n.kind === 'training' ? 'training'
-    : n.kind === 'youth' || n.kind === 'academy' ? 'youth'
+    : n.kind === 'youth' || n.kind === 'u21' || n.kind === 'academy' ? 'youth'
       : n.kind === 'window' || n.kind === 'deadline' ? 'transfers'
         : /facilit|building/i.test(n.label) ? 'facilities' : 'squad');
 
@@ -354,7 +376,7 @@ export function CalendarScreen(): JSX.Element {
             })}
             {selectedNotes.map((n, i) => (
               <button key={i} className="calendar-event" onClick={() => g.go(noteScreen(n))}>
-                <Icon name={n.kind === 'training' ? 'training' : n.kind === 'youth' || n.kind === 'academy' ? 'youth' : 'club'} size={18} />
+                <Icon name={n.kind === 'training' ? 'training' : n.kind === 'youth' || n.kind === 'u21' || n.kind === 'academy' ? 'youth' : 'club'} size={18} />
                 <span><b>{n.label}</b><small>Open workspace</small></span>
               </button>
             ))}
@@ -492,6 +514,7 @@ export function CalendarScreen(): JSX.Element {
           <span><b className="lg-deadline">Deadline</b>: transfer window closes</span>
           <span><b className="lg-training">Training</b>: the session planned</span>
           <span><b className="lg-youth">U19</b>: the academy side's match</span>
+          <span><b className="lg-u21">U21</b>: the under-21 side's match</span>
           <span><b className="lg-academy">Academy</b>: programmes, reports, the scouts' finds</span>
           <span><b className="lg-club">Club</b>: contracts, loans, building work</span>
           <span><b className="lg-result">W / L</b>: final result</span>

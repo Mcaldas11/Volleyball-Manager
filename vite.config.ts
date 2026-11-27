@@ -14,16 +14,18 @@ function localRealDb(): Plugin {
     name: 'local-real-db',
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use('/__local/real-db.json', (_req, res) => {
-        if (!existsSync(file)) {
+      for (const [url, path] of [['/__local/real-db.json', file], ['/__local/real-db-women.json', resolve(__dirname, 'data/local/real-db-women.json')]] as const) {
+      server.middlewares.use(url, (_req, res) => {
+        if (!existsSync(path)) {
           res.statusCode = 404;
           res.end();
           return;
         }
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store');
-        res.end(readFileSync(file));
+        res.end(readFileSync(path));
       });
+      }
       // The real clubs' and leagues' logos and the players' photos, from the same local folder.
       const types: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };
       for (const folder of ['real-logos', 'real-photos']) {
@@ -49,6 +51,7 @@ export default defineConfig({
   plugins: [react(), localRealDb()],
   // Relative paths, so the build runs from any folder — itch.io serves a game from a subfolder of its own.
   base: './',
-  server: { port: 5180 },
+  // The real-data import writes thousands of files under data/: nothing there is source, so it is not watched.
+  server: { port: 5180, watch: { ignored: ['**/data/**'] } },
   build: { target: 'es2022', outDir: 'dist' },
 });

@@ -97,7 +97,8 @@ export function generateWorld(opts: WorldGenOptions): World {
   setNationsGame(gender);
   const rng = world.rng;
   const usedNames = new Set<string>();
-  const real = opts.real !== undefined && gender === 'men' ? new RealWorldPlan(opts.real) : null;
+  const real = opts.real !== undefined && opts.real.gender === gender ? new RealWorldPlan(opts.real) : null;
+  if (real !== null) world.realData = true;
 
   for (let n = 0; n < NATIONS.length; n++) {
     const nation = NATIONS[n];

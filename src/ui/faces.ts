@@ -28,9 +28,18 @@ export function setOwnPhotos(photos: ReadonlyMap<number, string>): void {
   ownPhotos = photos;
 }
 
+/** A drawn portrait for a player with no photo of his own, when the world asks for one (see uniqueFaces.ts). */
+let drawnFace: ((playerId: number) => string | undefined) | null = null;
+
+export function setDrawnFaces(draw: ((playerId: number) => string | undefined) | null): void {
+  drawnFace = draw;
+}
+
 export function playerFaceUrl(playerId: number): string {
   const own = ownPhotos.get(playerId);
   if (own !== undefined) return own;
+  const drawn = drawnFace?.(playerId);
+  if (drawn !== undefined) return drawn;
   const index = ((playerId % PORTRAIT_COUNT) + PORTRAIT_COUNT) % PORTRAIT_COUNT;
   return `https://randomuser.me/api/portraits/${faceSet}/${index}.jpg`;
 }

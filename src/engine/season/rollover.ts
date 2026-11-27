@@ -33,6 +33,7 @@ import { finalStandingsOrder } from './playoffs.ts';
 import { applyPromotionRelegation } from './pyramid.ts';
 import { nextSeasonSponsorship, sponsorBonus } from '../world/commercial.ts';
 import { affiliateFee, affiliatesOf } from '../world/affiliates.ts';
+import { under21SeasonEnd } from '../world/under21.ts';
 import { openSeasonSpells } from '../world/clubHistory.ts';
 import { isCupCompetition, qualifyForCups } from './cups.ts';
 import {
@@ -448,9 +449,10 @@ function runTransferWindow(world: World): number {
   }
 
   // An under-21 side's players move up at 22: to the senior club when it has room, onto the free list when not.
+  let movedUpFromManaged = 0;
   // Eligible next season: no older than 21 in the year it starts.
   const nextStart = world.startYear + world.season + 1;
-  const under21Next = (p: number): boolean => nextStart - store.birthYear[p] <= 21;
+  const under21Next = (p: number): boolean => nextStart - store.birthYear[p] <= 20;
   for (const club of world.clubs) {
     if (club.under21Of === undefined) continue;
     const senior = world.clubs[club.under21Of];
@@ -460,6 +462,7 @@ function runTransferWindow(world: World): number {
       club.preferredLineup = club.preferredLineup.filter((x) => x !== p);
       if (club.preferredLibero === p) club.preferredLibero = -1;
       if (senior !== undefined && senior.players.length < MAX_SQUAD) {
+        if (club.id === world.userClubId) movedUpFromManaged++;
         senior.players.push(p);
         store.clubId[p] = senior.id;
         logTransfer(world, p, club.id, senior.id, 0);
@@ -471,6 +474,9 @@ function runTransferWindow(world: World): number {
       }
     }
   }
+
+  // The board of an under-21 side the manager coaches judges the year by who went up.
+  under21SeasonEnd(world, movedUpFromManaged);
 
   // Clubs shop in order of standing — twice round: first every club fills out
   // its core, then the depth behind it, from whoever is left. Otherwise the

@@ -47,6 +47,7 @@
  * home — and the world's news reports the tournaments.
  */
 
+import { spellsOf } from './clubHistory.ts';
 import { intlEventDays, plannedEventDays, type IntlKind } from './calendar.ts';
 import { frameOf, frameVerdict, framedSquad } from './nationalExtras.ts';
 import { nationalCampDay, nationalChemistryFor, nationalTogether, seedNationalChemistry } from './nationalChemistry.ts';
@@ -965,6 +966,12 @@ const HERITAGE_CHANCE = 0.025;
 export function assignDualNationals(world: World): void {
   const I = internationals(world);
   const store = world.players;
+  // A real-data world: no passport is made up. Five seasons at clubs of one country make him eligible for it.
+  if (world.realData === true) {
+    naturaliseAfterFiveSeasons(world);
+    I.dualFrom = store.count;
+    return;
+  }
   const rng = new Rng(`dual:${world.seed}:${world.season}:${I.dualFrom}`);
   for (let i = I.dualFrom; i < store.count; i++) {
     if (!store.isActive(i) || store.nation2[i] !== 0xffff) continue;
@@ -980,6 +987,30 @@ export function assignDualNationals(world: World): void {
     }
   }
   I.dualFrom = store.count;
+}
+
+/** Seasons at clubs of one country, other than his own, that earn its nationality. */
+const NATURALISED_SEASONS = 5;
+
+/** Every player with five seasons at clubs of another country takes its nationality as his second. */
+function naturaliseAfterFiveSeasons(world: World): void {
+  const store = world.players;
+  for (let i = 0; i < store.count; i++) {
+    if (!store.isActive(i) || (store.nation2[i] !== 0xffff && store.nation2[i] !== store.nation[i])) continue;
+    const seasons = new Map<number, Set<number>>();
+    for (const s of spellsOf(world, i)) {
+      // Only the seasons of the save: the years before it are made up for the generated players.
+      if (s.from < 0) continue;
+      const club = world.clubs[s.club];
+      if (club === undefined || club.nation === store.nation[i]) continue;
+      const set = seasons.get(club.nation) ?? new Set<number>();
+      for (let y = s.from; y <= s.to; y++) set.add(y);
+      seasons.set(club.nation, set);
+    }
+    for (const [nation, set] of seasons) {
+      if (set.size >= NATURALISED_SEASONS) { store.nation2[i] = nation; break; }
+    }
+  }
 }
 
 /** The other nation a player could play for, or -1. */

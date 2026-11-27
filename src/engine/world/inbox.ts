@@ -57,6 +57,7 @@ export function postMessage(world: World, msg: Omit<GameMessage, 'id' | 'day' | 
  */
 export function messageNeedsAction(world: World, m: GameMessage): boolean {
   if (m.jobOfferId !== undefined && world.career.offers.some((o) => o.id === m.jobOfferId)) return true;
+  if (m.callUpRequestId !== undefined && (world.under21?.requests ?? []).some((r) => r.id === m.callUpRequestId)) return true;
   if (m.contractOfferId !== undefined && world.career.contractOffer?.id === m.contractOfferId) return true;
   // An invitation to a pre-season tournament, until it is answered or lapses.
   if (m.cupInviteId !== undefined &&

@@ -8,7 +8,7 @@ import { Dropdown, type DropOption } from '../dropdown.tsx';
 import { ConfirmDialog } from '../confirmDialog.tsx';
 import { PATH_NAMES } from '../../engine/world/academyPlans.ts';
 import type { TimelineItem } from '../../engine/world/playerTimeline.ts';
-import { AcademyDevelopment, AcademyFacilities, AcademyInternationals, AcademyPlans, AcademyRecruitment, AcademyTraining } from './AcademyPlus.tsx';
+import { AcademyDevelopment, AcademyFacilities, AcademyInternationals, AcademyPlans, AcademyRecruitment, AcademyTraining, AcademyUnder21 } from './AcademyPlus.tsx';
 import {
   ATTR_LABELS, HIDDEN_ATTR_SET, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS,
   type AttributeName,
@@ -299,7 +299,12 @@ export function SquadScreen(): JSX.Element {
                         <button className="athlete-player-cell" onClick={() => setPicked(p)}>
                           <PlayerFace playerId={store.id[p]} name={store.fullName(p)} size={34} />
                           <span>
-                            <b translate="no">{store.fullName(p)}</b>
+                            <b translate="no">
+                              {store.fullName(p)}
+                              {store.clubId[p] !== club.id && club.under21Of !== undefined && (
+                                <span className="u21-first-team" title="On the senior club's books: he plays for you on your match days">1st team</span>
+                              )}
+                            </b>
                             <small>
                               {age(p)} <span>years</span>
                               {starters.has(p) && <span className="athlete-starter">VI</span>}
@@ -802,7 +807,7 @@ export function PlayerDetail(): JSX.Element | null {
               <Flag nation={store.nation[p]} /> {NATIONS[store.nation[p]].name}
               {secondNation(world, p) >= 0 && <> · <Flag nation={secondNation(world, p)} /> {NATIONS[secondNation(world, p)].name}</>}
             </span>
-            <span>{age} years old</span>
+            <span title={`Born ${birthDate(store.birthYear[p], store.birthDay[p])}`}>{age} years old · born {birthDate(store.birthYear[p], store.birthDay[p])}</span>
             <span>{store.heightCm[p]} cm</span>
             <span title="The hand he hits with">{store.offHand[p] >= 19 ? 'Ambidextrous' : store.hasFlag(p, PlayerFlag.LeftHanded) ? 'Left-handed' : 'Right-handed'}</span>
             <span>{club !== null ? <ClubLink id={club.id} /> : 'Free agent'}</span>
@@ -1286,7 +1291,7 @@ function assessment(pa: number): { text: string; cls: string } {
   return { text: 'Unlikely to make the grade', cls: 'dim' };
 }
 
-type AcademyTab = 'players' | 'training' | 'plans' | 'development' | 'recruitment' | 'facilities' | 'intl' | 'league';
+type AcademyTab = 'players' | 'u21' | 'training' | 'plans' | 'development' | 'recruitment' | 'facilities' | 'intl' | 'league';
 
 /**
  * The academy: its prospects — what they might become, how their season in
@@ -1357,10 +1362,11 @@ export function YouthScreen(): JSX.Element {
       </div>
 
       <div className="academy-tabs">
-        <Segmented<AcademyTab> options={[['players', 'Academy players'], ['training', 'Training'], ['plans', 'Career plans'], ['development', 'Development'], ['recruitment', 'Recruitment'], ['facilities', 'Facilities'], ['intl', 'Internationals'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
+        <Segmented<AcademyTab> options={[['players', 'Academy players'], ...(g.managedSide() !== null ? [['u21', 'Senior club'] as const] : g.under21Side() !== undefined ? [['u21', 'U21 side'] as const] : []), ['training', 'Training'], ['plans', 'Career plans'], ['development', 'Development'], ['recruitment', 'Recruitment'], ['facilities', 'Facilities'], ['intl', 'Internationals'], ['league', 'U19 league']]} value={tab} onChange={setTab} />
         <span className="faint">
           {tab === 'players'
             ? 'A new intake arrives each summer. Who plays for the U19s gets the minutes that make training stick.'
+            : tab === 'u21' ? 'The under-21 side: its squad, its league, and the call-ups between it and the first team.'
             : tab === 'training' ? "The academy's week: train with the first team, or on its own focus and intensity."
             : tab === 'plans' ? 'The path each prospect is on, and the head of youth seeing it through.'
             : tab === 'development' ? 'Money and weeks put into one prospect at a time, no promise of a star.'
@@ -1371,7 +1377,8 @@ export function YouthScreen(): JSX.Element {
         </span>
       </div>
 
-      {tab === 'training' ? <AcademyTraining />
+      {tab === 'u21' ? <AcademyUnder21 />
+        : tab === 'training' ? <AcademyTraining />
         : tab === 'plans' ? <AcademyPlans />
         : tab === 'development' ? <AcademyDevelopment />
         : tab === 'recruitment' ? <AcademyRecruitment />
@@ -1551,6 +1558,12 @@ function AcademyPlayersCard({ prospects, empty, toolbar, render }: {
         )}
     </Card>
   );
+}
+
+/** A birthday from its year and day of the year (0 = 1 January): "15 Sep 1993". */
+function birthDate(year: number, day: number): string {
+  const d = new Date(Date.UTC(year, 0, 1 + day));
+  return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
 /** The actions menu's values: a club's id to sell to it, LOAN_BASE + its id to lend to it. */
