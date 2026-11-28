@@ -30,8 +30,26 @@ const POS: Record<RealPosition, Position> = {
 };
 
 /** Real squads are lifted this share of the way from their generated level toward the target. */
-const REAL_LEVEL_LIFT = 0.22;
-const REAL_LEVEL_TARGET = 1550;
+const REAL_LEVEL_LIFT = 0.3;
+const REAL_LEVEL_TARGET = 1600;
+
+/**
+ * The least a national-team player is worth, from his country's strength: a
+ * Polish or Italian international is world class wherever he plays (about
+ * 1745), a Slovenian one about 1575, a Portuguese one about 1280, and a
+ * small nation's barely above its own league.
+ */
+export function internationalFloor(strength: number): number {
+  return Math.round(Math.min(1800, 400 + strength * 14));
+}
+
+/**
+ * A young real player's room to grow: his potential this many times his
+ * level now, the more the younger (about +40% at 17, +20% at 20, none from 24).
+ */
+export function youngHeadroom(age: number): number {
+  return 1 + Math.max(0, Math.min(0.45, (24 - age) * 0.065));
+}
 
 /** The most clubs a real division is given in the game. */
 const MAX_CLUBS = 16;
@@ -201,11 +219,21 @@ export class RealWorldPlan {
       const young = world.year - (rp.birthYear ?? 0) <= 20;
       const lift = international ? 1.13 : young ? 1.08 : 1;
       const own = playerDice(world, rp);
-      const estimated = Math.round(Math.min(1980, level * lift * own.gaussianClamped(1, 0.09, 0.76, 1.26)));
+      const spread = own.gaussianClamped(1, 0.09, 0.76, 1.26);
+      let estimated = Math.round(Math.min(1980, level * lift * spread));
+      // A national-team player is as good as his country's team, whatever club he is at: his own spread around that.
+      if (international) {
+        const floor = internationalFloor(nationStrength(nation)) * Math.min(1.08, Math.max(0.94, spread));
+        estimated = Math.round(Math.min(1980, Math.max(estimated, floor)));
+      }
       const height = rp.heightCm !== null && rp.heightCm >= 150 && rp.heightCm <= 230 ? rp.heightCm : undefined;
-      const set = handSet(rp, estimated);
+      // A young one: his level now as estimated, and room above it to grow into.
+      const headroom = youngHeadroom(age);
+      const set = handSet(rp, Math.round(Math.min(1980, estimated * headroom)));
       const potential = set.potential;
-      const abilityFraction = set.abilityFraction ?? (young ? Math.max(abilityFractionAtAge(age), 0.8) : undefined);
+      // His level now as before (a teenager most of the way there, at least 80%); the room above it is new.
+      const now = young ? estimated * Math.max(abilityFractionAtAge(age), 0.8) : estimated;
+      const abilityFraction = set.abilityFraction ?? (headroom > 1 ? Math.min(1, now / Math.max(1, potential)) : undefined);
 
       const idx = generatePlayer(store, own, { nation, age, potential, position, currentYear: world.year, heightCm: height, abilityFraction });
       this.realIndices.add(idx);

@@ -1,12 +1,14 @@
 /**
  * The tactic switcher over the Lineup screens, the way FM has it: the loaded
  * tactic by number and name, a menu of the others saved — load one, rename
- * it, throw it away — and a way to start a new one from the defaults.
+ * it, throw it away — and a way to start a new one from the defaults; and,
+ * as in FM, the loaded one saved to a file and others loaded from files.
  */
 
 import { useState, type JSX } from 'react';
 import { MAX_TACTICS, tacticFormationLabel } from '../engine/model/tacticSlots.ts';
 import { useDismiss } from './components.tsx';
+import { LoadTacticDialog, SaveTacticDialog } from './tacticFileDialog.tsx';
 import { Icon } from './icons.tsx';
 import { useGame } from './state.ts';
 
@@ -17,6 +19,7 @@ export function TacticPicker(): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
+  const [dialog, setDialog] = useState<'save' | 'load' | null>(null);
   const ref = useDismiss(open, () => { setOpen(false); setEditing(null); });
   if (club === null || saved === null) return null;
   const { slots, active } = saved;
@@ -95,12 +98,18 @@ export function TacticPicker(): JSX.Element | null {
           >
             + New tactic <span className="faint">from the defaults</span>
           </button>
+          <div className="tactic-files">
+            <button onClick={() => { setDialog('save'); setOpen(false); }}><Icon name="save" size={13} /> Save tactic</button>
+            <button onClick={() => { setDialog('load'); setOpen(false); }}><Icon name="upload" size={13} /> Load tactic</button>
+          </div>
           <p className="tactic-note">
             Each tactic keeps its own formation, instructions, rotations and team sheet. Changes to the loaded one
             are kept when you load another.
           </p>
         </div>
       )}
+      {dialog === 'save' && <SaveTacticDialog onClose={() => setDialog(null)} />}
+      {dialog === 'load' && <LoadTacticDialog onClose={() => setDialog(null)} />}
     </div>
   );
 }

@@ -14,3 +14,5 @@ data/fivb-cache/
 .env.local
 .ua/
 
+# Tactic files the desktop game writes when run from here (electron .).
+tactics/

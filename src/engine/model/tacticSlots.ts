@@ -107,6 +107,35 @@ export function newTactic(club: TacticFields, name?: string): number | null {
   return club.activeTactic;
 }
 
+/**
+ * A tactic from elsewhere — a tactic file — saved and loaded: in a slot of
+ * its own while there is room, otherwise in place of the loaded one. Which
+ * one it replaced, if it did, is returned with where it went.
+ */
+export function addTactic(club: TacticFields, t: SavedTactic): { index: number; replaced: string | null } {
+  const slots = tacticSlots(club);
+  const copy: SavedTactic = structuredClone(t);
+  copy.name = copy.name.trim().slice(0, 32) || `Tactic ${slots.length + 1}`;
+  if (slots.length < MAX_TACTICS) {
+    saveLoadedTactic(club);
+    slots.push(copy);
+    club.activeTactic = slots.length - 1;
+    apply(club, copy);
+    return { index: club.activeTactic, replaced: null };
+  }
+  const i = activeTactic(club);
+  const replaced = slots[i].name;
+  slots[i] = copy;
+  apply(club, copy);
+  return { index: i, replaced };
+}
+
+/** Where a tactic from a file would go: a free slot, or in place of the loaded one (its name). */
+export function addTacticTarget(club: TacticFields): string | null {
+  const slots = tacticSlots(club);
+  return slots.length < MAX_TACTICS ? null : slots[activeTactic(club)].name;
+}
+
 export function renameTactic(club: TacticFields, index: number, name: string): void {
   const slots = tacticSlots(club);
   const clean = name.trim().slice(0, 32);

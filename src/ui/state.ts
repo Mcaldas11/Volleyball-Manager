@@ -102,9 +102,10 @@ import { editorClearHistory, editorMovePlayer } from '../engine/world/godMode.ts
 import { releaseClauseOf, takeUpOption } from '../engine/world/contractTerms.ts';
 import { defaultTactics, FORMATION_NAMES, formationOf, type Formation, type TeamTactics } from '../engine/match/tactics.ts';
 import {
-  activeTactic, deleteTactic as deleteTacticSlot, loadTactic as loadTacticSlot, MAX_TACTICS,
-  newTactic as newTacticSlot, renameTactic as renameTacticSlot, tacticSlots, type SavedTactic,
+  activeTactic, addTactic, addTacticTarget, deleteTactic as deleteTacticSlot, loadTactic as loadTacticSlot, MAX_TACTICS,
+  newTactic as newTacticSlot, renameTactic as renameTacticSlot, saveLoadedTactic, tacticSlots, type SavedTactic,
 } from '../engine/model/tacticSlots.ts';
+import { serialiseTacticFile, type TacticFile, tacticFromFile, tacticToFile } from '../engine/model/tacticFile.ts';
 import {
   acceptNationalOffer, applyForNationalJob, applyIntlResult, askForSquad, canPlayForCountry, counterNationalOffer, declineNationalOffer,
   expressNationalInterest, nationalInterestBlock, type NationalCounter,
@@ -2846,10 +2847,11 @@ class Game {
     // A profile left open goes; one opened during the match shows over it.
     this.selectedPlayer = null;
 
-    const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, club);
+    const { lineup, libero, defensiveLibero, bench } = pickLineup(world.players, matchSquadClub(world, club)!);
     const side = (id: number): MatchSide => {
       const c = world.clubs[id];
-      return { clubId: id, nation: -1, name: c?.name ?? '—', shortName: c?.shortName ?? '—', players: c?.players ?? [] };
+      // An under-21 side's players for the day take in the senior club's young ones (see matchSquadPlayers).
+      return { clubId: id, nation: -1, name: c?.name ?? '—', shortName: c?.shortName ?? '—', players: c !== undefined ? matchSquadPlayers(world, c) : [] };
     };
     this.matchday = {
       fixture: next,
@@ -2941,7 +2943,8 @@ class Game {
     const back = this.navEntry();
     const side = (id: number): MatchSide => {
       const c = world.clubs[id];
-      return { clubId: id, nation: -1, name: c?.name ?? '—', shortName: c?.shortName ?? '—', players: c?.players ?? [] };
+      // An under-21 side's players for the day take in the senior club's young ones (see matchSquadPlayers).
+      return { clubId: id, nation: -1, name: c?.name ?? '—', shortName: c?.shortName ?? '—', players: c !== undefined ? matchSquadPlayers(world, c) : [] };
     };
     this.matchday = {
       fixture: f,
@@ -6313,6 +6316,43 @@ class Game {
     if (club === null || this.matchday !== null) return;
     const name = tacticSlots(club)[index]?.name;
     if (deleteTacticSlot(club, index)) this.notice = `${name} deleted.`;
+    this.emit();
+  }
+
+  /** The loaded tactic as a tactic file, named `name` — see tacticFile.ts. */
+  loadedTacticFile(name: string): string | null {
+    const club = this.club;
+    const world = this.world;
+    if (club === null || world === null) return null;
+    saveLoadedTactic(club);
+    const slot = tacticSlots(club)[activeTactic(club)];
+    const clean = name.trim().slice(0, 32) || slot.name;
+    return serialiseTacticFile(tacticToFile({ ...slot, name: clean }, world.players, club.name));
+  }
+
+  /** What became of a tactic file written, in a notice. */
+  tacticFileSaved(text: string): void {
+    this.notice = text;
+    this.emit();
+  }
+
+  /** Whether a tactic from a file can be loaded now, and the tactic it would replace, if any. */
+  tacticFileTarget(): { allowed: boolean; replaces: string | null } {
+    const club = this.club;
+    if (club === null) return { allowed: false, replaces: null };
+    return { allowed: this.matchday === null || this.matchday.stage === 'lineup', replaces: addTacticTarget(club) };
+  }
+
+  /** A tactic from a file, saved and loaded — its players found in the squad, the rest picked as usual. */
+  loadTacticFile(file: TacticFile): void {
+    const club = this.club;
+    const world = this.world;
+    if (club === null || world === null || (this.matchday !== null && this.matchday.stage !== 'lineup')) return;
+    const { tactic, found, named } = tacticFromFile(file, club.players, world.players);
+    const { replaced } = addTactic(club, tactic);
+    const players = named === 0 ? '' : found === named ? ', with its team sheet' : `, ${found} of its ${named} players found in your squad`;
+    this.notice = `${tactic.name} loaded${replaced !== null ? ` in place of ${replaced}` : ''}${players}.`;
+    if (this.matchday !== null && this.matchday.national === null) this.repickMatchdaySix();
     this.emit();
   }
 
