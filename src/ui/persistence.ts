@@ -16,6 +16,7 @@
  * touches the other two stores.
  */
 
+import { alignUnder21Contracts } from '../engine/world/under21Contracts.ts';
 import { addUniquePlayers } from '../engine/world/uniquePlayers.ts';
 import { setNationsGame } from '../engine/world/nations.ts';
 import { Rng } from '../engine/core/rng.ts';
@@ -294,6 +295,8 @@ export function reviveWorld(raw: World): World {
   // Saves from before the manager had a career: the club being managed
   // becomes the first job on record.
   backfillCareer(raw);
+  // Saves from before under-21 contracts went by age: they run to each player's age limit now.
+  alignUnder21Contracts(raw);
   migrateContractDays(raw.players);
   // Saves from before the cups were played: national cups, super cups and the
   // Club World Championship are added; all of them start with the next season.

@@ -251,7 +251,7 @@ export function NegotiationScreen(): JSX.Element | null {
     : `${endsLabel(startSeason + d.minYears - 1)} – ${endsLabel(startSeason + d.maxYears - 1)}`;
   // A renewal's new wage replaces what he earns now.
   // A pre-contract signing is paid from next season, when those leaving have gone.
-  const wageRoom = pre ? g.nextSeasonWageRoom() : g.wageRoom() + (renewal ? store.wage[player] : 0);
+  const wageRoom = pre ? g.nextSeasonWageRoom() : renewal ? g.renewalRoom(player) : g.wageRoom();
 
   return (
     <ContractPaper

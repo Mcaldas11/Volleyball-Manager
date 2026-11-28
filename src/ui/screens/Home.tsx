@@ -4,7 +4,8 @@ import { ATTR_LABELS, type AttributeName } from '../../engine/model/attributes.t
 import { compareTableRows } from '../../engine/model/club.ts';
 import { Position, POSITION_NAMES } from '../../engine/model/positions.ts';
 import { stageLabel } from '../../engine/season/cups.ts';
-import { seasonTotals } from '../../engine/world/records.ts';
+import { competitionPlayerLines, seasonTotals } from '../../engine/world/records.ts';
+import { matchSquadPlayers } from '../../engine/world/under21.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import {
   attrClass, ClubCrest, money, Paged, PlayerFace, StarMeter,
@@ -413,7 +414,11 @@ function TopScorer(): JSX.Element {
   const world = g.world!;
   const club = g.club!;
   const store = world.players;
-  const lines = club.players.map((p) => g.ctx.stats.get(p)).filter((s) => s !== undefined);
+  // An under-21 side: its league's lines, the senior club's young players it fields among them, its matches only.
+  const sideSquad = club.under21Of !== undefined ? new Set(matchSquadPlayers(world, club)) : null;
+  const lines = sideSquad !== null
+    ? competitionPlayerLines(world, club.leagueId).map((l) => l.stats).filter((s) => sideSquad.has(s.playerIdx))
+    : club.players.map((p) => g.ctx.stats.get(p)).filter((s) => s !== undefined);
   const points = (s: (typeof lines)[number]): number => s.attackKills + s.serveAces + s.blockPoints;
   const top = lines.sort((a, b) => points(b) - points(a))[0];
 
@@ -469,7 +474,7 @@ function TopScorer(): JSX.Element {
           <span className="hm-scorer-meta">
             <span className="hm-pos">{POSITION_NAMES[pos]}</span>
             {top !== undefined && <span className="dim">{top.matches} matches</span>}
-            {top !== undefined && <span className="dim">{top.sets} sets</span>}
+            {top !== undefined && top.sets !== undefined && <span className="dim">{top.sets} sets</span>}
           </span>
         </div>
         <button className="hm-link hm-scorer-link" onClick={() => g.go('stats')}>All leaderboards <Icon name="arrowRight" size={13} /></button>

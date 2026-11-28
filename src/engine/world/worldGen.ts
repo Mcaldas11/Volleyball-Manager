@@ -13,6 +13,7 @@
  * still makes sense forty seasons later after all of it has drifted.
  */
 
+import { UNDER21_DIV2_TIER, UNDER21_TIER } from './under21Leagues.ts';
 import { addUniquePlayers } from './uniquePlayers.ts';
 import { seedChemistry } from './chemistry.ts';
 import { planInternationals } from './internationals.ts';
@@ -80,6 +81,51 @@ function pyramidShape(
   return groups;
 }
 
+/**
+ * Every player of 20 or under, the world over, a little more potential: most
+ * a good step up (6 to 15%), a few a lot more (up to about 28%), the same for
+ * each player in every new world. A share of what he has, so the strongest
+ * leagues' and clubs' prospects stay the strongest. A hand-set one is left be.
+ */
+function liftYoungPotential(world: World, handSet?: ReadonlySet<number>): void {
+  const store = world.players;
+  for (let i = 0; i < store.count; i++) {
+    if (!store.isActive(i) || handSet?.has(i) === true) continue;
+    if (store.ageOn(i, world.year, 181) > 20) continue;
+    // A number in [0, 1) from the player himself, not the world's dice.
+    let h = Math.imul(store.id[i] ^ 0x51ed27, 0x2c1b3c6d);
+    h ^= h >>> 15;
+    h = Math.imul(h, 0x297a2d39);
+    h ^= h >>> 13;
+    const u = (h >>> 0) / 4294967296;
+    const pa = store.potentialAbility[i];
+    // The more he already has ahead of him, the less is added: the stars stay few.
+    const lift = (0.06 + 0.22 * u * u) * Math.max(0.3, 1 - Math.max(0, pa - 1200) / 1000);
+    store.potentialAbility[i] = Math.max(store.currentAbility[i], Math.min(1980, Math.round(pa * (1 + lift))));
+  }
+}
+
+/**
+ * A club's wage budget covers the squad it starts with, and a little over for
+ * the rises its renewals bring: where a squad came out dearer than its club's
+ * standing pays for (a real roster full of internationals, say), the sponsor
+ * makes up the difference, so it does not come out of the balance.
+ */
+const STARTING_WAGE_MARGIN = 1.08;
+function fundSquads(world: World): void {
+  for (const club of world.clubs) {
+    if (club.players.length === 0) continue;
+    const bill = club.players.reduce((sum, p) => sum + world.players.wage[p], 0);
+    const need = Math.round(bill * STARTING_WAGE_MARGIN);
+    const f = club.finances;
+    if (f.wageBudget >= need) continue;
+    const short = need - f.wageBudget;
+    f.wageBudget = need;
+    // Next season's budget is drawn from income (rollover.ts): the sponsor pays for it.
+    f.sponsorshipIncome += Math.round(short / 0.7);
+  }
+}
+
 /** Clubs per division, by tier. Top flights are smaller than lower ones. */
 function clubsPerDivision(tier: number, rng: Rng): number {
   const [lo, hi] = divisionSize(tier);
@@ -102,12 +148,15 @@ export function generateWorld(opts: WorldGenOptions): World {
 
   for (let n = 0; n < NATIONS.length; n++) {
     const nation = NATIONS[n];
-    const shape = pyramidShape(nation.poolSize, nation.leagueTiers, opts.scale);
+    // As deep as the real divisions go, at least; a real division is one league, not regional groups.
+    const shape = pyramidShape(nation.poolSize, Math.max(nation.leagueTiers, real?.deepestTier(nation.code) ?? 0), opts.scale)
+      .map((groups, t) => (real?.leagueFor(nation.code, t + 1) !== undefined ? 1 : groups));
+    let realTop: Club[] | null = null;
 
     for (let t = 0; t < shape.length; t++) {
       const tier = t + 1;
       for (let g = 0; g < shape[t]; g++) {
-        // A real division where the file has one: the top flight, and the tier below where it is a single league.
+        // A real division where the file has one.
         const realLeague = shape[t] === 1 ? real?.leagueFor(nation.code, tier) : undefined;
         const size = realLeague !== undefined ? real!.clubCount(realLeague) : clubsPerDivision(tier, rng);
         const comp = createLeague(world, n, tier, g, shape[t], size);
@@ -124,11 +173,12 @@ export function generateWorld(opts: WorldGenOptions): World {
           comp.table.push(newTableRow(club.id));
           made.push(club);
         }
-        if (realLeague !== undefined) real!.adopt(made, realLeague);
-        // Beside a real top flight, its clubs' under-21 sides in a league of their own.
-        if (realLeague !== undefined && tier === 1) createUnder21League(world, rng, n, made, usedNames, real!);
+        if (realLeague !== undefined) real!.adopt(made, realLeague, world, squadLevelFor);
+        if (realLeague !== undefined && tier === 1) realTop = made;
       }
     }
+    // The under-21 divisions, once every club of the nation exists.
+    if (real !== null) createUnder21Divisions(world, rng, n, usedNames, real, realTop);
   }
 
   // As many places down from each division as there are up from the one below.
@@ -157,6 +207,12 @@ export function generateWorld(opts: WorldGenOptions): World {
   }
   // National-team players with no club in the file, in place of generated ones.
   real?.placeInternationals(world);
+  // Each real division in the order of today's table, the leader the strongest.
+  real?.lineUpTables(world);
+  // The under-21s with more ahead of them.
+  liftYoungPotential(world, real?.handSetPotential);
+  // Every club can pay the squad it starts with.
+  fundSquads(world);
 
   // Every club starts with an academy — two years' intakes, from dice of their
   // own so the rest of the world comes out as it always has.
@@ -225,14 +281,59 @@ function createLeague(
 
 // ---- Under-21 sides ----------------------------------------------------------
 
-/** The tier an under-21 league sits at: off the bottom of every pyramid, which leaves it out. */
-export const UNDER21_TIER = 99;
+/** The tier an under-21 league sits at: off the bottom of every pyramid, which leaves it out (see under21Leagues.ts). */
+export { UNDER21_TIER };
 
-function createUnder21League(world: World, rng: Rng, nation: number, seniors: Club[], usedNames: Set<string>, real: RealWorldPlan): void {
+/**
+ * A nation's under-21 divisions. Where the federation says which division each
+ * club's under-21 side plays in, those: the first and second divisions with
+ * their real clubs, whatever senior division each is in. Otherwise beside a
+ * real top flight, its clubs' sides, and below them the best of the second tier.
+ */
+function createUnder21Divisions(world: World, rng: Rng, nation: number, usedNames: Set<string>, real: RealWorldPlan, realTop: Club[] | null): void {
+  const clubs = world.clubs.filter((c) => c.nation === nation && c.under21Of === undefined);
+  const inDivision = (d: 1 | 2): Club[] => clubs
+    .filter((c) => real.clubs.get(c.id)?.under21Division === d)
+    .sort((a, b) => world.competitions[a.leagueId].tier - world.competitions[b.leagueId].tier || b.reputation - a.reputation);
+  const first = inDivision(1);
+  if (first.length >= 4) {
+    createUnder21League(world, rng, nation, first, usedNames, real);
+    const second = inDivision(2).slice(0, UNDER21_DIV2_SIZE * 2);
+    if (second.length >= 4) createUnder21League(world, rng, nation, second, usedNames, real, UNDER21_DIV2_TIER);
+    else createUnder21SecondDivision(world, rng, nation, usedNames);
+    return;
+  }
+  if (realTop === null) return;
+  createUnder21League(world, rng, nation, realTop, usedNames, real);
+  createUnder21SecondDivision(world, rng, nation, usedNames);
+}
+
+/** Under-21 sides in a second division: at most this many, the strongest clubs of the senior tier below first. */
+const UNDER21_DIV2_SIZE = 12;
+
+/**
+ * The U21 second division, where a nation has a first: the under-21 sides of
+ * the best clubs in its second senior tier, as many as the first division has
+ * (at most twelve). Promotion and relegation between the two: under21Leagues.ts.
+ */
+function createUnder21SecondDivision(world: World, rng: Rng, nation: number, usedNames: Set<string>): void {
+  const first = world.competitions.find((c) => c.under21 === true && c.nation === nation && c.tier === UNDER21_TIER);
+  if (first === undefined) return;
+  const seniors = world.clubs
+    .filter((c) => c.nation === nation && c.under21Of === undefined && world.competitions[c.leagueId]?.tier === 2)
+    .sort((a, b) => b.reputation - a.reputation)
+    .slice(0, Math.min(UNDER21_DIV2_SIZE, Math.max(4, first.participants.length)));
+  if (seniors.length < 4) return;
+  createUnder21League(world, rng, nation, seniors, usedNames, null, UNDER21_DIV2_TIER);
+}
+
+function createUnder21League(
+  world: World, rng: Rng, nation: number, seniors: Club[], usedNames: Set<string>, real: RealWorldPlan | null, tier = UNDER21_TIER,
+): void {
   const top = world.competitions[seniors[0]?.leagueId ?? -1];
   if (top === undefined) return;
-  const comp = createLeague(world, nation, UNDER21_TIER, 0, 1, seniors.length);
-  comp.name = `${NATIONS[nation].name} U21`;
+  const comp = createLeague(world, nation, tier, 0, 1, seniors.length);
+  comp.name = tier === UNDER21_TIER ? `${NATIONS[nation].name} U21` : `${NATIONS[nation].name} U21 Second Division`;
   comp.under21 = true;
   comp.reputation = Math.round(top.reputation * 0.3);
   comp.promotionSlots = 0;
@@ -240,7 +341,7 @@ function createUnder21League(world: World, rng: Rng, nation: number, seniors: Cl
   comp.hasPlayoffs = false;
   comp.prizePool = Math.round(top.prizePool * 0.05);
   for (const senior of seniors) {
-    const club = createClub(world, rng, nation, UNDER21_TIER, usedNames);
+    const club = createClub(world, rng, nation, tier, usedNames);
     club.name = `${senior.name} U21`;
     club.shortName = senior.shortName;
     club.under21Of = senior.id;

@@ -2799,6 +2799,12 @@ tr.me.zone-champ td:first-child, tr.me.zone-releg td:first-child { box-shadow: i
 .zone-key:first-child { margin-left: 0; }
 .zone-key.champ { background: var(--accent); }
 .zone-key.releg { background: var(--bad); }
+/* The under-21 divisions: promoted, and the promotion playoff's places. */
+tr.zone-up td:first-child { box-shadow: inset 4px 0 0 var(--good, #3fb950); }
+tr.zone-po td:first-child { box-shadow: inset 4px 0 0 var(--gold, #c9a227); }
+tr.me.zone-up td:first-child, tr.me.zone-po td:first-child { box-shadow: inset 4px 0 0 var(--club-bright); }
+.zone-key.up { background: var(--good, #3fb950); }
+.zone-key.po { background: var(--gold, #c9a227); }
 
 .bracket { display: flex; align-items: stretch; gap: 26px; overflow-x: auto; padding: 4px 2px 8px; }
 .bracket-round { display: flex; flex-direction: column; justify-content: space-around; gap: 14px; min-width: 200px; flex: none; }
@@ -8830,4 +8836,13 @@ tr.fx-national > td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .acx-u21 .data-table th, .acx-u21 .data-table td { padding-left: 8px; padding-right: 8px; }
 .acx-u21 .data-table td:last-child { padding-right: 16px; }
 
+.acx-h { margin: 16px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--gold, #e9b949); }
+.acx-senior > .card-body { display: flex; flex-direction: column; overflow: hidden; }
+.acx-senior > .card-body > * { flex-shrink: 0; }
+.acx-senior .acx-first-team > p.faint:first-child { display: none; }
+.acx-senior .acx-first-team { margin-top: 10px; padding-top: 10px; gap: 6px; }
+.academy-card.acx-senior .acx-recommend { flex: 1 1 0; min-height: 72px; overflow-y: auto; margin-top: 4px; }
+.acx-u21 .acx-h .faint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.acx-u21 .acx-recommend + .acx-first-team { margin-top: 10px; padding-top: 10px; }
+.acx-recommend td { padding-top: 4px; padding-bottom: 4px; }
 .acx-first-team { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }

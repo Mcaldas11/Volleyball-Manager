@@ -105,6 +105,12 @@ export interface Under21Relations {
   lastAsked: number;
   /** The under-21 coach's calls for the senior club's young players, match by match, when the manager coaches the senior club. */
   matchCalls?: MatchCall[];
+  /** Under-21 contracts run to the age limit (under21Contracts.ts): set once for a world or a save from before. */
+  contractsByAge?: boolean;
+  /** Under-21 players at the age limit the senior manager has said he will let go this season. */
+  letGo?: number[];
+  /** The under-21 coach's words with the senior coach about his players (under21Recommend.ts). */
+  recommendations?: import('./under21Recommend.ts').Recommendation[];
 }
 
 /** The under-21 coach wants some of the first team's young players for one match. */

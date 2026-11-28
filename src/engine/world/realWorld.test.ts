@@ -10,6 +10,7 @@ import { under21Relations, answerCallUp, answerMatchCall, callUpFromUnder21, mat
 import { acceptJobOffer, appointManager, askForFirstTeamJob, careerDay, firstTeamAskBlock, sackCoach } from './career.ts';
 import { advanceDay, isSeasonOver, matchSquadClub, newSeasonContext, startSeason } from '../season/seasonEngine.ts';
 import { endSeason } from '../season/rollover.ts';
+import { competitionPlayerLines } from './records.ts';
 
 /** A made-up file in the real-data shape: two clubs in Portugal's top flight. */
 function fakeDb(): RealDb {
@@ -239,6 +240,29 @@ test("coaching the first team: the under-21 coach asks for its young players bef
   assert.ok(senior.players.includes(young), 'and still in the first team');
   world.day = first.day + 7;
   assert.ok(matchSquadPlayers(world, side).includes(young), 'only for that match');
+});
+
+test("the under-21 league's stats count the senior club's young players it fielded, with its matches only", () => {
+  const world = generateWorld({ seed: 7, startYear: 2026, scale: 'small', manager: stubManager(), real: fakeDb() });
+  const senior = world.clubs.find((c) => c.name === 'Clube Primeiro')!;
+  const side = under21SideOf(world, senior)!;
+  const store = world.players;
+  // The first team's best outside hitter, young enough for the under-21s: the side, picking on merit, starts him.
+  const young = senior.players.filter((p) => store.position[p] === Position.OutsideHitter)
+    .sort((a, b) => store.currentAbility[b] - store.currentAbility[a])[0];
+  store.birthYear[young] = 2007;
+  const ctx = newSeasonContext();
+  startSeason(world, ctx);
+  const sideDays = world.fixtures.filter((f) => f.home === side.id || f.away === side.id).map((f) => f.day).sort((a, b) => a - b);
+  while (world.day <= sideDays[Math.min(5, sideDays.length - 1)] && !isSeasonOver(world)) advanceDay(world, ctx);
+  const lines = competitionPlayerLines(world, side.leagueId);
+  const his = lines.find((l) => l.stats.playerIdx === young);
+  assert.ok(his !== undefined, 'he is in the under-21 league stats though registered with the first team');
+  assert.ok(senior.players.includes(young), 'and still a first-team player');
+  const inSide = (world.competitionRecords.get(young) ?? []).find((r) => r.competitionId === side.leagueId)!;
+  assert.equal(his.apps, inSide.apps, "only the under-21 league's matches");
+  const all = (world.competitionRecords.get(young) ?? []).reduce((n, r) => n + r.apps, 0);
+  assert.ok(his.apps <= all);
 });
 
 test('the under-21 coach can ask for the first-team job, and the board can say yes', () => {

@@ -16,6 +16,7 @@
  * moves when the next window opens (see moves.ts).
  */
 
+import { under21RenewalIsMine } from './under21Contracts.ts';
 import { renewalStory } from './playerVoices.ts';
 import type { Club } from '../model/club.ts';
 import { bidTurnedDown, stanceLine, stanceOf, stanceOnAgreedSale } from './offerStance.ts';
@@ -27,7 +28,7 @@ import {
 } from './negotiation.ts';
 import {
   evaluateLoanCounter, evaluateLoanRequest, loanOf, MAX_SQUAD, PLAYING_TIME_NAMES, playerAgreesToLoan, squadSize,
-  startLoan, wageRoom, type LoanPlayingTime,
+  renewalRoom, startLoan, wageRoom, type LoanPlayingTime,
 } from './loans.ts';
 import { moveDay, pendingMoveOf, seasonOfDay, windowOpeningLabel } from './moves.ts';
 import { contractEndSeason, euros, seasonEndDay, seasonEndYear, windowCloseDay, type GameMessage, type World } from './world.ts';
@@ -381,7 +382,9 @@ export function closeTalks(world: World, talks: Talks): void {
 function stillAvailable(world: World, t: Talks): boolean {
   const club = world.players.clubId[t.playerIdx];
   // One of ours out on loan is still ours to renew.
-  const ours = club === world.userClubId || loanOf(world, t.playerIdx)?.parentClubId === world.userClubId;
+  const ours = club === world.userClubId || loanOf(world, t.playerIdx)?.parentClubId === world.userClubId ||
+    // At the age limit at the club's under-21 side: the first team's to sign.
+    (t.kind === 'renewal' && under21RenewalIsMine(world, t.playerIdx));
   // A player who has agreed a move and is waiting on the window is spoken for.
   // A pre-contract stands only while his deal is running out: renewed, there is nothing to talk about.
   if (t.preContract === true && contractEndSeason(world.players.contractUntil[t.playerIdx]) !== world.season) return false;
@@ -447,7 +450,6 @@ function tableRivalBid(world: World, t: Talks): void {
 
 /** Why an agreed deal can no longer go through, if it can't. */
 function dealProblem(world: World, club: Club, t: Talks, offer: TalksOffer): string | null {
-  const store = world.players;
   if (t.preContract === true) {
     // He joins next season: it is next season's squad and wage bill he has to fit.
     if (nextSeasonSquad(world, club) >= MAX_SQUAD) return 'the squad for next season is full';
@@ -456,7 +458,7 @@ function dealProblem(world: World, club: Club, t: Talks, offer: TalksOffer): str
     return null;
   }
   if (t.kind === 'transfer' && squadSize(world, club) >= MAX_SQUAD) return 'the squad is full';
-  const room = wageRoom(world, club) + (t.kind === 'renewal' ? store.wage[t.playerIdx] : 0);
+  const room = t.kind === 'renewal' ? renewalRoom(world, club, t.playerIdx) : wageRoom(world, club);
   if (offer.wage > room) return 'there is no longer room in the wage budget';
   if (t.kind === 'transfer' && t.agreedFee > Math.min(club.finances.transferBudget, club.finances.balance)) {
     return 'the club can no longer afford the fee';

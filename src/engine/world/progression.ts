@@ -284,6 +284,21 @@ export function weeklyTraining(world: World): void {
       }
     }
 
+    // A slump, at any age: a run of poor matches, or months without playing, can cost a player some of
+    // what he has, a 23-year-old as much as a veteran. Who he is (professional, driven) fights it off;
+    // back in form, training brings it back. (A week's change is a whole attribute point, about seven of
+    // ability, so the slump is a chance of losing one: a season at 5.0 costs a professional about 35.)
+    const form = world.ratingForm.get(i);
+    let slump = 0;
+    if (form !== undefined && form.length >= 3) {
+      const avg = form.reduce((sum, r) => sum + r, 0) / form.length;
+      if (avg < 5.8) slump += (5.8 - avg) * 0.22;
+    }
+    if (age >= 21 && !youth && minutes < 0.12) slump += 0.06;
+    if (slump > 0 && rng.chance(Math.min(0.35, slump * (1.25 - drive * 0.75)))) {
+      applyAbilityDelta(store, i, -6, age, rng);
+    }
+
     if (Math.abs(delta) < 0.05) continue;
     applyAbilityDelta(store, i, delta, age, rng, plan.bias);
   }
@@ -383,8 +398,8 @@ function applyAbilityDelta(
   const pos = store.position[i] as Position;
   const w = weightsFor(pos);
   const improving = deltaCA > 0;
-  // Roughly how many attribute points correspond to this ability change.
-  const steps = Math.min(6, Math.max(1, Math.round(Math.abs(deltaCA) / 8)));
+  // Roughly how many attribute points correspond to this ability change (an old man's season can take more).
+  const steps = Math.min(deltaCA < 0 ? 12 : 6, Math.max(1, Math.round(Math.abs(deltaCA) / 8)));
   const row = i * ATTRIBUTES.length;
   const attrs = store.attrs;
 
@@ -448,15 +463,17 @@ export function applyAgeing(world: World): void {
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i)) continue;
     const age = store.ageOn(i, world.year, 181);
-    if (age < 29) continue;
+    // In volleyball the decline only sets in at 35.
+    if (age < 35) continue;
 
     const pos = store.position[i] as Position;
     const resistance = AGEING_RESISTANCE[pos];
     const durability = store.getAttr(i, 'durability') / 20;
     const professionalism = store.getAttr(i, 'professionalism') / 20;
 
-    // The decline curve steepens sharply in the mid-thirties.
-    const severity = Math.pow(Math.max(0, age - 28), 1.5) * 1.9 * resistance;
+    // From 35, and faster each season: a veteran can still be among the best, but each season takes
+    // more from him (about 25 points at 35, 60 at 36, 100 at 37, 150 at 38).
+    const severity = Math.pow(Math.max(0, age - 34), 1.3) * 25 * resistance;
     const mitigation = 0.62 + durability * 0.28 + professionalism * 0.22;
     const loss = severity / mitigation * rng.range(0.7, 1.3);
 

@@ -13,7 +13,10 @@
  * a match took.
  */
 
+import { under21ContractsDay } from '../world/under21Contracts.ts';
+import { seniorCoachAnswers } from '../world/under21Recommend.ts';
 import { matchSquadPlayers, seniorCallDay, under21Day } from '../world/under21.ts';
+import { under21LeaguesDay } from '../world/under21Leagues.ts';
 import { comebackVoice, matchVoices } from '../world/playerVoices.ts';
 import { agentsDay } from '../world/agents.ts';
 import { recruitmentDay } from '../world/recruitment.ts';
@@ -291,7 +294,11 @@ export function matchSquadClub(world: World, club: Club | undefined): Club | und
   if (club === undefined || club.under21Of === undefined) return club;
   // Under 21 for the season: born in its first year less 20 or later (2006 or later for 2026/27).
   const players = matchSquadPlayers(world, club);
-  return players.length === club.players.length ? club : { ...club, players };
+  if (players.length === club.players.length) return club;
+  // Its coach (not the manager's choices) picks on merit from all of them: a starting six set from the
+  // side's own squad would leave the senior club's better young players on the bench.
+  if (club.id === world.userClubId) return { ...club, players };
+  return { ...club, players, preferredLineup: club.preferredLineup.map(() => -1), preferredLibero: -1, preferredDefensiveLibero: -1 };
 }
 
 export function toTeamSetup(store: PlayerStore, club: Club, mustStart?: ReadonlySet<number>): TeamSetup {
@@ -679,6 +686,12 @@ export function advanceDay(world: World, ctx: SeasonContext, opts: AdvanceOption
   affiliatesDay(world);
   under21Day(world);
   seniorCallDay(world);
+  // The under-21 divisions' promotion playoff: drawn when the regular seasons end, then played out.
+  under21LeaguesDay(world);
+  // Under-21 contracts run to the age limit; the senior manager is warned before they end.
+  under21ContractsDay(world);
+  // The senior coach's answers to the under-21 coach's recommendations.
+  seniorCoachAnswers(world);
   monthlyLoanReports(world);
   contractNotices(world);
   // Deadline day: the bids fly in and the other clubs do their late business, before the day's answers.
@@ -840,7 +853,8 @@ export function startSeason(world: World, ctx?: SeasonContext): void {
   // Every board sets its target for the season, the divisions settled.
   setBoardExpectations(world);
   // And every other coach sets his side up for the players the summer left him.
-  coachesSetUp(world, (club) => pickLineup(world.players, club).lineup);
+  // (An under-21 side's from everyone it can field: the senior club's young players too.)
+  coachesSetUp(world, (club) => pickLineup(world.players, matchSquadClub(world, club) ?? club).lineup);
   // People out of work in every backroom role, for anyone hiring.
   topUpStaffPool(world);
   // Where each squad should finish, for the Coach of the Year to be judged against.

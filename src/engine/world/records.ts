@@ -14,7 +14,7 @@
 
 import { matchRating, playedInMatch, type RatingPath } from '../match/playerRating.ts';
 import { notePlayerEvent } from './playerTimeline.ts';
-import type { PlayerMatchStats } from '../match/stats.ts';
+import { newPlayerStats, type PlayerMatchStats } from '../match/stats.ts';
 import { POSITIONS, type Position } from '../model/positions.ts';
 import { courtShare, recordLoanMatch } from './loans.ts';
 import { noteTeamMatch } from './teamAwards.ts';
@@ -214,6 +214,41 @@ function recordPlayingTime(world: World, fixture: Fixture, clubId: number, stats
       : 0;
     store.playingTime[p] = Math.round(store.playingTime[p] * (1 - PLAYING_TIME_WEIGHT) + share * 100 * PLAYING_TIME_WEIGHT);
   }
+}
+
+/**
+ * One competition's players this season, from what each did in it: everyone
+ * who played in it, whatever squad he is registered to (an under-21 side's
+ * matches count the senior club's young players it fielded), and only its own
+ * matches (his first-team games are not added to his under-21 league line).
+ */
+export function competitionPlayerLines(world: World, competitionId: number, season = world.season): {
+  stats: PlayerMatchStats & { matches: number; sets?: number };
+  apps: number;
+  ratingSum: number;
+}[] {
+  // (Sets played are not kept per competition: `sets` is left out.)
+  const out: { stats: PlayerMatchStats & { matches: number; sets?: number }; apps: number; ratingSum: number }[] = [];
+  for (const [p, lines] of world.competitionRecords) {
+    const line = lines.find((l) => l.season === season && l.competitionId === competitionId);
+    if (line === undefined || line.apps === 0) continue;
+    const stats = {
+      ...newPlayerStats(p),
+      matches: line.apps,
+      serveAces: line.aces,
+      blockPoints: line.blocks,
+      attackKills: line.kills ?? Math.max(0, line.points - line.aces - line.blocks),
+      attacksTotal: line.attacks ?? 0,
+      attackErrors: line.attackErrors ?? 0,
+      servesTotal: line.serves ?? 0,
+      digsTotal: line.digs ?? 0,
+      receptionsTotal: line.receptions ?? 0,
+      receptionPerfect: line.goodPasses ?? 0,
+      setAssists: line.assists ?? 0,
+    };
+    out.push({ stats, apps: line.apps, ratingSum: line.ratingSum });
+  }
+  return out;
 }
 
 /** A player's lines for one season, league first then cups, in competition order. */

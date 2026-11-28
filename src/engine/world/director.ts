@@ -12,7 +12,7 @@ import { PlayerFlag } from '../model/players.ts';
 import { negotiatingRating, StaffRole, type Staff } from '../model/staff.ts';
 import { closeTalks, openTalks, submitOffer, type Talks, type TalksOffer } from './deals.ts';
 import { postMessage } from './inbox.ts';
-import { loanOf, squadSize, wageRoom } from './loans.ts';
+import { loanOf, renewalRoom, squadSize, wageRoom } from './loans.ts';
 import { MAX_SQUAD } from '../model/positions.ts';
 import { pendingMoveOf } from './moves.ts';
 import { contractEndSeason, euros, type World } from './world.ts';
@@ -151,7 +151,7 @@ function nextMove(world: World, club: Club, director: Staff, task: DirectorTask,
       `${store.fullName(t.playerIdx)} will not go below ${euros(d.floorWage)} a season, more than the ${euros(task.maxWage)} you allowed. I have left it there.`);
     return;
   }
-  const room = wageRoom(world, club) + (t.kind === 'renewal' ? store.wage[t.playerIdx] : 0);
+  const room = t.kind === 'renewal' ? renewalRoom(world, club, t.playerIdx) : wageRoom(world, club);
   const firstRound = t.reply === null;
   // First time round he tries a little under the asking; after that, what is asked, if it fits.
   let wage = firstRound ? Math.max(d.floorWage, d.wage * (1 - 0.07 * skill)) : t.patience <= 1 ? d.wage : (d.wage + Math.max(d.floorWage, last.wage)) / 2;

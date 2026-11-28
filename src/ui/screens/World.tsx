@@ -6,7 +6,7 @@ import { attackEfficiency, receptionPositivity } from '../../engine/match/stats.
 import type { Position } from '../../engine/model/positions.ts';
 import { NATIONS } from '../../engine/world/nations.ts';
 import { sideName } from '../../engine/world/sides.ts';
-import { averageRating, seasonTotals } from '../../engine/world/records.ts';
+import { averageRating, competitionPlayerLines, seasonTotals } from '../../engine/world/records.ts';
 import {
   abilityClass, Card, ClubLink, Empty, Flag, PlayerFace, PlayerLink, Pos, RatingBadge, Segmented, StarMeter, Paged, useListPages, formatInt } from '../components.tsx';
 import { Icon } from '../icons.tsx';
@@ -99,15 +99,27 @@ function ClubStats(): JSX.Element {
   // Everyone who has played a match this season is listed. The rate stats
   // still need a fair sample before they can top the chart, but early in the
   // season nobody has a big one, so the bar grows with the matches played.
-  const played = [...g.ctx.stats.values()].filter((s) => s.matches >= 1);
+  // My league: each player's line in the league itself, whoever's squad he is on (an under-21 side
+  // fields the senior club's young players) and its matches only. The whole world: the season's totals.
+  const league = ownLeagueOnly && club !== null
+    ? competitionPlayerLines(world, club.leagueId)
+    : null;
+  const ratingOf = new Map<number, { apps: number; ratingSum: number }>();
+  for (const l of league ?? []) ratingOf.set(l.stats.playerIdx, { apps: l.apps, ratingSum: l.ratingSum });
+  const played = league !== null ? league.map((l) => l.stats) : [...g.ctx.stats.values()].filter((s) => s.matches >= 1);
+  // The side he plays for in this league: his own club, or the under-21 side of it.
+  const sideOf = (p: number): number => {
+    const at = store.clubId[p];
+    if (!ownLeagueOnly || at < 0 || leagueClubs.has(at)) return at;
+    return world.clubs.find((c) => c.under21Of === at && leagueClubs.has(c.id))?.id ?? at;
+  };
   const mostMatches = played.reduce((m, s) => Math.max(m, s.matches), 1);
   const minSample = Math.min(MIN_RATE_SAMPLE, SAMPLE_PER_MATCH * mostMatches);
   const minRatedApps = Math.min(MIN_RATED_APPS, mostMatches);
 
   const rows = played
-    .filter((s) => !ownLeagueOnly || leagueClubs.has(store.clubId[s.playerIdx]))
     .map((s) => {
-      const season = seasonTotals(world, s.playerIdx);
+      const season = ratingOf.get(s.playerIdx) ?? seasonTotals(world, s.playerIdx);
       return {
         s,
         points: s.attackKills + s.serveAces + s.blockPoints,
@@ -185,7 +197,7 @@ function ClubStats(): JSX.Element {
                   {statRows.map((r, i) => (
                     <tr
                       key={r.s.playerIdx}
-                      className={`clickable${store.clubId[r.s.playerIdx] === world.userClubId ? ' me' : ''}`}
+                      className={`clickable${sideOf(r.s.playerIdx) === world.userClubId ? ' me' : ''}`}
                       onClick={() => g.select(r.s.playerIdx)}
                     >
                       <td className="num">
@@ -197,8 +209,8 @@ function ClubStats(): JSX.Element {
                       <td className="strong">{store.fullName(r.s.playerIdx)}</td>
                       <td><Pos pos={store.position[r.s.playerIdx] as Position} /></td>
                       <td className="dim">
-                        {store.clubId[r.s.playerIdx] >= 0
-                          ? <ClubLink id={store.clubId[r.s.playerIdx]} short />
+                        {sideOf(r.s.playerIdx) >= 0
+                          ? <ClubLink id={sideOf(r.s.playerIdx)} short />
                           : '—'}
                       </td>
                       <td className="num dim">{r.s.matches}</td>

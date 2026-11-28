@@ -290,6 +290,19 @@ function createPlayoffGroups(world: World, comp: Competition): void {
   }
 }
 
+/** A bracket of its own, outside a league's bands: the under-21 promotion playoff (see under21Leagues.ts),
+ *  its first round drawn three days on, each tie a best of three. */
+export function openPlayoffGroup(world: World, comp: Competition, id: PlayoffGroupId, label: string, seeds: number[]): PlayoffGroup {
+  const group = makeGroup(world, comp, id, label, seeds);
+  comp.playoffGroups.push(group);
+  return group;
+}
+
+/** A day of such a bracket: results read, the next game or round scheduled, or the bracket resolved. */
+export function advancePlayoffGroup(world: World, comp: Competition, group: PlayoffGroup): void {
+  if (!group.resolved) advanceGroup(world, comp, group);
+}
+
 /** Read results for the active round; schedule the next one, or resolve the
  *  band, once every tie in it has a winner. */
 function advanceGroup(world: World, comp: Competition, group: PlayoffGroup): void {

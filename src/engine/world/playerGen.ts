@@ -319,7 +319,8 @@ export function estimateValue(store: PlayerStore, i: number, age: number): numbe
  * youth intake rare and memorable.
  */
 export function rollPotential(rng: Rng, nationStrength: number, eliteBias = 1): number {
-  const base = 620 + nationStrength * 5.2;
+  // (Raised a tenth for 2026/27: under-21s the world over came out with too little ahead of them.)
+  const base = 680 + nationStrength * 5.7;
   // Heavy right tail.
   const roll = Math.exp(rng.gaussian(0, 0.30)) * eliteBias;
   const pa = base * roll + rng.gaussian(0, 70);

@@ -730,6 +730,8 @@ export function PlayerDetail(): JSX.Element | null {
   const borrowed = loan !== null && loan.loanClubId === world.userClubId;
   const lentOut = loan !== null && loan.parentClubId === world.userClubId;
   const isOwn = club?.id === world.userClubId && !borrowed;
+  // The manager coaches an under-21 side: its contracts are the senior club's.
+  const u21Coach = isOwn && club?.under21Of !== undefined;
   // Only a manager with a club to sign him for can make an offer.
   const managing = g.club !== null;
   const elsewhere = managing && club !== null && club.id !== world.userClubId && !lentOut;
@@ -885,13 +887,23 @@ export function PlayerDetail(): JSX.Element | null {
                   Promote to first team
                 </button>
               )}
-              {((isOwn && !isYouth) || lentOut) && move === null && !retiring && (
+              {/* Coaching an under-21 side: no contracts of his own, a word with the senior coach instead. */}
+              {u21Coach && isOwn && (['firstTeam', 'contract'] as const).map((kind) => {
+                const block = g.seniorRecommendBlock(p, kind);
+                return (
+                  <button key={kind} disabled={block !== null} title={block ?? (kind === 'firstTeam' ? 'Tell the senior coach he is ready for the first team' : 'Ask the senior club to give him a first-team contract')}
+                    onClick={() => g.recommendToSeniorCoach(p, kind)}>
+                    <Icon name="press" size={14} /> {kind === 'firstTeam' ? 'Recommend to the first team' : 'Recommend a new contract'}
+                  </button>
+                );
+              })}
+              {((isOwn && !isYouth && !u21Coach) || lentOut) && move === null && !retiring && (
                 <button className={expiring ? 'primary' : ''} onClick={() => g.startRenewal(p)}>
                   <Icon name="finances" size={14} />
                   {renewalTalks === null ? 'Renew contract' : renewalTalks.pending !== null ? 'Awaiting his answer' : 'Contract talks'}
                 </button>
               )}
-              {((isOwn && !isYouth) || lentOut) && move === null && !retiring && g.director() !== undefined && (
+              {((isOwn && !isYouth && !u21Coach) || lentOut) && move === null && !retiring && g.director() !== undefined && (
                 g.directorTaskFor(p) !== undefined
                   ? <span className="profile-chip"><Icon name="contract" size={13} /> Director on it</span>
                   : <button onClick={() => setToDirector('renewal')} title="Let the Director of Football agree a new contract, within a wage you set">

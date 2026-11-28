@@ -4,6 +4,7 @@
  * time put into the youngsters, with no promise of a star (see academy.ts).
  */
 
+import type { World } from '../../engine/world/world.ts';
 import { useState, type JSX } from 'react';
 import {
   INTENSITY_NAMES, MAX_PROGRAMMES, MAX_SEARCHES, PROGRAMME_AREAS, PROGRAMME_DAYS, SCOPE_NAMES, SEARCH_DAYS,
@@ -667,7 +668,7 @@ function CoachingUnder21({ senior }: { senior: Club }): JSX.Element {
           </div>
         )}
       </Card>
-      <Card title="The Senior Club" icon="club" className="academy-card acx-card">
+      <Card title="The Senior Club" icon="club" className="academy-card acx-card acx-senior">
         <p className="acx-lead">{senior.name} {mood}: goodwill {Math.round(goodwill)}/100. It asks for your best players when it needs them; letting them go up raises it, and keeping them lowers it.</p>
         <Bar value={goodwill} max={100} wide />
         <p className="faint" style={{ marginTop: 12 }}>
@@ -676,6 +677,32 @@ function CoachingUnder21({ senior }: { senior: Club }): JSX.Element {
             : 'No request waiting.'}
           {' '}Players sent up this season: {R?.promotedThisSeason ?? 0}. The board judges the season by them as much as by results.
         </p>
+        <h3 className="acx-h" title="Put a player forward for the first team, or in his last under-21 season for a senior contract. The senior coach answers in your inbox; contracts are always the senior club's decision.">
+          Senior coach <span className="faint">· recommend a player, he answers in your inbox</span>
+        </h3>
+        <div className="acx-recommend">
+          <table className="data-table">
+            <tbody>
+              {byAbilityOf(world, sideOf(world, senior)).map((p) => (
+                <tr key={p}>
+                  <td className="strong"><PlayerLink idx={p} /></td>
+                  <td><Pos pos={store.position[p] as Position} /></td>
+                  <td className={`num ${abilityClass(store.currentAbility[p])}`}>{store.currentAbility[p]}</td>
+                  {(['firstTeam', 'contract'] as const).map((kind) => {
+                    const block = g.seniorRecommendBlock(p, kind);
+                    return (
+                      <td key={kind} className="num">
+                        <button className="sm" disabled={block !== null} title={block ?? undefined} onClick={() => g.recommendToSeniorCoach(p, kind)}>
+                          {kind === 'firstTeam' ? 'First team' : 'Contract'}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <div className="acx-first-team">
           <p className="faint">Your results here, the players you send up and the club's goodwill count when you ask for the first team, and when its head coach goes.</p>
           <button className="primary" disabled={g.firstTeamAskBlock() !== null} title={g.firstTeamAskBlock() ?? 'Ask the board for the first-team job'}
@@ -687,4 +714,13 @@ function CoachingUnder21({ senior }: { senior: Club }): JSX.Element {
       </Card>
     </div>
   );
+}
+
+/** The under-21 side of a senior club, its players best first. */
+function sideOf(world: World, senior: Club): number[] {
+  return world.clubs.find((c) => c.under21Of === senior.id)?.players ?? [];
+}
+
+function byAbilityOf(world: World, players: number[]): number[] {
+  return [...players].sort((a, b) => world.players.currentAbility[b] - world.players.currentAbility[a]);
 }

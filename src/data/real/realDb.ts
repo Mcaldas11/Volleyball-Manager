@@ -27,6 +27,8 @@ export interface RealPlayer {
   photo?: string | null;
   /** Ability and potential set by hand (0-2000), in place of the estimate. */
   ability?: number;
+  /** Attributes set by hand (1-20), by name: the rest are fitted to the ability set. */
+  attributes?: Record<string, number>;
   potential?: number;
   /** A second position he plays in full, when known (from a hand correction). */
   secondary?: RealPosition | null;
@@ -57,6 +59,8 @@ export interface RealClub {
   coaches?: RealCoach[];
   /** The club's under-21 (or under-20) squad, for top-flight clubs where the federation lists one. */
   youth?: RealPlayer[];
+  /** The under-21 division its under-21 side plays in this season (1 or 2), where the federation has them. */
+  under21Division?: 1 | 2;
   players: RealPlayer[];
 }
 

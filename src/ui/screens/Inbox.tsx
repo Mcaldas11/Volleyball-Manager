@@ -1,4 +1,5 @@
 import { nationalOfferTerms } from '../../engine/world/internationals.ts';
+import { releasedByManager, under21RenewalIsMine } from '../../engine/world/under21Contracts.ts';
 import { NegotiateNationalOffer } from '../nationCoach.tsx';
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { MIND_GAME_REPLIES } from '../../engine/world/mindGames.ts';
@@ -1431,10 +1432,19 @@ function MessageActions({ message: m }: { message: GameMessage }): JSX.Element |
   // Only while his contract is still running out — not after he has re-signed.
   const contractTalk = cat === 'contract' && p !== undefined && store.clubId[p] === world.userClubId && m.retirementOf === undefined &&
     contractEndSeason(store.contractUntil[p]) <= world.season && talks === undefined;
-  if (contractTalk && p !== undefined) {
+  // An under-21 side's player at the age limit: the first team's to sign, or to let go.
+  const u21Call = m.under21Contract === true && p !== undefined && under21RenewalIsMine(world, p) && talks === undefined;
+  if ((contractTalk || u21Call) && p !== undefined) {
     out.push(
       <button key="renew" className="paper-btn primary-dark" onClick={() => g.startRenewal(p)}>
         <Icon name="contract" size={15} /> Open contract talks
+      </button>,
+    );
+  }
+  if (u21Call && p !== undefined && !releasedByManager(world, p)) {
+    out.push(
+      <button key="letgo" className="paper-btn" onClick={() => g.letUnder21PlayerGo(p)}>
+        Let him go
       </button>,
     );
   }

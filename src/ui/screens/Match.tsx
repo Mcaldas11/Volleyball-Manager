@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type CSSProperties } from 'react';
+import { playoffGroupsShown, under21Zones } from '../../engine/world/under21Leagues.ts';
 import { championOf, pastLeagueTable, pastSeasonsOf } from '../../engine/season/pastSeasons.ts';
 import { predictionFor } from '../../engine/world/predictions.ts';
 import { RivalTag, Paged } from '../components.tsx';
@@ -731,25 +732,28 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
 
   const rows = [...comp.table].sort(compareTableRows);
   const { championship: champSize, relegation: relegationSize } = playoffBandSizes(comp);
-  const activeGroup = comp.playoffGroups.find((grp) => grp.id === tab);
+  // The under-21 divisions: up, down and the promotion playoff (under21Leagues.ts) — shown on both divisions.
+  const u21 = under21Zones(comp);
+  const groups = playoffGroupsShown(world, comp);
+  const activeGroup = groups.find((grp) => grp.id === tab);
   const form = formByClub(comp, world);
   // The press's tips for the table, once printed.
   const tips = predictionFor(world, comp.id);
 
   return (
     <>
-      {(titled || comp.playoffGroups.length > 0) && <div className="comp-bar">
+      {(titled || groups.length > 0) && <div className="comp-bar">
         {titled && (
           <div className="comp-bar-title">
             <span className="comp-bar-name">{comp.name}</span>
             <span className="faint">Tier {comp.tier} · {comp.participants.length} clubs</span>
           </div>
         )}
-        {(titled || comp.playoffGroups.length > 0) && (
+        {(titled || groups.length > 0) && (
           <Segmented
             options={[
               ['table', 'Table'],
-              ...comp.playoffGroups.map((grp) => [grp.id, grp.label] as const),
+              ...groups.map((grp) => [grp.id, grp.label] as const),
               // The competition's own page has its statistics a tab of their own.
               ...(titled ? [['stats', 'Stats'] as const] : []),
             ]}
@@ -800,7 +804,9 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
               </thead>
               <tbody>
                 {rows.map((r, i) => {
-                  const zone = i < champSize ? 'zone-champ' : i >= rows.length - relegationSize ? 'zone-releg' : '';
+                  const zone = i < champSize ? 'zone-champ' : i >= rows.length - relegationSize ? 'zone-releg'
+                    : i < u21.up ? 'zone-up' : i < u21.up + u21.playoffUp ? 'zone-po'
+                      : i >= rows.length - u21.down ? 'zone-releg' : i >= rows.length - u21.down - u21.playoffDown ? 'zone-po' : '';
                   return (
                     <tr key={r.clubId} className={`${zone}${r.clubId === me ? ' me' : ''}`}>
                       <td className="num pos-cell">{i + 1}</td>
@@ -829,6 +835,13 @@ export function LeagueTableView({ comp, titled = true }: { comp: Competition; ti
             </table>
           </div>}
         </Card>
+      )}
+      {tab !== 'stats' && activeGroup === undefined && past < 0 && u21.up + u21.down > 0 && (
+        <p className="legend">
+          {u21.up > 0 && <><span className="zone-key up" /> Champions, promoted</>}
+          {u21.playoffUp + u21.playoffDown > 0 && <><span className="zone-key po" /> Promotion playoff, best of three</>}
+          {u21.down > 0 && <><span className="zone-key releg" /> Last, relegated</>}
+        </p>
       )}
       {tab !== 'stats' && activeGroup === undefined && past < 0 && champSize > 0 && (
         <p className="legend">

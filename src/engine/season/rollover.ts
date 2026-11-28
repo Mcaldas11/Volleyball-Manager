@@ -11,6 +11,7 @@
  * too generous, the world will have visibly drifted by season twenty.
  */
 
+import { settleUnder21Contracts, under21ContractEnd } from '../world/under21Contracts.ts';
 import { growUniquePlayers, MIN_SIGNING_AGE } from '../world/uniquePlayers.ts';
 import { notePlayerEvent } from '../world/playerTimeline.ts';
 import { challengeSeasonEnd } from '../world/challenges.ts';
@@ -34,6 +35,7 @@ import { applyPromotionRelegation } from './pyramid.ts';
 import { nextSeasonSponsorship, sponsorBonus } from '../world/commercial.ts';
 import { affiliateFee, affiliatesOf } from '../world/affiliates.ts';
 import { under21SeasonEnd } from '../world/under21.ts';
+import { under21PromotionRelegation } from '../world/under21Leagues.ts';
 import { openSeasonSpells } from '../world/clubHistory.ts';
 import { isCupCompetition, qualifyForCups } from './cups.ts';
 import {
@@ -122,6 +124,8 @@ export function endSeason(world: World, ctx: SeasonContext): RolloverReport {
   judgePhilosophy(world);
   const finishes = captureFinishes(world);
   applyPromotionRelegation(world, report);
+  // The under-21 divisions trade their sides too: the champions and the playoff's winners up.
+  under21PromotionRelegation(world);
   // Every board judges its coach's season — before the summer's contracts
   // run out, so a club that parts with the user renews its own players.
   seasonReckoning(world, record, finishes);
@@ -391,6 +395,8 @@ function runTransferWindow(world: World): number {
   const leftFrom = new Map<number, number>();
   const signings: Array<{ playerIdx: number; from: number; to: number }> = [];
   const lastDay = seasonEndDay(world.season);
+  // Under-21 sides' contracts run to the age limit: there, the senior club keeps a player or lets him go.
+  for (const p of settleUnder21Contracts(world)) leftFrom.set(p, -1);
   for (let i = 0; i < store.count; i++) {
     if (!store.isActive(i) || store.hasFlag(i, PlayerFlag.Youth)) continue;
     if (store.clubId[i] < 0) {
@@ -510,7 +516,10 @@ function runTransferWindow(world: World): number {
 
         club.players.push(p);
         store.clubId[p] = club.id;
-        store.contractUntil[p] = seasonEndDay(world.season + world.rng.int(1, 4));
+        // An under-21 side signs him to his age limit.
+        store.contractUntil[p] = club.under21Of !== undefined
+          ? under21ContractEnd(world, p, world.season + 1)
+          : seasonEndDay(world.season + world.rng.int(1, 4));
         // A summer signing belongs to the season about to start.
         logTransfer(world, p, -1, club.id, 0, world.season + 1);
         signings.push({ playerIdx: p, from: leftFrom.get(p) ?? -1, to: club.id });

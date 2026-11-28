@@ -21,7 +21,8 @@ import { REAL_LOGO_URL, type RealClub, type RealDb, type RealLeague, type RealPl
 import type { CrestDesign } from '../model/club.ts';
 import { NATION_BY_CODE, nationStrength } from './nations.ts';
 import { generatePlayer } from './playerGen.ts';
-import { abilityFractionAtAge } from '../model/ability.ts';
+import { abilityFractionAtAge, refreshAbility } from '../model/ability.ts';
+import { ATTR_COUNT, ATTR_INDEX, PHYSICAL_ATTRS, TECHNICAL_ATTRS } from '../model/attributes.ts';
 import { UNIQUE_PLAYERS } from './uniquePlayers.ts';
 import { seasonEndDay, type World } from './world.ts';
 
@@ -44,11 +45,79 @@ export function internationalFloor(strength: number): number {
 }
 
 /**
+ * A real player's measured reach: his vertical jump set to what it takes, at his height, to reach
+ * that high (so his jumping, blocking and attacking follow it), the reach written in, his ability
+ * worked out again from it.
+ */
+function applyRealReach(store: World['players'], idx: number, rp: RealPlayer): void {
+  if (rp.spikeReachCm === null || rp.spikeReachCm < 200 || rp.spikeReachCm > 400) {
+    if (rp.blockReachCm !== null) store.blockReachCm[idx] = rp.blockReachCm;
+    return;
+  }
+  const standing = store.heightCm[idx] * 1.302;
+  const [base, range] = store.women ? [44, 46] : [52, 58];
+  const vj = Math.max(1, Math.min(20, Math.round(1 + ((rp.spikeReachCm - standing - base) / range) * 19)));
+  store.attrs[idx * ATTR_COUNT + ATTR_INDEX.verticalJump] = vj;
+  store.spikeReachCm[idx] = rp.spikeReachCm;
+  store.blockReachCm[idx] = rp.blockReachCm ?? Math.round(standing + (rp.spikeReachCm - standing) * 0.78);
+  refreshAbility(store, idx);
+}
+
+/**
+ * What was set by hand for a real player: his strongest attributes as given,
+ * then the rest brought up or down a point at a time until his ability is the
+ * one set (within a few points), and his potential at least that.
+ */
+function applyHandSet(store: World['players'], idx: number, rp: RealPlayer): void {
+  if (rp.attributes === undefined && rp.ability === undefined) return;
+  const base = idx * ATTR_COUNT;
+  const fixed = new Set<number>();
+  for (const [name, value] of Object.entries(rp.attributes ?? {})) {
+    const a = (ATTR_INDEX as Record<string, number>)[name];
+    if (a === undefined) continue;
+    store.attrs[base + a] = Math.max(1, Math.min(20, Math.round(value)));
+    fixed.add(a);
+  }
+  // His jump is what his measured reach says.
+  if (rp.spikeReachCm !== null) fixed.add(ATTR_INDEX.verticalJump);
+  refreshAbility(store, idx);
+  const target = rp.ability;
+  if (target !== undefined) {
+    const free = SKILL_ATTRS.filter((a) => !fixed.has(a));
+    for (let step = 0; step < 400; step++) {
+      const ca = store.currentAbility[idx];
+      if (Math.abs(ca - target) <= 6) break;
+      const up = ca < target;
+      // Up: the lowest of the rest; down: the highest.
+      let pick = -1;
+      for (const a of free) {
+        const v = store.attrs[base + a];
+        if (up ? v >= 20 : v <= 1) continue;
+        if (pick < 0 || (up ? v < store.attrs[base + pick] : v > store.attrs[base + pick])) pick = a;
+      }
+      if (pick < 0) break;
+      store.attrs[base + pick] += up ? 1 : -1;
+      refreshAbility(store, idx);
+    }
+  }
+  if (rp.potential !== undefined) store.potentialAbility[idx] = Math.max(store.currentAbility[idx], rp.potential);
+}
+
+/** The physical and technical attributes, by index: what makes a player's ability. */
+const SKILL_ATTRS: number[] = [...PHYSICAL_ATTRS, ...TECHNICAL_ATTRS].map((n) => ATTR_INDEX[n]);
+
+/** A real squad's level: a little above what a generated squad of the club's standing would be, the weaker the more. */
+function realLevel(generatedLevel: number): number {
+  return generatedLevel + Math.max(0, REAL_LEVEL_TARGET - generatedLevel) * REAL_LEVEL_LIFT;
+}
+
+/**
  * A young real player's room to grow: his potential this many times his
  * level now, the more the younger (about +40% at 17, +20% at 20, none from 24).
  */
 export function youngHeadroom(age: number): number {
-  return 1 + Math.max(0, Math.min(0.45, (24 - age) * 0.065));
+  // (At most three tenths: a real first team's teenagers are prospects, not all of them stars.)
+  return 1 + Math.max(0, Math.min(0.3, (24 - age) * 0.05));
 }
 
 /** The most clubs a real division is given in the game. */
@@ -58,6 +127,15 @@ const MAX_CLUBS = 16;
 const MIN_AT: Record<Position, number> = {
   [Position.Setter]: 2, [Position.Opposite]: 2, [Position.OutsideHitter]: 4, [Position.MiddleBlocker]: 4, [Position.Libero]: 2,
 };
+
+/**
+ * A league's clubs the game takes: all of them, those with no roster in the
+ * source with a squad generated at their level (their place in the table).
+ */
+function rostered(league: RealLeague): RealClub[] {
+  // Every club in the table: one the federation lists no players for still plays, its squad generated.
+  return league.clubs;
+}
 
 /** His real seasons before the save, kept for his club history. */
 function noteCareer(world: World, id: number, rp: RealPlayer): void {
@@ -113,15 +191,34 @@ export class RealWorldPlan {
   readonly realYouth = new Set<number>();
   /** The under-21s have clubs of their own: their squads are built there. */
   readonly under21Sides = true;
+  /** Players whose potential was set by hand: left as set. */
+  readonly handSetPotential = new Set<number>();
+  /** Each real club's place in its table today, 0 the leader to 1 the last. */
+  private readonly rankOf = new Map<number, number>();
+  /** Each real club's players scaled by this, so the clubs line up in the order of today's table. */
+  private readonly tableFactor = new Map<number, number>();
   /** Everyone placed from a club roster, so a national-team player is not added twice. */
   private readonly placed = new Set<string>();
 
   constructor(readonly db: RealDb) {
-    for (const l of db.leagues) if (l.clubs.some((c) => c.players.length > 0)) this.byNation.set(`${l.nation}:${l.tier ?? 1}`, l);
+    // A league with rosters; or one with only its clubs and table, if it has enough of them to be a division.
+    for (const l of db.leagues) {
+      if (l.clubs.some((c) => c.players.length > 0) || l.clubs.length >= 4) this.byNation.set(`${l.nation}:${l.tier ?? 1}`, l);
+    }
     for (const p of db.internationals) {
       this.intl.add(personKey(p.first, p.last));
       this.intlLoose.add(looseKey(p.first, p.last));
     }
+  }
+
+  /** The lowest real division the file has for a nation (0: none). */
+  deepestTier(nationCode: string): number {
+    let deepest = 0;
+    for (const key of this.byNation.keys()) {
+      const [code, tier] = key.split(':');
+      if (code === nationCode) deepest = Math.max(deepest, Number(tier));
+    }
+    return deepest;
   }
 
   /** A nation's real division at a tier, when the file has one with players in it. */
@@ -134,8 +231,8 @@ export class RealWorldPlan {
    * generated club becomes the club top of the real table, and so on down;
    * clubs with no known place come after, in the file's order.
    */
-  adopt(generated: Club[], league: RealLeague): void {
-    const real = league.clubs.filter((c) => c.players.length > 0);
+  adopt(generated: Club[], league: RealLeague, world?: World, levelFor?: (reputation: number) => number): void {
+    const real = rostered(league);
     const order = [...real].sort((a, b) => (a.standing ?? 99) - (b.standing ?? 99));
     const strongest = [...generated].sort((a, b) => b.reputation - a.reputation);
     for (let i = 0; i < strongest.length && i < order.length; i++) {
@@ -147,18 +244,112 @@ export class RealWorldPlan {
       if (rc.logo) club.crest = logoCrest(rc.logo, rc.shortName);
       // A fixed standing, the same in every world: its country, its division and its place in the table.
       const rank = order.length > 1 ? i / (order.length - 1) : 0;
+      this.rankOf.set(club.id, rc.standing !== null ? rank : 0.5);
       const tierFactor = 1 / (1 + (club.tier - 1) * 0.68);
       const strength = Math.pow(nationStrength(club.nation) / 98, 2.6);
-      club.reputation = Math.round(Math.min(10000, 10000 * strength * tierFactor * (1.1 - 0.32 * rank)));
+      // The table as it stands: its leader the favourite, its last a good deal weaker.
+      club.reputation = Math.round(Math.min(10000, 10000 * strength * tierFactor * (1.16 - 0.42 * rank)));
       club.finances = newFinances(club.reputation, club.arenaCapacity);
       this.clubs.set(club.id, rc);
     }
+    if (world !== undefined && levelFor !== undefined) this.planTable(world, strongest.slice(0, order.length), levelFor);
+  }
+
+  /**
+   * Line the division's clubs up in the order of today's table: each club's
+   * strength (the average of its best seven) as its players would come out,
+   * then a target falling from the leader's down to the last's, and the factor
+   * that takes each club to its target. The leader is the strongest, whatever
+   * internationals the others have; the gap from first to last stays between
+   * an eighth and three tenths; nobody passes the ceiling.
+   */
+  private planTable(world: World, clubs: Club[], levelFor: (reputation: number) => number): void {
+    const natural = clubs.map((club) => {
+      const rc = this.clubs.get(club.id)!;
+      const level = realLevel(levelFor(club.reputation));
+      const values = rc.players.filter((rp) => rp.first !== '' || rp.last !== '')
+        .map((rp) => this.estimate(world, rp, club.nation, level).now);
+      // Short of seven: the generated ones (squad players, or the whole squad where there is no roster).
+      const fill = rc.players.length === 0 ? level : level * 0.8;
+      while (values.length < 7) values.push(fill);
+      const best = values.sort((a, b) => b - a).slice(0, 7);
+      return best.reduce((s, v) => s + v, 0) / best.length;
+    });
+    const top = Math.min(1860, Math.max(...natural));
+    const bottom = Math.max(top * 0.7, Math.min(top * 0.88, Math.min(...natural)));
+    clubs.forEach((club, i) => {
+      const rank = this.rankOf.get(club.id) ?? 0.5;
+      const target = top - (top - bottom) * rank;
+      this.tableFactor.set(club.id, target / Math.max(1, natural[i]));
+    });
+  }
+
+  /**
+   * The last word on today's table: in each real division, from the top down,
+   * a club that came out as strong as the one above it (the generator's dice
+   * on attributes) gives up an attribute point at a time from its best players
+   * until it is just behind. Only ever downwards, only as much as needed.
+   */
+  lineUpTables(world: World): number {
+    const store = world.players;
+    const strength = (club: Club): { avg: number; best: number[] } => {
+      const best = [...club.players].sort((a, b) => store.currentAbility[b] - store.currentAbility[a]).slice(0, 7);
+      return { avg: best.reduce((s, p) => s + store.currentAbility[p], 0) / Math.max(1, best.length), best };
+    };
+    let nudged = 0;
+    const byLeague = new Map<number, Club[]>();
+    for (const [id, rc] of this.clubs) {
+      const club = world.clubs[id];
+      if (club === undefined || rc.standing === null || club.under21Of !== undefined) continue;
+      byLeague.set(club.leagueId, [...(byLeague.get(club.leagueId) ?? []), club]);
+    }
+    for (const clubs of byLeague.values()) {
+      clubs.sort((a, b) => (this.rankOf.get(a.id) ?? 0.5) - (this.rankOf.get(b.id) ?? 0.5));
+      for (let i = 1; i < clubs.length; i++) {
+        const above = strength(clubs[i - 1]).avg;
+        for (let step = 0; step < 400; step++) {
+          const { avg, best } = strength(clubs[i]);
+          if (avg < above - 4) break;
+          // The best of them, his strongest attribute, one point down.
+          const p = best[step % best.length];
+          const base = p * ATTR_COUNT;
+          let top = 0;
+          for (let a = 1; a < ATTR_COUNT; a++) if (store.attrs[base + a] > store.attrs[base + top]) top = a;
+          if (store.attrs[base + top] <= 1) continue;
+          store.attrs[base + top]--;
+          refreshAbility(store, p);
+          nudged++;
+        }
+      }
+    }
+    return nudged;
+  }
+
+  /**
+   * A real player's estimate before his club's place in the table: the club's
+   * level, more for a national-team player (at least his country's floor), and
+   * his own spread; `now` is what he has reached of it (a teenager at least 80%).
+   */
+  private estimate(world: World, rp: RealPlayer, clubNation: number, level: number): { estimated: number; now: number; young: boolean; age: number; international: boolean } {
+    const nation = rp.nation !== null ? (NATION_BY_CODE.get(rp.nation) ?? clubNation) : clubNation;
+    const age = rp.birthYear !== null ? Math.max(15, Math.min(45, world.year - rp.birthYear)) : 25;
+    const international = this.isInternational(rp.first, rp.last);
+    const young = world.year - (rp.birthYear ?? 0) <= 20;
+    const lift = international ? 1.13 : young ? 1.08 : 1;
+    const spread = playerDice(world, rp).gaussianClamped(1, 0.07, 0.8, 1.22);
+    let estimated = Math.min(1980, level * lift * spread);
+    if (international) {
+      const floor = internationalFloor(nationStrength(nation)) * Math.min(1.08, Math.max(0.94, spread));
+      estimated = Math.min(1980, Math.max(estimated, floor));
+    }
+    const now = young ? estimated * Math.max(abilityFractionAtAge(age), 0.8) : estimated;
+    return { estimated, now, young, age, international };
   }
 
   /** Real clubs with players to sign, in a league: how many game clubs it needs. */
   clubCount(league: RealLeague): number {
     // A division merged from regional groups can run long: the top of each table, up to a full division.
-    return Math.min(MAX_CLUBS, league.clubs.filter((c) => c.players.length > 0).length);
+    return Math.min(MAX_CLUBS, rostered(league).length);
   }
 
   /**
@@ -191,7 +382,9 @@ export class RealWorldPlan {
     const store = world.players;
     // Real players a little above what a generated squad of the club's standing would be, and the
     // weaker the league the more: a real roster in a small league is not as thin as a made-up one.
-    const level = generatedLevel + Math.max(0, REAL_LEVEL_TARGET - generatedLevel) * REAL_LEVEL_LIFT;
+    const level = realLevel(generatedLevel);
+    // Its place in today's table: the factor that lines the division up (see planTable).
+    const tableLift = this.tableFactor.get(club.id) ?? 1.07 - 0.14 * (this.rankOf.get(club.id) ?? 0.5);
     const created: number[] = [];
     const count = new Map<Position, number>();
     const need = (): Position => {
@@ -210,22 +403,12 @@ export class RealWorldPlan {
       if (rp.first === '' && rp.last === '') continue;
       const position = rp.position !== null ? POS[rp.position] : need();
       const nation = rp.nation !== null ? (NATION_BY_CODE.get(rp.nation) ?? club.nation) : club.nation;
-      const age = rp.birthYear !== null ? Math.max(15, Math.min(45, world.year - rp.birthYear)) : 25;
-      const international = this.isInternational(rp.first, rp.last);
-      // The estimate: the club's level, more for a national-team player, a
-      // little less for a teenager who is on the roster to learn.
-      // A youngster on a real first-team roster is there because he is good already: no discount for his
-      // age, a potential above the club's level, and most of it reached, ahead of the under-21s.
-      const young = world.year - (rp.birthYear ?? 0) <= 20;
-      const lift = international ? 1.13 : young ? 1.08 : 1;
+      // The estimate (see estimate): the club's level, more for a national-team player; a youngster on a
+      // real first-team roster is there because he is good already. Then the club's place in today's table.
+      const { estimated: raw, young, age } = this.estimate(world, rp, club.nation, level);
       const own = playerDice(world, rp);
-      const spread = own.gaussianClamped(1, 0.09, 0.76, 1.26);
-      let estimated = Math.round(Math.min(1980, level * lift * spread));
-      // A national-team player is as good as his country's team, whatever club he is at: his own spread around that.
-      if (international) {
-        const floor = internationalFloor(nationStrength(nation)) * Math.min(1.08, Math.max(0.94, spread));
-        estimated = Math.round(Math.min(1980, Math.max(estimated, floor)));
-      }
+      own.gaussianClamped(1, 0.07, 0.8, 1.22);
+      const estimated = Math.round(Math.min(1980, raw * tableLift));
       const height = rp.heightCm !== null && rp.heightCm >= 150 && rp.heightCm <= 230 ? rp.heightCm : undefined;
       // A young one: his level now as estimated, and room above it to grow into.
       const headroom = youngHeadroom(age);
@@ -233,7 +416,8 @@ export class RealWorldPlan {
       const potential = set.potential;
       // His level now as before (a teenager most of the way there, at least 80%); the room above it is new.
       const now = young ? estimated * Math.max(abilityFractionAtAge(age), 0.8) : estimated;
-      const abilityFraction = set.abilityFraction ?? (headroom > 1 ? Math.min(1, now / Math.max(1, potential)) : undefined);
+      // The estimate is his level now, at any age: all of it reached from 24 on.
+      const abilityFraction = set.abilityFraction ?? (headroom > 1 ? Math.min(1, now / Math.max(1, potential)) : 1);
 
       const idx = generatePlayer(store, own, { nation, age, potential, position, currentYear: world.year, heightCm: height, abilityFraction });
       this.realIndices.add(idx);
@@ -243,8 +427,9 @@ export class RealWorldPlan {
       if (rp.birthYear !== null) store.birthYear[idx] = rp.birthYear;
       if (rp.birthDay !== null) store.birthDay[idx] = rp.birthDay;
       if (rp.weightKg !== null) store.weightKg[idx] = rp.weightKg;
-      if (rp.spikeReachCm !== null) store.spikeReachCm[idx] = rp.spikeReachCm;
-      if (rp.blockReachCm !== null) store.blockReachCm[idx] = rp.blockReachCm;
+      applyRealReach(store, idx, rp);
+      applyHandSet(store, idx, rp);
+      if (rp.potential !== undefined) this.handSetPotential.add(idx);
       if (rp.secondary) {
         store.secondary[idx] = POS[rp.secondary];
         store.setFamiliarity(idx, POS[rp.secondary], 100);
@@ -284,12 +469,17 @@ export class RealWorldPlan {
     }
     if (!this.under21Sides && (rc.youth ?? []).length > 0) this.realYouth.add(club.id);
 
-    // Short of a position: someone generated, a squad player rather than a starter.
+    // Short of a position: someone generated, a squad player rather than a starter; with no real
+    // roster at all, the whole squad generated at the club's level (its place in the real table).
+    const fill = rc.players.length === 0 ? 1 : 0.8;
     for (const pos of Object.keys(MIN_AT).map(Number) as Position[]) {
       while ((count.get(pos) ?? 0) < Math.min(MIN_AT[pos], SQUAD_TARGET[pos])) {
-        const age = Math.round(rng.gaussianClamped(23, 3.5, 18, 33));
-        const potential = Math.round(Math.min(1980, level * 0.8 * rng.gaussianClamped(1, 0.1, 0.7, 1.2)));
-        const idx = generatePlayer(store, rng, { nation: club.nation, age, potential, position: pos, currentYear: world.year });
+        // A club with no real roster: a squad of its level, close together and in its prime, so its place
+        // in today's table decides how strong it is, not the dice.
+        const whole = fill === 1;
+        const age = Math.round(whole ? rng.gaussianClamped(27, 2, 24, 30) : rng.gaussianClamped(23, 3.5, 18, 33));
+        const potential = Math.round(Math.min(1980, level * fill * tableLift * (whole ? rng.gaussianClamped(1, 0.04, 0.9, 1.1) : rng.gaussianClamped(1, 0.1, 0.7, 1.2))));
+        const idx = generatePlayer(store, rng, { nation: club.nation, age, potential, position: pos, currentYear: world.year, abilityFraction: whole ? 1 : undefined });
         store.clubId[idx] = club.id;
         store.contractUntil[idx] = seasonEndDay(world.season + rng.int(0, 2));
         count.set(pos, (count.get(pos) ?? 0) + 1);
@@ -364,6 +554,9 @@ export class RealWorldPlan {
       store.lastName[idx] = store.names.intern(rp.last);
       if (rp.birthYear !== null) store.birthYear[idx] = rp.birthYear;
       if (rp.birthDay !== null) store.birthDay[idx] = rp.birthDay;
+      applyRealReach(store, idx, rp);
+      applyHandSet(store, idx, rp);
+      if (rp.potential !== undefined) this.handSetPotential.add(idx);
       if (rp.secondary) {
         store.secondary[idx] = POS[rp.secondary];
         store.setFamiliarity(idx, POS[rp.secondary], 100);

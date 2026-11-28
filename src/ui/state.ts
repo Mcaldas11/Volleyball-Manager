@@ -8,6 +8,8 @@
  * UI it cannot be tested headlessly or run in a fifty-season career.
  */
 
+import { recommendBlock, recommendToSeniorCoach, type RecommendKind } from '../engine/world/under21Recommend.ts';
+import { letUnder21PlayerGo, under21RenewalIsMine } from '../engine/world/under21Contracts.ts';
 import { askForFirstTeamJob, firstTeamAskBlock } from '../engine/world/career.ts';
 import { matchEvent } from './sound.ts';
 import { deletePortraitsOf } from './portraits.ts';
@@ -121,7 +123,7 @@ import {
 } from '../engine/world/deals.ts';
 import {
   coachRequests, coachTalkBlock, loanOf, loansOutOf, loanStarters, MAX_SQUAD, recallFromLoan as recallPlayer,
-  requestLoanReport, squadSize, talkToLoanCoach, wageBill, wageRoom,
+  renewalRoom, requestLoanReport, squadSize, talkToLoanCoach, wageBill, wageRoom,
   type CoachTalkResult, type Loan, type LoanPlayingTime,
 } from '../engine/world/loans.ts';
 import {
@@ -4722,6 +4724,25 @@ class Game {
     this.emit();
   }
 
+  /** As the under-21 coach: put one of his players forward to the senior coach, for the first team or a contract. */
+  recommendToSeniorCoach(p: number, kind: RecommendKind): void {
+    if (this.world === null) return;
+    this.notice = recommendToSeniorCoach(this.world, p, kind).text;
+    this.emit();
+  }
+
+  /** Why a player can't be put forward to the senior coach now, or null. */
+  seniorRecommendBlock(p: number, kind: RecommendKind): string | null {
+    return this.world === null ? 'No game.' : recommendBlock(this.world, p, kind);
+  }
+
+  /** As the senior club's manager: let an under-21 player at the age limit go when his contract ends. */
+  letUnder21PlayerGo(p: number): void {
+    if (this.world === null) return;
+    this.notice = letUnder21PlayerGo(this.world, p).text;
+    this.emit();
+  }
+
   /** As the club's manager: put a prospect forward to his youth side's coach. */
   recommendToYouthSide(p: number): void {
     if (this.world === null) return;
@@ -6641,6 +6662,13 @@ class Game {
     return world === null || club === null ? [] : arrivalsFor(world, club.id);
   }
 
+  /** What the club can pay one of its own players to stay (see renewalRoom). */
+  renewalRoom(p: number): number {
+    const world = this.world;
+    const club = this.club;
+    return world === null || club === null ? 0 : renewalRoom(world, club, p);
+  }
+
   /** Room left in the wage budget, with players who have agreed to join already paid for. */
   wageRoom(): number {
     const world = this.world;
@@ -6807,8 +6835,15 @@ class Game {
     if (world === null || club === null) return;
     // Ours, whether here or out on loan — not a player here on loan, whose
     // contract is with his own club.
+    // Coaching an under-21 side: its contracts are the senior club's, never the side's coach's.
+    if (club.under21Of !== undefined) {
+      this.notice = "Contracts at an under-21 side are the senior club's decision. Recommend him to the senior coach instead.";
+      this.emit();
+      return;
+    }
     const loan = loanOf(world, playerIdx);
-    const ours = loan === undefined ? club.players.includes(playerIdx) : loan.parentClubId === club.id;
+    // At the under-21 side, his age limit reached: the first team's to sign.
+    const ours = (loan === undefined ? club.players.includes(playerIdx) : loan.parentClubId === club.id) || under21RenewalIsMine(world, playerIdx);
     if (!ours) return;
     if (pendingMoveOf(world, playerIdx) !== undefined) {
       this.notice = `${world.players.fullName(playerIdx)} has agreed to leave, there is nothing to renew.`;
@@ -7098,7 +7133,7 @@ class Game {
     const p = t.playerIdx;
 
     // A renewal's new wage replaces what he earns now.
-    const room = wageRoom(world, club) + (t.kind === 'renewal' ? store.wage[p] : 0);
+    const room = t.kind === 'renewal' ? renewalRoom(world, club, p) : wageRoom(world, club);
     if (n.termsWage > room) {
       n.message = 'Not enough room in the wage budget for that contract.';
       this.emit();

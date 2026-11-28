@@ -224,6 +224,20 @@ export function wageRoom(world: World, club: Club): number {
   return club.finances.wageBudget - wageBill(world, club) - pendingWages(world, club.id);
 }
 
+/** How far above his wage a renewal is always within the club's means, full wage budget or not. */
+export const RENEWAL_MARGIN = 0.12;
+
+/**
+ * What a club can pay a player of its own to stay: the room in its wage budget
+ * plus what he already earns, and never less than his wage and a fair rise.
+ * Keeping a player barely moves the wage bill; a club that can't afford its
+ * own squad's renewals is no club. (A bigger raise still needs the room.)
+ */
+export function renewalRoom(world: World, club: Club, p: number): number {
+  const wage = world.players.wage[p];
+  return Math.max(wageRoom(world, club) + wage, Math.round(wage * (1 + RENEWAL_MARGIN)));
+}
+
 /** Players a club answers for against the squad limit: everyone at the club,
  *  its own players out on loan, who will be back at the end of the season,
  *  and anyone who has agreed to join and is waiting on the window. */

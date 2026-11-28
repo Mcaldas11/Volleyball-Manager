@@ -169,7 +169,8 @@ export interface PlayoffTie {
   games?: number[];
 }
 
-export type PlayoffGroupId = 'championship' | 'placement' | 'relegation';
+/** 'promotion': the under-21 divisions' playoff, a first-division side against a second's (see under21Leagues.ts). */
+export type PlayoffGroupId = 'championship' | 'placement' | 'relegation' | 'promotion';
 
 /**
  * A single-elimination bracket carved out of a league's final table: the top
@@ -458,6 +459,8 @@ export interface GameMessage {
   cupInviteId?: number;
   /** A federation's offer of its national team job — see `Internationals.offers`. */
   nationalOffer?: { id: number; nation: number };
+  /** An under-21 side's player at the age limit: the senior manager's to offer a contract or let go (under21Contracts.ts). */
+  under21Contract?: boolean;
   /** The board's offer of a new contract — see career.ts. */
   contractOfferId?: number;
   /** News of one of the user's players out on loan: the inbox offers to

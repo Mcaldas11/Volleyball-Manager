@@ -106,10 +106,15 @@ export function competitionStats(
 
   const store = world.players;
   const players: PlayerCompStats[] = [];
+  // A first-team player who turned out for his club's under-21 side counts for
+  // that side in its competition, not for the senior club that is not in it.
+  const sideOf = new Map<number, number>();
+  for (const c of world.clubs) if (c.under21Of !== undefined && teams.has(c.id)) sideOf.set(c.under21Of, c.id);
   for (const [p, lines] of world.competitionRecords) {
     const l = lines.find((x) => x.season === season && x.competitionId === compId);
     if (l === undefined || l.apps === 0) continue;
-    const clubId = store.clubId[p];
+    const own = store.clubId[p];
+    const clubId = teams.has(own) ? own : (sideOf.get(own) ?? own);
     const line: PlayerCompStats = {
       p, clubId, apps: l.apps, appsText: appsLabel([l]), ratingSum: l.ratingSum, points: l.points, mvps: l.mvps,
       kills: l.kills ?? 0, attacks: l.attacks ?? 0, attackErrors: l.attackErrors ?? 0, aces: l.aces,
