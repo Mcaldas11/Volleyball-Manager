@@ -80,11 +80,12 @@ async function allowed(url: URL): Promise<boolean> {
 export class Disallowed extends Error {}
 
 /** The page at `url`, from the cache when it is there and fresh. */
-export async function getPage(url: string, init?: { method?: string; body?: string; contentType?: string }): Promise<string> {
+export async function getPage(url: string, init?: { method?: string; body?: string; contentType?: string; fresh?: boolean }): Promise<string> {
   const key = createHash('sha1').update((init?.method ?? 'GET') + ' ' + url + ' ' + (init?.body ?? '')).digest('hex');
   mkdirSync(CACHE_DIR, { recursive: true });
   const file = join(CACHE_DIR, `${key}.txt`);
-  if (existsSync(file)) {
+  // fresh: the copy kept is known to be wrong (a site that once answered with another page).
+  if (existsSync(file) && init?.fresh !== true) {
     const raw = readFileSync(file, 'utf8');
     const nl = raw.indexOf('\n');
     const meta = JSON.parse(raw.slice(0, nl)) as { url: string; at: number };

@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto';
 import { bankFor, NAME_BANKS } from '../../src/engine/world/names.ts';
 import { NATIONS } from '../../src/engine/world/nations.ts';
 import { readdirSync, unlinkSync } from 'node:fs';
-import { decode, Disallowed, fetchStats, getImage, getPage, PHOTO_DIR, nameKey, splitSurnameFirst, textLines, titleCase } from './http.ts';
+import { decode, Disallowed, fetchStats, getImage, getPage, LOGO_DIR, PHOTO_DIR, nameKey, splitSurnameFirst, textLines, titleCase } from './http.ts';
 
 /** `--women`: the women's leagues, into a file of their own. */
 const WOMEN = process.argv.includes('--women');
@@ -176,7 +176,10 @@ const DP_LEAGUES: DpLeague[] = [
   { nation: 'EST', tier: 1, host: 'evf-web.dataproject.com', comp: 96, name: 'Meistriliiga', season: '2026/27', federation: 'EVF' },
   { nation: 'ISR', tier: 1, host: 'iva-web.dataproject.com', comp: 50, name: 'Premier League', season: '2026/27', federation: 'IVA' },
   { nation: 'BIH', tier: 1, host: 'osbih-web.dataproject.com', comp: 50, name: 'Premijer Liga', season: '2026/27', federation: 'OSBiH' },
+  { nation: 'SRB', tier: 1, host: 'ossrb-web.dataproject.com', comp: 104, name: 'Superliga', season: '2026/27', federation: 'OSS' },
+  { nation: 'FIN', tier: 1, host: 'lml-web.dataproject.com', comp: 156, name: 'Mestaruusliiga', season: '2026/27', federation: 'Lentopalloliitto' },
   // Second tiers.
+  { nation: 'SRB', tier: 2, host: 'ossrb-web.dataproject.com', comp: 110, name: 'Prva liga', season: '2026/27', federation: 'OSS' },
   { nation: 'POR', tier: 2, host: 'fpv-web.dataproject.com', comp: 148, name: '2.ª Divisão', season: '2026/27', federation: 'FPV' },
   { nation: 'ESP', tier: 2, host: 'rfevb-web.dataproject.com', comp: 167, name: 'Superliga 2', season: '2026/27', federation: 'RFEVB' },
   { nation: 'SLO', tier: 2, host: 'ozs-web.dataproject.com', comp: 143, name: '1. liga', season: '2026/27', federation: 'OZS' },
@@ -208,6 +211,10 @@ const DP_LEAGUES_WOMEN: DpLeague[] = [
   { nation: 'EST', tier: 1, host: 'evf-web.dataproject.com', comp: 97, name: 'Meistriliiga', season: '2026/27', federation: 'EVF' },
   { nation: 'ISR', tier: 1, host: 'iva-web.dataproject.com', comp: 51, name: 'Premier League', season: '2026/27', federation: 'IVA' },
   { nation: 'BIH', tier: 1, host: 'osbih-web.dataproject.com', comp: 52, name: 'Premijer Liga', season: '2026/27', federation: 'OSBiH' },
+  { nation: 'SRB', tier: 1, host: 'ossrb-web.dataproject.com', comp: 105, name: 'Superliga', season: '2026/27', federation: 'OSS' },
+  { nation: 'FIN', tier: 1, host: 'lml-web.dataproject.com', comp: 157, name: 'Mestaruusliiga', season: '2026/27', federation: 'Lentopalloliitto' },
+  { nation: 'GRE', tier: 1, host: 'eope-web.dataproject.com', comp: 19, name: 'Volley League', season: '2026/27', federation: 'EOPE' },
+  { nation: 'SRB', tier: 2, host: 'ossrb-web.dataproject.com', comp: 111, name: 'Prva liga', season: '2026/27', federation: 'OSS' },
   { nation: 'POR', tier: 2, host: 'fpv-web.dataproject.com', comp: 147, name: '2.ª Divisão', season: '2026/27', federation: 'FPV' },
   { nation: 'GER', tier: 2, host: 'vbl-web.dataproject.com', comp: 198, name: '2. Liga Pro', season: '2026/27', federation: 'VBL' },
   { nation: 'ESP', tier: 2, host: 'rfevb-web.dataproject.com', comp: 164, name: 'Superliga 2', season: '2026/27', federation: 'RFEVB' },
@@ -615,7 +622,12 @@ async function fetchSuperLega(tier: 1 | 2): Promise<RealLeague> {
       photoUrls.set(coach, { url: decode(m[1]).replace(/heightImg=\d+/, 'heightImg=240'), name: `ITA-coach-${id}-${coach.role}-${coaches.length}` });
       coaches.push(coach);
     }
-    const logo = await getImage(`${base}/GetLogo.aspx?Field=LogoWeb&maxWidth=220&Proc=LogoSquadra&Web=0&Key=${id}&Char=False`, `ITA-${name}`);
+    // The club's badge (LogoSocieta, by its code); the team's own picture is mostly a blank stand-in.
+    const society = /Proc=LogoSocieta&(?:amp;)?maxWidth=\d+&(?:amp;)?Key=([^&"]+)/.exec(page);
+    const logo = (society !== null
+      ? await getImage(`${base}/GetLogo.aspx?Field=LogoWeb&Proc=LogoSocieta&maxWidth=220&Key=${society[1]}&Char=True`, `ITA-club-${name}`)
+      : null)
+      ?? await getImage(`${base}/GetLogo.aspx?Field=LogoWeb&maxWidth=220&Proc=LogoSquadra&Web=0&Key=${id}&Char=False`, `ITA-${name}`);
     clubs.push({ name, shortName: shortNameOf(name), city: null, arena: null, standing: null, logo, coaches, players });
     log(`  ITA ${name}: ${players.length} players`);
   }
@@ -667,6 +679,141 @@ async function fetchInternationals(): Promise<{ list: RealInternational[]; coach
     }
   }
   return { list, coaches, source: `https://en.wikipedia.org/wiki/${page} (rosters as registered with the FIVB)` };
+}
+
+// ---- zerozero.pt leagues: the countries whose federation has no portal -----------
+
+/** A league zerozero follows this season: its edition, the country and the division. */
+interface ZzLeague { nation: string; tier: number; name: string; edition: string }
+
+/** Top flights only zerozero has for 2026/27 (the men's; it follows no women's league abroad). */
+const ZZ_LEAGUES: ZzLeague[] = [
+  { nation: 'BEL', tier: 1, name: 'Lotto Volley League', edition: '/edicao/lotto-volley-league-fase-regular-2026-27/226976' },
+  { nation: 'FRA', tier: 1, name: 'Marmara SpikeLigue', edition: '/edicao/liga-francesa-voleibol-2026-27/226978' },
+  { nation: 'CZE', tier: 1, name: 'Extraliga', edition: '/edicao/liga-checa-voleibol-fase-regular-2026-27/227521' },
+  { nation: 'AUT', tier: 1, name: 'Austrian Volley League', edition: '/edicao/austrian-league-voleibol-2026-27/227528' },
+];
+
+/** zerozero's flags, two letters, to the game's three-letter codes. */
+const ISO2: Record<string, string> = {
+  PL: 'POL', IT: 'ITA', FR: 'FRA', SI: 'SLO', RS: 'SRB', NL: 'NED', DE: 'GER', BG: 'BUL', UA: 'UKR', TR: 'TUR', RU: 'RUS',
+  CZ: 'CZE', GR: 'GRE', BE: 'BEL', FI: 'FIN', PT: 'POR', ES: 'ESP', HR: 'CRO', RO: 'ROU', SK: 'SVK', EE: 'EST', LV: 'LAT',
+  AT: 'AUT', CH: 'SUI', DK: 'DEN', SE: 'SWE', NO: 'NOR', HU: 'HUN', IL: 'ISR', MK: 'MKD', BA: 'BIH', ME: 'MNE', BR: 'BRA',
+  AR: 'ARG', CL: 'CHI', CO: 'COL', VE: 'VEN', PE: 'PER', UY: 'URU', US: 'USA', CU: 'CUB', CA: 'CAN', MX: 'MEX', PR: 'PUR',
+  DO: 'DOM', JP: 'JPN', IR: 'IRI', CN: 'CHN', KR: 'KOR', QA: 'QAT', AU: 'AUS', IN: 'IND', TH: 'THA', KZ: 'KAZ', EG: 'EGY',
+  TN: 'TUN', MA: 'MAR', DZ: 'ALG', CM: 'CMR', ZA: 'RSA',
+};
+
+/** zerozero's squad sections, by position. */
+function zzPosition(section: string): RealPosition | null {
+  const s = section.toLowerCase();
+  if (/distrib/.test(s)) return 'S';
+  if (/l[ií]bero/.test(s)) return 'L';
+  if (/central|zona 3/.test(s)) return 'MB';
+  if (/oposto|zona 2/.test(s)) return 'OP';
+  if (/zona 4|recetor|ponta/.test(s)) return 'OH';
+  return null;
+}
+
+/** A zerozero page about a person: asked again when the copy kept is someone else's. */
+async function zzPersonPage(url: string, name: string): Promise<string> {
+  const key = nameKey(name);
+  const page = await getPage(url);
+  const title = nameKey(decode(/<title>([^<]*)/.exec(page)?.[1] ?? ''));
+  if (title.includes(key)) return page;
+  const again = await getPage(url, { fresh: true });
+  if (!nameKey(decode(/<title>([^<]*)/.exec(again)?.[1] ?? '')).includes(key)) throw new Error(`zerozero gave another person's page for ${name}`);
+  return again;
+}
+
+async function fetchZeroZeroLeague(def: ZzLeague): Promise<RealLeague> {
+  const base = 'https://www.zerozero.pt';
+  let edition = await getPage(base + def.edition);
+  // The copy kept may be another page (zerozero's general list): asked again, the edition's own.
+  if (!/Voleibol|Volley|League|Liga/i.test(/<title>([^<]*)/.exec(edition)?.[1] ?? '')) edition = await getPage(base + def.edition, { fresh: true });
+  const season = Math.max(0, ...[...edition.matchAll(/epoca_id=(\d+)/g)].map((m) => Number(m[1])));
+  // The teams in the edition's table, in its order (the site's menus add football clubs: their pages say so).
+  const teams = [...new Set([...edition.matchAll(/href="(\/equipa\/[^"/]+\/\d+)[^"]*"/g)].map((m) => m[1]))];
+  const clubs: RealClub[] = [];
+  for (const team of teams) {
+    const url = `${base}${team}${season > 0 ? `?epoca_id=${season}` : ''}`;
+    let page = await getPage(url);
+    let title = decode(/<title>([^<]*)/.exec(page)?.[1] ?? '');
+    // zerozero now and then answers with another team's page: asked again, it gives the right one.
+    // (A page that is not about the team in its own address; the menus' football clubs are, and are left out below.)
+    const slugWords = team.split('/')[2].split('-').filter((w) => w.length >= 4);
+    const titleKey = nameKey(title);
+    if (!/\(Voleibol\)/.test(title) && !slugWords.some((w) => titleKey.includes(w))) {
+      page = await getPage(url, { fresh: true });
+      title = decode(/<title>([^<]*)/.exec(page)?.[1] ?? '');
+    }
+    if (!/\(Voleibol\)/.test(title)) continue;
+    const name = title.replace(/\s*\(Voleibol\)[\s\S]*$/, '').trim();
+    const logoSrc = /(\/\/?img\/logos\/equipas\/\d+_[^"')\s]+)/.exec(page)?.[1];
+    const logo = logoSrc !== undefined
+      ? await getImage(`${base}/${logoSrc.replace(/^\/+/, '')}`, `${def.nation}-${name}`)
+      : null;
+    const squad = /id="team_squad"[\s\S]*?(?=<div class="card-data |<\/main>|$)/.exec(page)?.[0] ?? '';
+    const players: RealPlayer[] = [];
+    const coaches: RealCoach[] = [];
+    let section = '';
+    // The list a piece at a time: a section's heading (the position), then its people.
+    for (const block of squad.split(/(?=<div class="section">)|(?=<div class="staff">)/)) {
+      const heading = /^<div class="section">([^<]+)<\/div>/.exec(block);
+      if (heading !== null) { section = decode(heading[1]).trim(); continue; }
+      const link = /href="\/(jogador|treinador)\/([^"/]+)\/(\d+)[^"]*">([^<]+)<\/a>/.exec(block);
+      if (link === null) continue;
+      const fullName = decode(link[4]).trim();
+      const words = fullName.split(/\s+/);
+      const first = words.slice(0, -1).join(' ') || words[0];
+      const last = words.length > 1 ? words[words.length - 1] : '';
+      const src = /background-image: url\('([^']+)'\)/.exec(block)?.[1] ?? '';
+      const photo = src === '' || /No_Photo|default/i.test(src) ? null : src;
+      if (link[1] === 'treinador') {
+        const coach: RealCoach = { first, last, role: /adjunt|assist/i.test(section) ? 'assistant' : 'head' };
+        if (photo !== null) photoUrls.set(coach, { url: photo.startsWith('http') ? photo : base + photo, name: `${def.nation}-zz-coach-${first}-${last}` });
+        coaches.push(coach);
+        continue;
+      }
+      const p = emptyPlayer();
+      p.first = first;
+      p.last = last;
+      p.position = zzPosition(section);
+      const flag = /flag:([A-Z]{2})/.exec(block)?.[1];
+      p.nation = flag !== undefined ? (ISO2[flag] ?? null) : null;
+      // His birth date from his own page; his age on the squad list where the page has none.
+      try {
+        const own = await zzPersonPage(`${base}/jogador/${link[2]}/${link[3]}`, last || first);
+        const born = /,\s*(\d{4})-(\d{2})-(\d{2})\s*</.exec(own);
+        const d = born !== null ? parseDate(`${born[1]}-${born[2]}-${born[3] === '00' ? '01' : born[3]}`) : null;
+        if (d !== null) { p.birthYear = d.year; p.birthDay = d.day; }
+      } catch { /* the squad list's age will do */ }
+      if (p.birthYear === null) {
+        const age = /<span>(\d{2}) anos<\/span>/.exec(block);
+        if (age !== null) p.birthYear = 2026 - Number(age[1]);
+      }
+      if (photo !== null) photoUrls.set(p, { url: photo.startsWith('http') ? photo : base + photo, name: `${def.nation}-zz-${first}-${last}` });
+      // His seasons, club by club.
+      try {
+        const seasons = await zzPersonPage(`${base}/jogador/${link[2]}/${link[3]}/epocas`, last || first);
+        const table = /<table[\s\S]*?<\/table>/.exec(seasons)?.[0] ?? '';
+        const career: NonNullable<RealPlayer['career']> = [];
+        for (const row of table.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+          const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((c) => decode(c[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim());
+          const year = cells.length > 2 ? seasonYear(cells[1]) : null;
+          const clubName = cells[2]?.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+          const apps = /^\d+$/.test(cells[4] ?? '') ? Number(cells[4]) : undefined;
+          const points = /^\d+$/.test(cells[5] ?? '') ? Number(cells[5]) : undefined;
+          if (year !== null && clubName && !career.some((c) => c.year === year && c.club === clubName)) career.push({ year, club: clubName, apps, points });
+        }
+        if (career.length > 0) p.career = career;
+      } catch { /* no seasons page */ }
+      players.push(p);
+    }
+    clubs.push({ name, shortName: shortNameOf(name), city: null, arena: null, standing: clubs.length + 1, logo, coaches, players });
+    log(`  ${def.nation} ${name}: ${players.length} players (zerozero)`);
+  }
+  return { nation: def.nation, tier: def.tier, name: def.name, season: '2026/27', source: 'zerozero.pt', url: base + def.edition, clubs };
 }
 
 // ---- zerozero.pt: photos the federation does not have ---------------------
@@ -892,6 +1039,65 @@ function cleanCareers(leagues: RealLeague[]): number {
   return dropped;
 }
 
+// ---- Club logos: stand-ins dropped, Germany's from its league's own site -------
+
+/** A logo three or more clubs share is a portal's stand-in, not a badge: dropped, so the game draws its own. */
+function dropStandInLogos(leagues: RealLeague[]): number {
+  const hashOf = new Map<string, string>();
+  const count = new Map<string, number>();
+  for (const l of leagues) for (const c of l.clubs) {
+    if (!c.logo) continue;
+    const file = join(LOGO_DIR, c.logo);
+    if (!existsSync(file)) { c.logo = null; continue; }
+    const h = createHash('sha1').update(readFileSync(file)).digest('hex');
+    hashOf.set(c.logo, h);
+    count.set(h, (count.get(h) ?? 0) + 1);
+  }
+  let dropped = 0;
+  for (const l of leagues) for (const c of l.clubs) {
+    if (c.logo && (count.get(hashOf.get(c.logo) ?? '') ?? 0) >= 3) { c.logo = null; dropped++; }
+  }
+  return dropped;
+}
+
+/** The Volleyball Bundesliga's team lists: each club's badge beside its name. */
+const VBL_TEAM_PAGES: Record<'men' | 'women', string[]> = {
+  men: ['/cms/home/1_bundesliga_maenner/teamsspieler/mannschaften.xhtml'],
+  women: ['/cms/home/1_bundesliga_frauen/teams_spielerinnen/mannschaften.xhtml'],
+};
+
+async function fillGermanLogos(leagues: RealLeague[]): Promise<number> {
+  const base = 'https://www.volleyball-bundesliga.de';
+  const badges: { name: string; url: string }[] = [];
+  for (const path of VBL_TEAM_PAGES[WOMEN ? 'women' : 'men']) {
+    try {
+      const page = await getPage(base + path);
+      for (const m of page.matchAll(/src="([^"]+)"[^>]*class="teamLogo"[^>]*\/>\s*<\/div>\s*<h1 class="samsCmsComponentBlockHeader">([^<]+)<\/h1>/g)) {
+        badges.push({ url: decode(m[1]), name: decode(m[2]).trim() });
+      }
+    } catch (err) { log(`  VBL logos: ${(err as Error).message}`); }
+  }
+  let found = 0;
+  for (const l of leagues.filter((x) => x.nation === 'GER')) {
+    for (const c of l.clubs) {
+      if (c.logo) continue;
+      // The badge whose club shares the most words with this one's name; a tie is no match.
+      const mine = clubTokens(c.name);
+      let best: { name: string; url: string } | undefined;
+      let top = 0;
+      let tied = false;
+      for (const b of badges) {
+        const n = [...clubTokens(b.name)].filter((t) => mine.has(t)).length;
+        if (n > top) { top = n; best = b; tied = false; } else if (n === top && n > 0) tied = true;
+      }
+      if (best === undefined || tied) continue;
+      c.logo = await getImage(best.url, `GER-vbl-${c.name}`);
+      if (c.logo) found++;
+    }
+  }
+  return found;
+}
+
 // ---- Putting it together ---------------------------------------------------
 
 /** Nationality for players whose page leaves it out: their national team, if they have one. */
@@ -1057,6 +1263,17 @@ async function main(): Promise<void> {
   if (want('POL') && !WOMEN) jobs.push(async () => [await fetchPlusLiga()]);
   // The women's Serie A site turns Anthropic's crawler away in its robots.txt: left alone.
   if (want('ITA') && !WOMEN) jobs.push(async () => [await fetchSuperLega(1), await fetchSuperLega(2)]);
+  // The countries only zerozero follows: one job, the site asked once a second.
+  const zz = WOMEN ? [] : ZZ_LEAGUES.filter((d) => want(d.nation));
+  if (zz.length > 0) {
+    jobs.push(async () => {
+      const out: RealLeague[] = [];
+      for (const def of zz) {
+        try { out.push(await fetchZeroZeroLeague(def)); } catch (err) { log(`FAILED ${def.nation} ${def.name}: ${(err as Error).message}`); }
+      }
+      return out;
+    });
+  }
 
   const results = await Promise.allSettled(jobs.map((j) => j()));
   for (const r of results) {
@@ -1123,6 +1340,8 @@ async function main(): Promise<void> {
   log(`  ${withPhoto} players with a photo from the sources, ${manual} put in by hand, ${blank.size} placeholder pictures dropped.`);
 
   log(`  ${cleanCareers(leagues)} career rows that were not clubs left out`);
+  log(`  ${dropStandInLogos(leagues)} stand-in logos dropped`);
+  if (want('GER')) log(`  ${await fillGermanLogos(leagues)} German badges from the Volleyball Bundesliga`);
 
   const db: RealDb = {
     version: 1,
